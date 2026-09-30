@@ -17,12 +17,13 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21-jre-noble
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates nodejs npm util-linux \
-  && npm install --global @openai/codex \
+  && npm install --global @openai/codex@0.159.3 \
   && useradd --system --uid 10001 --create-home app \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=backend-build /src/backend/target/adaptive-java-tutor-0.1.0.jar /app/app.jar
 COPY java_initial_diagnostic_mvp_v2.md /app/java_initial_diagnostic_mvp_v2.md
+COPY backend/codex-config.toml /app/codex-config.toml
 COPY backend/docker-entrypoint.sh /usr/local/bin/adaptive-entrypoint
 RUN chmod 755 /usr/local/bin/adaptive-entrypoint \
   && mkdir -p /app/data /app/codex-home \

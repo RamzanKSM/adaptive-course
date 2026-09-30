@@ -149,7 +149,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
 
   private Map<String, Object> threadStartParams(String instructions) {
     return Map.of("model", model, "serviceName", "adaptive_java_tutor", "cwd", sandboxDirectory.toString(),
-        "approvalPolicy", "never", "sandbox", "readOnly", "developerInstructions", instructions);
+        "approvalPolicy", "never", "permissions", "student-tutor", "developerInstructions", instructions);
   }
 
   private String completeTurn(String threadId, String input, Map<String, Object> outputSchema) throws Exception {
@@ -161,9 +161,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       params.put("input", List.of(Map.of("type", "text", "text", input)));
       params.put("cwd", sandboxDirectory.toString());
       params.put("approvalPolicy", "never");
-      // CLI 0.159.2 schema supports readOnly + networkAccess. It does not expose
-      // readableRoots, so student traffic remains disabled until a live denial test.
-      params.put("sandboxPolicy", Map.of("type", "readOnly", "networkAccess", false));
+      params.put("permissions", "student-tutor");
       if (outputSchema != null) params.put("outputSchema", outputSchema);
       JsonNode turn = request("turn/start", params, Duration.ofSeconds(10));
       capture.turnId = turn.path("turn").path("id").asText();
@@ -256,7 +254,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       process = created; loadedThreads.clear(); stdin = new BufferedWriter(new OutputStreamWriter(created.getOutputStream(), StandardCharsets.UTF_8));
       Thread reader = Thread.ofVirtual().name("codex-app-server-reader").start(() -> readLoop(created));
       try {
-        request("initialize", Map.of("clientInfo", Map.of("name", "adaptive_java_tutor", "title", "Adaptive Java Tutor", "version", "0.1.0")), Duration.ofSeconds(15));
+        request("initialize", Map.of("clientInfo", Map.of("name", "adaptive_java_tutor", "title", "Adaptive Java Tutor", "version", "0.1.0"), "capabilities", Map.of("experimentalApi", true)), Duration.ofSeconds(15));
         notifyServer("initialized", Map.of());
       } catch (Exception e) { startupFailure = e; created.destroyForcibly(); process = null; throw e; }
     }

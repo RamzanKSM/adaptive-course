@@ -1,0 +1,12 @@
+# Managed by the application entrypoint. auth.json remains separate in CODEX_HOME.
+default_permissions = "student-tutor"
+
+[permissions.student-tutor]
+
+[permissions.student-tutor.network]
+enabled = false
+
+[permissions.student-tutor.filesystem]
+":root" = "deny"
+":minimal" = "read"
+"/app/codex-home" = "deny"
