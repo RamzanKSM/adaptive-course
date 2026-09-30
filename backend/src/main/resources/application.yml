@@ -1,0 +1,33 @@
+server:
+  port: ${PORT:8080}
+spring:
+  datasource:
+    url: jdbc:sqlite:${APP_DATABASE_PATH:./data/adaptive-tutor.db}
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      connection-init-sql: PRAGMA foreign_keys=ON
+  flyway:
+    enabled: true
+app:
+  session-hours: ${APP_SESSION_HOURS:168}
+  cookie-secure: ${APP_COOKIE_SECURE:false}
+  bootstrap-admin-login: ${APP_BOOTSTRAP_ADMIN_LOGIN:}
+  bootstrap-admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:}
+  llm:
+    enabled: ${APP_LLM_ENABLED:false}
+    model: ${CODEX_MODEL:gpt-6-luna}
+    app-server-command: ${CODEX_APP_SERVER_COMMAND:codex --disable shell_tool app-server --listen stdio://}
+    account-namespace: ${CODEX_ACCOUNT_NAMESPACE:default}
+    sandbox-directory: ${CODEX_SANDBOX_DIRECTORY:./data/codex-sandbox}
+    # Opt in only after live denial tests prove the deployed Linux sandbox cannot
+    # access CODEX_HOME/auth.json or host paths from an untrusted student turn.
+    student-runtime-validated: ${APP_LLM_STUDENT_RUNTIME_VALIDATED:false}
+  diagnostic:
+    source: ${APP_DIAGNOSTIC_SOURCE:../java_initial_diagnostic_mvp_v2.md}
+  piston:
+    base-url: ${PISTON_BASE_URL:}
+    java-version: ${PISTON_JAVA_VERSION:}
+    compile-timeout-ms: ${PISTON_COMPILE_TIMEOUT_MS:5000}
+    run-timeout-ms: ${PISTON_RUN_TIMEOUT_MS:3000}
+    compile-memory-bytes: ${PISTON_COMPILE_MEMORY_BYTES:268435456}
+    run-memory-bytes: ${PISTON_RUN_MEMORY_BYTES:134217728}

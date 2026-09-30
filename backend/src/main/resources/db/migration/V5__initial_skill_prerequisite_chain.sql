@@ -1,0 +1,3 @@
+-- The supplied diagnostic defines blocks but does not define a semantic
+-- prerequisite graph. Keep prerequisite_code unset until course authors add one.
+-- Selection still starts at the earliest eligible diagnostic block.

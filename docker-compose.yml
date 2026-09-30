@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      APP_BOOTSTRAP_ADMIN_LOGIN: ${APP_BOOTSTRAP_ADMIN_LOGIN:?set in .env}
+      APP_BOOTSTRAP_ADMIN_PASSWORD: ${APP_BOOTSTRAP_ADMIN_PASSWORD:?set in .env}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
+      PISTON_BASE_URL: http://piston:2000
+      CODEX_HOME: /app/codex-home
+      HOME: /app/codex-home
+      APP_LLM_ENABLED: "false"
+      APP_LLM_STUDENT_RUNTIME_VALIDATED: "false"
+    volumes:
+      - adaptive-data:/app/data
+      - codex-home:/app/codex-home
+    depends_on:
+      piston:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+
+  piston:
+    # Official current package digest; immutable unlike the `latest` tag.
+    image: ghcr.io/engineer-man/piston@sha256:2f66b7456189c4d713aa986d98eccd0b6ee16d26c7ec5f21b30e942756fd127a
+    environment:
+      PISTON_MAX_CONCURRENT_JOBS: "2"
+    privileged: true
+    restart: unless-stopped
+    # Leaves headroom for the OS and reverse proxy on a 4 GB VPS.
+    mem_limit: 2g
+    cpus: 2.0
+    volumes:
+      - piston-packages:/piston/packages
+
+volumes:
+  adaptive-data:
+  codex-home:
+  piston-packages:

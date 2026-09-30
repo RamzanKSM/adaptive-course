@@ -1,0 +1,1 @@
+-- Seed tasks are inserted by DiagnosticImporter after their skill rows exist.

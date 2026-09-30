@@ -1,0 +1,23 @@
+# Version-control and local dependencies/build output are not Docker build input.
+.git/
+frontend/node_modules/
+frontend/dist/
+backend/target/
+backend/data/
+*.tsbuildinfo
+# `tsc -b` output for Vite's TypeScript config; Docker compiles from source.
+frontend/vite.config.js
+frontend/vite.config.d.ts
+.DS_Store
+*.log
+
+# Runtime credentials and local operator state.
+.env
+.env.*
+!.env.example
+codex-home/
+**/auth.json
+.secrets/
+*.pem
+*.key
+.piston-cli/
