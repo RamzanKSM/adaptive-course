@@ -12,8 +12,10 @@ services:
       PISTON_BASE_URL: http://piston:2000
       CODEX_HOME: /app/codex-home
       HOME: /app/codex-home
-      APP_LLM_ENABLED: "false"
-      APP_LLM_STUDENT_RUNTIME_VALIDATED: "false"
+      APP_LLM_ENABLED: ${APP_LLM_ENABLED:-false}
+      APP_LLM_STUDENT_RUNTIME_VALIDATED: ${APP_LLM_STUDENT_RUNTIME_VALIDATED:-false}
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-6-luna}
+      CODEX_ACCOUNT_NAMESPACE: ${CODEX_ACCOUNT_NAMESPACE:-default}
     volumes:
       - adaptive-data:/app/data
       - codex-home:/app/codex-home

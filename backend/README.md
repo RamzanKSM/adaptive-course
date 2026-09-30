@@ -44,12 +44,12 @@ docker run --rm --network adaptive_course_default \
 Codex CLI запускают отдельным одноразовым контейнером с **тем же** `codex-home` volume и тем же user, что у backend:
 
 ```sh
+docker compose run --rm --no-deps backend codex logout
 docker compose run --rm --no-deps backend codex login --device-auth
 docker compose run --rm --no-deps backend codex login status
-docker compose run --rm --no-deps backend codex logout
 ```
 
-После входа или смены аккаунта перезапустите backend: `docker compose restart backend`. Перед сменой аккаунта остановите backend: `docker compose stop backend`. Старые thread ID могут быть недоступны новому аккаунту, поэтому одновременно задайте новое `CODEX_ACCOUNT_NAMESPACE` в compose environment перед запуском. Не печатайте и не копируйте `auth.json`; volume `codex-home` не попадает в Git.
+Для смены аккаунта сначала остановите backend: `docker compose stop backend`. Затем выполните три команды выше в указанном порядке: logout, device auth под новым ChatGPT/Codex-аккаунтом и status. После этого измените в `.env` на новое непустое значение `CODEX_ACCOUNT_NAMESPACE`, затем запустите backend. Старые remote thread ID могут быть недоступны новому аккаунту; локальная история уроков и чата в SQLite сохранится. Не печатайте и не копируйте `auth.json`; volume `codex-home` не попадает в Git.
 
 При первом запуске задайте `APP_BOOTSTRAP_ADMIN_LOGIN` и `APP_BOOTSTRAP_ADMIN_PASSWORD`. Backend создаст единственного первого администратора с bcrypt-хешем пароля. Если в базе уже есть администратор, эти переменные игнорируются. Дефолтной учётной записи и пароля нет.
 
@@ -82,7 +82,7 @@ codex login --device-auth
 codex login status
 ```
 
-Device code нужно подтвердить под нужным ChatGPT-аккаунтом. `codex login status` подтверждает режим авторизации, но не личность аккаунта. Затем задайте новое непустое `CODEX_ACCOUNT_NAMESPACE` и перезапустите backend: старые Codex thread ID могут быть недоступны новому аккаунту, а история уроков и чата в SQLite сохранится. Токены, `auth.json` и другие файлы авторизации не выводить и не добавлять в Git.
+Device code нужно подтвердить под нужным ChatGPT-аккаунтом. `codex login status` подтверждает режим авторизации, но не личность аккаунта. В `.env` доступны `APP_LLM_ENABLED`, `APP_LLM_STUDENT_RUNTIME_VALIDATED`, `CODEX_MODEL=gpt-6-luna` и `CODEX_ACCOUNT_NAMESPACE`. Первые два значения остаются `false` по умолчанию. `APP_LLM_STUDENT_RUNTIME_VALIDATED=true` допустим только после проверки на целевом Linux, что студентский turn не может прочитать `CODEX_HOME/auth.json` или пути вне sandbox. Токены, `auth.json` и другие файлы авторизации не выводить и не добавлять в Git.
 
 Для Docker `CODEX_HOME` должен переживать пересоздание контейнера и быть одинаковым для ручного входа и backend:
 
