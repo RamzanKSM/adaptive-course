@@ -31,15 +31,17 @@ Piston запускается пустым: Java runtime нужно постав
 
 ```sh
 git clone --depth 1 https://github.com/engineer-man/piston.git .piston-cli
-docker run --rm --network adaptive_course_default \
+docker run --rm --network adaptive-course_default \
   -v "$PWD/.piston-cli/cli:/cli" -w /cli node:22-bookworm \
   sh -lc 'npm ci && node index.js -u http://piston:2000 ppman install java'
-docker run --rm --network adaptive_course_default \
+docker run --rm --network adaptive-course_default \
   -v "$PWD/.piston-cli/cli:/cli" -w /cli node:22-bookworm \
   sh -lc 'node index.js -u http://piston:2000 ppman list | grep "^java"'
 ```
 
 Только после второй команды отправка Java-решения сможет пройти Piston. `.piston-cli` — локальная служебная папка, её можно удалить после установки. API runtimes можно проверить из backend network запросом `GET http://piston:2000/api/v2/runtimes`. Инструкция основана на [официальном Piston README](https://github.com/engineer-man/piston).
+
+На текущем официальном каталоге после установки доступен `java` версии `15.0.2`; это отдельный runtime Piston, а не Java 21, на которой работает backend. Поэтому задачи должны быть совместимы с Java 15 и не использовать синтаксис или API, появившиеся только в Java 16–21.
 
 Codex CLI запускают отдельным одноразовым контейнером с **тем же** `codex-home` volume и тем же user, что у backend:
 
