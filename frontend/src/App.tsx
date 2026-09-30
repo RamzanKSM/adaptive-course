@@ -15,7 +15,12 @@ export default function App() {
     setError(''); setNotice('')
     try { return await action() } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось выполнить запрос'); return undefined }
   }
-  useEffect(() => { request(() => api<MeResponse>('/auth/me')).then(value => { if (value) setMe(value.user); setLoading(false) }) }, [])
+  useEffect(() => {
+    api<MeResponse>('/auth/me')
+      .then(value => setMe(value.user))
+      .catch(err => { if (!(err instanceof ApiError && err.status === 401)) setError(err instanceof Error ? err.message : 'Не удалось проверить сессию') })
+      .finally(() => setLoading(false))
+  }, [])
   if (loading) return <div className="center">Загружаем…</div>
   if (!me) return <Login onLogin={setMe} onError={setError} error={error} />
   return <main className="app"><header><div><b>Java Tutor</b><span>{me.displayName} · {me.role === 'STUDENT' ? 'Студент' : 'Преподаватель'}</span></div><button className="quiet" onClick={() => request(() => post<void>('/auth/logout')).then(() => setMe(null))}>Выйти</button></header>{error && <div className="flash error">{error}</div>}{notice && <div className="flash">{notice}</div>}{me.role === 'STUDENT' ? <StudentPage request={request} /> : <TeacherPage request={request} />}</main>
