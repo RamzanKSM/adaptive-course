@@ -9,6 +9,8 @@ import java.net.http.*;
 import java.time.Duration;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.LinkedHashSet;
+import java.util.regex.Pattern;
 
 @Component
 class PistonCodeRunner {
@@ -23,12 +25,23 @@ class PistonCodeRunner {
     synchronized(this) { if(cachedStatus!=null&&now-statusCheckedAt<30_000)return cachedStatus; try { String version=javaVersion(); cachedStatus=version.isBlank()?new RuntimeStatus(false,"PISTON_JAVA_NOT_INSTALLED",""):runtimeProbe(version)?new RuntimeStatus(true,"READY",version):new RuntimeStatus(false,"PISTON_JAVA_EXECUTION_FAILED",version); } catch(Exception e) { cachedStatus=new RuntimeStatus(false,"PISTON_UNREACHABLE",""); } statusCheckedAt=now;return cachedStatus; }
   }
   Run run(String studentSource,String testSource) {
-    try { if(!testSource.contains(PASS_MARKER_PLACEHOLDER)) return new Run(false,"Hidden test harness has no pass marker"); String javaVersion=javaVersion(); if(javaVersion.isBlank()) return new Run(false,"Piston does not expose a Java runtime"); String passMarker=randomPassMarker(); ObjectNode request=json.createObjectNode();request.put("language","java");request.put("version",javaVersion);request.put("compile_timeout",compileTimeout);request.put("run_timeout",runTimeout);request.put("compile_memory_limit",compileMemory);request.put("run_memory_limit",runMemory);ArrayNode files=request.putArray("files");files.addObject().put("name","TestHarness.java").put("content",testSource.replace(PASS_MARKER_PLACEHOLDER,passMarker));files.addObject().put("name","Solution.java").put("content",studentSource);
+    try { if(!testSource.contains(PASS_MARKER_PLACEHOLDER)) return new Run(false,"Hidden test harness has no pass marker"); String javaVersion=javaVersion(); if(javaVersion.isBlank()) return new Run(false,"Piston does not expose a Java runtime"); String passMarker=randomPassMarker(); ObjectNode request=json.createObjectNode();request.put("language","java");request.put("version",javaVersion);request.put("compile_timeout",compileTimeout);request.put("run_timeout",runTimeout);request.put("compile_memory_limit",compileMemory);request.put("run_memory_limit",runMemory);ArrayNode files=request.putArray("files");files.addObject().put("name","TestHarness").put("content",combinedSource(studentSource,testSource.replace(PASS_MARKER_PLACEHOLDER,passMarker)));
       var response=http.send(HttpRequest.newBuilder(URI.create(baseUrl+"/api/v2/execute")).timeout(Duration.ofSeconds(20)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(request))).build(),HttpResponse.BodyHandlers.ofString());
       if(response.statusCode()/100!=2)return new Run(false,"Piston execution service is unavailable"); JsonNode root=json.readTree(response.body()),compile=root.path("compile"),run=root.path("run");int compileCode=compile.path("code").asInt(0);String compileOutput=output(compile); if(compileCode!=0)return new Run(false,studentCompilerFeedback(compileOutput));int code=run.path("code").asInt(-1);String output=output(run);return new Run(code==0&&passMarker.equals(output.strip()),code==0&&passMarker.equals(output.strip())?"Решение прошло скрытые проверки":studentRunFeedback(output));
     } catch(Exception e){return new Run(false,"Piston execution service is unavailable");}
   }
   private String randomPassMarker(){byte[] bytes=new byte[24];new SecureRandom().nextBytes(bytes);return "__ADAPTIVE_PASS_"+Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)+"__";}
+  static String combinedSource(String studentSource,String testSource) {
+    SourceWithoutImports harness=withoutImports(testSource), solution=withoutImports(studentSource);
+    String solutionBody=solution.body().replaceFirst("(?m)\\bpublic\\s+(?=(?:(?:final|abstract)\\s+)*class\\s+Solution\\b)","");
+    var imports=new LinkedHashSet<String>(); imports.addAll(harness.imports()); imports.addAll(solution.imports());
+    return String.join("\n",imports)+"\n"+harness.body()+"\n"+solutionBody;
+  }
+  private static SourceWithoutImports withoutImports(String source) {
+    var imports=new LinkedHashSet<String>(); var matcher=Pattern.compile("(?m)^\\s*import\\s+(?:static\\s+)?[\\w.*]+\\s*;\\s*$").matcher(source);
+    var body=new StringBuffer(); while(matcher.find()){imports.add(matcher.group().trim());matcher.appendReplacement(body,"");}matcher.appendTail(body);return new SourceWithoutImports(imports,body.toString());
+  }
+  private record SourceWithoutImports(LinkedHashSet<String> imports,String body) {}
   private String studentCompilerFeedback(String output){if(output==null||output.isBlank()||output.contains("TestHarness"))return "Java compilation failed";return output;}
   private String studentRunFeedback(String output){return "Решение не прошло скрытые проверки";}
   private String output(JsonNode node) { String out=node.path("output").asText(""); if(!out.isBlank())return out; String stderr=node.path("stderr").asText(""); if(!stderr.isBlank())return stderr; return node.path("message").asText(""); }
