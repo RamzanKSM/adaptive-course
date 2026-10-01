@@ -48,9 +48,13 @@ public class ApiController {
     var tasks=availableTasks(userId, lesson, skillCode);
     if(tasks.isEmpty()) {
       if(!tutor.status(userId).available()) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","NO_TASK_AVAILABLE","llm",llm(userId));
-      try { storeGeneratedTask(contentGenerator.generateTask(userId, skillCode)); }
+      if(!codeRunner.status().available()) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","RUNNER_UNAVAILABLE","llm",llm(userId),"runner",runner());
+      boolean stored=false;
+      for(int attempt=0;attempt<2&&!stored;attempt++) try { storeGeneratedTask(contentGenerator.generateTask(userId, skillCode)); stored=true; }
+      catch (InvalidGeneratedContentException ignored) { }
       catch (LlmUnavailableException e) { return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","NO_TASK_AVAILABLE","llm",llm(userId)); }
       tasks=availableTasks(userId, lesson, skillCode);
+      if(tasks.isEmpty()&&!stored) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","LLM_GENERATION_FAILED_VALIDATION","llm",llm(userId));
     }
     if(tasks.isEmpty()) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","NO_TASK_AVAILABLE","llm",llm(userId));
     var task=tasks.getFirst(); db.update("insert into lesson_tasks(lesson_id,task_id) values(?,?)",lesson.get("id"),task.get("id"));
@@ -71,13 +75,13 @@ public class ApiController {
     }).orElse(null);
   }
   private void storeGeneratedTask(GeneratedTask task) {
-    if(task==null || task.skillCode()==null || task.title()==null || task.title().isBlank() || task.statement()==null || task.statement().isBlank() || task.testSource()==null || task.testSource().isBlank() || !task.testSource().contains("class TestHarness") || !task.testSource().contains("main(") || !task.testSource().contains(PistonCodeRunner.PASS_MARKER_PLACEHOLDER) || task.testFileName()==null || task.testFileName().isBlank() || task.referenceSolutionSource()==null || task.referenceSolutionSource().isBlank() || task.targetSkillCodes()==null || !task.targetSkillCodes().contains(task.skillCode()) || task.prerequisiteSkillCodes()==null) throw bad("INVALID_LLM_CONTENT","LLM task must include target skills, a reference solution and runnable hidden harness");
-    if(count("select count(*) from skills where code=?",task.skillCode())==0) throw bad("INVALID_LLM_CONTENT","LLM returned an unknown skill");
-    for(String target:task.targetSkillCodes()) if(count("select count(*) from skills where code=?",target)==0) throw bad("INVALID_LLM_CONTENT","LLM returned an unknown target skill");
-    for(String prerequisite:task.prerequisiteSkillCodes()) if(count("select count(*) from skills where code=?",prerequisite)==0) throw bad("INVALID_LLM_CONTENT","LLM returned an unknown prerequisite skill");
+    if(task==null || task.skillCode()==null || task.title()==null || task.title().isBlank() || task.statement()==null || task.statement().isBlank() || task.testSource()==null || task.testSource().isBlank() || !task.testSource().contains("class TestHarness") || !task.testSource().contains("main(") || !task.testSource().contains(PistonCodeRunner.PASS_MARKER_PLACEHOLDER) || task.testFileName()==null || task.testFileName().isBlank() || task.referenceSolutionSource()==null || task.referenceSolutionSource().isBlank() || task.targetSkillCodes()==null || !task.targetSkillCodes().contains(task.skillCode()) || task.prerequisiteSkillCodes()==null) throw new InvalidGeneratedContentException();
+    if(count("select count(*) from skills where code=?",task.skillCode())==0) throw new InvalidGeneratedContentException();
+    for(String target:task.targetSkillCodes()) if(count("select count(*) from skills where code=?",target)==0) throw new InvalidGeneratedContentException();
+    for(String prerequisite:task.prerequisiteSkillCodes()) if(count("select count(*) from skills where code=?",prerequisite)==0) throw new InvalidGeneratedContentException();
     if(!codeRunner.configured()) throw new LlmUnavailableException("Piston is required to validate generated content");
     var validation=codeRunner.run(task.referenceSolutionSource(),task.testSource());
-    if(!validation.passed()) throw bad("INVALID_LLM_CONTENT","Generated reference solution does not pass hidden-harness validation");
+    if(!validation.passed()) throw new InvalidGeneratedContentException();
     db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?,?,?,?)",task.skillCode(),task.title(),task.statement(),task.starterCode()==null?"":task.starterCode(),task.testSource(),task.testFileName());
     long taskId=db.queryForObject("select last_insert_rowid()",Long.class);
     for(String target:new LinkedHashSet<>(task.targetSkillCodes())) db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",taskId,target);
@@ -119,4 +123,5 @@ public class ApiController {
   private Map<String,Object> active(long u){var x=db.queryForList("select id,lesson_number as number,started_at as startedAt from lessons where user_id=? and finished_at is null order by id desc",u);return x.isEmpty()?null:x.getFirst();} private Map<String,Object> lesson(long id){return db.queryForMap("select id,lesson_number as number,started_at as startedAt,finished_at as finishedAt from lessons where id=?",id);} private void requireDiagnostic(long u){if(count("select count(*) from student_languages where user_id=? and diagnostic_completed_at is not null",u)==0)throw bad("DIAGNOSTIC_REQUIRED","Сначала пройдите диагностику");} private int count(String q,Object...p){return db.queryForObject(q,Integer.class,p);} private long uid(HttpServletRequest r){return ((Number)user(r).get("id")).longValue();} @SuppressWarnings("unchecked") private Map<String,Object> user(HttpServletRequest r){return (Map<String,Object>)r.getAttribute("user");} private long student(HttpServletRequest r){if(!"STUDENT".equals(user(r).get("role")))throw bad("FORBIDDEN","Нужна роль STUDENT");return uid(r);} private void admin(HttpServletRequest r){if(!"ADMIN".equals(user(r).get("role")))throw bad("FORBIDDEN","Нужна роль ADMIN");} private Optional<String> cookie(HttpServletRequest r){return r.getCookies()==null?Optional.empty():Arrays.stream(r.getCookies()).filter(c->c.getName().equals("adaptive_session")).map(Cookie::getValue).findFirst();} private String randomToken(){byte[] b=new byte[32];new SecureRandom().nextBytes(b);return Base64.getUrlEncoder().withoutPadding().encodeToString(b);} private Object json(Object value){try{return new com.fasterxml.jackson.databind.ObjectMapper().readValue((String)value,List.class);}catch(Exception e){throw new IllegalStateException(e);}} private Map<String,Object> obj(Object... entries){var m=new LinkedHashMap<String,Object>();for(int i=0;i<entries.length;i+=2)m.put((String)entries[i],entries[i+1]);return m;} private ApiError bad(String c,String m){return new ApiError(c,m);}
 }
 @ResponseStatus(HttpStatus.BAD_REQUEST) class ApiError extends RuntimeException { final String code; ApiError(String c,String m){super(m);code=c;} }
+class InvalidGeneratedContentException extends RuntimeException { }
 @RestControllerAdvice class Errors { @ExceptionHandler(ApiError.class) ResponseEntity<?> api(ApiError e){return ResponseEntity.badRequest().body(Map.of("error",e.code,"message",e.getMessage()));} }

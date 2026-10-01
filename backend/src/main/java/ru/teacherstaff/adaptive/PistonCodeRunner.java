@@ -13,7 +13,7 @@ import java.util.Base64;
 @Component
 class PistonCodeRunner {
   static final String PASS_MARKER_PLACEHOLDER="{{PASS_MARKER}}";
-  private final ObjectMapper json; private final String baseUrl, configuredJavaVersion; private volatile String discoveredJavaVersion; private volatile RuntimeStatus cachedStatus; private volatile long statusCheckedAt; private final long compileTimeout,runTimeout,compileMemory,runMemory; private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+  private final ObjectMapper json; private final String baseUrl, configuredJavaVersion; private volatile String discoveredJavaVersion; private volatile RuntimeStatus cachedStatus; private volatile long statusCheckedAt; private final long compileTimeout,runTimeout,compileMemory,runMemory; private final HttpClient http=HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build();
   PistonCodeRunner(ObjectMapper json,@Value("${app.piston.base-url}") String baseUrl,@Value("${app.piston.java-version}") String javaVersion,@Value("${app.piston.compile-timeout-ms}") long compileTimeout,@Value("${app.piston.run-timeout-ms}") long runTimeout,@Value("${app.piston.compile-memory-bytes}") long compileMemory,@Value("${app.piston.run-memory-bytes}") long runMemory){this.json=json;this.baseUrl=baseUrl.replaceAll("/$","");this.configuredJavaVersion=javaVersion;this.compileTimeout=compileTimeout;this.runTimeout=runTimeout;this.compileMemory=compileMemory;this.runMemory=runMemory;}
   boolean configured(){return !baseUrl.isBlank();}
   RuntimeStatus status() {
