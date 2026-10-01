@@ -23,6 +23,10 @@ services:
       piston:
         condition: service_started
     restart: unless-stopped
+    # Docker 29.6.1 default profile plus the four bwrap namespace syscalls.
+    # Never replace this with seccomp=unconfined.
+    security_opt:
+      - seccomp=./deploy/seccomp/backend-bwrap.json
     mem_limit: 768m
     cpus: 1.0
 
