@@ -4,7 +4,7 @@ backend/target/
 frontend/node_modules/
 frontend/dist/
 *.tsbuildinfo
-# `tsc -b` compiles the Vite config through tsconfig.node.json.
+# Stale copies from older builds; tsc now emits the Vite config into node_modules/.tmp.
 frontend/vite.config.js
 frontend/vite.config.d.ts
 .DS_Store

@@ -26,3 +26,42 @@
   .task, .chat { padding: 15px; }
   .code-editor { font-size: 12px; }
 }
+
+/* Layout and state fixes */
+[hidden] { display: none !important; }
+.center { min-height: 60vh; display: grid; place-items: center; color: #6a706b; }
+.flash { position: sticky; top: 8px; z-index: 5; display: flex; justify-content: space-between; align-items: start; gap: 12px; box-shadow: 0 4px 16px #28352b14; }
+.flash.error { background: #fdecea; }
+.flash-close { flex: none; padding: 0 6px; background: transparent; color: inherit; font-size: 20px; line-height: 1; }
+.actions { gap: 10px; }
+.actions > :last-child { margin-left: auto; }
+.lesson-grid { align-items: start; }
+.chat { position: sticky; top: 16px; min-height: 420px; max-height: calc(100vh - 32px); }
+.messages { min-height: 120px; overscroll-behavior: contain; }
+.typing { margin: 8px 0; }
+.empty-task { text-align: left; }
+.student-list .list-note { margin: 0; padding: 14px; }
+.student-detail.placeholder { display: grid; place-items: center; text-align: center; }
+.student-detail h2 + .muted { margin-top: -6px; }
+.lesson-list { display: grid; gap: 6px; }
+.lesson-item { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; width: 100%; text-align: left; background: #f4f6f4; color: #242723; font-weight: 400; padding: 9px 12px; }
+.lesson-item span { font-size: 13px; color: #6d746e; }
+.lesson-item:hover { background: #eaf3ed; }
+.lesson-item.selected { background: #dcece2; box-shadow: inset 3px 0 0 #295f4d; }
+.student-detail article small { display: block; color: #6d746e; font-size: 11px; margin-bottom: 2px; }
+summary { cursor: pointer; }
+summary.passed { color: #175b38; }
+summary.not-passed { color: #8f3823; }
+
+.admin { grid-template-columns: minmax(0, 1fr) minmax(300px, .75fr); }
+.inline-form { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.inline-form input { min-width: 0; }
+.student-detail article > b:first-child { display: block; margin-bottom: 4px; }
+
+@media (max-width: 1000px) {
+  .admin { grid-template-columns: 1fr; }
+}
+@media (max-width: 800px) {
+  .chat { position: static; max-height: 75vh; }
+  .actions button { flex: 1; }
+}
