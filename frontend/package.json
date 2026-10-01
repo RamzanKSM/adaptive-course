@@ -8,11 +8,14 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "@codemirror/lang-java": "^6.0.2",
+    "@uiw/react-codemirror": "^4.25.12",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "react-markdown": "^10.1.0",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

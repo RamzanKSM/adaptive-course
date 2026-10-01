@@ -32,5 +32,9 @@ class DiagnosticImportIntegrationTest {
     var seeds=db.queryForList("select t.statement,t.starter_code from tasks t join task_target_skills ts on ts.task_id=t.id where ts.skill_code='BASIC_CODE_READING'");
     assertEquals(9,seeds.size());
     for(var seed:seeds) { assertTrue(((String)seed.get("statement")).contains("System.out.print")); assertTrue(((String)seed.get("starter_code")).contains("String answer()")); }
+    var twoLines=db.queryForMap("select statement,starter_code from tasks where title='Две строки'");
+    assertTrue(((String)twoLines.get("statement")).contains("Верни в `Solution.answer()` Java-строку"));
+    assertTrue(((String)twoLines.get("statement")).contains("```java\n"));
+    assertTrue(((String)twoLines.get("starter_code")).contains("public class Solution {\n    public static String answer()"));
   }
 }

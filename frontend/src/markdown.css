@@ -1,0 +1,28 @@
+.question-prompt > :first-child,
+.markdown > :first-child { margin-top: 0; }
+
+.question-prompt > :last-child,
+.markdown > :last-child { margin-bottom: 0; }
+
+.choices label { grid-template-columns: auto minmax(0, 1fr); }
+.explanation { margin-bottom: 21px; }
+
+.code-label { display: grid; gap: 7px; font-weight: 600; font-size: 14px; }
+.code-editor { overflow: hidden; border: 1px solid #cfd5cf; border-radius: 8px; background: #fbfcfb; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; }
+.code-editor .cm-editor { height: 100%; outline: 0; }
+.code-editor .cm-scroller { overflow: auto; font-family: inherit; }
+.code-editor .cm-content { padding: 12px 0; }
+.code-editor .cm-gutters { border-right: 1px solid #e4e7e3; background: #f3f6f3; color: #7b837d; }
+.code-editor .cm-activeLine { background: #eef6f1; }
+
+.markdown { min-width: 0; }
+.markdown code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #edf2ef; border-radius: 4px; padding: 1px 4px; font-size: .92em; }
+.markdown pre { max-width: 100%; overflow-x: auto; white-space: pre; margin: 12px 0; padding: 12px; background: #f3f6f3; border: 1px solid #e1e6e1; border-radius: 8px; line-height: 1.5; }
+.markdown pre code { display: block; width: max-content; min-width: 100%; padding: 0; background: transparent; border-radius: 0; font-size: 13px; }
+.inline-markdown { display: inline; }
+.message p { white-space: normal; }
+
+@media (max-width: 800px) {
+  .task, .chat { padding: 15px; }
+  .code-editor { font-size: 12px; }
+}

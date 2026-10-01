@@ -39,7 +39,13 @@ class DiagnosticImporter implements ApplicationRunner {
     addReadingTask("Число и текст", "System.out.print(3);\nSystem.out.println(\" кота\");", "3 кота\n");
     addReadingTask("Три вывода", "System.out.print('X');\nSystem.out.println(\"Y\");\nSystem.out.print(false);", "XY\nfalse");
   }
-  private void addReadingTask(String title,String snippet,String expected) { String statement="Что выведет этот код?\n\n```java\n"+snippet+"\n```\n\nВ готовом `Solution.answer()` впиши точный вывод одной строкой. Для перевода строки используй `\\n`.";String starter="public class Solution { public static String answer() { return \"\"; } }";String test="public class TestHarness { public static void main(String[] args) { if (!\""+javaLiteral(expected)+"\".equals(Solution.answer())) throw new AssertionError(); System.out.println(\"{{PASS_MARKER}}\"); } }"; addTask(title,statement,starter,test); }
+  private void addReadingTask(String title,String snippet,String expected) { String statement="Что выведет этот код?\n\n```java\n"+snippet+"\n```\n\nВерни в `Solution.answer()` Java-строку с точным выводом программы. Меняй только выражение после `return`. Если `println` добавляет перенос строки, запиши его внутри строки как `\\n`.";String starter="""
+      public class Solution {
+          public static String answer() {
+              return \"\";
+          }
+      }
+      """.strip();String test="public class TestHarness { public static void main(String[] args) { if (!\""+javaLiteral(expected)+"\".equals(Solution.answer())) throw new AssertionError(); System.out.println(\"{{PASS_MARKER}}\"); } }"; addTask(title,statement,starter,test); }
   private String javaLiteral(String value) { return value.replace("\\","\\\\").replace("\n","\\n").replace("\"","\\\""); }
   private void addTask(String title,String statement,String starter,String test) { var existing=db.queryForList("select id from tasks where title=?",title);if(!existing.isEmpty()){long id=((Number)existing.getFirst().get("id")).longValue();db.update("update tasks set skill_code=?,statement=?,starter_code=?,test_source=?,test_file_name=?,active=1 where id=?","BASIC_CODE_READING",statement,starter,test,"TestHarness.java",id);db.update("insert or ignore into task_target_skills(task_id,skill_code) values(?,?)",id,"BASIC_CODE_READING");return;} db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?,?,?,?)","BASIC_CODE_READING",title,statement,starter,test,"TestHarness.java"); db.update("insert into task_target_skills(task_id,skill_code) values(last_insert_rowid(),?)", "BASIC_CODE_READING"); }
 }

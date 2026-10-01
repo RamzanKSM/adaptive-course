@@ -1,10 +1,27 @@
 import { FormEvent, useEffect, useState } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { java } from '@codemirror/lang-java'
+import ReactMarkdown from 'react-markdown'
 import { api, ApiError, post } from './api'
 import type { Attempt, ChatMessage, Diagnostic, LearningNext, Lesson, MeResponse, Progress, Student, User } from './types'
 
 const UNKNOWN = 'Не знаю'
 const codeFallback = 'public class Solution {\n    public static void main(String[] args) {\n        // Напишите решение здесь\n    }\n}\n'
 const fmt = (value?: string) => value && new Date(value).toLocaleString('ru-RU')
+const javaExtensions = [java()]
+
+function Markdown({ children, inline = false }: { children: string; inline?: boolean }) {
+  const content = <ReactMarkdown
+    components={{
+      p: ({ children: paragraphChildren }) => inline ? <>{paragraphChildren}</> : <p>{paragraphChildren}</p>,
+      code: ({ className, children, node: _node, ...props }) => {
+        const language = /language-(\w+)/.exec(className || '')?.[1]
+        return language ? <code className={`language-${language}`}>{children}</code> : <code {...props}>{children}</code>
+      },
+    }}
+  >{children}</ReactMarkdown>
+  return inline ? <span className="markdown inline-markdown">{content}</span> : <div className="markdown">{content}</div>
+}
 
 export default function App() {
   const [me, setMe] = useState<User | null>(null)
@@ -45,7 +62,7 @@ function StudentPage({ request }: { request: Request }) {
 function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnostic; request: Request; onDone: () => void }) {
   const [index, setIndex] = useState(0); const [answers, setAnswers] = useState<Record<string, number | null>>({}); const question = diagnostic.questions[index]; const last = index === diagnostic.questions.length - 1
   const save = async () => { const body = { answers: diagnostic.questions.map(q => ({ questionId: q.id, selectedOption: answers[q.id] ?? null })) }; const done = await request(() => post('/diagnostic', body)); if (done) onDone() }
-  return <section className="diagnostic"><p className="eyebrow">ПЕРВИЧНАЯ ДИАГНОСТИКА</p><h1>Поймём, с чего начать</h1><p>Здесь нет оценки. Если не уверены, выберите «Не знаю».</p><div className="meter"><i style={{ width: `${((index + 1) / diagnostic.questions.length) * 100}%` }} /></div><small>Вопрос {index + 1} из {diagnostic.questions.length}</small><article className="card question"><h2>{question.prompt}</h2><div className="choices">{[...question.options, UNKNOWN].map((option, optionIndex) => <label key={option}><input type="radio" checked={answers[question.id] === (optionIndex === question.options.length ? null : optionIndex)} onChange={() => setAnswers({ ...answers, [question.id]: optionIndex === question.options.length ? null : optionIndex })} />{option}</label>)}</div></article><div className="actions">{index > 0 && <button className="secondary" onClick={() => setIndex(index - 1)}>Назад</button>}{last ? <button disabled={answers[question.id] === undefined} onClick={save}>Завершить диагностику</button> : <button disabled={answers[question.id] === undefined} onClick={() => setIndex(index + 1)}>Далее</button>}</div></section>
+  return <section className="diagnostic"><p className="eyebrow">ПЕРВИЧНАЯ ДИАГНОСТИКА</p><h1>Поймём, с чего начать</h1><p>Здесь нет оценки. Если не уверены, выберите «Не знаю».</p><div className="meter"><i style={{ width: `${((index + 1) / diagnostic.questions.length) * 100}%` }} /></div><small>Вопрос {index + 1} из {diagnostic.questions.length}</small><article className="card question"><div className="question-prompt"><Markdown>{question.prompt}</Markdown></div><div className="choices">{[...question.options, UNKNOWN].map((option, optionIndex) => <label key={option}><input type="radio" checked={answers[question.id] === (optionIndex === question.options.length ? null : optionIndex)} onChange={() => setAnswers({ ...answers, [question.id]: optionIndex === question.options.length ? null : optionIndex })} /><Markdown inline>{option}</Markdown></label>)}</div></article><div className="actions">{index > 0 && <button className="secondary" onClick={() => setIndex(index - 1)}>Назад</button>}{last ? <button disabled={answers[question.id] === undefined} onClick={save}>Завершить диагностику</button> : <button disabled={answers[question.id] === undefined} onClick={() => setIndex(index + 1)}>Далее</button>}</div></section>
 }
 
 function LessonView({ lesson, request, refresh }: { lesson: LearningNext | null; request: Request; refresh: () => void }) {
@@ -58,20 +75,20 @@ function LessonView({ lesson, request, refresh }: { lesson: LearningNext | null;
     : lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' ? 'Новая задача не прошла проверку. Попробуйте запросить её ещё раз.'
       : lesson.reason === 'RUNNER_UNAVAILABLE' ? 'Проверка Java сейчас недоступна. Попробуйте ещё раз позже.'
         : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены.' : 'Контент урока загружается.'
-  return <section className="lesson"><div className="lesson-heading"><div><p className="eyebrow">АКТИВНЫЙ УРОК · {lesson.lesson.number}</p><h1>{title}</h1></div><button className="secondary" onClick={() => request(() => post(`/lessons/${lesson.lesson.id}/finish`)).then(refresh)}>Завершить урок</button></div>{lesson.explanation && <article className="explanation"><h2>Объяснение</h2><p>{lesson.explanation.content}</p></article>}{lesson.task ? <div className="lesson-grid"><TaskEditor key={lesson.task.id} task={lesson.task} request={request} onPassed={refresh} /><Chat llm={lesson.llm} request={request} /></div> : <article className="empty"><h2>{lesson.reason === 'NO_DUE_SKILL' ? 'Урок можно завершить' : 'Задача ещё не подготовлена'}</h2><p>{emptyMessage}</p>{retryable && <button className="secondary" onClick={refresh}>Повторить</button>}<Chat llm={lesson.llm} request={request} /></article>}</section>
+  return <section className="lesson"><div className="lesson-heading"><div><p className="eyebrow">АКТИВНЫЙ УРОК · {lesson.lesson.number}</p><h1>{title}</h1></div><button className="secondary" onClick={() => request(() => post(`/lessons/${lesson.lesson.id}/finish`)).then(refresh)}>Завершить урок</button></div>{lesson.explanation && <article className="explanation"><h2>Объяснение</h2><Markdown>{lesson.explanation.content}</Markdown></article>}{lesson.task ? <div className="lesson-grid"><TaskEditor key={lesson.task.id} task={lesson.task} request={request} onPassed={refresh} /><Chat llm={lesson.llm} request={request} /></div> : <article className="empty"><h2>{lesson.reason === 'NO_DUE_SKILL' ? 'Урок можно завершить' : 'Задача ещё не подготовлена'}</h2><p>{emptyMessage}</p>{retryable && <button className="secondary" onClick={refresh}>Повторить</button>}<Chat llm={lesson.llm} request={request} /></article>}</section>
 }
 
 function TaskEditor({ task, request, onPassed }: { task: { id: string; title: string; statement: string; starterCode?: string }; request: Request; onPassed: () => void }) {
   const [code, setCode] = useState(task.starterCode || codeFallback); const [attempt, setAttempt] = useState<Attempt | null>(null); const [sending, setSending] = useState(false)
   async function submit() { setSending(true); const result = await request(() => post<Attempt>('/attempts', { taskId: task.id, sourceCode: code })); if (result) { setAttempt(result); if (result.passed) onPassed() }; setSending(false) }
-  return <section className="task"><h2>{task.title}</h2><p>{task.statement}</p><label className="code-label">Решение на Java<textarea className="code" spellCheck={false} value={code} onChange={e => setCode(e.target.value)} /></label><button disabled={sending} onClick={submit}>{sending ? 'Проверяем…' : 'Отправить на проверку'}</button>{attempt && <div className={`result ${attempt.passed ? 'success' : 'failed'}`}><b>{attempt.passed ? 'Решение принято' : 'Нужно доработать'}</b>{attempt.output && <pre>{attempt.output}</pre>}</div>}</section>
+  return <section className="task"><h2>{task.title}</h2><Markdown>{task.statement}</Markdown><div className="code-label"><span>Решение на Java</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={javaExtensions} onChange={setCode} aria-label="Редактор решения на Java" /></div><button disabled={sending} onClick={submit}>{sending ? 'Проверяем…' : 'Отправить на проверку'}</button>{attempt && <div className={`result ${attempt.passed ? 'success' : 'failed'}`}><b>{attempt.passed ? 'Решение принято' : 'Нужно доработать'}</b>{attempt.output && <pre>{attempt.output}</pre>}</div>}</section>
 }
 
 function Chat({ llm, request }: { llm?: { available: boolean; reason?: string }; request: Request }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [text, setText] = useState(''); const [status, setStatus] = useState(''); const [available, setAvailable] = useState(llm?.available); const [sending, setSending] = useState(false)
   useEffect(() => { request(() => api<{ messages: ChatMessage[]; llm: { available: boolean; reason?: string } }>('/chat')).then(value => { if (value) { setMessages(value.messages); setAvailable(value.llm.available); setStatus(value.llm.available ? '' : (value.llm.reason ?? 'LLM сейчас недоступна')) } }) }, [])
   async function send(e: FormEvent) { e.preventDefault(); const content = text.trim(); if (!content) return; setSending(true); setStatus(''); setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'STUDENT', content, createdAt: new Date().toISOString() }]); setText(''); const result = await request(() => post<{ message: ChatMessage }>('/chat', { content })); if (result) setMessages(m => [...m, result.message]); setSending(false) }
-  return <aside className="chat"><h2>Спросить преподавателя</h2><div className="messages">{messages.length ? messages.map(m => <div key={m.id} className={`message ${m.role.toLowerCase()}`}><small>{m.role === 'STUDENT' ? 'Вы' : 'Помощник'} {fmt(m.createdAt)}</small><p>{m.content}</p></div>) : <p className="muted">Задайте вопрос по текущей задаче.</p>}</div>{status && <p className="muted">{status}</p>}{available === false ? <p className="muted">{llm?.reason ?? 'Помощник временно недоступен.'}</p> : <form onSubmit={send}><textarea value={text} onChange={e => setText(e.target.value)} placeholder="Ваш вопрос" /><button disabled={sending}>{sending ? 'Отправляем…' : 'Отправить'}</button></form>}</aside>
+  return <aside className="chat"><h2>Учебный помощник</h2><div className="messages">{messages.length ? messages.map(m => <div key={m.id} className={`message ${m.role.toLowerCase()}`}><small>{m.role === 'STUDENT' ? 'Вы' : 'Помощник'} {fmt(m.createdAt)}</small><Markdown>{m.content}</Markdown></div>) : <p className="muted">Помощник подскажет ход мысли; за точным разбором обратитесь к преподавателю.</p>}</div>{status && <p className="muted">{status}</p>}{available === false ? <p className="muted">{llm?.reason ?? 'Помощник временно недоступен.'}</p> : <form onSubmit={send}><textarea value={text} onChange={e => setText(e.target.value)} placeholder="Опишите, где возникло затруднение" aria-label="Ваш вопрос учебному помощнику" /><button disabled={sending}>{sending ? 'Отправляем…' : 'Отправить'}</button></form>}</aside>
 }
 
 function ProgressView({ progress }: { progress: Progress | null }) { return <section><h1>Мой прогресс</h1>{!progress ? <p>Загружаем…</p> : <div className="card"><div className="skills">{progress.skills.length ? progress.skills.map(skill => <div key={skill.skillCode}><span>{skill.title}</span><div className="bar"><i style={{ width: `${skill.mastered ? 100 : Math.min(90, skill.iterationSuccesses * 30)}%` }} /></div><small>{skill.mastered ? 'Освоено' : `${skill.completedIterations}/3 итераций · ${skill.iterationSuccesses}/3 успешных решений`}</small></div>) : <p className="muted">Прогресс появится после первого решения.</p>}</div></div>}</section> }
