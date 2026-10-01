@@ -1,6 +1,7 @@
 package ru.teacherstaff.adaptive;
 
-/** Server-derived context sent to the teacher adapter; never populated from client input. */
+/** Context for the teacher adapter. Only currentEditorSource is an untrusted client snapshot; the rest is server-derived. */
 record TutorContext(long lessonId, int lessonNumber, String skillCode, String skillTitle,
                     Long taskId, String taskTitle, String taskStatement,
-                    String latestSubmissionSource, Boolean latestSubmissionPassed, String latestSubmissionOutput) {}
+                    String currentEditorSource, String latestSubmissionSource,
+                    Boolean latestSubmissionPassed, String latestSubmissionOutput) {}

@@ -25,16 +25,18 @@ class DiagnosticImportIntegrationTest {
     assertEquals(44, db.queryForObject("select count(*) from skills", Integer.class));
     assertEquals(9, db.queryForObject("select count(*) from tasks", Integer.class));
     assertEquals(1, db.queryForObject("select count(*) from explanations", Integer.class));
-    String harness=db.queryForObject("select test_source from tasks where title='Число и текст'",String.class);
+    String harness=db.queryForObject("select test_source from tasks where title='Консоль: кота'",String.class);
     assertTrue(harness.contains("class TestHarness"));
     assertTrue(harness.contains("main("));
     assertTrue(harness.contains(PistonCodeRunner.PASS_MARKER_PLACEHOLDER));
     var seeds=db.queryForList("select t.statement,t.starter_code from tasks t join task_target_skills ts on ts.task_id=t.id where ts.skill_code='BASIC_CODE_READING'");
     assertEquals(9,seeds.size());
-    for(var seed:seeds) { assertTrue(((String)seed.get("statement")).contains("System.out.print")); assertTrue(((String)seed.get("starter_code")).contains("String answer()")); }
-    var twoLines=db.queryForMap("select statement,starter_code from tasks where title='Две строки'");
-    assertTrue(((String)twoLines.get("statement")).contains("Верни в `Solution.answer()` Java-строку"));
-    assertTrue(((String)twoLines.get("statement")).contains("```java\n"));
-    assertTrue(((String)twoLines.get("starter_code")).contains("public class Solution {\n    public static String answer()"));
+    for(var seed:seeds) { assertTrue(((String)seed.get("statement")).contains("System.out.print")); assertTrue(((String)seed.get("starter_code")).contains("void main(String[] args)")); }
+    var twoLines=db.queryForMap("select statement,starter_code from tasks where title='Консоль: две строки'");
+    assertTrue(((String)twoLines.get("statement")).contains("Дополни тело `Solution.main(String[] args)`"));
+    assertTrue(((String)twoLines.get("starter_code")).contains("public class Solution {\n    public static void main(String[] args)"));
+    assertTrue(harness.contains("ByteArrayOutputStream"));
+    assertTrue(harness.contains("Solution.main(new String[0])"));
+    assertTrue(harness.contains("finally"));
   }
 }

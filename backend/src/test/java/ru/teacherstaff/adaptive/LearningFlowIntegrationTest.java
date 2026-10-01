@@ -50,6 +50,37 @@ class LearningFlowIntegrationTest {
     verifyNoInteractions(generator);
   }
 
+  @Test void retiredPredictionTaskKeepsHistoryButIsSkippedAndCannotBeAttempted() throws Exception {
+    String token=createStudentAndLogin("retired-student"); long student=studentId("retired-student"); submitDiagnostic(token,student,false);
+    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?,?,?,?)", "BASIC_CODE_READING", "Вывод строки", "Что выведет этот код?", "public class Solution { public static String answer(){ return \"\"; } }", "class TestHarness { public static void main(String[] args) { Solution.answer(); } }", "TestHarness.java");
+    long oldTask=db.queryForObject("select last_insert_rowid()",Long.class);
+    db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",oldTask,"BASIC_CODE_READING");
+    int lesson=start(token); long lessonId=db.queryForObject("select id from lessons where user_id=? and lesson_number=?",Long.class,student,lesson);
+    db.update("insert into lesson_tasks(lesson_id,task_id) values(?,?)",lessonId,oldTask);
+    db.update("insert into submissions(lesson_id,task_id,source_code,passed,runner_output) values(?,?,?,?,?)",lessonId,oldTask,"old code",0,"old output");
+    var importer=new DiagnosticImporter(db,json,Path.of("missing-diagnostic.md").toString());
+    importer.run(null);
+    importer.run(null);
+    assertEquals(0,db.queryForObject("select active from tasks where id=?",Integer.class,oldTask));
+    assertEquals(1,db.queryForObject("select count(*) from submissions where task_id=?",Integer.class,oldTask));
+    var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertNotEquals(oldTask,response.path("task").path("id").asLong());
+    var attempt=json.readTree(mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",oldTask,"sourceCode","public class Solution {}")))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("TASK_UPDATED",attempt.path("error").asText());
+    assertEquals(9,db.queryForObject("select count(*) from tasks where skill_code='BASIC_CODE_READING' and active=1 and title like 'Консоль:%'",Integer.class));
+  }
+
+  @Test void chatReceivesFreshEditorDraftForCurrentTask() throws Exception {
+    String token=createStudentAndLogin("chat-draft-student"); long student=studentId("chat-draft-student"); submitDiagnostic(token,student,false); start(token);
+    long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
+    when(tutor.reply(anyLong(),any(TutorContext.class),anyString())).thenReturn("Подумай о первой строке.");
+    String draft="public class Solution { public static void main(String[] args) { System.out.print(\"черновик\"); } }";
+    mvc.perform(post("/api/chat").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("content","Что проверить?","taskId",String.valueOf(task),"sourceCode",draft)))).andExpect(status().isOk());
+    var context=org.mockito.ArgumentCaptor.forClass(TutorContext.class); verify(tutor).reply(eq(student),context.capture(),eq("Что проверить?"));
+    assertEquals(draft,context.getValue().currentEditorSource());
+    assertNull(context.getValue().latestSubmissionSource());
+  }
+
   @Test void successfulTasksCompleteOnlyScheduledIterations() throws Exception {
     String token=createStudentAndLogin("progress-student"); long student=studentId("progress-student"); submitDiagnostic(token,student,false);
     db.update("update student_languages set starting_block=0 where user_id=?",student);
