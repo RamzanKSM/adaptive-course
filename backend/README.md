@@ -25,9 +25,9 @@ Compose намеренно публикует backend только на `127.0.0
 
 Для Codex `bwrap` backend использует [узкий custom seccomp profile](../deploy/seccomp/backend-bwrap.json). Его baseline — точный [Docker/Moby default profile `docker-v29.6.1`](https://raw.githubusercontent.com/moby/moby/docker-v29.6.1/vendor/github.com/moby/profiles/seccomp/default.json), сохранённый без изменений вне двух добавленных правил. Добавлены только `unshare`, `mount`, `umount2`, `pivot_root` и `clone` при флаге `CLONE_NEWUSER`; `seccomp=unconfined` не используется. На этом VPS нет AppArmor/SELinux, поэтому нельзя приписывать baseline отдельную защиту `socketcall` или AF_ALG: Docker 29.4.3 перенёс её на LSM. Это расширяет syscall surface backend container и требует одноразовой проверки bwrap на VPS. Если bwrap запросит другой syscall, его нужно подтвердить по deny log и добавить отдельно, не ослабляя профиль целиком.
 
-Piston остаётся без опубликованного порта и запускается privileged, поэтому его нельзя открывать напрямую в интернет. LLM по умолчанию остаётся выключенной и fail-closed; пользовательская авторизация Codex App Server разрешена только для локального MVP, не для hosted-сервиса.
+Piston остаётся без опубликованного порта и запускается privileged, поэтому его нельзя открывать напрямую в интернет. LLM остаётся выключенной и fail-closed по умолчанию. На `course.rmzn.net` она включена только явными переменными `.env` после проверки sandbox; это opt-in конфигурация развёртывания, а не изменение безопасных дефолтов образа.
 
-Для VPS с 4 GB RAM Compose ограничивает backend до 768 MB, Piston до 2 GB и оставляет память ОС и reverse proxy. Piston одновременно запускает не больше двух jobs. Лимиты одного запуска Java заданы отдельно: 256 MB на компиляцию и 128 MB на выполнение. Образ Piston зафиксирован официальным immutable digest, а не подвижным `latest`; обновление образа требует отдельной проверки и изменения Compose. Сейчас на VPS доступно 8.3 GB и Docker помечает 10.84 GB build cache как reclaimable. Этого достаточно, чтобы продолжить подготовку, но перед сборкой и обновлениями нужно проверять заполнение Docker volumes и логов. Очистка Docker cache или данных выполняется только отдельной осознанной операцией.
+Для VPS с 4 GB RAM Compose ограничивает backend до 768 MB, Piston до 2 GB и оставляет память ОС и reverse proxy. Piston одновременно запускает не больше двух jobs. Лимиты одного запуска Java заданы отдельно: 256 MB на компиляцию и 128 MB на выполнение. Образ Piston зафиксирован официальным immutable digest, а не подвижным `latest`; обновление образа требует отдельной проверки и изменения Compose. Перед сборкой или обновлением проверьте свободное место командой `df -h /`, Docker cache и volumes — через `docker system df`, а заполнение логов — отдельно; очистка cache или данных выполняется только отдельной осознанной операцией.
 
 Piston запускается пустым: Java runtime нужно поставить один раз после запуска, затем проверить, что он виден API. Runtime хранится в named volume `piston-packages`. Образ API не содержит package-manager CLI, поэтому для установки нужен checkout официального Piston repository и временный Node-контейнер в той же Compose-сети:
 
@@ -70,15 +70,15 @@ docker compose up --build -d
 
 `PISTON_BASE_URL` задаёт URL собственного Piston. Без него отправка решения возвращает `503`; успешный результат не имитируется.
 
-LLM выключена по умолчанию. Адаптер подготовлен для одного дочернего процесса `codex --disable shell_tool app-server --listen stdio://`, persistent thread в `student_languages` и последовательных turns одного студента. Образ фиксирует Codex CLI `0.159.3`. Чат студентов сейчас намеренно **fail-closed**: по умолчанию статус `STUDENT_RUNTIME_NOT_VALIDATED`, child process не запускается.
+LLM выключена по умолчанию. Адаптер использует один дочерний процесс `codex --disable shell_tool app-server --listen stdio://`, persistent thread в `student_languages` и последовательные turns одного студента. Образ фиксирует Codex CLI `0.159.3`. Без `APP_LLM_ENABLED=true` и `APP_LLM_STUDENT_RUNTIME_VALIDATED=true` чат остаётся **fail-closed** со статусом `STUDENT_RUNTIME_NOT_VALIDATED`; в текущем явно настроенном развёртывании `course.rmzn.net` оба условия прошли проверку sandbox и LLM включена.
 
-Причина: `readOnly` sandbox разрешает чтение, поэтому сам по себе не защищает `auth.json`. Entrypoint копирует управляемый приложением [профиль `student-tutor`](codex-config.toml) в persistent `CODEX_HOME/config.toml`, не затрагивая `auth.json`. Профиль запрещает `:root` и `/app/codex-home`, разрешает только `:minimal` на чтение и отключает сеть. App Server запрашивает этот профиль в `thread/start` и `turn/start`, а `initialize` включает `capabilities.experimentalApi=true`. Это настройка защиты, а не доказательство её действия: перед установкой `APP_LLM_STUDENT_RUNTIME_VALIDATED=true` оператор обязан на целевом Linux runtime доказать, что студентский turn не может прочитать `CODEX_HOME/auth.json` и пути вне sandbox. До этого флага вопросы студентов в App Server не передаются.
+Причина: `readOnly` sandbox разрешает чтение, поэтому сам по себе не защищает `auth.json`. Entrypoint копирует управляемый приложением [профиль `student-tutor`](codex-config.toml) в persistent `CODEX_HOME/config.toml`, не затрагивая `auth.json`. Профиль запрещает `:root` и `/app/codex-home`, разрешает только `:minimal` на чтение и отключает сеть. App Server запрашивает этот профиль в `thread/start` и `turn/start`, а `initialize` включает `capabilities.experimentalApi=true`. Перед установкой `APP_LLM_STUDENT_RUNTIME_VALIDATED=true` для нового Linux runtime оператор обязан доказать, что студентский turn не может прочитать `CODEX_HOME/auth.json` и пути вне sandbox. Эта проверка выполнена для текущего `course.rmzn.net`; в другом окружении её нужно повторить. До этого флага вопросы студентов в App Server не передаются.
 
 Модель по умолчанию — `CODEX_MODEL=gpt-6-luna`. `CODEX_APP_SERVER_COMMAND` позволяет указать другой путь к CLI, но должен запускать App Server с transport `stdio://`; не убирайте `--disable shell_tool` без отдельной проверки безопасности.
 
-### Локальная авторизация и смена аккаунта
+### Авторизация Codex и смена аккаунта
 
-Если безопасный путь будет утверждён, остановите backend и на том же хосте (либо внутри контейнера с тем же persistent `CODEX_HOME`) выполните вручную:
+Для включённого deployment остановите backend и на том же хосте (либо внутри контейнера с тем же persistent `CODEX_HOME`) выполните вручную:
 
 ```sh
 codex logout
@@ -101,10 +101,10 @@ services:
 
 Это пример локального запуска; `codex-home` содержит секреты и исключается из Git. Скрипта смены аккаунта в репозитории нет: переключение выполняется вручную указанными командами. Persistent thread нужен для `thread/resume`, поэтому `codex exec --ephemeral` здесь не подходит.
 
-Пользовательскую авторизацию App Server нельзя использовать для hosted-сервиса, поэтому эта интеграция предназначена только для локального MVP. Официальные команды: [OpenAI Codex CLI reference](https://developers.openai.com/codex/cli/reference).
+На `course.rmzn.net` пользовательская авторизация используется через этот явный opt-in путь с persistent `codex-home`; при переносе на другой сервер нужно повторить проверку sandbox до включения student runtime. Официальные команды: [OpenAI Codex CLI reference](https://developers.openai.com/codex/cli/reference).
 
 ## Осознанные границы первого среза
 
 Есть девять seed-задач и объяснение для `BASIC_CODE_READING`: это задания на точное предсказание вывода `System.out.print/println` с литералами. Их достаточно для трёх итераций первого навыка при настроенном Piston. Диагностика определяет начальный блок; semantic prerequisite graph в исходных материалах не задан, поэтому `prerequisite_code` пока пустой и готов для заполнения авторами курса. Backend выбирает самый ранний доступный блок и случайную задачу внутри него.
 
-При отсутствии подходящей задачи backend сначала вызывает `LearningContentGenerator`. Он принимает результат только с названием, условием, starter code, target skill IDs и непустым hidden Java harness, затем сохраняет его в общий банк. Если генератор отключён или не прошёл безопасную проверку App Server, задача не создаётся и API честно отвечает `NO_TASK_AVAILABLE`. В текущем fail-closed режиме студентский чат также возвращает `503 LLM_UNAVAILABLE` и не запускает App Server.
+При отсутствии подходящей задачи backend сначала вызывает `LearningContentGenerator`. Он принимает результат только с названием, условием, starter code, target skill IDs и непустым hidden Java harness, затем сохраняет его в общий банк. Если генератор отключён или не прошёл безопасную проверку App Server, задача не создаётся и API честно отвечает `NO_TASK_AVAILABLE`. При дефолтном fail-closed режиме студентский чат возвращает `503 LLM_UNAVAILABLE` и не запускает App Server; в явно включённом deployment он доступен после проверки sandbox.
