@@ -95,51 +95,91 @@ class LearningFlowIntegrationTest {
   @Test void generatedTaskIsValidatedStoredOnceAndThenRestored() throws Exception {
     String token=createStudentAndLogin("generated-student"); long student=studentId("generated-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"LOGICAL_AND");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
-    when(generator.generateExplanation(student,"LOGICAL_AND")).thenReturn(Optional.empty());
-    when(generator.generateTask(student,"LOGICAL_AND")).thenReturn(generated("LOGICAL_AND", true));
+    when(generator.generateExplanation(eq(student),brief("LOGICAL_AND"))).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(student),brief("LOGICAL_AND"))).thenReturn(generated("LOGICAL_AND", true));
     start(token);
     var first=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertTrue(first.path("task").path("id").asLong()>0);
     assertEquals(1,db.queryForObject("select count(*) from tasks where title='generated LOGICAL_AND'",Integer.class));
     var reloaded=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals(first.path("task").path("id").asLong(),reloaded.path("task").path("id").asLong());
-    verify(generator,times(1)).generateTask(student,"LOGICAL_AND");
+    verify(generator,times(1)).generateTask(eq(student),brief("LOGICAL_AND"));
+    assertEquals(1,db.queryForObject("select difficulty from tasks where title='generated LOGICAL_AND'",Integer.class));
+    var requested=org.mockito.ArgumentCaptor.forClass(ContentBrief.class); verify(generator).generateTask(eq(student),requested.capture());
+    assertEquals(1,requested.getValue().difficulty()); assertEquals("Логическое И (&&)",requested.getValue().skillTitle()); assertFalse(requested.getValue().earlierSkills().isEmpty());
   }
 
   @Test void invalidGeneratedHarnessIsNeverStored() throws Exception {
     String token=createStudentAndLogin("invalid-generator-student"); long student=studentId("invalid-generator-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"FOR_LOOP_BASIC");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
-    when(generator.generateExplanation(student,"FOR_LOOP_BASIC")).thenReturn(Optional.empty());
-    when(generator.generateTask(student,"FOR_LOOP_BASIC")).thenReturn(generated("FOR_LOOP_BASIC", false));
+    when(generator.generateExplanation(eq(student),brief("FOR_LOOP_BASIC"))).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(student),brief("FOR_LOOP_BASIC"))).thenReturn(generated("FOR_LOOP_BASIC", false));
     start(token);
     var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("LLM_GENERATION_FAILED_VALIDATION",response.path("reason").asText());
     assertEquals(0,db.queryForObject("select count(*) from tasks where title='generated FOR_LOOP_BASIC'",Integer.class));
-    verify(generator,times(2)).generateTask(student,"FOR_LOOP_BASIC");
+    verify(generator,times(2)).generateTask(eq(student),brief("FOR_LOOP_BASIC"));
   }
 
   @Test void invalidGeneratedCandidateIsRetriedAndOnlyValidCandidateIsStored() throws Exception {
     String token=createStudentAndLogin("retry-generator-student"); long student=studentId("retry-generator-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"WHILE_LOOP_BASIC");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
-    when(generator.generateExplanation(student,"WHILE_LOOP_BASIC")).thenReturn(Optional.empty());
-    when(generator.generateTask(student,"WHILE_LOOP_BASIC")).thenReturn(generated("WHILE_LOOP_BASIC", false),generated("WHILE_LOOP_BASIC", true));
+    when(generator.generateExplanation(eq(student),brief("WHILE_LOOP_BASIC"))).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(student),brief("WHILE_LOOP_BASIC"))).thenReturn(generated("WHILE_LOOP_BASIC", false),generated("WHILE_LOOP_BASIC", true));
     start(token);
     var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertTrue(response.path("task").path("id").asLong()>0);
     assertEquals(1,db.queryForObject("select count(*) from tasks where title='generated WHILE_LOOP_BASIC'",Integer.class));
-    verify(generator,times(2)).generateTask(student,"WHILE_LOOP_BASIC");
+    verify(generator,times(2)).generateTask(eq(student),brief("WHILE_LOOP_BASIC"));
   }
 
   @Test void unavailableRunnerDoesNotCallGenerator() throws Exception {
     String token=createStudentAndLogin("runner-unavailable-student"); long student=studentId("runner-unavailable-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"SWITCH_BASIC");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
-    when(generator.generateExplanation(student,"SWITCH_BASIC")).thenReturn(Optional.empty());
+    when(generator.generateExplanation(eq(student),brief("SWITCH_BASIC"))).thenReturn(Optional.empty());
     when(runner.status()).thenReturn(new PistonCodeRunner.RuntimeStatus(false,"PISTON_UNREACHABLE",""));
     start(token);
     var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("RUNNER_UNAVAILABLE",response.path("reason").asText());
-    verify(generator,never()).generateTask(student,"SWITCH_BASIC");
+    verify(generator,never()).generateTask(eq(student),brief("SWITCH_BASIC"));
   }
+
+  @Test void iterationStaysOnOneSkillAndGoesFromEasyToHard() throws Exception {
+    String token=createStudentAndLogin("focus-student"); long student=studentId("focus-student"); submitDiagnostic(token,student,false);
+    db.update("update student_languages set starting_block=0 where user_id=?",student);
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,iteration_successes,mastered) select ?,code,3,0,1 from skills where code not in ('BASIC_CODE_READING','VARIABLE_BASIC','ASSIGNMENT')",student);
+    for(String skill:List.of("VARIABLE_BASIC","ASSIGNMENT")) for(int i=1;i<=3;i++) addTask(skill,skill+" "+i);
+    start(token);
+    var difficulties=new ArrayList<Integer>();
+    for(int i=0;i<3;i++) {
+      var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals("BASIC_CODE_READING",next.path("skill").path("code").asText());
+      long task=next.path("task").path("id").asLong(); difficulties.add(db.queryForObject("select difficulty from tasks where id=?",Integer.class,task));
+      mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());
+    }
+    assertEquals(List.of(1,2,3),difficulties);
+    assertProgress(student,1,0,0);
+    var after=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("VARIABLE_BASIC",after.path("skill").path("code").asText());
+  }
+
+  @Test void outdatedLlmExplanationIsRegeneratedAndKeptWhenGenerationFails() throws Exception {
+    String token=createStudentAndLogin("explanation-student"); long student=studentId("explanation-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"LOGICAL_OR");
+    addTask("LOGICAL_OR","or task");
+    db.update("insert into explanations(skill_code,content,source,prompt_version) values('LOGICAL_OR','old dry text','LLM',1)");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),brief("LOGICAL_OR"))).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(student),brief("LOGICAL_OR"))).thenReturn(generated("LOGICAL_OR", true));
+    start(token);
+    var kept=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("old dry text",kept.path("explanation").path("content").asText());
+    when(generator.generateExplanation(eq(student),brief("LOGICAL_OR"))).thenReturn(Optional.of(new GeneratedExplanation("LOGICAL_OR","### Зачем это нужно\nподробно")));
+    var fresh=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("### Зачем это нужно\nподробно",fresh.path("explanation").path("content").asText());
+    assertEquals(LearningContentGenerator.EXPLANATION_PROMPT_VERSION,db.queryForObject("select prompt_version from explanations where skill_code='LOGICAL_OR'",Integer.class));
+  }
+
+  private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
 
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }
   private String login(String login,String password) throws Exception { var r=mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password",password)))).andExpect(status().isOk()).andReturn().getResponse(); return r.getCookie("adaptive_session").getValue(); }

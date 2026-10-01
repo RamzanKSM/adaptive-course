@@ -43,38 +43,71 @@ public class ApiController {
     var skill=nextSkill(userId,((Number)lesson.get("number")).intValue(),((Number)lesson.get("id")).longValue());
     if(skill==null) return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason","NO_DUE_SKILL","llm",llm(userId));
     String skillCode=(String)skill.get("code");
-    var explanationRows=db.queryForList("select content,source from explanations where skill_code=?",skillCode);
-    Object explanation=explanationRows.isEmpty()?generatedExplanation(userId, skillCode):explanationRows.getFirst();
-    var tasks=availableTasks(userId, lesson, skillCode);
-    if(tasks.isEmpty()) {
-      if(!tutor.status(userId).available()) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","NO_TASK_AVAILABLE","llm",llm(userId));
-      if(!codeRunner.status().available()) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","RUNNER_UNAVAILABLE","llm",llm(userId),"runner",runner());
-      boolean stored=false;
-      for(int attempt=0;attempt<2&&!stored;attempt++) try { storeGeneratedTask(contentGenerator.generateTask(userId, skillCode)); stored=true; }
-      catch (InvalidGeneratedContentException ignored) { }
-      catch (LlmUnavailableException e) { return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","NO_TASK_AVAILABLE","llm",llm(userId)); }
-      tasks=availableTasks(userId, lesson, skillCode);
-      if(tasks.isEmpty()&&!stored) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","LLM_GENERATION_FAILED_VALIDATION","llm",llm(userId));
+    long lessonId=((Number)lesson.get("id")).longValue();
+    Object explanation=explanation(userId, skillCode);
+    int difficulty=targetDifficulty(userId, lessonId, skillCode);
+    var tasks=availableTasks(userId, lesson, skillCode, difficulty);
+    if(!hasDifficulty(tasks, difficulty)) {
+      // Generate the missing step of the easy→hard ladder; fall back to the nearest bank task when generation is impossible.
+      String reason=null;
+      if(!tutor.status(userId).available()) reason="NO_TASK_AVAILABLE";
+      else if(!codeRunner.status().available()) reason="RUNNER_UNAVAILABLE";
+      else {
+        boolean stored=false;
+        var brief=brief(userId, skillCode, difficulty, explanation instanceof Map<?,?> m ? (String)m.get("content") : null);
+        for(int attempt=0;attempt<2&&!stored;attempt++) try { storeGeneratedTask(contentGenerator.generateTask(userId, brief), difficulty); stored=true; }
+        catch (InvalidGeneratedContentException ignored) { }
+        catch (LlmUnavailableException e) { reason="NO_TASK_AVAILABLE"; break; }
+        if(!stored&&reason==null) reason="LLM_GENERATION_FAILED_VALIDATION";
+        tasks=availableTasks(userId, lesson, skillCode, difficulty);
+      }
+      if(tasks.isEmpty()) return "RUNNER_UNAVAILABLE".equals(reason)
+          ? obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason,"llm",llm(userId),"runner",runner())
+          : obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason==null?"NO_TASK_AVAILABLE":reason,"llm",llm(userId));
     }
-    if(tasks.isEmpty()) return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason","NO_TASK_AVAILABLE","llm",llm(userId));
     var task=tasks.getFirst(); db.update("insert into lesson_tasks(lesson_id,task_id) values(?,?)",lesson.get("id"),task.get("id"));
     return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(task));
   }
   private Map<String,Object> unsolvedTask(Map<String,Object> lesson) { var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,ts.skill_code, s.title as skill_title,s.block_no from lesson_tasks lt join tasks t on t.id=lt.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where lt.lesson_id=? and t.active=1 and not exists(select 1 from submissions x where x.lesson_id=lt.lesson_id and x.task_id=lt.task_id and x.passed=1) order by lt.rowid desc limit 1",lesson.get("id"));return rows.isEmpty()?null:rows.getFirst(); }
-  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");var explanationRows=db.queryForList("select content,source from explanations where skill_code=?",skillCode);Object explanation=explanationRows.isEmpty()?generatedExplanation(userId,skillCode):explanationRows.getFirst();return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(task)); }
+  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation=explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(task)); }
   private Map<String,Object> taskView(Map<String,Object> task) { return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code")); }
-  private List<Map<String,Object>> availableTasks(long userId,Map<String,Object> lesson,String skillCode) {
-    return db.queryForList("select t.id,t.title,t.statement,t.starter_code from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1)) order by t.id",skillCode,userId,lesson.get("id"),userId);
+  /** Unsolved bank tasks for the skill, the requested difficulty first, then the nearest one, legacy tasks without difficulty last. */
+  private List<Map<String,Object>> availableTasks(long userId,Map<String,Object> lesson,String skillCode,int difficulty) {
+    return db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.difficulty from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1)) order by t.difficulty is null, abs(t.difficulty-?), t.difficulty, t.id",skillCode,userId,lesson.get("id"),userId,difficulty);
   }
-  private Object generatedExplanation(long studentId, String skillCode) {
+  private static boolean hasDifficulty(List<Map<String,Object>> tasks,int difficulty) { return !tasks.isEmpty() && tasks.getFirst().get("difficulty") instanceof Number d && d.intValue()==difficulty; }
+  /** Step inside the current iteration: the n-th task of the skill solved in this lesson asks for difficulty n+1 (1..3). */
+  private int targetDifficulty(long userId,long lessonId,String skillCode) { return Math.min(3, solvedInLesson(userId,lessonId,skillCode)+1); }
+  private int solvedInLesson(long userId,long lessonId,String skillCode) { return count("select count(distinct c.task_id) from successful_task_credit c join task_target_skills ts on ts.task_id=c.task_id join submissions s on s.task_id=c.task_id and s.lesson_id=? and s.passed=1 where c.user_id=? and ts.skill_code=?",lessonId,userId,skillCode); }
+  private ContentBrief brief(long userId,String skillCode,int difficulty,String explanation) {
+    var skill=db.queryForMap("select title,block_no,sort_order from skills where code=?",skillCode);
+    var earlier=db.queryForList("select code,title from skills where sort_order<? order by sort_order",((Number)skill.get("sort_order")).intValue()).stream().map(x->x.get("code").equals(x.get("title"))?(String)x.get("code"):x.get("code")+" — "+x.get("title")).toList();
+    var examples=db.queryForList("select prompt from diagnostic_questions where skill_code=? order by ordinal limit 4",String.class,skillCode);
+    var existing=db.queryForList("select t.title,t.difficulty,t.statement from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? order by t.id desc limit 12",skillCode).stream().map(x->x.get("title")+" (уровень "+(x.get("difficulty")==null?"?":x.get("difficulty"))+"): "+abbreviate((String)x.get("statement"),240)).toList();
+    var iteration=db.queryForList("select completed_iterations from student_skills where user_id=? and skill_code=?",Integer.class,userId,skillCode);
+    return new ContentBrief(skillCode,(String)skill.get("title"),((Number)skill.get("block_no")).intValue(),difficulty,Math.min(3,(iteration.isEmpty()?0:iteration.getFirst())+1),earlier,examples,existing,explanation);
+  }
+  private static String abbreviate(String value,int max) { String flat=value.replaceAll("\\s+"," ").strip(); return flat.length()<=max?flat:flat.substring(0,max)+"…"; }
+  /** Cached explanation; LLM explanations from an older prompt version are regenerated when possible and kept otherwise. */
+  private Object explanation(long studentId, String skillCode) {
+    var rows=db.queryForList("select content,source,prompt_version from explanations where skill_code=?",skillCode);
+    var cached=rows.isEmpty()?null:rows.getFirst();
+    boolean stale=cached!=null&&"LLM".equals(cached.get("source"))&&((Number)cached.get("prompt_version")).intValue()<LearningContentGenerator.EXPLANATION_PROMPT_VERSION;
+    if(cached!=null&&!stale) return Map.of("content",cached.get("content"),"source",cached.get("source"));
+    var generated=generatedExplanation(studentId, skillCode);
+    if(generated!=null) return generated;
+    return cached==null?null:Map.of("content",cached.get("content"),"source",cached.get("source"));
+  }
+  private Map<String,Object> generatedExplanation(long studentId, String skillCode) {
     if(!tutor.status(studentId).available()) return null;
-    return contentGenerator.generateExplanation(studentId, skillCode).map(ex -> {
-      if(!skillCode.equals(ex.skillCode()) || ex.content()==null || ex.content().isBlank()) throw bad("INVALID_LLM_CONTENT","LLM returned an invalid explanation");
-      db.update("insert into explanations(skill_code,content,source) values(?,?,?)",skillCode,ex.content(),"LLM");
-      return Map.of("content",ex.content(),"source","LLM");
-    }).orElse(null);
+    return contentGenerator.generateExplanation(studentId, brief(studentId, skillCode, 1, null))
+      .filter(ex -> skillCode.equals(ex.skillCode()) && ex.content()!=null && !ex.content().isBlank())
+      .map(ex -> {
+        db.update("insert into explanations(skill_code,content,source,prompt_version) values(?,?,'LLM',?) on conflict(skill_code) do update set content=excluded.content,source=excluded.source,prompt_version=excluded.prompt_version",skillCode,ex.content(),LearningContentGenerator.EXPLANATION_PROMPT_VERSION);
+        return Map.<String,Object>of("content",ex.content(),"source","LLM");
+      }).orElse(null);
   }
-  private void storeGeneratedTask(GeneratedTask task) {
+  private void storeGeneratedTask(GeneratedTask task,int difficulty) {
     if(task==null || task.skillCode()==null || task.title()==null || task.title().isBlank() || task.statement()==null || task.statement().isBlank() || task.testSource()==null || task.testSource().isBlank() || !task.testSource().contains("class TestHarness") || !task.testSource().contains("main(") || !task.testSource().contains(PistonCodeRunner.PASS_MARKER_PLACEHOLDER) || task.testFileName()==null || task.testFileName().isBlank() || task.referenceSolutionSource()==null || task.referenceSolutionSource().isBlank() || task.targetSkillCodes()==null || !task.targetSkillCodes().contains(task.skillCode()) || task.prerequisiteSkillCodes()==null) throw new InvalidGeneratedContentException();
     if(count("select count(*) from skills where code=?",task.skillCode())==0) throw new InvalidGeneratedContentException();
     for(String target:task.targetSkillCodes()) if(count("select count(*) from skills where code=?",target)==0) throw new InvalidGeneratedContentException();
@@ -82,7 +115,7 @@ public class ApiController {
     if(!codeRunner.configured()) throw new LlmUnavailableException("Piston is required to validate generated content");
     var validation=codeRunner.run(task.referenceSolutionSource(),task.testSource());
     if(!validation.passed()) throw new InvalidGeneratedContentException();
-    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?,?,?,?)",task.skillCode(),task.title(),task.statement(),task.starterCode()==null?"":task.starterCode(),task.testSource(),task.testFileName());
+    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty) values(?,?,?,?,?,?,?)",task.skillCode(),task.title(),task.statement(),task.starterCode()==null?"":task.starterCode(),task.testSource(),task.testFileName(),difficulty);
     long taskId=db.queryForObject("select last_insert_rowid()",Long.class);
     for(String target:new LinkedHashSet<>(task.targetSkillCodes())) db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",taskId,target);
     for(String prerequisite:new LinkedHashSet<>(task.prerequisiteSkillCodes())) db.update("insert into task_prerequisite_skills(task_id,skill_code) values(?,?)",taskId,prerequisite);
@@ -106,20 +139,24 @@ public class ApiController {
   private Map<String,Object> llm(long id){return tutor.status(id).asMap();} private Map<String,Object> runner(){var state=codeRunner.status();return obj("available",state.available(),"reason",state.reason(),"javaVersion",state.javaVersion());}
   private List<Map<String,Object>> progress(long u){return db.queryForList("select s.code as skillCode,s.title,coalesce(x.completed_iterations,0) as completedIterations,coalesce(x.iteration_successes,0) as iterationSuccesses,coalesce(x.mastered,0) as mastered from skills s left join student_skills x on x.skill_code=s.code and x.user_id=? order by s.sort_order",u);}
   private void credit(long user,String skill,long lessonId,int lessonNumber){db.update("insert or ignore into student_skills(user_id,skill_code) values(?,?)",user,skill);int successes=count("select count(distinct c.task_id) from successful_task_credit c join task_target_skills ts on ts.task_id=c.task_id join submissions s on s.task_id=c.task_id and s.lesson_id=? and s.passed=1 where c.user_id=? and ts.skill_code=?",lessonId,user,skill);if(successes<3){db.update("update student_skills set iteration_successes=? where user_id=? and skill_code=?",successes,user,skill);return;}var x=db.queryForMap("select completed_iterations,first_iteration_lesson_number from student_skills where user_id=? and skill_code=?",user,skill);int completed=((Number)x.get("completed_iterations")).intValue();Integer first=x.get("first_iteration_lesson_number")==null?null:((Number)x.get("first_iteration_lesson_number")).intValue();boolean due=completed==0||(completed==1&&lessonNumber==first+1)||(completed==2&&lessonNumber==first+3);if(!due||count("select count(*) from skill_iterations where user_id=? and skill_code=? and lesson_id=?",user,skill,lessonId)>0)return;int done=completed+1;db.update("insert into skill_iterations(user_id,skill_code,iteration_number,lesson_id) values(?,?,?,?)",user,skill,done,lessonId);db.update("update student_skills set completed_iterations=?,iteration_successes=0,first_iteration_lesson_number=case when first_iteration_lesson_number is null then ? else first_iteration_lesson_number end,mastered=? where user_id=? and skill_code=?",done,lessonNumber,done>=3?1:0,user,skill);}
+  /**
+   * Picks one skill and keeps the student on it: an iteration already started in this lesson is finished first,
+   * then scheduled repetitions (iterations 2 and 3 are only valid on their lesson), then new topics in course order.
+   */
   private Map<String,Object> nextSkill(long userId,int lessonNumber,long lessonId) {
     int startBlock=db.queryForObject("select starting_block from student_languages where user_id=?",Integer.class,userId);
     var rows=db.queryForList("select s.code,s.title,s.block_no,coalesce(x.completed_iterations,0) completed,coalesce(x.first_iteration_lesson_number,0) first from skills s left join student_skills x on x.skill_code=s.code and x.user_id=? where coalesce(x.mastered,0)=0 and s.block_no>=? and (s.prerequisite_code is null or exists(select 1 from student_skills p where p.user_id=? and p.skill_code=s.prerequisite_code and p.mastered=1)) order by s.block_no,s.sort_order",userId,startBlock,userId);
     var due=new ArrayList<Map<String,Object>>();
     for(var row:rows) { int completed=((Number)row.get("completed")).intValue(), first=((Number)row.get("first")).intValue(); if(completed==0||(completed==1&&lessonNumber==first+1)||(completed==2&&lessonNumber==first+3)) due.add(row); }
     if(due.isEmpty()) return null;
-    var withBank=new ArrayList<Map<String,Object>>();
-    for(var row:due) if(count("select count(*) from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id)",row.get("code"),userId,lessonId)>0) withBank.add(row);
-    var candidates=withBank.isEmpty()?due:withBank;
-    int earliest=candidates.stream().mapToInt(x->((Number)x.get("block_no")).intValue()).min().orElseThrow();
-    candidates.removeIf(x->((Number)x.get("block_no")).intValue()!=earliest);
-    Collections.shuffle(candidates); var selected=candidates.getFirst();
-    return Map.of("code",selected.get("code"),"title",selected.get("title"),"blockNo",selected.get("block_no"));
+    for(var row:due) if(solvedInLesson(userId,lessonId,(String)row.get("code"))>0) return skillView(row);
+    for(var row:due) if(((Number)row.get("completed")).intValue()>0) return skillView(row);
+    // Without generation a topic with an empty bank would block the lesson, so take the first topic that still has tasks.
+    if(!tutor.status(userId).available()||!codeRunner.status().available())
+      for(var row:due) if(count("select count(*) from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id)",row.get("code"),userId,lessonId)>0) return skillView(row);
+    return skillView(due.getFirst());
   }
+  private static Map<String,Object> skillView(Map<String,Object> row) { return Map.of("code",row.get("code"),"title",row.get("title"),"blockNo",row.get("block_no")); }
   private Map<String,Object> active(long u){var x=db.queryForList("select id,lesson_number as number,started_at as startedAt from lessons where user_id=? and finished_at is null order by id desc",u);return x.isEmpty()?null:x.getFirst();} private Map<String,Object> lesson(long id){return db.queryForMap("select id,lesson_number as number,started_at as startedAt,finished_at as finishedAt from lessons where id=?",id);} private void requireDiagnostic(long u){if(count("select count(*) from student_languages where user_id=? and diagnostic_completed_at is not null",u)==0)throw bad("DIAGNOSTIC_REQUIRED","Сначала пройдите диагностику");} private int count(String q,Object...p){return db.queryForObject(q,Integer.class,p);} private long uid(HttpServletRequest r){return ((Number)user(r).get("id")).longValue();} @SuppressWarnings("unchecked") private Map<String,Object> user(HttpServletRequest r){return (Map<String,Object>)r.getAttribute("user");} private long student(HttpServletRequest r){if(!"STUDENT".equals(user(r).get("role")))throw bad("FORBIDDEN","Нужна роль STUDENT");return uid(r);} private void admin(HttpServletRequest r){if(!"ADMIN".equals(user(r).get("role")))throw bad("FORBIDDEN","Нужна роль ADMIN");} private Optional<String> cookie(HttpServletRequest r){return r.getCookies()==null?Optional.empty():Arrays.stream(r.getCookies()).filter(c->c.getName().equals("adaptive_session")).map(Cookie::getValue).findFirst();} private String randomToken(){byte[] b=new byte[32];new SecureRandom().nextBytes(b);return Base64.getUrlEncoder().withoutPadding().encodeToString(b);} private Object json(Object value){try{return new com.fasterxml.jackson.databind.ObjectMapper().readValue((String)value,List.class);}catch(Exception e){throw new IllegalStateException(e);}} private Map<String,Object> obj(Object... entries){var m=new LinkedHashMap<String,Object>();for(int i=0;i<entries.length;i+=2)m.put((String)entries[i],entries[i+1]);return m;} private ApiError bad(String c,String m){return new ApiError(c,m);}
 }
 @ResponseStatus(HttpStatus.BAD_REQUEST) class ApiError extends RuntimeException { final String code; ApiError(String c,String m){super(m);code=c;} }
