@@ -14,7 +14,7 @@ export interface LearningNext { lesson: Lesson; skill: { code: string; title: st
 export interface Attempt { id: Id; passed: Flag; output?: string | null }
 export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; content: string; createdAt?: string }
 export interface SkillProgress { skillCode: string; title: string; completedIterations: number; iterationSuccesses: number; mastered: Flag }
-export interface Progress { skills: SkillProgress[] }
+export interface Progress { skills: SkillProgress[]; solvedTasks?: number; activity?: string[] }
 export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string }
 export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; submissions: Submission[] }[] }

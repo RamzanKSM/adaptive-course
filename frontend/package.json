@@ -9,6 +9,9 @@
   },
   "dependencies": {
     "@codemirror/lang-java": "^6.0.2",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/unbounded": "^5.3.0",
     "@uiw/react-codemirror": "^4.25.12",
     "@vitejs/plugin-react": "latest",
     "react": "latest",
