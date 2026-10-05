@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class DiagnosticImportIntegrationTest {
@@ -33,11 +35,23 @@ class DiagnosticImportIntegrationTest {
     assertEquals(9,seeds.size());
     for(var seed:seeds) { assertTrue(((String)seed.get("statement")).contains("System.out.print")); assertTrue(((String)seed.get("starter_code")).contains("void main(String[] args)")); }
     var twoLines=db.queryForMap("select statement,starter_code from tasks where title='Консоль: две строки'");
-    assertTrue(((String)twoLines.get("statement")).contains("Дополни тело `Solution.main(String[] args)`"));
+    assertTrue(((String)twoLines.get("statement")).contains("Допиши код внутри `main` в редакторе"));
     assertTrue(((String)twoLines.get("starter_code")).contains("public class Solution {\n    public static void main(String[] args)"));
     assertTrue(harness.contains("ByteArrayOutputStream"));
     assertTrue(harness.contains("Solution.main(new String[0])"));
     assertTrue(harness.contains("finally"));
+  }
+
+  @Test void seedStatementsSpellOutTrailingNewlineAndHideInternals() {
+    assertTrue(DiagnosticImporter.expectedOutput("Раз\nДва\n").contains("После «Два» **нужен** перевод строки"));
+    assertTrue(DiagnosticImporter.expectedOutput("Привет").contains("перевода строки **нет**"));
+    assertTrue(DiagnosticImporter.expectedOutput("\nготово").startsWith("**Должно получиться в консоли:**\n\n```text\n\nготово\n```"));
+    assertTrue(DiagnosticImporter.expectedOutput("\nготово").contains("Первая строка вывода — пустая"));
+    for (String statement : db.queryForList("select statement from tasks where active=1", String.class)) {
+      assertNull(ApiController.internalTerm(statement), statement);
+      assertTrue(statement.contains("перевод"), statement);
+    }
+    assertFalse(db.queryForObject("select content from explanations where skill_code='PY_BASIC_CODE_READING'", String.class).contains("solution.py"));
   }
 
   @Test void importsThePythonTrackSeparately() {

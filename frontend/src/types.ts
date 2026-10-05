@@ -19,3 +19,13 @@ export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; 
 export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string }
 export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; submissions: Submission[] }[] }
+export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
+export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION'
+export interface LlmUsage {
+  days: number; totals: LlmUsageTotals; llm: LlmStatus
+  byDay: { day: string; calls: number; errors: number; tokens: number }[]
+  byPurpose: { purpose: LlmPurpose; calls: number; errors: number; avgMs: number; tokens: number }[]
+  byLanguage: { language: CourseLanguage; calls: number; tokens: number }[]
+  byStudent: { userId: Id | null; displayName: string; login?: string; calls: number; chatTurns: number; errors: number; tokens: number; lastAt: string }[]
+  recentErrors: { createdAt: string; purpose: LlmPurpose; language: CourseLanguage; status: 'ERROR' | 'TIMEOUT'; error?: string; durationMs: number; displayName?: string }[]
+}

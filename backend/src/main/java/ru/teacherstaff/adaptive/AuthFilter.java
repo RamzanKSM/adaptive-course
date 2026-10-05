@@ -22,7 +22,7 @@ public class AuthFilter extends OncePerRequestFilter {
     if (token == null) { s.sendError(HttpStatus.UNAUTHORIZED.value(), "Authentication required"); return; }
     var rows = db.queryForList("select u.id,u.login,u.role,u.display_name,u.llm_enabled from sessions x join users u on u.id=x.user_id where x.token_hash=? and x.expires_at>?", Hashing.sha256(token), Instant.now().toString());
     if (rows.isEmpty()) { s.sendError(HttpStatus.UNAUTHORIZED.value(), "Session expired"); return; }
-    r.setAttribute("user", rows.getFirst()); chain.doFilter(r, s);
+    r.setAttribute("user", rows.getFirst()); org.slf4j.MDC.put("userId", String.valueOf(rows.getFirst().get("id"))); chain.doFilter(r, s);
   }
 }
 final class Hashing {

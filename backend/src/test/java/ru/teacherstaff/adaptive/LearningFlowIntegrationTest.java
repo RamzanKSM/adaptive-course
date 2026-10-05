@@ -215,6 +215,61 @@ class LearningFlowIntegrationTest {
     assertEquals("UNKNOWN_LANGUAGE",body.path("error").asText());
   }
 
+  @Test void adminChangesPasswordAndClosesStudentSessions() throws Exception {
+    String token=createStudentAndLogin("pwd-student"); long student=studentId("pwd-student"); String admin=login("admin","admin-pass");
+    var weak=json.readTree(mvc.perform(patch("/api/admin/students/{id}/password",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"123\"}")).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("WEAK_PASSWORD",weak.path("error").asText());
+    var changed=json.readTree(mvc.perform(patch("/api/admin/students/{id}/password",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"new-secret-1\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(1,changed.path("sessionsClosed").asInt());
+    mvc.perform(get("/api/auth/me").cookie(cookie(token))).andExpect(status().isUnauthorized());
+    mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{\"login\":\"pwd-student\",\"password\":\"student-pass\"}")).andExpect(status().isBadRequest());
+    login("pwd-student","new-secret-1");
+    mvc.perform(patch("/api/admin/students/{id}/password",student).cookie(cookie(login("pwd-student","new-secret-1"))).contentType(MediaType.APPLICATION_JSON).content("{\"password\":\"hacker-pass\"}")).andExpect(status().isBadRequest());
+  }
+
+  @Test void duplicateLoginIsAClearError() throws Exception {
+    createStudentAndLogin("dup-student"); String admin=login("admin","admin-pass");
+    var body=json.readTree(mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login","dup-student","password","other-pass","displayName","Dup")))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("LOGIN_TAKEN",body.path("error").asText());
+  }
+
+  @Test void llmUsageAnalyticsAggregatesCalls() throws Exception {
+    createStudentAndLogin("usage-student"); long student=studentId("usage-student"); String admin=login("admin","admin-pass");
+    db.update("delete from llm_calls");
+    db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens) values(?, 'CHAT','JAVA','OK',1000,100,20,50,10,150)",student);
+    db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms,total_tokens,outcome) values(?, 'TASK','PYTHON','OK',3000,400,'ACCEPTED')",student);
+    db.update("insert into llm_calls(user_id,purpose,language,status,error,duration_ms) values(?, 'TASK','PYTHON','TIMEOUT','LlmUnavailableException: timeout',240000)",student);
+    db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms,created_at) values(?, 'CHAT','JAVA','OK',500,datetime('now','-40 days'))",student);
+    var usage=json.readTree(mvc.perform(get("/api/admin/llm/usage").param("days","30").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    var totals=usage.path("totals");
+    assertEquals(3,totals.path("calls").asInt(),"calls older than the period are excluded");
+    assertEquals(1,totals.path("errors").asInt()); assertEquals(1,totals.path("timeouts").asInt());
+    assertEquals(550,totals.path("totalTokens").asInt()); assertEquals(1,totals.path("tasksAccepted").asInt());
+    assertEquals(2000,totals.path("avgMs").asInt(),"average duration counts successful calls only");
+    assertEquals(2,usage.path("byPurpose").size()); assertEquals(1,usage.path("byStudent").size());
+    assertEquals(3,usage.path("byStudent").path(0).path("calls").asInt());
+    assertEquals("TIMEOUT",usage.path("recentErrors").path(0).path("status").asText());
+    mvc.perform(get("/api/admin/llm/usage").cookie(cookie(createStudentAndLogin("nosy-student")))).andExpect(status().isBadRequest());
+  }
+
+  @Test void statementsWithPlatformInternalsAreDetected() {
+    assertEquals("solution.py",ApiController.internalTerm("Напиши код в файле `solution.py`."));
+    assertEquals("run_checks",ApiController.internalTerm("Функция run_checks проверит"));
+    assertNull(ApiController.internalTerm("Напиши функцию `area(width, height)` в редакторе."));
+  }
+
+  @Test void generatedTaskLeakingInternalsIsRejected() throws Exception {
+    String token=createStudentAndLogin("leak-student"); long student=studentId("leak-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"SWITCH_BASIC");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),brief("SWITCH_BASIC"))).thenReturn(Optional.empty());
+    String test="public class TestHarness { public static void main(String[] a) { System.out.print(\""+PistonCodeRunner.PASS_MARKER_PLACEHOLDER+"\"); } }";
+    when(generator.generateTask(eq(student),brief("SWITCH_BASIC"))).thenReturn(new GeneratedTask("SWITCH_BASIC","leaky","Код проверит TestHarness","",test,"TestHarness.java","public class Solution {}",List.of("SWITCH_BASIC"),List.of()));
+    start(token);
+    var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("LLM_GENERATION_FAILED_VALIDATION",response.path("reason").asText());
+    assertEquals(0,db.queryForObject("select count(*) from tasks where title='leaky'",Integer.class));
+  }
+
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
 
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }

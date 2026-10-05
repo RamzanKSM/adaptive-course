@@ -2,6 +2,8 @@ package ru.teacherstaff.adaptive;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -38,6 +40,9 @@ class LlmUnavailableException extends RuntimeException {
 @Primary
 class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoCloseable {
   static final String TUTOR_INSTRUCTION_VERSION = "tutor-v3";
+  private static final Logger log = LoggerFactory.getLogger(CodexAppServerTutor.class);
+  /** After a process-level failure the LLM is reported unavailable for this long, then the next request tries again. */
+  private static final long RETRY_AFTER_FAILURE_MS = 60_000;
   private final JdbcTemplate db;
   private final ObjectMapper json;
   private final boolean appEnabled;
@@ -55,6 +60,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   private volatile Process process;
   private volatile BufferedWriter stdin;
   private volatile Throwable startupFailure;
+  private volatile long startupFailedAt;
+  private final boolean logContent;
 
   CodexAppServerTutor(JdbcTemplate db, ObjectMapper json,
                       @Value("${app.llm.enabled}") boolean appEnabled,
@@ -62,11 +69,13 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
                       @Value("${app.llm.model}") String model,
                       @Value("${app.llm.account-namespace}") String namespace,
                       @Value("${app.llm.sandbox-directory}") String sandboxDirectory,
-                      @Value("${app.llm.student-runtime-validated}") boolean studentRuntimeValidated) {
+                      @Value("${app.llm.student-runtime-validated}") boolean studentRuntimeValidated,
+                      @Value("${app.llm.log-content:false}") boolean logContent) {
     this.db = db; this.json = json; this.appEnabled = appEnabled;
     this.command = command; this.model = model; this.namespace = namespace;
     this.sandboxDirectory = Path.of(sandboxDirectory).toAbsolutePath().normalize();
     this.studentRuntimeValidated = studentRuntimeValidated;
+    this.logContent = logContent;
   }
 
   @Override public LlmStatus status(long userId) {
@@ -78,7 +87,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     // mechanism to disable those tools. Untrusted student input must never reach it.
     if (!studentRuntimeValidated) return new LlmStatus(true, true, false, "STUDENT_RUNTIME_NOT_VALIDATED", model);
     if (command == null || command.isBlank()) return new LlmStatus(true, true, false, "APP_SERVER_NOT_CONFIGURED", model);
-    if (startupFailure != null) return new LlmStatus(true, true, false, "APP_SERVER_UNAVAILABLE", model);
+    if (recentlyFailed()) return new LlmStatus(true, true, false, "APP_SERVER_UNAVAILABLE", model);
     return new LlmStatus(true, true, true, "READY", model);
   }
 
@@ -88,9 +97,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     if (content == null || content.isBlank()) throw new LlmUnavailableException("Пустой вопрос нельзя отправить");
     synchronized (userLocks.computeIfAbsent(userId, ignored -> new Object())) {
       try {
-        startIfNeeded();
-        String threadId = threadFor(userId, context.language());
-        return completeTurn(threadId, tutorContext(context, content), null);
+        return completeTurn(new Call(userId, "CHAT", context.language(), context.skillCode()),
+            () -> { startIfNeeded(); return threadFor(userId, context.language()); }, tutorContext(context, content), null);
       } catch (LlmUnavailableException e) { throw e;
       } catch (Exception e) { throw unavailable(e); }
     }
@@ -99,7 +107,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   @Override public GeneratedTask generateTask(long studentId, ContentBrief brief) {
     if (!contentAvailable(studentId)) throw new LlmUnavailableException("LLM content generation is unavailable");
     try {
-      String response = completeTurn(newThread(contentInstructions(brief.language())), taskPrompt(brief), taskSchema());
+      String response = completeTurn(new Call(studentId, "TASK", brief.language(), brief.skillCode()),
+          () -> newThread(contentInstructions(brief.language())), taskPrompt(brief), taskSchema());
       JsonNode value = responseJson(response);
       List<String> targets = new ArrayList<>();
       for (JsonNode target : value.path("targetSkillCodes")) targets.add(target.asText());
@@ -115,10 +124,14 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   @Override public Optional<GeneratedExplanation> generateExplanation(long studentId, ContentBrief brief) {
     if (!contentAvailable(studentId)) return Optional.empty();
     try {
-      String response = completeTurn(newThread(contentInstructions(brief.language())), explanationPrompt(brief), explanationSchema());
+      String response = completeTurn(new Call(studentId, "EXPLANATION", brief.language(), brief.skillCode()),
+          () -> newThread(contentInstructions(brief.language())), explanationPrompt(brief), explanationSchema());
       JsonNode value = responseJson(response);
       return Optional.of(new GeneratedExplanation(value.path("skillCode").asText(), value.path("content").asText()));
-    } catch (Exception e) { return Optional.empty(); }
+    } catch (Exception e) {
+      log.warn("LLM explanation for {} could not be used: {}", brief.skillCode(), describe(e));
+      return Optional.empty();
+    }
   }
 
   /** One long-lived thread per student and language, created on first use. */
@@ -130,6 +143,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     if (id != null && tutorNamespace.equals(row.get("conversation_namespace"))) {
       if (!loadedThreads.contains(id)) {
         request("thread/resume", Map.of("threadId", id), Duration.ofSeconds(10));
+        log.info("Resumed tutor thread {} for user={} language={}", id, userId, language);
         loadedThreads.add(id);
       }
       return id;
@@ -138,6 +152,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     String newId = started.path("thread").path("id").asText();
     if (newId.isBlank()) throw new IOException("Codex did not return a thread id");
     db.update("update student_languages set conversation_id=?, conversation_namespace=? where user_id=? and language=?", newId, tutorNamespace, userId, language.name());
+    log.info("Started tutor thread {} for user={} language={} namespace={}", newId, userId, language, tutorNamespace);
     loadedThreads.add(newId);
     return newId;
   }
@@ -155,10 +170,24 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         "approvalPolicy", "never", "permissions", "student-tutor", "developerInstructions", instructions);
   }
 
-  private String completeTurn(String threadId, String input, Map<String, Object> outputSchema) throws Exception {
-    TurnCapture capture = new TurnCapture();
-    activeTurns.put(threadId, capture);
+  /** Who asked and why; recorded with every turn. */
+  record Call(long userId, String purpose, Language language, String skillCode) {}
+  @FunctionalInterface interface ThreadOpener { String open() throws Exception; }
+
+  /**
+   * Runs one turn and always leaves a trace: an INFO log line with timing and token usage, an llm_calls row for
+   * analytics and, when app.llm.log-content is on, the full prompt and answer.
+   */
+  private String completeTurn(Call call, ThreadOpener opener, String input, Map<String, Object> outputSchema) throws Exception {
+    long started = System.nanoTime();
+    String threadId = null, answer = null, status = "ERROR", error = null;
+    TurnCapture capture = null;
+    log.info("LLM {} start: user={} language={} skill={} promptChars={} model={}", call.purpose(), call.userId(), call.language(), call.skillCode(), input.length(), model);
+    if (logContent) log.info("LLM {} prompt (user={}):\n{}", call.purpose(), call.userId(), limit(input, 40_000));
     try {
+      threadId = opener.open();
+      capture = new TurnCapture();
+      activeTurns.put(threadId, capture);
       Map<String, Object> params = new LinkedHashMap<>();
       params.put("threadId", threadId);
       params.put("input", List.of(Map.of("type", "text", "text", input)));
@@ -168,18 +197,51 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       if (outputSchema != null) params.put("outputSchema", outputSchema);
       JsonNode turn = request("turn/start", params, Duration.ofSeconds(10));
       capture.turnId = turn.path("turn").path("id").asText();
-      JsonNode completed = capture.completed.get(240, TimeUnit.SECONDS);
-      if (!"completed".equals(completed.path("turn").path("status").asText())) throw new LlmUnavailableException("Codex не завершил ответ");
-      String answer = capture.text.toString().trim();
+      JsonNode completed;
+      try { completed = capture.completed.get(240, TimeUnit.SECONDS); }
+      catch (TimeoutException e) { status = "TIMEOUT"; throw new LlmUnavailableException("Codex не ответил за 240 секунд"); }
+      String turnStatus = completed.path("turn").path("status").asText();
+      if (!"completed".equals(turnStatus)) throw new LlmUnavailableException("Codex не завершил ответ (status=" + turnStatus + ", error=" + completed.path("turn").path("error") + ")");
+      answer = capture.text.toString().trim();
       if (answer.isBlank()) throw new LlmUnavailableException("Codex не вернул текстовый ответ");
+      status = "OK";
       return answer;
-    } finally { activeTurns.remove(threadId, capture); }
+    } catch (Exception e) {
+      error = describe(e);
+      throw e;
+    } finally {
+      if (capture != null) activeTurns.remove(threadId, capture);
+      long ms = (System.nanoTime() - started) / 1_000_000;
+      TokenUsage usage = capture == null ? TokenUsage.NONE : capture.usage;
+      if ("OK".equals(status))
+        log.info("LLM {} done in {} ms: user={} thread={} turn={} tokens input={} cached={} output={} reasoning={} total={} responseChars={}",
+            call.purpose(), ms, call.userId(), threadId, capture.turnId, usage.input, usage.cached, usage.output, usage.reasoning, usage.total, answer.length());
+      else log.warn("LLM {} {} after {} ms: user={} thread={} error={}", call.purpose(), status, ms, call.userId(), threadId, error);
+      if (logContent && answer != null) log.info("LLM {} answer (user={}):\n{}", call.purpose(), call.userId(), limit(answer, 40_000));
+      record(call, status, error, ms, input.length(), answer == null ? 0 : answer.length(), usage);
+    }
   }
+
+  private void record(Call call, String status, String error, long ms, int promptChars, int responseChars, TokenUsage usage) {
+    try {
+      db.update("insert into llm_calls(user_id,purpose,language,skill_code,model,status,error,duration_ms,prompt_chars,response_chars,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          call.userId(), call.purpose(), call.language().name(), call.skillCode(), model, status, error == null ? null : limit(error, 1000), ms, promptChars, responseChars,
+          usage.seen ? usage.input : null, usage.seen ? usage.cached : null, usage.seen ? usage.output : null, usage.seen ? usage.reasoning : null, usage.seen ? usage.total : null);
+    } catch (Exception e) { log.error("Could not record LLM call statistics", e); }
+  }
+
+  private static String describe(Throwable e) {
+    Throwable root = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
+    return root.getClass().getSimpleName() + (root.getMessage() == null ? "" : ": " + root.getMessage());
+  }
+
+  private boolean recentlyFailed() { return startupFailure != null && System.currentTimeMillis() - startupFailedAt < RETRY_AFTER_FAILURE_MS; }
+  private void markProcessFailure(Throwable e) { startupFailure = e; startupFailedAt = System.currentTimeMillis(); }
 
   private boolean contentAvailable(long studentId) {
     return appEnabled && "true".equals(db.queryForObject("select value from app_settings where key='llm_enabled'", String.class))
         && db.queryForObject("select count(*) from users where id=? and llm_enabled=1", Integer.class, studentId) > 0
-        && studentRuntimeValidated && command != null && !command.isBlank() && startupFailure == null;
+        && studentRuntimeValidated && command != null && !command.isBlank() && !recentlyFailed();
   }
 
   private JsonNode responseJson(String answer) throws IOException {
@@ -192,7 +254,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
 
   static String tutorInstructions(Language language) {
     String errors = language == Language.PYTHON
-        ? "Если в выводе runner Traceback или SyntaxError, переведи его смысл на простой русский: какой тип ошибки, в какой строке solution.py и что это обычно значит. "
+        ? "Если в выводе runner Traceback или SyntaxError, переведи его смысл на простой русский: какой тип ошибки, в какой строке кода и что это обычно значит. "
           + "Помни об особенностях Python для новичков: отступы — часть синтаксиса, двоеточие после if/for/def, разница между print и return, = и ==. "
         : "Если в выводе runner ошибка компиляции или исключение, переведи её смысл на простой русский и укажи, в какой строке или конструкции искать причину. ";
     return "Ты терпеливый преподаватель " + language.title + " для студента, который только начинает программировать. Отвечай по-русски, тепло и понятно. "
@@ -266,10 +328,11 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
 
         Требования к условию (поле statement, Markdown, по-русски, обращение на «ты»):
         1. Одно-два предложения о небольшой жизненной ситуации и о том, зачем это нужно.
-        2. Раздел «Что нужно сделать» — нумерованные шаги простыми словами; точно укажи, какой код дописать (для Java — метод класса Solution, для Python — код или функцию в solution.py), сигнатуру и что он должен вывести или вернуть.
-        3. Раздел «Пример» — ожидаемый вывод или пример вызова и результата в блоке кода. Если важны пробелы или переводы строк, скажи об этом явно.
+        2. Раздел «Что нужно сделать» — нумерованные шаги простыми словами; точно укажи, что написать (для Java — код в методе класса Solution, который студент видит в редакторе; для Python — программу или функцию с точным именем), сигнатуру и что программа должна вывести или функция вернуть.
+        3. Раздел «Пример» — ожидаемый вывод или пример вызова и результата в блоке кода. Если проверяется вывод, сразу после блока одной фразой явно напиши, нужен ли перевод строки после последней строки вывода (например: «После последней строки нужен перевод строки» или «Перевода строки в конце нет»), и упомяни пустые строки, если они есть: по блоку кода это не видно.
         4. Раздел «Подсказка» — одна подсказка, которая напоминает нужную идею из объяснения, без готового кода решения.
         Каждый пример кода оформляй в корректный fenced-блок Markdown с языком. Не используй термины, которые студент ещё не проходил, без пояснения.
+        Условие описывает задачу так, как её видит студент: «в редакторе», «твоя программа», «функция …». Никогда не упоминай файлы (solution.py, test_solution.py, Solution.java), скрытые проверки, harness, TestHarness, run_checks, Piston, маркеры и устройство платформы.
         """)
         .append(python ? pythonTaskRules(b) : javaTaskRules(b))
         .append("Keep the checks aligned with the statement: every checked case must follow from what the statement asks. ")
@@ -302,7 +365,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   private String explanationPrompt(ContentBrief b) {
     boolean python = b.language() == Language.PYTHON;
     String workspace = python
-        ? "в задачах студент пишет код в файле solution.py: на первых темах — код верхнего уровня, который печатает результат через print, позже — функции и классы с указанными в условии именами"
+        ? "в задачах студент пишет программу прямо в редакторе: на первых темах — несколько строк, которые печатают результат через print, позже — функции и классы с указанными в условии именами. Не упоминай файлы и устройство проверки"
         : "в задачах нужно будет дописывать код в класс Solution (обычно в метод main или в указанный метод)";
     return "Напиши подробное объяснение темы для студента, который раньше никогда не программировал. Оно будет показано перед серией из трёх практических задач по этой теме.\n\n"
         + courseContext(b)
@@ -363,13 +426,17 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       builder.environment().clear();
       if (path != null) builder.environment().put("PATH", path);
       if (codexHome != null) builder.environment().put("CODEX_HOME", codexHome);
-      Process created = builder.start();
+      log.info("Starting Codex App Server: {}", String.join(" ", parts));
+      Process created;
+      try { created = builder.start(); }
+      catch (IOException e) { markProcessFailure(e); log.error("Codex App Server could not be started", e); throw e; }
       process = created; loadedThreads.clear(); stdin = new BufferedWriter(new OutputStreamWriter(created.getOutputStream(), StandardCharsets.UTF_8));
       Thread reader = Thread.ofVirtual().name("codex-app-server-reader").start(() -> readLoop(created));
       try {
         request("initialize", Map.of("clientInfo", Map.of("name", "adaptive_java_tutor", "title", "Adaptive Java Tutor", "version", "0.1.0"), "capabilities", Map.of("experimentalApi", true)), Duration.ofSeconds(15));
         notifyServer("initialized", Map.of());
-      } catch (Exception e) { startupFailure = e; created.destroyForcibly(); process = null; throw e; }
+        log.info("Codex App Server initialized (pid={}, model={})", created.pid(), model);
+      } catch (Exception e) { markProcessFailure(e); log.error("Codex App Server initialization failed: {}", describe(e)); created.destroyForcibly(); process = null; throw e; }
     }
   }
 
@@ -386,13 +453,33 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       String line; while ((line = lines.readLine()) != null) {
         JsonNode event = json.readTree(line);
         if (event.has("id")) { CompletableFuture<JsonNode> reply = replies.get(event.path("id").asLong()); if (reply != null) { if (event.has("error")) reply.completeExceptionally(new IOException(event.path("error").toString())); else reply.complete(event.path("result")); } continue; }
-        JsonNode params = event.path("params"); String threadId = params.path("threadId").asText(); TurnCapture capture = activeTurns.get(threadId); if (capture == null) continue;
-        if ("item/agentMessage/delta".equals(event.path("method").asText())) capture.text.append(params.path("delta").asText());
-        if ("turn/completed".equals(event.path("method").asText())) capture.completed.complete(params);
+        String method = event.path("method").asText();
+        JsonNode params = event.path("params"); String threadId = params.path("threadId").asText(); TurnCapture capture = activeTurns.get(threadId);
+        if (capture == null) { log.trace("Codex notification without an active turn: {}", method); continue; }
+        switch (method) {
+          case "item/agentMessage/delta" -> capture.text.append(params.path("delta").asText());
+          case "thread/tokenUsage/updated" -> capture.usage.add(params.path("tokenUsage").path("last"));
+          case "turn/completed" -> capture.completed.complete(params);
+          case "error" -> log.warn("Codex error event on thread {}: {}", threadId, params);
+          default -> log.debug("Codex {} on thread {}", method, threadId);
+        }
       }
-    } catch (Exception e) { startupFailure = e; } finally { if (process == owner) { process = null; loadedThreads.clear(); } for (TurnCapture c : activeTurns.values()) c.completed.completeExceptionally(new IOException("Codex App Server stopped")); }
+      log.warn("Codex App Server stdout closed (exit code {})", owner.isAlive() ? "running" : owner.exitValue());
+    } catch (Exception e) { markProcessFailure(e); log.error("Codex App Server reader stopped: {}", describe(e)); }
+    finally { if (process == owner) { process = null; loadedThreads.clear(); } for (TurnCapture c : activeTurns.values()) c.completed.completeExceptionally(new IOException("Codex App Server stopped")); }
   }
-  private LlmUnavailableException unavailable(Exception e) { startupFailure = e; return new LlmUnavailableException("Codex App Server недоступен: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())); }
+  /** Turn-level errors (timeouts, bad JSON) are reported to the caller but do not mark the whole App Server as broken. */
+  private LlmUnavailableException unavailable(Exception e) { return new LlmUnavailableException("Codex App Server недоступен: " + describe(e)); }
   @Override public void close() { Process p = process; if (p != null) p.destroy(); }
-  private static final class TurnCapture { String turnId = ""; final StringBuilder text = new StringBuilder(); final CompletableFuture<JsonNode> completed = new CompletableFuture<>(); }
+  private static final class TurnCapture { String turnId = ""; final StringBuilder text = new StringBuilder(); final CompletableFuture<JsonNode> completed = new CompletableFuture<>(); final TokenUsage usage = new TokenUsage(); }
+  /** Sum of `last` breakdowns from thread/tokenUsage/updated: one per model request inside the turn. */
+  static final class TokenUsage {
+    static final TokenUsage NONE = new TokenUsage();
+    long input, cached, output, reasoning, total; boolean seen;
+    synchronized void add(JsonNode last) {
+      if (last == null || last.isMissingNode() || last.isNull()) return;
+      seen = true; input += last.path("inputTokens").asLong(); cached += last.path("cachedInputTokens").asLong();
+      output += last.path("outputTokens").asLong(); reasoning += last.path("reasoningOutputTokens").asLong(); total += last.path("totalTokens").asLong();
+    }
+  }
 }

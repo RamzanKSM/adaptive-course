@@ -266,7 +266,7 @@ class DiagnosticImporter implements ApplicationRunner {
 
       ### Как это пригодится в задачах
 
-      В задачах ты пишешь код в файле `solution.py`. На этой теме это просто одна или несколько строк с `print` — без функций и классов, прямо с начала файла. Проверка сравнивает вывод **символ в символ**, поэтому внимательно смотри, где в условии нужен перевод строки, а где нет.
+      В задачах ты пишешь программу прямо в редакторе. На этой теме это просто одна или несколько строк с `print` — без функций и классов. Проверка сравнивает вывод **символ в символ**, поэтому внимательно смотри, где в условии нужен перевод строки, а где нет.
 
       ### Проверь себя
 
@@ -300,7 +300,7 @@ class DiagnosticImporter implements ApplicationRunner {
       db.update("update tasks set active=0 where title=? and test_source like '%Solution.answer()%'", title);
     db.update("update tasks set active=0 where skill_code='BASIC_CODE_READING' and test_source like '%Solution.answer()%' and (statement like '%Что выведет%' or statement like '%предскажи вывод%' or statement like '%предсказать вывод%')");
   }
-  private void addOutputTask(String title,int difficulty,String action,String expected) { String statement=action+"\n\nДополни тело `Solution.main(String[] args)`. Используй `System.out.print` или `System.out.println`.\n\n**Должно получиться в консоли:**\n\n```text\n"+expected.stripTrailing()+"\n```\n\nПроверка сравнивает вывод символ в символ, включая пробелы и переводы строк — перечитай в условии, нужен ли перевод строки в конце.";String starter="""
+  private void addOutputTask(String title,int difficulty,String action,String expected) { String statement=action+"\n\nДопиши код внутри `main` в редакторе. Используй `System.out.print` (печатает и остаётся на строке) или `System.out.println` (печатает и переходит на новую строку).\n\n"+expectedOutput(expected);String starter="""
       public class Solution {
           public static void main(String[] args) {
 
@@ -326,6 +326,19 @@ class DiagnosticImporter implements ApplicationRunner {
           }
       }
       """.formatted(javaLiteral(expected)); addTask(Language.JAVA,"BASIC_CODE_READING",title,difficulty,statement,starter,test,"TestHarness.java"); }
+  /**
+   * The example block cannot show a trailing newline, so the statement spells it out; leading empty lines are named too.
+   * The check compares output character by character, so this sentence is part of the task, not decoration.
+   */
+  static String expectedOutput(String expected) {
+    StringBuilder text = new StringBuilder("**Должно получиться в консоли:**\n\n```text\n").append(expected.endsWith("\n") ? expected.substring(0, expected.length() - 1) : expected).append("\n```\n\n");
+    if (expected.startsWith("\n")) text.append("Первая строка вывода — пустая. ");
+    String last = expected.stripTrailing(); last = last.substring(last.lastIndexOf('\n') + 1);
+    text.append(expected.endsWith("\n")
+        ? "После «" + last + "» **нужен** перевод строки — вывод заканчивается переходом на новую строку."
+        : "После «" + last + "» перевода строки **нет** — вывод заканчивается сразу на этих символах.");
+    return text.append(" Проверка сравнивает вывод символ в символ, включая пробелы.").toString();
+  }
   private String javaLiteral(String value) { return value.replace("\\","\\\\").replace("\n","\\n").replace("\"","\\\""); }
   /** Idempotent by title: re-running the importer refreshes seed content instead of adding duplicates. */
   private void addTask(Language language,String skill,String title,int difficulty,String statement,String starter,String test,String testFile) {
@@ -353,7 +366,7 @@ class DiagnosticImporter implements ApplicationRunner {
     addPythonOutputTask("Python: три значения", 3, "Напечатай подряд X, затем Y с переводом строки, затем False без перевода строки после него.", "XY\nFalse");
   }
   private void addPythonOutputTask(String title,int difficulty,String action,String expected) {
-    String statement=action+"\n\nНапиши код в `solution.py` с помощью `print(...)`. Чтобы `print` не переходил на новую строку, передай ему `end=\"\"`.\n\n**Должно получиться в консоли:**\n\n```text\n"+expected.stripTrailing()+"\n```\n\nПроверка сравнивает вывод символ в символ, включая пробелы и переводы строк — перечитай в условии, нужен ли перевод строки в конце.";
+    String statement=action+"\n\nНапиши программу в редакторе с помощью `print(...)`. Чтобы `print` не переходил на новую строку, передай ему `end=\"\"`.\n\n"+expectedOutput(expected);
     String test="""
         import contextlib
         import io

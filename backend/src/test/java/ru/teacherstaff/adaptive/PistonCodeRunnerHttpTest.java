@@ -121,14 +121,15 @@ class PistonCodeRunnerHttpTest {
       assertFalse(wrong.passed()); assertEquals("Неверный результат: add(2, 3) вернула не то",wrong.output());
       var syntax=runner.run(Language.PYTHON,"def add(a, b) # syntax\n",checks);
       assertFalse(syntax.passed()); assertTrue(syntax.output().startsWith("Синтаксическая ошибка в коде Python:"));
-      assertTrue(syntax.output().contains("File \"solution.py\", line 1")); assertFalse(syntax.output().contains("main.py"));
+      assertTrue(syntax.output().contains("Строка 1")); assertFalse(syntax.output().contains("main.py")); assertFalse(syntax.output().contains("solution.py"));
       assertFalse(runner.run(Language.PYTHON,"print('forge')",checks).passed(), "a marker the solution could not know never passes");
     } finally { server.stop(0); }
   }
 
   @Test void hidesEntryPointAndChecksFromPythonTracebacks() {
     String traceback=PistonCodeRunner.studentTraceback("Traceback (most recent call last):\n  File \"/tmp/main.py\", line 9, in <module>\n    _main()\n  File \"/tmp/test_solution.py\", line 6, in run_checks\n    import solution\n  File \"/tmp/job/solution.py\", line 2, in <module>\n    print(x)\nNameError: name 'x' is not defined");
-    assertEquals("Traceback (most recent call last):\n  File \"solution.py\", line 2, in <module>\n    print(x)\nNameError: name 'x' is not defined",traceback);
+    assertEquals("Traceback (most recent call last):\n  Строка 2\n    print(x)\nNameError: name 'x' is not defined",traceback);
+    assertEquals("Строка 4, функция area",PistonCodeRunner.studentTraceback("  File \"/piston/jobs/1/solution.py\", line 4, in area"));
   }
 
   @Test void prefersNewestRuntimeVersion() {

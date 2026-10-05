@@ -9,7 +9,7 @@ import java.util.Optional;
 /** Generates reusable shared learning content. Implementations must never return a task without its hidden harness. */
 interface LearningContentGenerator {
   /** Bump when the explanation prompt changes so cached LLM explanations are regenerated. */
-  int EXPLANATION_PROMPT_VERSION = 2;
+  int EXPLANATION_PROMPT_VERSION = 3;
   GeneratedTask generateTask(long studentId, ContentBrief brief);
   Optional<GeneratedExplanation> generateExplanation(long studentId, ContentBrief brief);
 }

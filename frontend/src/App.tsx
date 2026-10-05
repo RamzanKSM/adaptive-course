@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { api, ApiError, humanize, onUnauthorized, patch, post } from './api'
 import { achievements, commonAchievements, experience, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
+import { LlmAnalytics } from './analytics'
 import type { Attempt, ChatMessage, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
 
 const UNKNOWN = 'Не знаю'
@@ -447,7 +448,7 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     </div>
     <h2 className="title">{task.title}</h2>
     <Markdown>{task.statement}</Markdown>
-    <div className="code-label"><span>Решение на {course.title}{course.id === 'PYTHON' && <span className="muted small"> · solution.py</span>}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
+    <div className="code-label"><span>Решение на {course.title}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
     <div className="task-actions">
       {passed
         ? <button className="reward big" onClick={onNext}>Следующая задача <Icon name="arrow" /></button>
@@ -571,6 +572,7 @@ function TeacherPage({ request }: { request: Request }) {
   const [students, setStudents] = useState<Student[] | null>(null); const [selected, setSelected] = useState<Student | null>(null)
   const [globalLlm, setGlobalLlm] = useState<LlmStatus | null>(null)
   const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [creating, setCreating] = useState(false)
+  const [view, setView] = useState<'students' | 'llm'>('students')
   const toast = useToast()
   const load = useCallback(() => request(() => api<{ students: Student[] }>('/admin/students')).then(s => { if (s) setStudents(s.students) }), [request])
   useEffect(() => {
@@ -596,7 +598,13 @@ function TeacherPage({ request }: { request: Request }) {
   }
   const onLlmStatus = useCallback((llm: LlmStatus) => setGlobalLlm(current => current ? { ...current, globallyEnabled: llm.globallyEnabled } : current), [])
   const configDisabled = globalLlm?.reason === 'DISABLED_BY_CONFIGURATION'
-  return <section className="admin">
+  const tabs = <nav className="segmented admin-tabs" role="tablist" style={{ '--active': view === 'students' ? 0 : 1 } as CSSProperties}>
+    <span className="segmented-thumb" aria-hidden="true" />
+    <button role="tab" aria-selected={view === 'students'} className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}><Icon name="user" size={16} /> Студенты</button>
+    <button role="tab" aria-selected={view === 'llm'} className={view === 'llm' ? 'active' : ''} onClick={() => setView('llm')}><Icon name="chart" size={16} /> Аналитика LLM</button>
+  </nav>
+  if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
+  return <>{tabs}<section className="admin">
     <div className="admin-main">
       <div className="enter">
         <p className="eyebrow">Преподаватель</p>
@@ -627,7 +635,44 @@ function TeacherPage({ request }: { request: Request }) {
     </div>
     {selected ? <StudentDetail key={selected.id} student={selected} request={request} toggle={() => toggle(selected)} onLlmStatus={onLlmStatus} />
       : <aside className="card student-detail placeholder"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">Выбери студента, чтобы увидеть его уроки, решения и переписку с помощником.</p></aside>}
-  </section>
+  </section></>
+}
+
+// No look-alike characters (0/O, 1/l/I) so a password read aloud or copied by hand survives.
+const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+function generatePassword(length = 10) {
+  const bytes = new Uint32Array(length); crypto.getRandomValues(bytes)
+  return Array.from(bytes, b => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length]).join('')
+}
+
+function PasswordReset({ student, request }: { student: Student; request: Request }) {
+  const [open, setOpen] = useState(false); const [password, setPassword] = useState(''); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState('')
+  const toast = useToast()
+  async function save(e: FormEvent) {
+    e.preventDefault(); setSaving(true)
+    const result = await request(() => patch<{ sessionsClosed: number }>(`/admin/students/${student.id}/password`, { password }))
+    setSaving(false)
+    if (!result) return
+    setSaved(password); setPassword('')
+    toast({ tone: 'info', icon: 'lock', title: 'Пароль изменён', text: result.sessionsClosed ? `Студент вышел из системы на ${result.sessionsClosed} устр.` : `${student.displayName} войдёт с новым паролем` })
+  }
+  const copy = () => navigator.clipboard?.writeText(saved).then(() => toast({ tone: 'info', icon: 'check', title: 'Пароль скопирован' })).catch(() => {})
+  if (!open) return <button className="ghost small-button" onClick={() => { setOpen(true); setPassword(generatePassword()); setSaved('') }}><Icon name="lock" size={15} /> Сменить пароль</button>
+  return <div className="password-reset enter">
+    {saved ? <div className="password-saved">
+      <span className="muted small">Новый пароль — передай его студенту. После закрытия он больше не будет показан.</span>
+      <div className="password-row"><code>{saved}</code><button className="secondary" onClick={copy}>Скопировать</button><button className="ghost" onClick={() => { setOpen(false); setSaved('') }}>Готово</button></div>
+    </div> : <form onSubmit={save} autoComplete="off">
+      <label className="small">Новый пароль для {student.displayName}
+        <div className="password-row">
+          <input value={password} onChange={e => setPassword(e.target.value)} minLength={6} required autoComplete="new-password" spellCheck={false} aria-describedby="password-hint" />
+          <button type="button" className="ghost" onClick={() => setPassword(generatePassword())} title="Сгенерировать">↻</button>
+        </div>
+      </label>
+      <p id="password-hint" className="muted small">Не короче 6 символов. Все открытые сессии студента будут завершены.</p>
+      <div className="password-row"><button className="primary" disabled={saving || password.length < 6}>{saving ? <><Spinner /> Сохраняем…</> : 'Сохранить пароль'}</button><button type="button" className="ghost" onClick={() => setOpen(false)}>Отмена</button></div>
+    </form>}
+  </div>
 }
 
 function Switch({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: () => void; label: string }) {
@@ -658,6 +703,7 @@ function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Stu
       <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}</p></div>
       <label className="switch-label"><span className="muted small">LLM</span><Switch checked={!!student.llmEnabled} onChange={toggle} label={`LLM для ${student.displayName}`} /></label>
     </div>
+    <PasswordReset student={student} request={request} />
     {progress && <div className="lang-stats">{LANGUAGES.filter(language => progress[language]).map(language => {
       const level = experience({ skills: progress[language]! })
       return <div key={language}>

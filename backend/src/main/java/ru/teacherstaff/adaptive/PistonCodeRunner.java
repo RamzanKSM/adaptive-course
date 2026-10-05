@@ -107,11 +107,18 @@ class PistonCodeRunner {
       if(line.matches("\\s*File \".*(main|test_solution)\\.py\".*")) { skipCode=true; continue; }
       if(skipCode&&line.startsWith("    ")&&!line.stripLeading().startsWith("File ")) continue;
       skipCode=false;
-      kept.add(line.replaceAll("File \"[^\"]*solution\\.py\"","File \"solution.py\""));
+      kept.add(studentFrame(line));
     }
     return String.join("\n",kept).strip();
   }
 
+  /** Students never see platform file names: «File ".../solution.py", line 4, in area» becomes «Строка 4, функция area». */
+  private static String studentFrame(String line) {
+    var frame=Pattern.compile("^(\\s*)File \"[^\"]*solution\\.py\", line (\\d+)(?:, in (.+))?$").matcher(line);
+    if(!frame.matches()) return line;
+    String where=frame.group(3)==null||frame.group(3).equals("<module>")?"":", функция "+frame.group(3);
+    return frame.group(1)+"Строка "+frame.group(2)+where;
+  }
   private ObjectNode execution(Language language,String version) { ObjectNode request=json.createObjectNode();request.put("language",language.pistonLanguage);request.put("version",version);request.put("compile_timeout",compileTimeout);request.put("run_timeout",runTimeout);request.put("compile_memory_limit",compileMemory);request.put("run_memory_limit",runMemory);return request; }
   private JsonNode execute(ObjectNode request) throws Exception {
     var response=http.send(HttpRequest.newBuilder(URI.create(baseUrl+"/api/v2/execute")).timeout(Duration.ofSeconds(20)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(request))).build(),HttpResponse.BodyHandlers.ofString());
