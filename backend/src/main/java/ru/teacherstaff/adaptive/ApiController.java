@@ -127,9 +127,11 @@ public class ApiController {
     for(String prerequisite:task.prerequisiteSkillCodes()) if(count("select count(*) from skills where code=?",prerequisite)==0) throw rejected("unknown prerequisite skill "+prerequisite);
     String leak=internalTerm(task.statement()); if(leak!=null) throw rejected("statement mentions platform internals: "+leak);
     if(!codeRunner.configured()) throw new LlmUnavailableException("Piston is required to validate generated content");
-    var validation=codeRunner.run(lang,task.referenceSolutionSource(),task.testSource());
+    String testSource=lang==Language.PYTHON&&"PY_ARITHMETIC_BASIC".equals(task.skillCode())
+        ? PythonArithmeticChecks.strengthen(task.statement(),task.testSource()) : task.testSource();
+    var validation=codeRunner.run(lang,task.referenceSolutionSource(),testSource);
     if(!validation.passed()) throw rejected("reference solution failed its own checks: "+abbreviate(validation.output(),300));
-    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language) values(?,?,?,?,?,?,?,?)",task.skillCode(),task.title(),task.statement(),task.starterCode()==null?"":task.starterCode(),task.testSource(),task.testFileName(),difficulty,lang.name());
+    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language) values(?,?,?,?,?,?,?,?)",task.skillCode(),task.title(),task.statement(),task.starterCode()==null?"":task.starterCode(),testSource,task.testFileName(),difficulty,lang.name());
     long taskId=db.queryForObject("select last_insert_rowid()",Long.class);
     for(String target:new LinkedHashSet<>(task.targetSkillCodes())) db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",taskId,target);
     for(String prerequisite:new LinkedHashSet<>(task.prerequisiteSkillCodes())) db.update("insert into task_prerequisite_skills(task_id,skill_code) values(?,?)",taskId,prerequisite);

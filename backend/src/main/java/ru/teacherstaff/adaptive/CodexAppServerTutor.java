@@ -354,8 +354,12 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     String checks = "PY_BASIC_CODE_READING".equals(b.skillCode())
         ? "This is an output task: the student writes top-level code in solution.py that prints. run_checks() must capture stdout while importing the module (buf = io.StringIO(); with contextlib.redirect_stdout(buf): import solution) and compare buf.getvalue() with the exact expected output. Never ask the student to predict output. "
         : "If the task asks for a function or class, run_checks() must import it from solution and make at least three deterministic assert checks with different inputs. If the task asks to print, capture stdout while importing solution or while calling the function (contextlib.redirect_stdout) and compare exactly. ";
+    String arithmetic = "PY_ARITHMETIC_BASIC".equals(b.skillCode())
+        ? "For this arithmetic skill, explicitly name the operation in the statement. Ask the student to put that calculation directly inside print(...). The reference solution must calculate with the named operator, not print the final number as a literal. A program that only prints the expected number must not count as a solution. "
+        : "";
     return "starterCode — содержимое solution.py: читаемый Python 3.12 с отступами в 4 пробела и комментарием «# Напиши решение здесь» там, где нужно писать код; для задач на функцию — заготовка def с нужной сигнатурой и телом pass. Не клади в starterCode решение. Задачи не используют input(): данные приходят как аргументы функции или прямо в условии.\n"
         + "testSource is test_solution.py and testFileName must be \"test_solution.py\". It must define def run_checks(): and use only the standard library. "
+        + arithmetic
         + checks
         + "Every assert must have a short Russian message that says what went wrong (for example which call returned an unexpected value) without revealing the whole expected answer. "
         + "test_solution.py must not print anything, read stdin, call sys.exit or define a pass marker: the platform runs run_checks() itself and treats a return without exceptions as success. "
