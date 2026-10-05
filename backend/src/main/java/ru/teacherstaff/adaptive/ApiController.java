@@ -164,6 +164,30 @@ public class ApiController {
     log.info("Password changed for student {} by admin {}; {} session(s) closed",id,uid(r),sessions);
     return Map.of("id",id,"sessionsClosed",sessions);
   }
+  /**
+   * Deletes a student and everything that belongs only to them: sessions, diagnostic, lessons with their submissions
+   * and chat, progress and credit. Shared content (tasks, explanations) stays. LLM usage rows stay for analytics but
+   * lose the link to the person. Irreversible, so the client must send the student's login as confirmation.
+   */
+  @DeleteMapping("/admin/students/{id}") @Transactional public Map<String,Object> deleteStudent(@PathVariable long id,@RequestBody(required=false) Map<String,String> b,HttpServletRequest r){
+    admin(r);
+    var rows=db.queryForList("select login,display_name from users where id=? and role='STUDENT'",id);
+    if(rows.isEmpty())throw bad("STUDENT_NOT_FOUND","Студент не найден");
+    String login=(String)rows.getFirst().get("login");
+    if(b==null||!login.equals(b.get("confirmLogin")))throw bad("CONFIRMATION_REQUIRED","Для удаления введите логин студента");
+    String lessons="(select id from lessons where user_id=?)";
+    int submissions=db.update("delete from submissions where lesson_id in "+lessons,id);
+    int messages=db.update("delete from chat_messages where lesson_id in "+lessons,id);
+    db.update("delete from lesson_tasks where lesson_id in "+lessons,id);
+    db.update("delete from skill_iterations where user_id=? or lesson_id in "+lessons,id,id);
+    int lessonCount=db.update("delete from lessons where user_id=?",id);
+    for(String table:List.of("successful_task_credit","student_skills","diagnostic_answers","diagnostic_skill_results","student_languages","sessions"))
+      db.update("delete from "+table+" where user_id=?",id);
+    int llmCalls=db.update("update llm_calls set user_id=null where user_id=?",id);
+    db.update("delete from users where id=?",id);
+    log.info("Student account {} ({}) deleted by admin {}: {} lessons, {} submissions, {} chat messages removed; {} LLM usage rows kept without the user",id,login,uid(r),lessonCount,submissions,messages,llmCalls);
+    return obj("id",id,"lessons",lessonCount,"submissions",submissions,"chatMessages",messages);
+  }
   private void validatePassword(String password){ if(password==null||password.length()<6)throw bad("WEAK_PASSWORD","Пароль должен быть не короче 6 символов"); if(password.length()>200)throw bad("WEAK_PASSWORD","Пароль слишком длинный"); }
 
   /** Usage of the LLM over the last N days: totals, per day, per purpose, language and student, task acceptance and recent errors. */

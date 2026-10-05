@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { java } from '@codemirror/lang-java'
 import { python } from '@codemirror/lang-python'
 import ReactMarkdown from 'react-markdown'
-import { api, ApiError, humanize, onUnauthorized, patch, post } from './api'
+import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './api'
 import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
@@ -666,7 +666,7 @@ function TeacherPage({ request }: { request: Request }) {
         </button>)
         : <p className="muted list-note">Студентов пока нет. Создай первую учётную запись выше.</p>}</div>
     </div>
-    {selected ? <StudentDetail key={selected.id} student={selected} request={request} toggle={() => toggle(selected)} onLlmStatus={onLlmStatus} />
+    {selected ? <StudentDetail key={selected.id} student={selected} request={request} toggle={() => toggle(selected)} onLlmStatus={onLlmStatus} onDeleted={() => { setStudents(xs => xs && xs.filter(x => x.id !== selected.id)); setSelected(null) }} />
       : <aside className="card student-detail placeholder"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">Выбери студента, чтобы увидеть его уроки, решения и переписку с помощником.</p></aside>}
   </section></>
 }
@@ -724,7 +724,7 @@ function Switch({ checked, disabled, onChange, label }: { checked: boolean; disa
   return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`switch ${checked ? 'on' : ''}`} disabled={disabled} onClick={onChange}><span /></button>
 }
 
-function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Student; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void }) {
+function StudentDetail({ student, request, toggle, onLlmStatus, onDeleted }: { student: Student; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void; onDeleted: () => void }) {
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
   const [openLesson, setOpenLesson] = useState<Id | null>(null)
@@ -775,5 +775,34 @@ function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Stu
         {detail.chat.length ? <div className="messages static">{detail.chat.map(m => <div key={m.id} className={`message ${m.role === 'STUDENT' ? 'student' : 'assistant'}`}><Markdown>{m.content}</Markdown><small>{m.role === 'STUDENT' ? 'Студент' : 'Помощник'} · {fmt(m.createdAt)}</small></div>)}</div> : <p className="muted">Переписки не было.</p>}
       </div>}
     </>}
+    <DeleteAccount student={student} request={request} onDeleted={onDeleted} />
   </aside>
+}
+
+/** Irreversible, so the teacher types the student's login to confirm; the server checks it too. */
+function DeleteAccount({ student, request, onDeleted }: { student: Student; request: Request; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false); const [typed, setTyped] = useState(''); const [deleting, setDeleting] = useState(false)
+  const toast = useToast()
+  const matches = typed.trim() === student.login
+  async function confirm(e: FormEvent) {
+    e.preventDefault(); if (!matches) return
+    setDeleting(true)
+    const result = await request(() => remove<{ lessons: number; submissions: number }>(`/admin/students/${student.id}`, { confirmLogin: typed.trim() }))
+    setDeleting(false)
+    if (!result) return
+    toast({ tone: 'info', icon: 'user', title: `Аккаунт ${student.displayName} удалён`, text: `Уроков: ${result.lessons}, отправок решений: ${result.submissions}` })
+    onDeleted()
+  }
+  if (!open) return <div className="danger-zone"><button className="ghost danger small-button" onClick={() => setOpen(true)}><Icon name="x" size={15} /> Удалить аккаунт</button></div>
+  return <form className="danger-zone open enter" onSubmit={confirm} autoComplete="off">
+    <b>Удалить аккаунт {student.displayName}?</b>
+    <p className="muted small">Будут удалены вход в систему, диагностика, все уроки, решения, переписка с помощником и прогресс по обоим курсам. Восстановить их нельзя. Статистика обращений к LLM останется в аналитике без привязки к студенту.</p>
+    <label className="small">Чтобы подтвердить, введи логин <code>{student.login}</code>
+      <input value={typed} onChange={e => setTyped(e.target.value)} autoCapitalize="none" spellCheck={false} aria-invalid={typed.length > 0 && !matches} autoFocus />
+    </label>
+    <div className="password-row">
+      <button className="danger-solid" disabled={!matches || deleting}>{deleting ? <><Spinner /> Удаляем…</> : 'Удалить навсегда'}</button>
+      <button type="button" className="ghost" onClick={() => { setOpen(false); setTyped('') }}>Отмена</button>
+    </div>
+  </form>
 }

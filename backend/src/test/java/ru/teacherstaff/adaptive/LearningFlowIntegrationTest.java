@@ -325,6 +325,27 @@ class LearningFlowIntegrationTest {
     assertEquals(0,taskAudit.auditPending(),"nothing left to re-verify");
   }
 
+  @Test void adminDeletesStudentWithAllPersonalData() throws Exception {
+    String token=createStudentAndLogin("gone-student"); long student=studentId("gone-student"); submitDiagnostic(token,student,false); start(token);
+    long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
+    mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());
+    db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms) values(?, 'CHAT','JAVA','OK',100)",student);
+    String admin=login("admin","admin-pass");
+    var refused=json.readTree(mvc.perform(delete("/api/admin/students/{id}",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"confirmLogin\":\"someone-else\"}")).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("CONFIRMATION_REQUIRED",refused.path("error").asText());
+    mvc.perform(delete("/api/admin/students/{id}",student).cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"confirmLogin\":\"gone-student\"}")).andExpect(status().isBadRequest());
+    var deleted=json.readTree(mvc.perform(delete("/api/admin/students/{id}",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"confirmLogin\":\"gone-student\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(1,deleted.path("lessons").asInt()); assertEquals(1,deleted.path("submissions").asInt());
+    for(String table:List.of("sessions","student_languages","diagnostic_answers","diagnostic_skill_results","student_skills","successful_task_credit","lessons"))
+      assertEquals(0,db.queryForObject("select count(*) from "+table+" where user_id=?",Integer.class,student),table);
+    assertEquals(0,db.queryForObject("select count(*) from users where id=?",Integer.class,student));
+    assertEquals(1,db.queryForObject("select count(*) from llm_calls where user_id is null and purpose='CHAT' and duration_ms=100",Integer.class),"usage stays in analytics without the person");
+    assertEquals(1,db.queryForObject("select count(*) from tasks where id=?",Integer.class,task),"shared tasks stay");
+    mvc.perform(get("/api/auth/me").cookie(cookie(token))).andExpect(status().isUnauthorized());
+    mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{\"login\":\"gone-student\",\"password\":\"student-pass\"}")).andExpect(status().isBadRequest());
+    createStudentAndLogin("gone-student");
+  }
+
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
 
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }

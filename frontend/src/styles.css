@@ -639,3 +639,16 @@ pre { overflow: auto; background: var(--surface-2); padding: 12px; border-radius
 .diag-summary { grid-column: 1 / -1; display: grid; gap: 6px; margin: 2px 0 6px; }
 .gap-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 @media (max-width: 800px) { .topic-meta { justify-content: flex-start; } }
+
+/* ───────── Danger zone ───────── */
+.danger-zone { margin-top: 22px; padding-top: 14px; border-top: 1px dashed var(--line-strong); }
+.danger-zone.open { display: grid; gap: 10px; padding: 14px; border: 1.5px solid #f6c4c6; border-radius: 16px; background: var(--danger-soft); }
+.danger-zone.open b { color: #a3262b; }
+.danger-zone .muted { margin: 0; }
+.danger-zone label { font-size: 13px; }
+.danger-zone label code { font-family: var(--font-mono); padding: 1px 6px; border-radius: 6px; background: var(--surface); }
+.danger-zone input { background: var(--surface); font-family: var(--font-mono); }
+button.ghost.danger { color: #b42318; border-color: #f2b8bb; }
+button.ghost.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); }
+button.danger-solid { background: var(--danger); color: #fff; box-shadow: 0 10px 24px -12px rgb(229 72 77 / .8); }
+button.danger-solid:hover:not(:disabled) { background: #c8363b; }
