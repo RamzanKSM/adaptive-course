@@ -33,7 +33,7 @@ class LearningFlowIntegrationTest {
     p.add("app.bootstrap-admin-login", () -> "admin");
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
   }
-  @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status()).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(anyString(),anyString())).thenReturn(new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna")); }
+  @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenReturn(new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna")); }
 
   @Test void diagnosticDeterminesFirstAvailableBlock() throws Exception {
     String cookie=createStudentAndLogin("block-student"); long student=studentId("block-student");
@@ -137,7 +137,7 @@ class LearningFlowIntegrationTest {
     String token=createStudentAndLogin("runner-unavailable-student"); long student=studentId("runner-unavailable-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"SWITCH_BASIC");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
     when(generator.generateExplanation(eq(student),brief("SWITCH_BASIC"))).thenReturn(Optional.empty());
-    when(runner.status()).thenReturn(new PistonCodeRunner.RuntimeStatus(false,"PISTON_UNREACHABLE",""));
+    when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(false,"PISTON_UNREACHABLE",""));
     start(token);
     var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("RUNNER_UNAVAILABLE",response.path("reason").asText());
@@ -179,12 +179,48 @@ class LearningFlowIntegrationTest {
     assertEquals(LearningContentGenerator.EXPLANATION_PROMPT_VERSION,db.queryForObject("select prompt_version from explanations where skill_code='LOGICAL_OR'",Integer.class));
   }
 
+  @Test void pythonTrackHasItsOwnDiagnosticLessonsAndProgress() throws Exception {
+    String token=createStudentAndLogin("python-student"); long student=studentId("python-student");
+    submitDiagnostic(token,student,false);
+    int javaLesson=start(token);
+    var pyDiagnostic=json.readTree(mvc.perform(get("/api/diagnostic").param("language","PYTHON").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertFalse(pyDiagnostic.path("completed").asBoolean());
+    assertEquals(db.queryForObject("select count(*) from diagnostic_questions where language='PYTHON'",Integer.class),pyDiagnostic.path("questions").size());
+    assertTrue(pyDiagnostic.path("questions").path(0).path("skillCode").asText().startsWith("PY_"));
+    var answers=new ArrayList<Map<String,Object>>();
+    for(var q:pyDiagnostic.path("questions")){var a=new LinkedHashMap<String,Object>();a.put("questionId",q.path("id").asLong());answers.add(a);}
+    mvc.perform(post("/api/diagnostic").param("language","PYTHON").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers",answers)))).andExpect(status().isOk());
+    var pyStart=json.readTree(mvc.perform(post("/api/lessons/start").param("language","PYTHON").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(1,pyStart.path("lesson").path("number").asInt(),"Python lessons are numbered separately from Java");
+    assertEquals("PYTHON",pyStart.path("lesson").path("language").asText());
+    var next=json.readTree(mvc.perform(get("/api/learning/next").param("language","PYTHON").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("PY_BASIC_CODE_READING",next.path("skill").path("code").asText());
+    long task=next.path("task").path("id").asLong();
+    assertEquals(1,db.queryForObject("select difficulty from tasks where id=?",Integer.class,task));
+    assertTrue(next.path("explanation").path("content").asText().contains("print"));
+    mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","print('Привет', end='')")))).andExpect(status().isOk());
+    verify(runner).run(eq(Language.PYTHON),eq("print('Привет', end='')"),contains("def run_checks"));
+    var py=json.readTree(mvc.perform(get("/api/progress").param("language","PYTHON").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(1,py.path("solvedTasks").asInt()); assertEquals(1,py.path("activity").size());
+    assertTrue(py.path("skills").path(0).path("skillCode").asText().startsWith("PY_"));
+    var java=json.readTree(mvc.perform(get("/api/progress").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(0,java.path("solvedTasks").asInt()); assertEquals("JAVA",java.path("language").asText());
+    var javaCurrent=json.readTree(mvc.perform(get("/api/lessons/current").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(javaLesson,javaCurrent.path("lesson").path("number").asInt(),"the Java lesson stays open while Python is studied");
+  }
+
+  @Test void unknownLanguageIsRejected() throws Exception {
+    String token=createStudentAndLogin("lang-student");
+    var body=json.readTree(mvc.perform(get("/api/diagnostic").param("language","COBOL").cookie(cookie(token))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("UNKNOWN_LANGUAGE",body.path("error").asText());
+  }
+
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
 
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }
   private String login(String login,String password) throws Exception { var r=mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password",password)))).andExpect(status().isOk()).andReturn().getResponse(); return r.getCookie("adaptive_session").getValue(); }
   private long studentId(String login){return db.queryForObject("select id from users where login=?",Long.class,login);}
-  private void submitDiagnostic(String token,long user,boolean correctBlockZero) throws Exception { var rows=db.queryForList("select id,correct_option,block_no from diagnostic_questions order by id"); var answers=new ArrayList<Map<String,Object>>();for(var q:rows){boolean correct=correctBlockZero&&((Number)q.get("block_no")).intValue()==0;var answer=new LinkedHashMap<String,Object>();answer.put("questionId",q.get("id"));if(correct)answer.put("selectedOption",q.get("correct_option"));answers.add(answer);}mvc.perform(post("/api/diagnostic").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers",answers)))).andExpect(status().isOk());}
+  private void submitDiagnostic(String token,long user,boolean correctBlockZero) throws Exception { var rows=db.queryForList("select id,correct_option,block_no from diagnostic_questions where language='JAVA' order by id"); var answers=new ArrayList<Map<String,Object>>();for(var q:rows){boolean correct=correctBlockZero&&((Number)q.get("block_no")).intValue()==0;var answer=new LinkedHashMap<String,Object>();answer.put("questionId",q.get("id"));if(correct)answer.put("selectedOption",q.get("correct_option"));answers.add(answer);}mvc.perform(post("/api/diagnostic").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers",answers)))).andExpect(status().isOk());}
   private int start(String token) throws Exception { return json.readTree(mvc.perform(post("/api/lessons/start").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("lesson").path("number").asInt(); }
   private void finish(String token,int lesson) throws Exception { long id=db.queryForObject("select id from lessons where user_id=(select user_id from sessions where token_hash=?) and lesson_number=?",Long.class,Hashing.sha256(token),lesson);mvc.perform(post("/api/lessons/{id}/finish",id).cookie(cookie(token))).andExpect(status().isOk()); }
   private void solveThree(String token) throws Exception { for(int i=0;i<3;i++){var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());long task=next.path("task").path("id").asLong();assertTrue(task>0);mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());} }

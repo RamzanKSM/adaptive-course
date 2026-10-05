@@ -23,6 +23,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=backend-build /src/backend/target/adaptive-java-tutor-0.1.0.jar /app/app.jar
 COPY java_initial_diagnostic_mvp_v2.md /app/java_initial_diagnostic_mvp_v2.md
+COPY python_initial_diagnostic_mvp.md /app/python_initial_diagnostic_mvp.md
 COPY backend/codex-config.toml /app/codex-config.toml
 COPY backend/docker-entrypoint.sh /usr/local/bin/adaptive-entrypoint
 RUN chmod 755 /usr/local/bin/adaptive-entrypoint \
@@ -31,7 +32,8 @@ RUN chmod 755 /usr/local/bin/adaptive-entrypoint \
 ENV HOME=/app/codex-home \
     CODEX_HOME=/app/codex-home \
     APP_DATABASE_PATH=/app/data/adaptive-tutor.db \
-    APP_DIAGNOSTIC_SOURCE=/app/java_initial_diagnostic_mvp_v2.md
+    APP_DIAGNOSTIC_SOURCE=/app/java_initial_diagnostic_mvp_v2.md \
+    APP_PYTHON_DIAGNOSTIC_SOURCE=/app/python_initial_diagnostic_mvp.md
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/adaptive-entrypoint"]
 CMD ["java", "-jar", "/app/app.jar"]

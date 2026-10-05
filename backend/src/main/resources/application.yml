@@ -24,9 +24,11 @@ app:
     student-runtime-validated: ${APP_LLM_STUDENT_RUNTIME_VALIDATED:false}
   diagnostic:
     source: ${APP_DIAGNOSTIC_SOURCE:../java_initial_diagnostic_mvp_v2.md}
+    python-source: ${APP_PYTHON_DIAGNOSTIC_SOURCE:../python_initial_diagnostic_mvp.md}
   piston:
     base-url: ${PISTON_BASE_URL:}
     java-version: ${PISTON_JAVA_VERSION:}
+    python-version: ${PISTON_PYTHON_VERSION:}
     compile-timeout-ms: ${PISTON_COMPILE_TIMEOUT_MS:5000}
     run-timeout-ms: ${PISTON_RUN_TIMEOUT_MS:3000}
     compile-memory-bytes: ${PISTON_COMPILE_MEMORY_BYTES:268435456}

@@ -1,20 +1,45 @@
-import { CSSProperties, FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, CSSProperties, FormEvent, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { java } from '@codemirror/lang-java'
+import { python } from '@codemirror/lang-python'
 import ReactMarkdown from 'react-markdown'
 import { api, ApiError, humanize, onUnauthorized, patch, post } from './api'
-import { achievements, experience, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
+import { achievements, commonAchievements, experience, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
-import type { Attempt, ChatMessage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
+import type { Attempt, ChatMessage, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
 
 const UNKNOWN = 'Не знаю'
-const codeFallback = 'public class Solution {\n    public static void main(String[] args) {\n        // Напишите решение здесь\n    }\n}\n'
 const fmt = (value?: string | null) => {
   if (!value) return ''
   const date = parseDate(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ru-RU')
 }
-const javaExtensions = [java()]
+
+const COURSES = {
+  JAVA: {
+    id: 'JAVA', key: 'java', title: 'Java', logo: 'J',
+    fallback: 'public class Solution {\n    public static void main(String[] args) {\n        // Напишите решение здесь\n    }\n}\n',
+    pitch: 'Строгая типизация и классический ООП. Язык бэкенда, Android и больших систем.', tags: ['ООП', 'Бэкенд', 'Android'],
+  },
+  PYTHON: {
+    id: 'PYTHON', key: 'python', title: 'Python', logo: 'Py',
+    fallback: '# Напиши решение здесь\n',
+    pitch: 'Короткий понятный синтаксис. Автоматизация, анализ данных, бэкенд и машинное обучение.', tags: ['Простой синтаксис', 'Данные', 'Автоматизация'],
+  },
+} as const
+type Course = (typeof COURSES)[CourseLanguage]
+// Stable references: a new extensions array on every render would make CodeMirror reconfigure the editor.
+const EDITOR_EXTENSIONS = { JAVA: [java()], PYTHON: [python()] }
+const LANGUAGES = Object.keys(COURSES) as CourseLanguage[]
+const CourseContext = createContext<Course>(COURSES.JAVA)
+const useCourse = () => useContext(CourseContext)
+/** Adds the course to a student API path; the backend treats a missing value as Java. */
+const withCourse = (path: string, language: CourseLanguage) => `${path}${path.includes('?') ? '&' : '?'}language=${language}`
+const LANGUAGE_KEY = 'rmzn.language'
+const storedLanguage = (): CourseLanguage | null => {
+  try { const value = localStorage.getItem(LANGUAGE_KEY); return value === 'JAVA' || value === 'PYTHON' ? value : null } catch { return null }
+}
+const storeLanguage = (language: CourseLanguage) => { try { localStorage.setItem(LANGUAGE_KEY, language) } catch { /* private mode: choice lasts for this page only */ } }
 
 function Markdown({ children, inline = false }: { children: string; inline?: boolean }) {
   const content = <ReactMarkdown
@@ -41,6 +66,14 @@ function Shell() {
   const [me, setMe] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [language, setLanguage] = useState<CourseLanguage | null>(storedLanguage)
+  const chooseLanguage = (value: CourseLanguage) => { storeLanguage(value); setLanguage(value); window.scrollTo({ top: 0 }) }
+  const isStudent = me?.role === 'STUDENT'
+  // The accent palette follows the course; the login screen and the teacher view keep the default one.
+  useEffect(() => {
+    const root = document.documentElement
+    if (isStudent && language) root.dataset.lang = COURSES[language].key; else delete root.dataset.lang
+  }, [isStudent, language])
   const request = useCallback<Request>(async action => {
     setError('')
     try { return await action() } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось выполнить запрос'); return undefined }
@@ -62,7 +95,8 @@ function Shell() {
   if (!me) return <Login onLogin={login} onError={setError} error={error} />
   return <main className="app">
     <header className="topbar">
-      <div className="brand"><span className="logo" aria-hidden="true">J</span><b>Java Tutor</b></div>
+      <div className="brand"><span className="logo" aria-hidden="true">R</span><b>Rmzn Tutor</b></div>
+      {isStudent && language && <LanguageSwitch value={language} onChange={chooseLanguage} />}
       <div className="user-chip">
         <span className="avatar" aria-hidden="true">{initials(me.displayName)}</span>
         <span className="user-meta"><b>{me.displayName}</b><small>{me.role === 'STUDENT' ? 'Студент' : 'Преподаватель'}</small></span>
@@ -70,8 +104,45 @@ function Shell() {
       </div>
     </header>
     {error && <div className="flash error" role="alert"><span>{error}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setError('')}><Icon name="x" size={16} /></button></div>}
-    {me.role === 'STUDENT' ? <StudentPage request={request} /> : <TeacherPage request={request} />}
+    {!isStudent ? <TeacherPage request={request} />
+      : !language ? <LanguagePicker request={request} onPick={chooseLanguage} />
+        : <CourseContext.Provider value={COURSES[language]}><StudentPage key={language} request={request} /></CourseContext.Provider>}
   </main>
+}
+
+function LanguageSwitch({ value, onChange }: { value: CourseLanguage; onChange: (language: CourseLanguage) => void }) {
+  return <nav className="lang-switch" aria-label="Курс" style={{ '--active': LANGUAGES.indexOf(value) } as CSSProperties}>
+    <span className="segmented-thumb" aria-hidden="true" />
+    {LANGUAGES.map(language => <button key={language} className={language === value ? 'active' : ''} aria-pressed={language === value} onClick={() => language !== value && onChange(language)}>
+      <span className={`lang-dot ${COURSES[language].key}`} aria-hidden="true" />{COURSES[language].title}
+    </button>)}
+  </nav>
+}
+
+/** First visit: the student chooses a course. Both stay available later through the switch in the header. */
+function LanguagePicker({ request, onPick }: { request: Request; onPick: (language: CourseLanguage) => void }) {
+  const [solved, setSolved] = useState<Partial<Record<CourseLanguage, number>>>({})
+  useEffect(() => {
+    for (const language of LANGUAGES) request(() => api<Progress>(withCourse('/progress', language))).then(value => { if (value) setSolved(s => ({ ...s, [language]: experience(value).solved })) })
+  }, [request])
+  return <section className="picker">
+    <div className="enter">
+      <p className="eyebrow">Выбор курса</p>
+      <h1 className="display small">Что будем учить?</h1>
+      <p className="muted">Оба курса устроены одинаково: диагностика, объяснения и задачи от простых к сложным. Переключиться можно в любой момент — прогресс у каждого курса свой.</p>
+    </div>
+    <div className="picker-grid">{LANGUAGES.map((language, i) => {
+      const course = COURSES[language]
+      return <button key={language} className={`lang-card ${course.key}`} onClick={() => onPick(language)} style={{ animationDelay: `${120 + i * 80}ms` }}>
+        <span className="lang-logo" aria-hidden="true">{course.logo}</span>
+        <h2>{course.title}</h2>
+        <p>{course.pitch}</p>
+        <ul>{course.tags.map(tag => <li key={tag}>{tag}</li>)}</ul>
+        {!!solved[language] && <span className="stat-line">Уже решено задач: {solved[language]}</span>}
+        <span className="go">{solved[language] ? 'Продолжить' : 'Начать'} {course.title} <Icon name="arrow" /></span>
+      </button>
+    })}</div>
+  </section>
 }
 
 function Login({ onLogin, onError, error }: { onLogin: (me: User) => void; onError: (message: string) => void; error: string }) {
@@ -84,14 +155,14 @@ function Login({ onLogin, onError, error }: { onLogin: (me: User) => void; onErr
   return <main className="login">
     <section className="login-hero" aria-hidden="false">
       <div className="blob blob-a" /><div className="blob blob-b" />
-      <div className="brand light"><span className="logo" aria-hidden="true">J</span><b>Java Tutor</b></div>
-      <h1 className="display">Учим Java.<br /><span className="accent">В твоём темпе.</span></h1>
-      <p className="hero-lead">Короткая диагностика, понятные объяснения и задачи, которые становятся сложнее ровно тогда, когда ты готов.</p>
+      <div className="brand light"><span className="logo" aria-hidden="true">R</span><b>Rmzn Tutor</b></div>
+      <h1 className="display">Учим код.<br /><span className="accent">В твоём темпе.</span></h1>
+      <p className="hero-lead">Java и Python с нуля: короткая диагностика, понятные объяснения и задачи, которые становятся сложнее ровно тогда, когда ты готов.</p>
       <div className="code-card" aria-hidden="true">
         <span className="dots"><i /><i /><i /></span>
-        <code><span className="k">int</span> streak = <span className="n">1</span>;{'\n'}<span className="k">while</span> (learning) streak++;{'\n'}System.out.println(<span className="s">"Level up!"</span>);<span className="caret" /></code>
+        <code>streak = <span className="n">1</span>{'\n'}<span className="k">while</span> learning:{'\n'}    streak += <span className="n">1</span>{'\n'}print(<span className="s">"Level up!"</span>)<span className="caret" /></code>
       </div>
-      <ul className="hero-points"><li><Icon name="target" size={16} /> 3 задачи на итерацию</li><li><Icon name="flame" size={16} /> Серии и достижения</li><li><Icon name="chat" size={16} /> Помощник рядом</li></ul>
+      <ul className="hero-points"><li><Icon name="code" size={16} /> Java и Python</li><li><Icon name="target" size={16} /> 3 задачи на итерацию</li><li><Icon name="flame" size={16} /> Серии и достижения</li><li><Icon name="chat" size={16} /> Помощник рядом</li></ul>
     </section>
     <section className="login-panel">
       <form className="card login-card enter" onSubmit={submit}>
@@ -114,29 +185,38 @@ function StudentPage({ request }: { request: Request }) {
   const [lesson, setLesson] = useState<LearningNext | null>(null)
   const [state, setState] = useState<LoadState>('loading')
   const [progress, setProgress] = useState<Progress | null>(null)
+  const [otherProgress, setOtherProgress] = useState<Partial<Record<CourseLanguage, Progress>>>({})
+  const [othersReady, setOthersReady] = useState(false)
   const [tab, setTab] = useState<'lesson' | 'progress'>('lesson')
   const toast = useToast()
+  const course = useCourse()
   const loadId = useRef(0)
-  const loadProgress = useCallback(() => request(() => api<Progress>('/progress')).then(value => { if (value) setProgress(value) }), [request])
+  const loadProgress = useCallback(() => request(() => api<Progress>(withCourse('/progress', course.id))).then(value => { if (value) setProgress(value) }), [request, course.id])
+  // Other courses only feed the shared achievements, so they load once and quietly.
+  useEffect(() => {
+    Promise.allSettled(LANGUAGES.filter(language => language !== course.id).map(language =>
+      api<Progress>(withCourse('/progress', language)).then(value => setOtherProgress(p => ({ ...p, [language]: value })))))
+      .then(() => setOthersReady(true))
+  }, [course.id])
   const load = useCallback(async () => {
     const id = ++loadId.current
     const stale = () => id !== loadId.current
     setState('loading')
     loadProgress()
-    const d = await request(() => api<Diagnostic>('/diagnostic'))
+    const d = await request(() => api<Diagnostic>(withCourse('/diagnostic', course.id)))
     if (stale()) return
     if (!d) return setState('failed')
     setDiagnostic(d)
     if (!d.completed) return setState('ready')
-    const current = await request(() => api<{ lesson: Lesson | null }>('/lessons/current'))
+    const current = await request(() => api<{ lesson: Lesson | null }>(withCourse('/lessons/current', course.id)))
     if (stale()) return
     if (!current) return setState('failed')
     if (!current.lesson) { setLesson(null); return setState('ready') }
-    const next = await request(() => api<LearningNext>('/learning/next'))
+    const next = await request(() => api<LearningNext>(withCourse('/learning/next', course.id)))
     if (stale()) return
     if (!next) return setState('failed')
     setLesson(next); setState('ready')
-  }, [request, loadProgress])
+  }, [request, loadProgress, course.id])
   useEffect(() => { load() }, [load])
 
   // Celebrate milestones that the attempt response reveals (iteration closed, topic mastered), then refresh stats.
@@ -156,11 +236,12 @@ function StudentPage({ request }: { request: Request }) {
   // Announce achievements unlocked during this session (not the ones already unlocked on first load).
   const unlocked = useRef<Set<string> | null>(null)
   useEffect(() => {
-    if (!progress) return
-    const now = achievements(progress).filter(a => a.unlocked)
+    // Wait for every course: otherwise shared badges would look "new" the moment the other course loads.
+    if (!progress || !othersReady) return
+    const now = [...achievements(progress, course.id), ...commonAchievements({ ...otherProgress, [course.id]: progress })].filter(a => a.unlocked)
     if (unlocked.current) for (const a of now) if (!unlocked.current.has(a.id)) toast({ tone: 'reward', icon: a.icon, title: `Достижение: ${a.title}`, text: a.description })
     unlocked.current = new Set(now.map(a => a.id))
-  }, [progress, toast])
+  }, [progress, otherProgress, othersReady, toast, course.id])
 
   if (!diagnostic) return state === 'failed'
     ? <section className="empty-state enter"><h1 className="title">Не удалось загрузить данные</h1><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
@@ -175,7 +256,7 @@ function StudentPage({ request }: { request: Request }) {
       <button role="tab" aria-selected={tab === 'progress'} className={tab === 'progress' ? 'active' : ''} onClick={() => setTab('progress')}><Icon name="chart" size={16} /> Мой прогресс</button>
     </nav>
     {/* Both tabs stay mounted so switching to progress does not discard the code in the editor. */}
-    <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} /></div>
+    <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} otherProgress={otherProgress} /></div>
     <div hidden={tab !== 'lesson'} className={tab === 'lesson' ? 'enter' : ''}>
       {state === 'loading' ? <LessonSkeleton />
         : state === 'failed' ? <section className="empty-state enter"><h2 className="title">Не удалось загрузить урок</h2><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
@@ -213,6 +294,7 @@ function Hud({ progress }: { progress: Progress }) {
 function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnostic; request: Request; onDone: () => void }) {
   const [index, setIndex] = useState(0); const [answers, setAnswers] = useState<Record<string, number | null>>({}); const [sending, setSending] = useState(false)
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
+  const course = useCourse()
   const total = diagnostic.questions.length
   const question = diagnostic.questions[index]
   const last = index === total - 1
@@ -222,11 +304,11 @@ function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnosti
   const save = async () => {
     setSending(true)
     const body = { answers: diagnostic.questions.map(q => ({ questionId: q.id, selectedOption: answers[q.id] ?? null })) }
-    const done = await request(() => post('/diagnostic', body))
+    const done = await request(() => post(withCourse('/diagnostic', course.id), body))
     setSending(false)
     if (done) onDone()
   }
-  // Keyboard: 1–5 choose an option, Enter moves on — handy for 56 questions in a row.
+  // Keyboard: 1–5 choose an option, Enter moves on — handy for ~60 questions in a row.
   useEffect(() => {
     if (!question) return
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -242,7 +324,7 @@ function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnosti
   const answeredCount = Object.keys(answers).length
   return <section className="diagnostic">
     <div className="enter">
-      <p className="eyebrow">Первичная диагностика</p>
+      <p className="eyebrow">Первичная диагностика · {course.title}</p>
       <h1 className="display small">Поймём, с чего начать</h1>
       <p className="muted">Здесь нет оценки. Если не уверен — смело выбирай «Не знаю», так мы точнее подберём старт.</p>
     </div>
@@ -282,14 +364,15 @@ function LessonSkeleton() {
 
 function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { lesson: LearningNext | null; skillProgress?: SkillProgress; request: Request; refresh: () => void; onProgress: (skills: SkillProgress[]) => void }) {
   const [working, setWorking] = useState(false)
-  async function start() { setWorking(true); const started = await request(() => post<{ lesson: Lesson }>('/lessons/start')); setWorking(false); if (started) refresh() }
+  const course = useCourse()
+  async function start() { setWorking(true); const started = await request(() => post<{ lesson: Lesson }>(withCourse('/lessons/start', course.id))); setWorking(false); if (started) refresh() }
   async function finish(current: Lesson, hasTask: boolean) {
     if (hasTask && !window.confirm('Текущая задача ещё не решена. Завершить урок?')) return
     setWorking(true); const finished = await request(() => post(`/lessons/${current.id}/finish`)); setWorking(false); if (finished) refresh()
   }
   if (!lesson) return <section className="empty-state start enter">
     <span className="empty-icon"><Icon name="play" size={28} /></span>
-    <h1 className="display small">Готов к новому уроку?</h1>
+    <h1 className="display small">Готов к уроку {course.title}?</h1>
     <p className="muted">Сервис выберет следующую тему по результатам диагностики и предыдущим занятиям.</p>
     <button className="primary big" disabled={working} onClick={start}>{working ? <><Spinner /> Готовим урок…</> : <>Начать урок <Icon name="arrow" /></>}</button>
   </section>
@@ -297,12 +380,12 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
   const retryable = lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' || lesson.reason === 'RUNNER_UNAVAILABLE'
   const emptyMessage = lesson.reason === 'NO_TASK_AVAILABLE' ? 'Подходящей задачи в банке пока нет. Преподаватель увидит это состояние.'
     : lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' ? 'Новая задача не прошла проверку. Попробуй запросить её ещё раз.'
-      : lesson.reason === 'RUNNER_UNAVAILABLE' ? 'Проверка Java сейчас недоступна. Попробуй ещё раз позже.'
+      : lesson.reason === 'RUNNER_UNAVAILABLE' ? `Проверка ${course.title} сейчас недоступна. Попробуй ещё раз позже.`
         : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены — отличная работа!' : 'Контент урока загружается.'
   return <section className="lesson">
     <div className="lesson-heading enter">
       <div>
-        <p className="eyebrow">Урок {lesson.lesson.number}{lesson.skill ? ` · Блок ${lesson.skill.blockNo}` : ''}</p>
+        <p className="eyebrow">{course.title} · Урок {lesson.lesson.number}{lesson.skill ? ` · Блок ${lesson.skill.blockNo}` : ''}</p>
         <h1 className="display small">{title}</h1>
       </div>
       <button className="ghost" disabled={working} onClick={() => finish(lesson.lesson, !!lesson.task)}>{working ? <><Spinner /> Завершаем…</> : <><Icon name="flag" size={16} /> Завершить урок</>}</button>
@@ -326,7 +409,8 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
 }
 
 function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress }: { task: Task; skillProgress?: SkillProgress; llm?: LlmStatus; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void }) {
-  const [code, setCode] = useState(task.starterCode || codeFallback)
+  const course = useCourse()
+  const [code, setCode] = useState(task.starterCode || course.fallback)
   return <div className="lesson-grid enter">
     <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} />
     <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} />
@@ -343,6 +427,7 @@ function IterationSteps({ done, iteration, pulse }: { done: number; iteration: n
 function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress }: { task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void }) {
   const [attempt, setAttempt] = useState<Attempt | null>(null); const [sending, setSending] = useState(false); const [tries, setTries] = useState(0)
   const resultRef = useRef<HTMLDivElement>(null)
+  const course = useCourse()
   // Snapshot the step on mount: after the iteration closes the server resets successes to 0, but this task still was step 3 of 3.
   const [step] = useState(() => ({ done: Math.min(skillProgress?.iterationSuccesses ?? 0, TASKS_PER_ITERATION - 1), iteration: Math.min((skillProgress?.completedIterations ?? 0) + 1, ITERATIONS) }))
   async function submit() {
@@ -362,7 +447,7 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     </div>
     <h2 className="title">{task.title}</h2>
     <Markdown>{task.statement}</Markdown>
-    <div className="code-label"><span>Решение на Java</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={javaExtensions} onChange={onCodeChange} editable={!passed} aria-label="Редактор решения на Java" /></div>
+    <div className="code-label"><span>Решение на {course.title}{course.id === 'PYTHON' && <span className="muted small"> · solution.py</span>}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
     <div className="task-actions">
       {passed
         ? <button className="reward big" onClick={onNext}>Следующая задача <Icon name="arrow" /></button>
@@ -387,11 +472,12 @@ type ChatState = { messages: ChatMessage[]; llm: LlmStatus }
 function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [text, setText] = useState(''); const [status, setStatus] = useState<LlmStatus | undefined>(llm); const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const course = useCourse()
   const sync = useCallback(async () => {
-    const value = await request(() => api<ChatState>('/chat'))
+    const value = await request(() => api<ChatState>(withCourse('/chat', course.id)))
     if (value) { setMessages(value.messages); setStatus(value.llm) }
     return value
-  }, [request])
+  }, [request, course.id])
   useEffect(() => { sync() }, [sync])
   useEffect(() => { const list = listRef.current; if (list) list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' }) }, [messages, sending])
   async function send(e?: FormEvent) {
@@ -400,7 +486,7 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
     setSending(true)
     setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'STUDENT', content, createdAt: new Date().toISOString() }]); setText('')
     const body = taskId !== undefined ? { content, taskId, sourceCode } : { content }
-    const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus }>('/chat', body))
+    const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus }>(withCourse('/chat', course.id), body))
     if (result) {
       setMessages(m => [...m, result.message]); if (result.llm) setStatus(result.llm)
     } else {
@@ -433,27 +519,28 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
   </aside>
 }
 
-function ProgressView({ progress }: { progress: Progress | null }) {
+function ProgressView({ progress, otherProgress }: { progress: Progress | null; otherProgress: Partial<Record<CourseLanguage, Progress>> }) {
   const [showAll, setShowAll] = useState(false)
-  const list = useMemo(() => progress ? achievements(progress) : [], [progress])
+  const course = useCourse()
+  const list = useMemo(() => progress ? achievements(progress, course.id) : [], [progress, course.id])
+  const shared = useMemo(() => progress ? commonAchievements({ ...otherProgress, [course.id]: progress }) : [], [progress, otherProgress, course.id])
   if (!progress) return <section><h1 className="display small">Мой прогресс</h1><div className="sk sk-card" /></section>
   const level = experience(progress)
   const started = progress.skills.filter(skillStarted)
   const skills = showAll ? progress.skills : started
   return <section className="progress-page">
-    <h1 className="display small">Мой прогресс</h1>
+    <h1 className="display small">Мой прогресс · {course.title}</h1>
     <div className="stat-grid">
       <Stat icon="sparkle" label="Опыт" value={level.xp} suffix="XP" />
       <Stat icon="bolt" label="Задач решено" value={level.solved} />
       <Stat icon="target" label="Итераций" value={level.iterations} />
       <Stat icon="award" label="Тем освоено" value={level.mastered} />
     </div>
-    <h2 className="section-title">Достижения <span className="muted">{list.filter(a => a.unlocked).length} из {list.length}</span></h2>
-    <div className="achievements">{list.map((a, i) => <div key={a.id} className={`achievement ${a.unlocked ? 'unlocked' : ''}`} style={{ animationDelay: `${i * 40}ms` }}>
-      <span className="badge"><Icon name={a.unlocked ? a.icon : 'lock'} size={20} /></span>
-      <b>{a.title}</b><small>{a.description}</small>
-      {!a.unlocked && a.goal > 1 && <div className="mini-bar"><i style={{ width: `${(a.current / a.goal) * 100}%` }} /><span className="tabular">{a.current}/{a.goal}</span></div>}
-    </div>)}</div>
+    <h2 className="section-title">Достижения <span className="muted">{[...list, ...shared].filter(a => a.unlocked).length} из {list.length + shared.length}</span></h2>
+    <p className="achievement-group"><span className={`lang-dot ${course.key}`} aria-hidden="true" />Курс {course.title}</p>
+    <AchievementGrid items={list} />
+    <p className="achievement-group"><Icon name="globe" size={15} />Общие — для обоих курсов</p>
+    <AchievementGrid items={shared} />
     <h2 className="section-title">Темы <span className="muted">{level.mastered} освоено · {started.length} в работе</span>
       <button className="link" onClick={() => setShowAll(v => !v)}>{showAll ? 'Только начатые' : `Показать все ${progress.skills.length}`}</button>
     </h2>
@@ -465,6 +552,14 @@ function ProgressView({ progress }: { progress: Progress | null }) {
       </div>)
       : <p className="muted">Прогресс появится после первого решения. Начни урок — первая задача ждёт!</p>}</div>
   </section>
+}
+
+function AchievementGrid({ items }: { items: ReturnType<typeof achievements> }) {
+  return <div className="achievements">{items.map((a, i) => <div key={a.id} className={`achievement ${a.unlocked ? 'unlocked' : ''}`} style={{ animationDelay: `${i * 40}ms` }}>
+    <span className="badge"><Icon name={a.unlocked ? a.icon : 'lock'} size={20} /></span>
+    <b>{a.title}</b><small>{a.description}</small>
+    {!a.unlocked && a.goal > 1 && <div className="mini-bar"><i style={{ width: `${(a.current / a.goal) * 100}%` }} /><span className="tabular">{a.current}/{a.goal}</span></div>}
+  </div>)}</div>
 }
 
 function Stat({ icon, label, value, suffix }: { icon: Parameters<typeof Icon>[0]['name']; label: string; value: number; suffix?: string }) {
@@ -541,7 +636,7 @@ function Switch({ checked, disabled, onChange, label }: { checked: boolean; disa
 
 function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Student; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void }) {
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
-  const [progress, setProgress] = useState<SkillProgress[] | null>(null)
+  const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
   const [openLesson, setOpenLesson] = useState<Id | null>(null)
   const [detail, setDetail] = useState<LessonDetail | null>(null)
   const openRef = useRef<Id | null>(null)
@@ -549,7 +644,7 @@ function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Stu
     let alive = true
     setLessons(null); setDetail(null); setOpenLesson(null); openRef.current = null
     request(() => api<{ lessons: Lesson[] }>(`/admin/students/${student.id}/lessons`)).then(value => { if (alive && value) setLessons(value.lessons) })
-    request(() => api<{ llm: LlmStatus; progress: SkillProgress[] }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progress) } })
+    request(() => api<{ llm: LlmStatus; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }) } })
     return () => { alive = false }
   }, [student.id, request, onLlmStatus])
   async function open(lesson: Lesson) {
@@ -557,22 +652,25 @@ function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Stu
     const value = await request(() => api<LessonDetail>(`/admin/students/${student.id}/lessons/${lesson.id}`))
     if (value && openRef.current === lesson.id) setDetail(value)
   }
-  const level = progress ? experience({ skills: progress }) : null
   return <aside className="card student-detail enter-side">
     <div className="detail-head">
       <span className="avatar big" aria-hidden="true">{initials(student.displayName)}</span>
       <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}</p></div>
       <label className="switch-label"><span className="muted small">LLM</span><Switch checked={!!student.llmEnabled} onChange={toggle} label={`LLM для ${student.displayName}`} /></label>
     </div>
-    {level && <div className="mini-stats">
-      <span><b>{level.level}</b><small>уровень</small></span>
-      <span><b>{level.iterations}</b><small>итераций</small></span>
-      <span><b>{level.mastered}</b><small>тем освоено</small></span>
-    </div>}
+    {progress && <div className="lang-stats">{LANGUAGES.filter(language => progress[language]).map(language => {
+      const level = experience({ skills: progress[language]! })
+      return <div key={language}>
+        <span className="lang-badge"><span className={`lang-dot ${COURSES[language].key}`} aria-hidden="true" />{COURSES[language].title}</span>
+        <span className="mini-stats-cell"><b>{level.level}</b><small>уровень</small></span>
+        <span className="mini-stats-cell"><b>{level.iterations}</b><small>итераций</small></span>
+        <span className="mini-stats-cell"><b>{level.mastered}</b><small>тем освоено</small></span>
+      </div>
+    })}</div>}
     {!lessons ? <p className="muted">Загружаем данные…</p> : <>
       <h3 className="section-title">Уроки</h3>
       {lessons.length ? <div className="lesson-list">{lessons.map(l => <button key={l.id} className={openLesson === l.id ? 'lesson-item selected' : 'lesson-item'} aria-pressed={openLesson === l.id} onClick={() => open(l)}>
-        <b>Урок {l.number}</b><span className={l.finishedAt ? '' : 'live'}>{l.finishedAt ? `завершён ${fmt(l.finishedAt)}` : `идёт · начат ${fmt(l.startedAt)}`}</span>
+        <b><span className={`lang-dot ${COURSES[l.language ?? 'JAVA'].key}`} title={COURSES[l.language ?? 'JAVA'].title} /> {COURSES[l.language ?? 'JAVA'].title} · урок {l.number}</b><span className={l.finishedAt ? '' : 'live'}>{l.finishedAt ? `завершён ${fmt(l.finishedAt)}` : `идёт · начат ${fmt(l.startedAt)}`}</span>
       </button>)}</div> : <p className="muted">Уроков пока нет.</p>}
       {openLesson !== null && !detail && <p className="muted"><Spinner /> Загружаем урок…</p>}
       {detail && <div className="enter">

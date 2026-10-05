@@ -18,7 +18,7 @@ interface LearningContentGenerator {
  * Server-derived course context for generation, so content stays inside the topic, builds on what the
  * student has already studied and matches the requested step of the iteration (difficulty 1..3).
  */
-record ContentBrief(String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
+record ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
                     List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation) {}
 
 record GeneratedTask(String skillCode, String title, String statement, String starterCode,

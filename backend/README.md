@@ -1,4 +1,4 @@
-# Adaptive Java Tutor backend
+# Rmzn Tutor backend (Java и Python)
 
 Локальный MVP: Java 21, Spring Boot, SQLite, Flyway и JDBC. Запускать из этой папки:
 
@@ -41,7 +41,20 @@ docker run --rm --network adaptive-course_default \
   sh -lc 'node index.js -u http://piston:2000 ppman list | grep "^java"'
 ```
 
-Только после второй команды отправка Java-решения сможет пройти Piston. `.piston-cli` — локальная служебная папка, её можно удалить после установки. API runtimes можно проверить из backend network запросом `GET http://piston:2000/api/v2/runtimes`. Инструкция основана на [официальном Piston README](https://github.com/engineer-man/piston).
+Только после второй команды отправка Java-решения сможет пройти Piston.
+
+Для курса Python так же один раз установите Python runtime (рекомендуется 3.12) и проверьте его:
+
+```sh
+docker run --rm --network adaptive-course_default \
+  -v "$PWD/.piston-cli/cli:/cli" -w /cli node:22-bookworm \
+  sh -lc 'node index.js -u http://piston:2000 ppman install python=3.12.0'
+docker run --rm --network adaptive-course_default \
+  -v "$PWD/.piston-cli/cli:/cli" -w /cli node:22-bookworm \
+  sh -lc 'node index.js -u http://piston:2000 ppman list | grep "^python"'
+```
+
+Если установлено несколько версий Python, backend берёт самую новую; конкретную можно закрепить переменной `PISTON_PYTHON_VERSION`. Пока Python runtime не установлен, курс Python работает, но проверка решений возвращает «проверка недоступна» (`PISTON_PYTHON_NOT_INSTALLED`), а генерация новых задач Python не запускается. `.piston-cli` — локальная служебная папка, её можно удалить после установки. API runtimes можно проверить из backend network запросом `GET http://piston:2000/api/v2/runtimes`. Инструкция основана на [официальном Piston README](https://github.com/engineer-man/piston).
 
 На текущем официальном каталоге после установки доступен `java` версии `15.0.2`; это отдельный runtime Piston, а не Java 21, на которой работает backend. Поэтому задачи должны быть совместимы с Java 15 и не использовать синтаксис или API, появившиеся только в Java 16–21.
 
@@ -65,6 +78,14 @@ docker compose up --build -d
 ```
 
 Команда удаляет SQLite, `codex-home` и установленные Piston runtimes этого проекта; она не предназначена для уже нужных пользовательских данных.
+
+### Два курса: Java и Python
+
+Курсы независимы: у каждого своя диагностика, навыки (коды Python начинаются с `PY_`), уроки с собственной нумерацией и расписанием итераций, прогресс и отдельный thread учебного помощника со своим промптом. Студент выбирает курс сам и может переключаться в любой момент; ограничений доступа нет. Студенческие endpoint'ы принимают `?language=JAVA|PYTHON` (без параметра — Java, как раньше).
+
+Задачи Python проверяются так: студент пишет `solution.py`, скрытые проверки лежат в `test_solution.py` и определяют `run_checks()`, а фиксированная точка входа `main.py` получает секретный маркер успеха через stdin до импорта решения и печатает его, только если `run_checks()` завершилась без исключений. Поэтому маркер не лежит ни в одном файле, который может прочитать код студента.
+
+`APP_PYTHON_DIAGNOSTIC_SOURCE` указывает на диагностику Python (по умолчанию соседний `../python_initial_diagnostic_mvp.md`, в Docker-образе — `/app/python_initial_diagnostic_mvp.md`). Вопросы импортируются при старте, если вопросов Python в базе ещё нет, поэтому уже работающая база получит курс Python после обновления без ручных шагов.
 
 `APP_DIAGNOSTIC_SOURCE` указывает на исходный Markdown диагностики. По умолчанию это соседний `../java_initial_diagnostic_mvp_v2.md`; приложение импортирует вопросы в пустую БД. Этот файл остаётся источником данных и должен быть доступен при первом запуске.
 

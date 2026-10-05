@@ -21,10 +21,10 @@ class DiagnosticImportIntegrationTest {
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
   }
   @Test void importsTheSpecifiedDiagnosticAndSeedContent() {
-    assertEquals(56, db.queryForObject("select count(*) from diagnostic_questions", Integer.class));
-    assertEquals(44, db.queryForObject("select count(*) from skills", Integer.class));
-    assertEquals(9, db.queryForObject("select count(*) from tasks", Integer.class));
-    assertEquals(1, db.queryForObject("select count(*) from explanations", Integer.class));
+    assertEquals(56, db.queryForObject("select count(*) from diagnostic_questions where language='JAVA'", Integer.class));
+    assertEquals(44, db.queryForObject("select count(*) from skills where language='JAVA'", Integer.class));
+    assertEquals(9, db.queryForObject("select count(*) from tasks where language='JAVA'", Integer.class));
+    assertEquals(1, db.queryForObject("select count(*) from explanations e join skills s on s.code=e.skill_code where s.language='JAVA'", Integer.class));
     String harness=db.queryForObject("select test_source from tasks where title='Консоль: кота'",String.class);
     assertTrue(harness.contains("class TestHarness"));
     assertTrue(harness.contains("main("));
@@ -38,5 +38,19 @@ class DiagnosticImportIntegrationTest {
     assertTrue(harness.contains("ByteArrayOutputStream"));
     assertTrue(harness.contains("Solution.main(new String[0])"));
     assertTrue(harness.contains("finally"));
+  }
+
+  @Test void importsThePythonTrackSeparately() {
+    assertEquals(62, db.queryForObject("select count(*) from diagnostic_questions where language='PYTHON'", Integer.class));
+    assertEquals(0, db.queryForObject("select count(*) from diagnostic_questions where language='PYTHON' and ordinal<=1000", Integer.class));
+    assertEquals(52, db.queryForObject("select count(*) from skills where language='PYTHON' and code like 'PY_%'", Integer.class));
+    assertEquals(0, db.queryForObject("select count(*) from skills where language='PYTHON' and title=code", Integer.class), "every Python skill has a readable title");
+    assertEquals(9, db.queryForObject("select count(*) from tasks where language='PYTHON' and skill_code='PY_BASIC_CODE_READING'", Integer.class));
+    assertEquals(3, db.queryForObject("select count(*) from tasks where language='PYTHON' and difficulty=1", Integer.class));
+    var harnesses=db.queryForList("select test_source from tasks where language='PYTHON'", String.class);
+    for (String harness : harnesses) assertTrue(ApiController.validHarness(Language.PYTHON, harness));
+    assertTrue(db.queryForObject("select content from explanations where skill_code='PY_BASIC_CODE_READING'", String.class).contains("end=\"\""));
+    assertEquals(0, db.queryForObject("select min(block_no) from skills where language='PYTHON'", Integer.class));
+    assertEquals(8, db.queryForObject("select max(block_no) from skills where language='PYTHON'", Integer.class));
   }
 }

@@ -82,6 +82,61 @@ class PistonCodeRunnerHttpTest {
     }
   }
 
+  @Test void runsPythonThroughFixedEntryWithMarkerOnStdin() throws Exception {
+    ObjectMapper json = new ObjectMapper();
+    HttpServer server;
+    try { server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0); }
+    catch(SocketException e) { Assumptions.assumeTrue(false,"test sandbox does not permit a local TCP listener"); return; }
+    AtomicBoolean layout=new AtomicBoolean();
+    server.createContext("/api/v2/", exchange -> {
+      String response;
+      if(exchange.getRequestURI().getPath().endsWith("/runtimes")) response="[{\"language\":\"python\",\"version\":\"3.10.0\"},{\"language\":\"python\",\"version\":\"3.12.0\"},{\"language\":\"java\",\"version\":\"15.0.2\"}]";
+      else {
+        var request=json.readTree(exchange.getRequestBody().readAllBytes());
+        var files=request.path("files"); String stdin=request.path("stdin").asText();
+        if(files.path(0).path("name").asText().equals("health.py")) response="{\"run\":{\"code\":0,\"stdout\":\"READY\\n\"}}";
+        else {
+          String solution=files.path(2).path("content").asText();
+          layout.set("python".equals(request.path("language").asText()) && "3.12.0".equals(request.path("version").asText())
+              && "main.py".equals(files.path(0).path("name").asText()) && "test_solution.py".equals(files.path(1).path("name").asText()) && "solution.py".equals(files.path(2).path("name").asText())
+              && stdin.startsWith("__ADAPTIVE_PASS_") && !files.path(0).path("content").asText().contains("__ADAPTIVE_PASS_") && !files.path(1).path("content").asText().contains("__ADAPTIVE_PASS_"));
+          String marker=stdin.strip();
+          if(solution.contains("wrong")) response="{\"run\":{\"code\":1,\"stdout\":\"\",\"stderr\":\"Traceback (most recent call last):\\n  File \\\"/piston/jobs/x/main.py\\\", line 9, in <module>\\n    _main()\\n  File \\\"/piston/jobs/x/test_solution.py\\\", line 4, in run_checks\\n    assert solution.add(2, 3) == 5, \\\"add(2, 3) вернула не то\\\"\\nAssertionError: add(2, 3) вернула не то\\n\"}}";
+          else if(solution.contains("syntax")) response="{\"run\":{\"code\":1,\"stdout\":\"\",\"stderr\":\"Traceback (most recent call last):\\n  File \\\"/piston/jobs/x/main.py\\\", line 9, in <module>\\n    _main()\\n  File \\\"/piston/jobs/x/solution.py\\\", line 1\\n    def add(a, b)\\n                 ^\\nSyntaxError: expected ':'\\n\"}}";
+          else if(solution.contains("forge")) response="{\"run\":{\"code\":0,\"stdout\":\"__ADAPTIVE_PASS_forged__\\n\"}}";
+          else response="{\"run\":{\"code\":0,\"stdout\":\"student print\\n"+marker+"\\n\"}}";
+        }
+      }
+      byte[] bytes=response.getBytes(StandardCharsets.UTF_8); exchange.sendResponseHeaders(200,bytes.length); exchange.getResponseBody().write(bytes); exchange.close();
+    });
+    server.start();
+    try {
+      PistonCodeRunner runner=new PistonCodeRunner(json,"http://127.0.0.1:"+server.getAddress().getPort(),"",1_000,1_000,32_000_000,32_000_000);
+      assertTrue(runner.status(Language.PYTHON).available());
+      assertEquals("3.12.0",runner.status(Language.PYTHON).version());
+      String checks="import solution\n\ndef run_checks():\n    assert solution.add(2, 3) == 5\n";
+      assertTrue(runner.run(Language.PYTHON,"def add(a, b):\n    return a + b\n",checks).passed());
+      assertTrue(layout.get());
+      var wrong=runner.run(Language.PYTHON,"def add(a, b):\n    return 'wrong'\n",checks);
+      assertFalse(wrong.passed()); assertEquals("Неверный результат: add(2, 3) вернула не то",wrong.output());
+      var syntax=runner.run(Language.PYTHON,"def add(a, b) # syntax\n",checks);
+      assertFalse(syntax.passed()); assertTrue(syntax.output().startsWith("Синтаксическая ошибка в коде Python:"));
+      assertTrue(syntax.output().contains("File \"solution.py\", line 1")); assertFalse(syntax.output().contains("main.py"));
+      assertFalse(runner.run(Language.PYTHON,"print('forge')",checks).passed(), "a marker the solution could not know never passes");
+    } finally { server.stop(0); }
+  }
+
+  @Test void hidesEntryPointAndChecksFromPythonTracebacks() {
+    String traceback=PistonCodeRunner.studentTraceback("Traceback (most recent call last):\n  File \"/tmp/main.py\", line 9, in <module>\n    _main()\n  File \"/tmp/test_solution.py\", line 6, in run_checks\n    import solution\n  File \"/tmp/job/solution.py\", line 2, in <module>\n    print(x)\nNameError: name 'x' is not defined");
+    assertEquals("Traceback (most recent call last):\n  File \"solution.py\", line 2, in <module>\n    print(x)\nNameError: name 'x' is not defined",traceback);
+  }
+
+  @Test void prefersNewestRuntimeVersion() {
+    assertTrue(PistonCodeRunner.compareVersions("3.12.0","3.10.0")>0);
+    assertTrue(PistonCodeRunner.compareVersions("3.9.4","3.10.0")<0);
+    assertTrue(PistonCodeRunner.compareVersions("15.0.2","")>0);
+  }
+
   @Test void reportsCompilerAndResourceFailuresAndEscapesCyrillicSource() throws Exception {
     ObjectMapper json = new ObjectMapper();
     HttpServer server;

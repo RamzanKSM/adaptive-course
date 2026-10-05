@@ -1,11 +1,11 @@
-import type { Progress, SkillProgress } from './types'
+import type { CourseLanguage, Progress, SkillProgress } from './types'
 
 // SQLite CURRENT_TIMESTAMP values are UTC without a zone ("2026-10-01 05:00:00"); Safari cannot parse them as-is.
 export const parseDate = (value: string) => new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value) ? `${value.replace(' ', 'T')}Z` : value)
 
 export const ITERATIONS = 3, TASKS_PER_ITERATION = 3
 export const XP = { task: 10, iteration: 20, mastery: 50 }
-const RANKS = ['Новичок', 'Исследователь', 'Практик', 'Кодер', 'Разработчик', 'Инженер', 'Мастер Java']
+const RANKS = ['Новичок', 'Исследователь', 'Практик', 'Кодер', 'Разработчик', 'Инженер', 'Мастер кода']
 
 export const skillStarted = (s: SkillProgress) => s.completedIterations > 0 || s.iterationSuccesses > 0
 export const skillPercent = (s: SkillProgress) => s.mastered ? 100
@@ -37,10 +37,11 @@ export function streak(activity: string[] = []) {
   return { count, activeToday, week }
 }
 
-export type IconName = 'bolt' | 'star' | 'flag' | 'target' | 'award' | 'flame' | 'sparkle' | 'compass'
+export type IconName = 'bolt' | 'star' | 'flag' | 'target' | 'award' | 'flame' | 'sparkle' | 'compass' | 'globe' | 'crown'
 export interface Achievement { id: string; title: string; description: string; icon: IconName; current: number; goal: number; unlocked: boolean }
 
-export function achievements(progress: Progress): Achievement[] {
+/** Achievements inside one course; ids are namespaced by language so the same badge can be earned in Java and in Python. */
+export function achievements(progress: Progress, language: CourseLanguage = 'JAVA'): Achievement[] {
   const { solved, iterations, mastered } = experience(progress)
   const days = streak(progress.activity).count
   const started = progress.skills.filter(skillStarted).length
@@ -54,5 +55,22 @@ export function achievements(progress: Progress): Achievement[] {
     { id: 'streak-7', title: 'Неделя без пропусков', description: 'Решай задачи 7 дней подряд', icon: 'flame', current: days, goal: 7 },
     { id: 'tasks-50', title: 'Марафон', description: 'Реши 50 задач', icon: 'flag', current: solved, goal: 50 },
   ]
-  return list.map(a => ({ ...a, current: Math.min(a.current, a.goal), unlocked: a.current >= a.goal }))
+  return list.map(a => ({ ...a, id: `${language}:${a.id}`, current: Math.min(a.current, a.goal), unlocked: a.current >= a.goal }))
+}
+
+/** Achievements that look across both courses. Languages without loaded progress count as empty. */
+export function commonAchievements(byLanguage: Partial<Record<CourseLanguage, Progress>>): Achievement[] {
+  const courses = Object.values(byLanguage).filter((p): p is Progress => !!p).map(experience)
+  const solved = courses.reduce((n, c) => n + c.solved, 0)
+  const withTasks = courses.filter(c => c.solved > 0).length
+  const withMastery = courses.filter(c => c.mastered > 0).length
+  const topLevel = courses.reduce((n, c) => Math.max(n, c.level), 1)
+  const list: Omit<Achievement, 'unlocked'>[] = [
+    { id: 'polyglot', title: 'Полиглот', description: 'Реши задачу и на Java, и на Python', icon: 'globe', current: withTasks, goal: 2 },
+    { id: 'total-25', title: 'Четверть сотни', description: 'Реши 25 задач на любых языках', icon: 'star', current: solved, goal: 25 },
+    { id: 'level-5', title: 'Пятый уровень', description: 'Достигни 5 уровня в любом курсе', icon: 'bolt', current: topLevel, goal: 5 },
+    { id: 'double-master', title: 'Двойной мастер', description: 'Освой тему и в Java, и в Python', icon: 'crown', current: withMastery, goal: 2 },
+    { id: 'total-100', title: 'Сотня', description: 'Реши 100 задач на любых языках', icon: 'flag', current: solved, goal: 100 },
+  ]
+  return list.map(a => ({ ...a, id: `common:${a.id}`, current: Math.min(a.current, a.goal), unlocked: a.current >= a.goal }))
 }
