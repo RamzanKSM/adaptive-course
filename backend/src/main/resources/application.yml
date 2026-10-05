@@ -16,6 +16,7 @@ app:
   llm:
     enabled: ${APP_LLM_ENABLED:false}
     model: ${CODEX_MODEL:gpt-6-luna}
+    reasoning-effort: ${CODEX_REASONING_EFFORT:medium}
     app-server-command: ${CODEX_APP_SERVER_COMMAND:codex --disable shell_tool app-server --listen stdio://}
     account-namespace: ${CODEX_ACCOUNT_NAMESPACE:default}
     sandbox-directory: ${CODEX_SANDBOX_DIRECTORY:./data/codex-sandbox}

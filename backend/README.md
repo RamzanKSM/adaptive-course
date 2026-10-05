@@ -112,7 +112,7 @@ LLM выключена по умолчанию. Адаптер использу�
 
 Причина: `readOnly` sandbox разрешает чтение, поэтому сам по себе не защищает `auth.json`. Entrypoint копирует управляемый приложением [профиль `student-tutor`](codex-config.toml) в persistent `CODEX_HOME/config.toml`, не затрагивая `auth.json`. Профиль запрещает `:root` и `/app/codex-home`, разрешает только `:minimal` на чтение и отключает сеть. App Server запрашивает этот профиль в `thread/start` и `turn/start`, а `initialize` включает `capabilities.experimentalApi=true`. Перед установкой `APP_LLM_STUDENT_RUNTIME_VALIDATED=true` для нового Linux runtime оператор обязан доказать, что студентский turn не может прочитать `CODEX_HOME/auth.json` и пути вне sandbox. Эта проверка выполнена для текущего `course.rmzn.net`; в другом окружении её нужно повторить. До этого флага вопросы студентов в App Server не передаются.
 
-Модель по умолчанию — `CODEX_MODEL=gpt-6-luna`. `CODEX_APP_SERVER_COMMAND` позволяет указать другой путь к CLI, но должен запускать App Server с transport `stdio://`; не убирайте `--disable shell_tool` без отдельной проверки безопасности.
+Модель по умолчанию — `CODEX_MODEL=gpt-6-luna`, уровень размышлений — `CODEX_REASONING_EFFORT=medium`. Уровень передаётся в каждый `turn/start`, включая продолжение существующего диалога. `CODEX_APP_SERVER_COMMAND` позволяет указать другой путь к CLI, но должен запускать App Server с transport `stdio://`; не убирайте `--disable shell_tool` без отдельной проверки безопасности.
 
 ### Авторизация Codex и смена аккаунта
 

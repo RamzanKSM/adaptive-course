@@ -48,6 +48,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   private final boolean appEnabled;
   private final String command;
   private final String model;
+  private final String reasoningEffort;
   private final String namespace;
   private final Path sandboxDirectory;
   private final boolean studentRuntimeValidated;
@@ -67,12 +68,13 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
                       @Value("${app.llm.enabled}") boolean appEnabled,
                       @Value("${app.llm.app-server-command}") String command,
                       @Value("${app.llm.model}") String model,
+                      @Value("${app.llm.reasoning-effort:medium}") String reasoningEffort,
                       @Value("${app.llm.account-namespace}") String namespace,
                       @Value("${app.llm.sandbox-directory}") String sandboxDirectory,
                       @Value("${app.llm.student-runtime-validated}") boolean studentRuntimeValidated,
                       @Value("${app.llm.log-content:false}") boolean logContent) {
     this.db = db; this.json = json; this.appEnabled = appEnabled;
-    this.command = command; this.model = model; this.namespace = namespace;
+    this.command = command; this.model = model; this.reasoningEffort = reasoningEffort; this.namespace = namespace;
     this.sandboxDirectory = Path.of(sandboxDirectory).toAbsolutePath().normalize();
     this.studentRuntimeValidated = studentRuntimeValidated;
     this.logContent = logContent;
@@ -194,6 +196,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       params.put("cwd", sandboxDirectory.toString());
       params.put("approvalPolicy", "never");
       params.put("permissions", "student-tutor");
+      params.put("effort", reasoningEffort);
       if (outputSchema != null) params.put("outputSchema", outputSchema);
       JsonNode turn = request("turn/start", params, Duration.ofSeconds(10));
       capture.turnId = turn.path("turn").path("id").asText();
