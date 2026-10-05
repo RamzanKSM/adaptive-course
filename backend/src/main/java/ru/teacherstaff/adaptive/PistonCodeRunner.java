@@ -184,6 +184,20 @@ class PistonCodeRunner {
     return (compile.isMissingNode()||compile.isNull()||compile.path("code").asInt(0)==0)&&Integer.valueOf(0).equals(exitCode(run))&&"READY".equals(output(run).strip());
   }
   private record CachedStatus(RuntimeStatus status,long checkedAt) {}
-  record Run(boolean passed,String output) {}
+  /** Why a run ended. Task verification needs it: a wrong example must fail a check, not crash or time out. */
+  enum Outcome { PASSED, CHECK_FAILED, COMPILE_ERROR, RUNTIME_ERROR, LIMIT, UNAVAILABLE }
+  record Run(boolean passed,String output,Outcome outcome) {
+    Run(boolean passed,String output){this(passed,output,classify(passed,output));}
+    /** Every failure message is produced in this class, so its prefix identifies the cause. */
+    static Outcome classify(boolean passed,String output) {
+      if(passed) return Outcome.PASSED;
+      String text=output==null?"":output;
+      if(text.startsWith("Неверн")) return Outcome.CHECK_FAILED;
+      if(text.startsWith("Ошибка компиляции")||text.startsWith("Синтаксическая ошибка")) return Outcome.COMPILE_ERROR;
+      if(text.startsWith("Ошибка выполнения")) return Outcome.RUNTIME_ERROR;
+      if(text.startsWith("Превышен лимит")) return Outcome.LIMIT;
+      return Outcome.UNAVAILABLE;
+    }
+  }
   record RuntimeStatus(boolean available,String reason,String version) {}
 }

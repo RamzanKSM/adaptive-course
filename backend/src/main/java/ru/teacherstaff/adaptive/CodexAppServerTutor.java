@@ -48,7 +48,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   private final boolean appEnabled;
   private final String command;
   private final String model;
-  private final String reasoningEffort;
+  /** Reasoning level per purpose: tasks need careful checks, chat needs quick answers. */
+  private final Map<String, String> reasoningEfforts;
   private final String namespace;
   private final Path sandboxDirectory;
   private final boolean studentRuntimeValidated;
@@ -69,12 +70,16 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
                       @Value("${app.llm.app-server-command}") String command,
                       @Value("${app.llm.model}") String model,
                       @Value("${app.llm.reasoning-effort:medium}") String reasoningEffort,
+                      @Value("${app.llm.reasoning-effort-chat:low}") String chatEffort,
+                      @Value("${app.llm.reasoning-effort-task:high}") String taskEffort,
+                      @Value("${app.llm.reasoning-effort-explanation:medium}") String explanationEffort,
                       @Value("${app.llm.account-namespace}") String namespace,
                       @Value("${app.llm.sandbox-directory}") String sandboxDirectory,
                       @Value("${app.llm.student-runtime-validated}") boolean studentRuntimeValidated,
                       @Value("${app.llm.log-content:false}") boolean logContent) {
     this.db = db; this.json = json; this.appEnabled = appEnabled;
-    this.command = command; this.model = model; this.reasoningEffort = reasoningEffort; this.namespace = namespace;
+    this.command = command; this.model = model; this.reasoningEfforts = Map.of("CHAT", effort(chatEffort, reasoningEffort), "TASK", effort(taskEffort, reasoningEffort),
+        "TASK_REPAIR", effort(taskEffort, reasoningEffort), "EXPLANATION", effort(explanationEffort, reasoningEffort)); this.namespace = namespace;
     this.sandboxDirectory = Path.of(sandboxDirectory).toAbsolutePath().normalize();
     this.studentRuntimeValidated = studentRuntimeValidated;
     this.logContent = logContent;
@@ -111,16 +116,37 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     try {
       String response = completeTurn(new Call(studentId, "TASK", brief.language(), brief.skillCode()),
           () -> newThread(contentInstructions(brief.language())), taskPrompt(brief), taskSchema());
-      JsonNode value = responseJson(response);
-      List<String> targets = new ArrayList<>();
-      for (JsonNode target : value.path("targetSkillCodes")) targets.add(target.asText());
-      List<String> prerequisites = new ArrayList<>();
-      for (JsonNode prerequisite : value.path("prerequisiteSkillCodes")) prerequisites.add(prerequisite.asText());
-      return new GeneratedTask(value.path("skillCode").asText(), value.path("title").asText(),
-          value.path("statement").asText(), value.path("starterCode").asText(),
-          value.path("testSource").asText(), value.path("testFileName").asText(), value.path("referenceSolutionSource").asText(), targets, prerequisites);
+      return parseTask(responseJson(response));
     } catch (LlmUnavailableException e) { throw e;
     } catch (Exception e) { throw unavailable(e); }
+  }
+
+  @Override public GeneratedTask repairTask(ContentBrief brief, ExistingTask task) {
+    if (!available()) throw new LlmUnavailableException("LLM content generation is unavailable");
+    try {
+      String response = completeTurn(new Call(null, "TASK_REPAIR", brief.language(), brief.skillCode()),
+          () -> newThread(contentInstructions(brief.language())), repairPrompt(brief, task), taskSchema());
+      return parseTask(responseJson(response));
+    } catch (LlmUnavailableException e) { throw e;
+    } catch (Exception e) { throw unavailable(e); }
+  }
+
+  @Override public boolean available() {
+    return appEnabled && "true".equals(db.queryForObject("select value from app_settings where key='llm_enabled'", String.class))
+        && studentRuntimeValidated && command != null && !command.isBlank() && !recentlyFailed();
+  }
+
+  private static GeneratedTask parseTask(JsonNode value) {
+    List<String> targets = new ArrayList<>();
+    for (JsonNode target : value.path("targetSkillCodes")) targets.add(target.asText());
+    List<String> prerequisites = new ArrayList<>();
+    for (JsonNode prerequisite : value.path("prerequisiteSkillCodes")) prerequisites.add(prerequisite.asText());
+    List<TaskGoal.Mutant> wrong = new ArrayList<>();
+    for (JsonNode item : value.path("wrongSolutions")) wrong.add(new TaskGoal.Mutant(item.path("description").asText(), item.path("source").asText()));
+    return new GeneratedTask(value.path("skillCode").asText(), value.path("title").asText(),
+        value.path("statement").asText(), value.path("starterCode").asText(),
+        value.path("testSource").asText(), value.path("testFileName").asText(), value.path("referenceSolutionSource").asText(), targets, prerequisites,
+        value.path("goal"), wrong);
   }
 
   @Override public Optional<GeneratedExplanation> generateExplanation(long studentId, ContentBrief brief) {
@@ -173,7 +199,10 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   }
 
   /** Who asked and why; recorded with every turn. */
-  record Call(long userId, String purpose, Language language, String skillCode) {}
+  /** userId is null for background work (task repair). */
+  record Call(Long userId, String purpose, Language language, String skillCode) {}
+  private static String effort(String specific, String fallback) { return specific == null || specific.isBlank() ? fallback : specific; }
+  String effortFor(String purpose) { return reasoningEfforts.get(purpose); }
   @FunctionalInterface interface ThreadOpener { String open() throws Exception; }
 
   /**
@@ -184,7 +213,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     long started = System.nanoTime();
     String threadId = null, answer = null, status = "ERROR", error = null;
     TurnCapture capture = null;
-    log.info("LLM {} start: user={} language={} skill={} promptChars={} model={}", call.purpose(), call.userId(), call.language(), call.skillCode(), input.length(), model);
+    log.info("LLM {} start: user={} language={} skill={} promptChars={} model={} effort={}", call.purpose(), call.userId(), call.language(), call.skillCode(), input.length(), model, reasoningEfforts.get(call.purpose()));
     if (logContent) log.info("LLM {} prompt (user={}):\n{}", call.purpose(), call.userId(), limit(input, 40_000));
     try {
       threadId = opener.open();
@@ -196,7 +225,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       params.put("cwd", sandboxDirectory.toString());
       params.put("approvalPolicy", "never");
       params.put("permissions", "student-tutor");
-      params.put("effort", reasoningEffort);
+      params.put("effort", reasoningEfforts.get(call.purpose()));
       if (outputSchema != null) params.put("outputSchema", outputSchema);
       JsonNode turn = request("turn/start", params, Duration.ofSeconds(10));
       capture.turnId = turn.path("turn").path("id").asText();
@@ -227,8 +256,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
 
   private void record(Call call, String status, String error, long ms, int promptChars, int responseChars, TokenUsage usage) {
     try {
-      db.update("insert into llm_calls(user_id,purpose,language,skill_code,model,status,error,duration_ms,prompt_chars,response_chars,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          call.userId(), call.purpose(), call.language().name(), call.skillCode(), model, status, error == null ? null : limit(error, 1000), ms, promptChars, responseChars,
+      db.update("insert into llm_calls(user_id,purpose,language,skill_code,model,reasoning_effort,status,error,duration_ms,prompt_chars,response_chars,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          call.userId(), call.purpose(), call.language().name(), call.skillCode(), model, reasoningEfforts.get(call.purpose()), status, error == null ? null : limit(error, 1000), ms, promptChars, responseChars,
           usage.seen ? usage.input : null, usage.seen ? usage.cached : null, usage.seen ? usage.output : null, usage.seen ? usage.reasoning : null, usage.seen ? usage.total : null);
     } catch (Exception e) { log.error("Could not record LLM call statistics", e); }
   }
@@ -339,8 +368,36 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         """)
         .append(python ? pythonTaskRules(b) : javaTaskRules(b))
         .append("Keep the checks aligned with the statement: every checked case must follow from what the statement asks. ")
+        .append(GOAL_RULES)
         .append("skillCode must be '").append(b.skillCode()).append("'; targetSkillCodes must contain only '").append(b.skillCode()).append("'; prerequisiteSkillCodes must be an empty array.");
     return prompt.toString();
+  }
+
+  /** What the task teaches and how it can be cheated; the platform enforces the first and runs the second. */
+  static final String GOAL_RULES = """
+
+      Also return `goal` — what this task teaches, so the platform can enforce it — and `wrongSolutions`.
+      goal.kind:
+      - FIXED_ARITHMETIC: the student computes one fixed result with one arithmetic operation over numbers given in the statement (for example the cost of 4 tickets at 6 roubles: operation "*", operands [4, 6]). Write those numbers in the statement as digits and name the operation. operands are listed in calculation order; expectedOutput is the exact stdout including the trailing newline (for example "24\\n"). The platform checks that the program calculates exactly these numbers with this operation, so print(24) or print(12 * 2) fails.
+      - FUNCTION_BEHAVIOR: the task asks for a function (method) named functionName; the checks call it with at least three different inputs, including an edge case, and any correct implementation passes. Do not constrain how it is implemented.
+      - OUTPUT_TEXT: print exact text that does not come from a calculation; expectedOutput is the exact stdout.
+      - CONSTRUCT: the statement explicitly requires using a construct (a loop, an assignment, …); list it in requiredConstructs. The checks still verify the result.
+      requiredConstructs (allowed with any kind): only constructs the statement explicitly requires, from: assignment, augmented_assignment, if, for, while, function, return, list, dict, class, try. Use [] when the statement does not require a specific construct — do not invent structural requirements.
+      Use null for fields that do not apply (operation and operands only for FIXED_ARITHMETIC; functionName for FUNCTION_BEHAVIOR or the "function" construct).
+      wrongSolutions: 2–4 plausible incorrect programs a student might submit to the same editor (same class, function and method names) that compile and run without errors but miss the goal: print the ready answer, compute it from other numbers, hard-code the examples from the statement, handle only one case, drop or add the trailing newline, skip the required construct. Each needs a short description. The checks must reject every one of them with a failing check (assertion or wrong output), not by crashing. The platform runs them and discards the task if any of them passes.
+      """;
+
+  private String repairPrompt(ContentBrief b, ExistingTask task) {
+    return "У существующей задачи слишком слабые скрытые проверки: они пропускают решения, которые обходят учебную цель. Условие уже показано студентам и не меняется.\n\n"
+        + courseContext(b)
+        + "\nНазвание: " + task.title()
+        + "\n\nУсловие (оставь без изменений):\n" + task.statement()
+        + "\n\nЗаготовка кода в редакторе:\n" + nullText(task.starterCode())
+        + "\n\nТекущие проверки (слабые, замени их):\n" + limit(task.testSource(), 8000)
+        + "\n\nВерни задачу в той же JSON-схеме: title, statement и starterCode скопируй без изменений, а testSource, testFileName, referenceSolutionSource, goal и wrongSolutions составь заново так, чтобы проверки соответствовали именно этому условию.\n"
+        + (b.language() == Language.PYTHON ? pythonTaskRules(b) : javaTaskRules(b))
+        + GOAL_RULES
+        + "skillCode must be '" + b.skillCode() + "'; targetSkillCodes must contain only '" + b.skillCode() + "'; prerequisiteSkillCodes must be an empty array.";
   }
 
   private static String javaTaskRules(ContentBrief b) {
@@ -357,12 +414,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     String checks = "PY_BASIC_CODE_READING".equals(b.skillCode())
         ? "This is an output task: the student writes top-level code in solution.py that prints. run_checks() must capture stdout while importing the module (buf = io.StringIO(); with contextlib.redirect_stdout(buf): import solution) and compare buf.getvalue() with the exact expected output. Never ask the student to predict output. "
         : "If the task asks for a function or class, run_checks() must import it from solution and make at least three deterministic assert checks with different inputs. If the task asks to print, capture stdout while importing solution or while calling the function (contextlib.redirect_stdout) and compare exactly. ";
-    String arithmetic = "PY_ARITHMETIC_BASIC".equals(b.skillCode())
-        ? "For this arithmetic skill, explicitly name the operation in the statement. Ask the student to put that calculation directly inside print(...). The reference solution must calculate with the named operator, not print the final number as a literal. A program that only prints the expected number must not count as a solution. "
-        : "";
     return "starterCode — содержимое solution.py: читаемый Python 3.12 с отступами в 4 пробела и комментарием «# Напиши решение здесь» там, где нужно писать код; для задач на функцию — заготовка def с нужной сигнатурой и телом pass. Не клади в starterCode решение. Задачи не используют input(): данные приходят как аргументы функции или прямо в условии.\n"
         + "testSource is test_solution.py and testFileName must be \"test_solution.py\". It must define def run_checks(): and use only the standard library. "
-        + arithmetic
         + checks
         + "Every assert must have a short Russian message that says what went wrong (for example which call returned an unexpected value) without revealing the whole expected answer. "
         + "test_solution.py must not print anything, read stdin, call sys.exit or define a pass marker: the platform runs run_checks() itself and treats a return without exceptions as success. "
@@ -404,11 +457,26 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   }
 
   private Map<String, Object> taskSchema() {
-    return Map.of("type", "object", "additionalProperties", false,
-        "required", List.of("skillCode", "title", "statement", "starterCode", "testSource", "testFileName", "referenceSolutionSource", "targetSkillCodes", "prerequisiteSkillCodes"),
-        "properties", Map.of("skillCode", Map.of("type", "string"), "title", Map.of("type", "string"), "statement", Map.of("type", "string"),
-            "starterCode", Map.of("type", "string"), "testSource", Map.of("type", "string"), "testFileName", Map.of("type", "string"), "referenceSolutionSource", Map.of("type", "string"),
-            "targetSkillCodes", Map.of("type", "array", "items", Map.of("type", "string")), "prerequisiteSkillCodes", Map.of("type", "array", "items", Map.of("type", "string"))));
+    Map<String, Object> nullableString = Map.of("type", List.of("string", "null"));
+    Map<String, Object> goal = Map.of("type", "object", "additionalProperties", false,
+        "required", List.of("kind", "operation", "operands", "expectedOutput", "functionName", "requiredConstructs"),
+        "properties", Map.of(
+            "kind", Map.of("type", "string", "enum", List.of("FIXED_ARITHMETIC", "FUNCTION_BEHAVIOR", "OUTPUT_TEXT", "CONSTRUCT")),
+            "operation", nullableString,
+            "operands", Map.of("type", "array", "items", Map.of("type", "number")),
+            "expectedOutput", nullableString,
+            "functionName", nullableString,
+            "requiredConstructs", Map.of("type", "array", "items", Map.of("type", "string", "enum", List.copyOf(TaskGoal.CONSTRUCTS.keySet())))));
+    Map<String, Object> wrong = Map.of("type", "array", "items", Map.of("type", "object", "additionalProperties", false,
+        "required", List.of("description", "source"),
+        "properties", Map.of("description", Map.of("type", "string"), "source", Map.of("type", "string"))));
+    Map<String, Object> properties = new LinkedHashMap<>();
+    for (String field : List.of("skillCode", "title", "statement", "starterCode", "testSource", "testFileName", "referenceSolutionSource")) properties.put(field, Map.of("type", "string"));
+    properties.put("targetSkillCodes", Map.of("type", "array", "items", Map.of("type", "string")));
+    properties.put("prerequisiteSkillCodes", Map.of("type", "array", "items", Map.of("type", "string")));
+    properties.put("goal", goal);
+    properties.put("wrongSolutions", wrong);
+    return Map.of("type", "object", "additionalProperties", false, "required", List.copyOf(properties.keySet()), "properties", properties);
   }
 
   private Map<String, Object> explanationSchema() {

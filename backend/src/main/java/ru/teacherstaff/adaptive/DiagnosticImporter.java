@@ -325,7 +325,7 @@ class DiagnosticImporter implements ApplicationRunner {
               System.out.print("{{PASS_MARKER}}");
           }
       }
-      """.formatted(javaLiteral(expected)); addTask(Language.JAVA,"BASIC_CODE_READING",title,difficulty,statement,starter,test,"TestHarness.java"); }
+      """.formatted(javaLiteral(expected)); addTask(Language.JAVA,"BASIC_CODE_READING",title,difficulty,statement,starter,test,"TestHarness.java",expected); }
   /**
    * The example block cannot show a trailing newline, so the statement spells it out; leading empty lines are named too.
    * The check compares output character by character, so this sentence is part of the task, not decoration.
@@ -341,17 +341,20 @@ class DiagnosticImporter implements ApplicationRunner {
   }
   private String javaLiteral(String value) { return value.replace("\\","\\\\").replace("\n","\\n").replace("\"","\\\""); }
   /** Idempotent by title: re-running the importer refreshes seed content instead of adding duplicates. */
-  private void addTask(Language language,String skill,String title,int difficulty,String statement,String starter,String test,String testFile) {
+  /** Seeds are written by hand: their goal is the exact text and they count as verified at the current quality level. */
+  private void addTask(Language language,String skill,String title,int difficulty,String statement,String starter,String test,String testFile,String expected) {
+    String goal=TaskGoal.outputText(expected).toJson(json);
     var existing=db.queryForList("select id from tasks where title=?",title);
     if(!existing.isEmpty()){
       long id=((Number)existing.getFirst().get("id")).longValue();
-      db.update("update tasks set skill_code=?,statement=?,starter_code=?,test_source=?,test_file_name=?,difficulty=?,language=?,active=1 where id=?",skill,statement,starter,test,testFile,difficulty,language.name(),id);
+      db.update("update tasks set skill_code=?,statement=?,starter_code=?,test_source=?,test_file_name=?,difficulty=?,language=?,source='SEED',goal_json=?,quality_version=?,active=1 where id=?",skill,statement,starter,test,testFile,difficulty,language.name(),goal,LearningContentGenerator.TASK_QUALITY_VERSION,id);
       db.update("insert or ignore into task_target_skills(task_id,skill_code) values(?,?)",id,skill);
       return;
     }
-    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language) values(?,?,?,?,?,?,?,?)",skill,title,statement,starter,test,testFile,difficulty,language.name());
+    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language,source,goal_json,quality_version) values(?,?,?,?,?,?,?,?,'SEED',?,?)",skill,title,statement,starter,test,testFile,difficulty,language.name(),goal,LearningContentGenerator.TASK_QUALITY_VERSION);
     db.update("insert into task_target_skills(task_id,skill_code) values(last_insert_rowid(),?)",skill);
   }
+
 
   private void seedPythonTasks() {
     if (db.queryForObject("select count(*) from skills where code='PY_BASIC_CODE_READING'", Integer.class) == 0) return;
@@ -378,6 +381,6 @@ class DiagnosticImporter implements ApplicationRunner {
                 import solution  # noqa: F401  (the student's top-level code runs on import)
             assert buffer.getvalue() == "%s", "Вывод не совпадает с ожидаемым: проверь текст, пробелы и переводы строк"
         """.formatted(javaLiteral(expected));
-    addTask(Language.PYTHON,"PY_BASIC_CODE_READING",title,difficulty,statement,"# Напиши решение здесь\n",test,"test_solution.py");
+    addTask(Language.PYTHON,"PY_BASIC_CODE_READING",title,difficulty,statement,"# Напиши решение здесь\n",test,"test_solution.py",expected);
   }
 }

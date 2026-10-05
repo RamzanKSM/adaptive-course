@@ -619,3 +619,23 @@ pre { overflow: auto; background: var(--surface-2); padding: 12px; border-radius
 .chart-x { grid-column: 2; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 @keyframes grow-up { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @media (max-width: 1000px) { .analytics-grid { grid-template-columns: 1fr; } }
+
+/* ───────── Topic states (diagnostic vs practice) ───────── */
+.topic-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 12px; }
+.topic-filters button { gap: 6px; padding: 7px 12px; font-size: 13px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); }
+.topic-filters button span { min-width: 20px; padding: 0 6px; border-radius: 99px; background: var(--surface-2); color: var(--muted); font-size: 11.5px; }
+.topic-filters button.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.topic-filters button.active span { background: rgb(255 255 255 / .18); color: #fff; }
+.skill-row.confirmed .skill-name .icon { color: var(--brand); }
+.skill-row.gap .skill-name::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--flame); margin-left: 2px; }
+.confirmed-note { font-size: 12.5px; font-weight: 700; color: var(--brand-ink); padding: 4px 10px; border-radius: 99px; background: var(--brand-soft); justify-self: start; }
+.topic-meta { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.diag-chip { display: inline-flex; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.diag-chip.ok { background: var(--brand-soft); color: var(--brand-ink); }
+.diag-chip.gap { background: #ffece2; color: #a1440f; }
+.course-cover .cover-text { flex: 1; min-width: 0; }
+.cover-bar { height: 6px; margin: 7px 0 3px; border-radius: 9px; background: #ebe9e2; overflow: hidden; }
+.cover-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), var(--brand-2)); transition: width 900ms var(--ease-out); }
+.diag-summary { grid-column: 1 / -1; display: grid; gap: 6px; margin: 2px 0 6px; }
+.gap-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+@media (max-width: 800px) { .topic-meta { justify-content: flex-start; } }

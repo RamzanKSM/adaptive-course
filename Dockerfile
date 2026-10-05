@@ -14,7 +14,8 @@ COPY backend/src ./src
 COPY --from=frontend-build /src/frontend/dist ./src/main/resources/static
 RUN mvn -q -DskipTests package
 
-FROM eclipse-temurin:21-jre-noble
+# A JDK, not a JRE: task checks parse Java solutions with the JDK compiler tree API (javax.tools / com.sun.source).
+FROM eclipse-temurin:21-jdk-noble
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates nodejs npm util-linux \
   && npm install --global @openai/codex@0.159.3 \

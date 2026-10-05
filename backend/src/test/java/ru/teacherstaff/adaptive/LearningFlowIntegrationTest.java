@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class LearningFlowIntegrationTest {
-  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json;
+  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit;
   @MockBean PistonCodeRunner runner;
   @MockBean LlmTutor tutor;
   @MockBean LearningContentGenerator generator;
@@ -33,21 +33,49 @@ class LearningFlowIntegrationTest {
     p.add("app.bootstrap-admin-login", () -> "admin");
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
   }
-  @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenReturn(new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna")); }
+  @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenAnswer(call->((String)call.getArgument(1)).contains("WRONG")?new PistonCodeRunner.Run(false,"Неверный вывод программы."):new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna")); }
 
-  @Test void diagnosticDeterminesFirstAvailableBlock() throws Exception {
+  @Test void diagnosticConfirmsTopicsSoPracticeSkipsThemWithoutFakeProgress() throws Exception {
     String cookie=createStudentAndLogin("block-student"); long student=studentId("block-student");
     submitDiagnostic(cookie, student, true);
+    // Block 0 answered correctly: its topics are confirmed, except VARIABLE_BASIC whose block-1 question was not answered.
+    assertEquals(1,db.queryForObject("select confirmed from diagnostic_skill_results where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+    assertEquals(0,db.queryForObject("select confirmed from diagnostic_skill_results where user_id=? and skill_code='VARIABLE_BASIC'",Integer.class,student));
+    assertEquals(0,db.queryForObject("select count(*) from student_skills where user_id=?",Integer.class,student),"confirmation is not practice credit");
     addTask("PRIMITIVE_TYPES", "block 1 task");
-    var response=json.readTree(mvc.perform(post("/api/lessons/start").cookie(cookie(cookie))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-    assertTrue(response.path("lesson").path("id").asLong()>0);
+    start(cookie);
     var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(cookie))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-    assertEquals(1,next.path("skill").path("blockNo").asInt());
+    assertNotEquals("BASIC_CODE_READING",next.path("skill").path("code").asText(),"a confirmed topic is never practiced, even though it has seed tasks");
     long assigned=next.path("task").path("id").asLong();
     var restored=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(cookie))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals(assigned,restored.path("task").path("id").asLong());
     assertEquals(1,countLessonTasks(student));
     verifyNoInteractions(generator);
+    var progress=json.readTree(mvc.perform(get("/api/progress").cookie(cookie(cookie))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    var basic=findSkill(progress,"BASIC_CODE_READING");
+    assertEquals(1,basic.path("confirmedByDiagnostic").asInt()); assertEquals(0,basic.path("completedIterations").asInt()); assertEquals(0,basic.path("mastered").asInt());
+    assertEquals(1,basic.path("diagnosticCorrect").asInt()); assertEquals(1,basic.path("diagnosticTotal").asInt());
+  }
+
+  @Test void weakTopicInsideAStrongBlockIsPracticedAndAPerfectDiagnosticStartsNothing() throws Exception {
+    String token=createStudentAndLogin("umar-student"); long student=studentId("umar-student");
+    // Everything right except one question on INTEGER_DIVISION: block 1 stays above 80%, the topic still needs practice.
+    var rows=db.queryForList("select id,correct_option,skill_code from diagnostic_questions where language='JAVA' order by id"); var answers=new ArrayList<Map<String,Object>>(); boolean missed=false;
+    for(var q:rows){var a=new LinkedHashMap<String,Object>();a.put("questionId",q.get("id"));if(!missed&&"INTEGER_DIVISION".equals(q.get("skill_code"))){a.put("selectedOption",(((Number)q.get("correct_option")).intValue()+1)%4);missed=true;}else a.put("selectedOption",q.get("correct_option"));answers.add(a);}
+    mvc.perform(post("/api/diagnostic").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers",answers)))).andExpect(status().isOk());
+    addTask("INTEGER_DIVISION","division practice");
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("INTEGER_DIVISION",next.path("skill").path("code").asText());
+
+    String perfect=createStudentAndLogin("perfect-student"); long perfectId=studentId("perfect-student");
+    var all=new ArrayList<Map<String,Object>>(); for(var q:rows) all.add(Map.of("questionId",q.get("id"),"selectedOption",q.get("correct_option")));
+    mvc.perform(post("/api/diagnostic").cookie(cookie(perfect)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers",all)))).andExpect(status().isOk());
+    assertEquals(0,db.queryForObject("select count(*) from diagnostic_skill_results where user_id=? and confirmed=0",Integer.class,perfectId));
+    start(perfect);
+    var done=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(perfect))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("COURSE_COMPLETE",done.path("reason").asText(),"no forced start of the last block");
+    assertTrue(done.path("task").isNull());
   }
 
   @Test void retiredPredictionTaskKeepsHistoryButIsSkippedAndCannotBeAttempted() throws Exception {
@@ -118,7 +146,7 @@ class LearningFlowIntegrationTest {
     var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("LLM_GENERATION_FAILED_VALIDATION",response.path("reason").asText());
     assertEquals(0,db.queryForObject("select count(*) from tasks where title='generated FOR_LOOP_BASIC'",Integer.class));
-    verify(generator,times(2)).generateTask(eq(student),brief("FOR_LOOP_BASIC"));
+    verify(generator,times(ApiController.GENERATION_ATTEMPTS)).generateTask(eq(student),brief("FOR_LOOP_BASIC"));
   }
 
   @Test void invalidGeneratedCandidateIsRetriedAndOnlyValidCandidateIsStored() throws Exception {
@@ -263,11 +291,38 @@ class LearningFlowIntegrationTest {
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
     when(generator.generateExplanation(eq(student),brief("SWITCH_BASIC"))).thenReturn(Optional.empty());
     String test="public class TestHarness { public static void main(String[] a) { System.out.print(\""+PistonCodeRunner.PASS_MARKER_PLACEHOLDER+"\"); } }";
-    when(generator.generateTask(eq(student),brief("SWITCH_BASIC"))).thenReturn(new GeneratedTask("SWITCH_BASIC","leaky","Код проверит TestHarness","",test,"TestHarness.java","public class Solution {}",List.of("SWITCH_BASIC"),List.of()));
+    when(generator.generateTask(eq(student),brief("SWITCH_BASIC"))).thenReturn(new GeneratedTask("SWITCH_BASIC","leaky","Код проверит TestHarness","",test,"TestHarness.java","public class Solution {}",List.of("SWITCH_BASIC"),List.of(),functionGoal(),wrongSolutions()));
     start(token);
     var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("LLM_GENERATION_FAILED_VALIDATION",response.path("reason").asText());
     assertEquals(0,db.queryForObject("select count(*) from tasks where title='leaky'",Integer.class));
+  }
+
+  @Test void legacyWeakTaskGetsVerifiedChecksWithoutRecalculatingCredit() throws Exception {
+    String token=createStudentAndLogin("legacy-student"); long student=studentId("legacy-student");
+    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,language,source) values('PY_ARITHMETIC_BASIC','Считаем стоимость билетов','Посчитай стоимость 4 билетов по 6 рублей умножением.','','def run_checks():\n    assert True\n','test_solution.py','PYTHON','LLM')");
+    long weak=db.queryForObject("select last_insert_rowid()",Long.class); db.update("insert into task_target_skills(task_id,skill_code) values(?, 'PY_ARITHMETIC_BASIC')",weak);
+    db.update("insert into successful_task_credit(user_id,task_id) values(?,?)",student,weak);
+    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,language,source) values('PY_ARITHMETIC_BASIC','Безнадёжная задача','Условие','','def run_checks():\n    assert True\n','test_solution.py','PYTHON','LLM')");
+    long hopeless=db.queryForObject("select last_insert_rowid()",Long.class); db.update("insert into task_target_skills(task_id,skill_code) values(?, 'PY_ARITHMETIC_BASIC')",hopeless);
+    var goal=json.readTree("{\"kind\":\"FIXED_ARITHMETIC\",\"operation\":\"*\",\"operands\":[4,6],\"expectedOutput\":\"24\\n\",\"functionName\":null,\"requiredConstructs\":[]}");
+    String strongChecks="import contextlib, io\n\ndef run_checks():\n    buffer = io.StringIO()\n    with contextlib.redirect_stdout(buffer):\n        import solution\n    assert buffer.getvalue() == '24\\n'\n";
+    when(generator.available()).thenReturn(true);
+    when(generator.repairTask(any(ContentBrief.class),argThat(t->t!=null&&t.id()==weak))).thenReturn(new GeneratedTask("PY_ARITHMETIC_BASIC","x","x","",strongChecks,"test_solution.py","print(4 * 6)\n",List.of("PY_ARITHMETIC_BASIC"),List.of(),goal,List.of()));
+    when(generator.repairTask(any(ContentBrief.class),argThat(t->t!=null&&t.id()==hopeless))).thenReturn(new GeneratedTask("PY_ARITHMETIC_BASIC","x","x","",strongChecks,"test_solution.py","print(4 * 6)\n",List.of("PY_ARITHMETIC_BASIC"),List.of(),goal,List.of()));
+    // Piston stand-in: only the exact calculation passes, and only for the repaired task; the hopeless task's checks accept anything.
+    when(runner.run(eq(Language.PYTHON),anyString(),anyString())).thenAnswer(call->{String source=((String)call.getArgument(1)).strip();String test=call.getArgument(2);
+      boolean hopelessCall=test.contains("hopeless-marker");
+      return hopelessCall||source.equals("print(4 * 6)")?new PistonCodeRunner.Run(true,"ok"):new PistonCodeRunner.Run(false,"Неверный результат.");});
+    when(generator.repairTask(any(ContentBrief.class),argThat(t->t!=null&&t.id()==hopeless))).thenReturn(new GeneratedTask("PY_ARITHMETIC_BASIC","x","x","",strongChecks+"# hopeless-marker\n","test_solution.py","print(4 * 6)\n",List.of("PY_ARITHMETIC_BASIC"),List.of(),goal,List.of()));
+    assertEquals(1,taskAudit.auditPending());
+    var repaired=db.queryForMap("select test_source,goal_json,quality_version,statement,active from tasks where id=?",weak);
+    assertEquals(strongChecks,repaired.get("test_source")); assertEquals(LearningContentGenerator.TASK_QUALITY_VERSION,((Number)repaired.get("quality_version")).intValue());
+    assertEquals("Посчитай стоимость 4 билетов по 6 рублей умножением.",repaired.get("statement"),"students keep the statement they saw");
+    assertEquals(1,db.queryForObject("select count(*) from successful_task_credit where user_id=? and task_id=?",Integer.class,student,weak),"earlier credit is not recalculated");
+    assertEquals(0,db.queryForObject("select active from tasks where id=?",Integer.class,hopeless),"a task whose checks cannot be made reliable is retired");
+    verify(generator,times(TaskAudit.REPAIR_ATTEMPTS)).repairTask(any(ContentBrief.class),argThat(t->t!=null&&t.id()==hopeless));
+    assertEquals(0,taskAudit.auditPending(),"nothing left to re-verify");
   }
 
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
@@ -285,5 +340,8 @@ class LearningFlowIntegrationTest {
   private jakarta.servlet.http.Cookie cookie(String value){return new jakarta.servlet.http.Cookie("adaptive_session",value);}
   private int countLessonTasks(long student){return db.queryForObject("select count(*) from lesson_tasks where lesson_id=(select id from lessons where user_id=? and finished_at is null)",Integer.class,student);}
   private void prepareOnlySkill(long student,String skill){db.update("insert into student_skills(user_id,skill_code,completed_iterations,mastered) select ?,code,3,1 from skills where code<>?",student,skill);}
-  private GeneratedTask generated(String skill,boolean valid){String test="public class TestHarness { public static void main(String[] a) { System.out.print(\""+(valid?PistonCodeRunner.PASS_MARKER_PLACEHOLDER:"missing")+"\"); } }";return new GeneratedTask(skill,"generated "+skill,"statement","",test,"TestHarness.java","public class Solution {}",List.of(skill),List.of());}
+  private GeneratedTask generated(String skill,boolean valid){String test="public class TestHarness { public static void main(String[] a) { Solution.answer(1); Solution.answer(2); Solution.answer(3); System.out.print(\""+(valid?PistonCodeRunner.PASS_MARKER_PLACEHOLDER:"missing")+"\"); } }";return new GeneratedTask(skill,"generated "+skill,"statement","",test,"TestHarness.java","public class Solution { static int answer(int x) { return x; } }",List.of(skill),List.of(),functionGoal(),wrongSolutions());}
+  private com.fasterxml.jackson.databind.JsonNode functionGoal(){try{return json.readTree("{\"kind\":\"FUNCTION_BEHAVIOR\",\"operation\":null,\"operands\":[],\"expectedOutput\":null,\"functionName\":\"answer\",\"requiredConstructs\":[]}");}catch(Exception e){throw new IllegalStateException(e);}}
+  private static List<TaskGoal.Mutant> wrongSolutions(){return List.of(new TaskGoal.Mutant("hard-codes the first example","public class Solution { static int answer(int x) { return 1; } } // WRONG"),new TaskGoal.Mutant("off by one","public class Solution { static int answer(int x) { return x + 1; } } // WRONG"));}
+  private static com.fasterxml.jackson.databind.JsonNode findSkill(com.fasterxml.jackson.databind.JsonNode progress,String code){for(var skill:progress.path("skills"))if(code.equals(skill.path("skillCode").asText()))return skill;throw new AssertionError(code);}
 }

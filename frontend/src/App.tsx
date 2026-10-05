@@ -4,7 +4,7 @@ import { java } from '@codemirror/lang-java'
 import { python } from '@codemirror/lang-python'
 import ReactMarkdown from 'react-markdown'
 import { api, ApiError, humanize, onUnauthorized, patch, post } from './api'
-import { achievements, commonAchievements, experience, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
+import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
 import type { Attempt, ChatMessage, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
@@ -285,9 +285,12 @@ function Hud({ progress }: { progress: Progress }) {
       <div><b className="tabular">{days.count}</b><small>{days.count === 1 ? 'день подряд' : days.count >= 2 && days.count <= 4 ? 'дня подряд' : 'дней подряд'}</small></div>
       <div className="week" aria-label="Активность за неделю">{days.week.map((d, i) => <span key={i} className={`${d.active ? 'on' : ''} ${d.today ? 'today' : ''}`} title={d.label}><i />{d.label}</span>)}</div>
     </div>
-    <div className="hud-stat">
+    <div className="hud-stat course-cover" title="Тема закрыта, если освоена практикой или подтверждена диагностикой">
       <span className="hud-icon bolt"><Icon name="bolt" size={22} /></span>
-      <div><b className="tabular">{level.solved}</b><small>задач решено</small></div>
+      <div className="cover-text"><b className="tabular">{level.solved}</b><small>задач решено</small>
+        <div className="cover-bar" role="progressbar" aria-label="Закрыто тем курса" aria-valuemin={0} aria-valuemax={level.topics} aria-valuenow={level.closed}><i style={{ width: `${level.topics ? (level.closed / level.topics) * 100 : 0}%` }} /></div>
+        <small className="tabular">тем закрыто {level.closed} из {level.topics}</small>
+      </div>
     </div>
   </section>
 }
@@ -296,6 +299,7 @@ function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnosti
   const [index, setIndex] = useState(0); const [answers, setAnswers] = useState<Record<string, number | null>>({}); const [sending, setSending] = useState(false)
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
   const course = useCourse()
+  const toast = useToast()
   const total = diagnostic.questions.length
   const question = diagnostic.questions[index]
   const last = index === total - 1
@@ -305,9 +309,14 @@ function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnosti
   const save = async () => {
     setSending(true)
     const body = { answers: diagnostic.questions.map(q => ({ questionId: q.id, selectedOption: answers[q.id] ?? null })) }
-    const done = await request(() => post(withCourse('/diagnostic', course.id), body))
+    const done = await request(() => post<{ confirmedTopics?: number; gapTopics?: number }>(withCourse('/diagnostic', course.id), body))
     setSending(false)
-    if (done) onDone()
+    if (!done) return
+    const confirmed = done.confirmedTopics ?? 0, gaps = done.gapTopics ?? 0
+    toast(confirmed
+      ? { tone: 'reward', icon: 'sparkle', title: `Диагностика: подтверждено тем — ${confirmed}`, text: `+${confirmed * XP.confirmed} XP · эти темы пропустим, к практике: ${gaps}` }
+      : { tone: 'info', icon: 'target', title: 'Диагностика завершена', text: `Начнём с самого начала — тем к практике: ${gaps}` })
+    onDone()
   }
   // Keyboard: 1–5 choose an option, Enter moves on — handy for ~60 questions in a row.
   useEffect(() => {
@@ -377,12 +386,14 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
     <p className="muted">Сервис выберет следующую тему по результатам диагностики и предыдущим занятиям.</p>
     <button className="primary big" disabled={working} onClick={start}>{working ? <><Spinner /> Готовим урок…</> : <>Начать урок <Icon name="arrow" /></>}</button>
   </section>
-  const title = lesson.skill?.title ?? (lesson.reason === 'NO_DUE_SKILL' ? 'На сегодня задач больше нет' : 'Текущий урок')
+  const finished = lesson.reason === 'NO_DUE_SKILL' || lesson.reason === 'COURSE_COMPLETE'
+  const title = lesson.skill?.title ?? (lesson.reason === 'COURSE_COMPLETE' ? 'Все темы курса закрыты' : lesson.reason === 'NO_DUE_SKILL' ? 'На сегодня задач больше нет' : 'Текущий урок')
   const retryable = lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' || lesson.reason === 'RUNNER_UNAVAILABLE'
   const emptyMessage = lesson.reason === 'NO_TASK_AVAILABLE' ? 'Подходящей задачи в банке пока нет. Преподаватель увидит это состояние.'
     : lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' ? 'Новая задача не прошла проверку. Попробуй запросить её ещё раз.'
       : lesson.reason === 'RUNNER_UNAVAILABLE' ? `Проверка ${course.title} сейчас недоступна. Попробуй ещё раз позже.`
-        : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены — отличная работа!' : 'Контент урока загружается.'
+        : lesson.reason === 'COURSE_COMPLETE' ? 'Каждая тема освоена практикой или подтверждена диагностикой — задач для обязательной практики не осталось.'
+          : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены — отличная работа! Повторения запланированы на следующие уроки.' : 'Контент урока загружается.'
   return <section className="lesson">
     <div className="lesson-heading enter">
       <div>
@@ -398,9 +409,10 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
     {lesson.task
       ? <TaskWorkspace key={lesson.task.id} task={lesson.task} skillProgress={skillProgress} llm={lesson.llm} request={request} onNext={refresh} onProgress={onProgress} />
       : <div className="lesson-grid enter">
-        <article className={`card task empty-task ${lesson.reason === 'NO_DUE_SKILL' ? 'done' : ''}`}>
-          {lesson.reason === 'NO_DUE_SKILL' && <span className="empty-icon success"><Icon name="check" size={28} /></span>}
-          <h2 className="title">{lesson.reason === 'NO_DUE_SKILL' ? 'Урок можно завершить' : 'Задача ещё не подготовлена'}</h2>
+        <article className={`card task empty-task ${finished ? 'done' : ''}`}>
+          {finished && <span className="empty-icon success"><Icon name={lesson.reason === 'COURSE_COMPLETE' ? 'award' : 'check'} size={28} /></span>}
+          {lesson.reason === 'COURSE_COMPLETE' && <Burst trigger={1} />}
+          <h2 className="title">{lesson.reason === 'COURSE_COMPLETE' ? 'Курс пройден' : finished ? 'Урок можно завершить' : 'Задача ещё не подготовлена'}</h2>
           <p className="muted">{emptyMessage}</p>
           {retryable && <button className="secondary" onClick={refresh}><Icon name="refresh" /> Повторить</button>}
         </article>
@@ -520,39 +532,60 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
   </aside>
 }
 
+const TOPIC_FILTERS: { id: 'todo' | 'confirmed' | 'mastered' | 'all'; label: string; match: (state: SkillState) => boolean }[] = [
+  { id: 'todo', label: 'Нужна практика', match: state => state === 'gap' || state === 'started' || state === 'new' },
+  { id: 'confirmed', label: 'Подтверждено диагностикой', match: state => state === 'confirmed' },
+  { id: 'mastered', label: 'Освоено практикой', match: state => state === 'mastered' },
+  { id: 'all', label: 'Все', match: () => true },
+]
+
 function ProgressView({ progress, otherProgress }: { progress: Progress | null; otherProgress: Partial<Record<CourseLanguage, Progress>> }) {
-  const [showAll, setShowAll] = useState(false)
+  const [filter, setFilter] = useState<(typeof TOPIC_FILTERS)[number]['id']>('todo')
   const course = useCourse()
   const list = useMemo(() => progress ? achievements(progress, course.id) : [], [progress, course.id])
   const shared = useMemo(() => progress ? commonAchievements({ ...otherProgress, [course.id]: progress }) : [], [progress, otherProgress, course.id])
   if (!progress) return <section><h1 className="display small">Мой прогресс</h1><div className="sk sk-card" /></section>
   const level = experience(progress)
-  const started = progress.skills.filter(skillStarted)
-  const skills = showAll ? progress.skills : started
+  const counts = Object.fromEntries(TOPIC_FILTERS.map(f => [f.id, progress.skills.filter(skill => f.match(skillState(skill))).length]))
+  const active = TOPIC_FILTERS.find(f => f.id === filter)!
+  const skills = progress.skills.filter(skill => active.match(skillState(skill)))
+  const coverage = level.topics ? Math.round((level.closed / level.topics) * 100) : 0
   return <section className="progress-page">
     <h1 className="display small">Мой прогресс · {course.title}</h1>
     <div className="stat-grid">
-      <Stat icon="sparkle" label="Опыт" value={level.xp} suffix="XP" />
+      <Stat icon="sparkle" label={level.diagnosticXp ? `Опыт · ${level.diagnosticXp} за диагностику` : 'Опыт'} value={level.xp} suffix="XP" />
       <Stat icon="bolt" label="Задач решено" value={level.solved} />
-      <Stat icon="target" label="Итераций" value={level.iterations} />
-      <Stat icon="award" label="Тем освоено" value={level.mastered} />
+      <Stat icon="flag" label={`Курс закрыт · ${level.closed} из ${level.topics} тем`} value={coverage} suffix="%" />
+      <Stat icon="award" label={`Освоено практикой${level.confirmed ? ` · ${level.confirmed} подтверждено диагностикой` : ''}`} value={level.mastered} />
     </div>
     <h2 className="section-title">Достижения <span className="muted">{[...list, ...shared].filter(a => a.unlocked).length} из {list.length + shared.length}</span></h2>
     <p className="achievement-group"><span className={`lang-dot ${course.key}`} aria-hidden="true" />Курс {course.title}</p>
     <AchievementGrid items={list} />
     <p className="achievement-group"><Icon name="globe" size={15} />Общие — для обоих курсов</p>
     <AchievementGrid items={shared} />
-    <h2 className="section-title">Темы <span className="muted">{level.mastered} освоено · {started.length} в работе</span>
-      <button className="link" onClick={() => setShowAll(v => !v)}>{showAll ? 'Только начатые' : `Показать все ${progress.skills.length}`}</button>
-    </h2>
+    <h2 className="section-title">Темы</h2>
+    <div className="topic-filters" role="tablist" aria-label="Темы">{TOPIC_FILTERS.map(f => <button key={f.id} role="tab" aria-selected={f.id === filter} className={f.id === filter ? 'active' : ''} onClick={() => setFilter(f.id)}>
+      {f.label}<span className="tabular">{counts[f.id]}</span></button>)}</div>
     <div className="card skills">{skills.length
-      ? skills.map(skill => <div key={skill.skillCode} className={`skill-row ${skill.mastered ? 'mastered' : skillStarted(skill) ? 'started' : 'idle'}`}>
-        <span className="skill-name">{skill.mastered ? <Icon name="check" size={15} /> : null}{skill.title}</span>
-        <div className="bar" role="progressbar" aria-valuenow={skillPercent(skill)} aria-valuemin={0} aria-valuemax={100} aria-label={skill.title}><i style={{ width: `${skillPercent(skill)}%` }} /></div>
-        <small className="tabular">{skill.mastered ? 'Освоено' : `Итерации ${skill.completedIterations}/${ITERATIONS} · задачи ${skill.iterationSuccesses}/${TASKS_PER_ITERATION}`}</small>
-      </div>)
-      : <p className="muted">Прогресс появится после первого решения. Начни урок — первая задача ждёт!</p>}</div>
+      ? skills.map(skill => <TopicRow key={skill.skillCode} skill={skill} />)
+      : <p className="muted">{filter === 'todo' ? 'Все темы закрыты — практикой или диагностикой. Отличная работа!' : filter === 'confirmed' ? 'Диагностика пока не подтвердила ни одной темы.' : filter === 'mastered' ? 'Пока ни одна тема не освоена полностью: для этого нужны три итерации на разных уроках.' : 'Тем пока нет.'}</p>}</div>
   </section>
+}
+
+/** Practice progress and the diagnostic result side by side; a confirmed topic is never drawn as practiced. */
+function TopicRow({ skill }: { skill: SkillProgress }) {
+  const state = skillState(skill)
+  const diagnostic = skill.diagnosticTotal ? `${skill.diagnosticCorrect ?? 0}/${skill.diagnosticTotal}` : null
+  return <div className={`skill-row ${state}`}>
+    <span className="skill-name">{state === 'mastered' ? <Icon name="check" size={15} /> : state === 'confirmed' ? <Icon name="sparkle" size={15} /> : null}{skill.title}</span>
+    {state === 'confirmed'
+      ? <span className="confirmed-note">Подтверждено диагностикой · практика не нужна</span>
+      : <div className="bar" role="progressbar" aria-valuenow={skillPercent(skill)} aria-valuemin={0} aria-valuemax={100} aria-label={skill.title}><i style={{ width: `${skillPercent(skill)}%` }} /></div>}
+    <small className="tabular topic-meta">
+      {state === 'mastered' ? 'Освоено практикой' : state === 'confirmed' ? null : `Итерации ${skill.completedIterations}/${ITERATIONS} · задачи ${skill.iterationSuccesses}/${TASKS_PER_ITERATION}`}
+      {diagnostic && <span className={`diag-chip ${skill.confirmedByDiagnostic ? 'ok' : 'gap'}`} title="Результат первичной диагностики по теме">диагностика {diagnostic}</span>}
+    </small>
+  </div>
 }
 
 function AchievementGrid({ items }: { items: ReturnType<typeof achievements> }) {
@@ -675,6 +708,18 @@ function PasswordReset({ student, request }: { student: Student; request: Reques
   </div>
 }
 
+/** What the diagnostic confirmed and which topics it flagged, so the teacher sees why practice starts where it does. */
+function DiagnosticSummary({ skills }: { skills: SkillProgress[] }) {
+  const taken = skills.filter(s => s.diagnosticTotal)
+  if (!taken.length) return <p className="diag-summary muted small">Диагностика не пройдена</p>
+  const confirmed = taken.filter(s => s.confirmedByDiagnostic).length
+  const gaps = taken.filter(s => !s.confirmedByDiagnostic && !s.mastered)
+  return <div className="diag-summary">
+    <span className="small"><b>Диагностика:</b> подтверждено {confirmed} из {taken.length} тем{gaps.length ? `, пробелов — ${gaps.length}` : ', пробелов нет'}</span>
+    {gaps.length > 0 && <div className="gap-chips">{gaps.slice(0, 8).map(g => <span key={g.skillCode} className="diag-chip gap" title={`диагностика ${g.diagnosticCorrect ?? 0}/${g.diagnosticTotal}`}>{g.title} {g.diagnosticCorrect ?? 0}/{g.diagnosticTotal}</span>)}{gaps.length > 8 && <span className="muted small">и ещё {gaps.length - 8}</span>}</div>}
+  </div>
+}
+
 function Switch({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: () => void; label: string }) {
   return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`switch ${checked ? 'on' : ''}`} disabled={disabled} onClick={onChange}><span /></button>
 }
@@ -711,6 +756,7 @@ function StudentDetail({ student, request, toggle, onLlmStatus }: { student: Stu
         <span className="mini-stats-cell"><b>{level.level}</b><small>уровень</small></span>
         <span className="mini-stats-cell"><b>{level.iterations}</b><small>итераций</small></span>
         <span className="mini-stats-cell"><b>{level.mastered}</b><small>тем освоено</small></span>
+        <DiagnosticSummary skills={progress[language]!} />
       </div>
     })}</div>}
     {!lessons ? <p className="muted">Загружаем данные…</p> : <>

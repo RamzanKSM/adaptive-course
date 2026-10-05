@@ -7,7 +7,8 @@ import type { LlmPurpose, LlmUsage } from './types'
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 
 const PERIODS = [7, 30, 90]
-const PURPOSES: Record<LlmPurpose, string> = { CHAT: 'Ответы в чате', TASK: 'Генерация задач', EXPLANATION: 'Объяснения тем' }
+const PURPOSES: Record<LlmPurpose, string> = { CHAT: 'Ответы в чате', TASK: 'Генерация задач', EXPLANATION: 'Объяснения тем', TASK_REPAIR: 'Перепроверка старых задач' }
+const EFFORTS: Record<string, string> = { minimal: 'минимальный', low: 'низкий', medium: 'средний', high: 'высокий', xhigh: 'очень высокий' }
 const LANGUAGE_TITLES: Record<string, string> = { JAVA: 'Java', PYTHON: 'Python' }
 const number = new Intl.NumberFormat('ru-RU')
 const compact = new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 })
@@ -62,8 +63,8 @@ export function LlmAnalytics({ request }: { request: Request }) {
           <div className="analytics-grid">
             <div className="card">
               <h2 className="card-title">Для чего используется</h2>
-              <table className="data-table"><thead><tr><th>Назначение</th><th>Вызовы</th><th>Ошибки</th><th>Ср. время</th><th>Токены</th></tr></thead>
-                <tbody>{usage.byPurpose.map(p => <tr key={p.purpose}><td>{PURPOSES[p.purpose]}</td><td>{number.format(p.calls)}</td><td>{p.errors ? number.format(p.errors) : '—'}</td><td>{seconds(p.avgMs)}</td><td>{p.tokens ? compact.format(p.tokens) : '—'}</td></tr>)}</tbody>
+              <table className="data-table"><thead><tr><th>Назначение</th><th>Размышления</th><th>Вызовы</th><th>Ошибки</th><th>Ср. время</th><th>Токены</th></tr></thead>
+                <tbody>{usage.byPurpose.map(p => <tr key={p.purpose}><td>{PURPOSES[p.purpose] ?? p.purpose}</td><td>{p.effort ? EFFORTS[p.effort] ?? p.effort : '—'}</td><td>{number.format(p.calls)}</td><td>{p.errors ? number.format(p.errors) : '—'}</td><td>{seconds(p.avgMs)}</td><td>{p.tokens ? compact.format(p.tokens) : '—'}</td></tr>)}</tbody>
               </table>
               {(t.tasksAccepted + t.tasksRejected) > 0 && <p className="muted small table-note">Сгенерированные задачи: принято {t.tasksAccepted}, отклонено проверкой {t.tasksRejected} ({percent(t.tasksRejected, t.tasksAccepted + t.tasksRejected)}).</p>}
               {usage.byLanguage.length > 0 && <p className="muted small table-note">По курсам: {usage.byLanguage.map(l => `${LANGUAGE_TITLES[l.language] ?? l.language} — ${number.format(l.calls)}`).join(' · ')}</p>}
@@ -72,7 +73,7 @@ export function LlmAnalytics({ request }: { request: Request }) {
               <h2 className="card-title">Ошибки</h2>
               {usage.recentErrors.length ? <ul className="error-list">{usage.recentErrors.map((e, i) => <li key={i}>
                 <span className={`status-pill ${e.status === 'TIMEOUT' ? 'timeout' : 'error'}`}>{e.status === 'TIMEOUT' ? 'Таймаут' : 'Ошибка'}</span>
-                <div><b>{PURPOSES[e.purpose]}</b> · {LANGUAGE_TITLES[e.language] ?? e.language}{e.displayName ? ` · ${e.displayName}` : ''}<small>{when(e.createdAt)} · {seconds(e.durationMs)}</small>{e.error && <code>{e.error}</code>}</div>
+                <div><b>{PURPOSES[e.purpose] ?? e.purpose}</b> · {LANGUAGE_TITLES[e.language] ?? e.language}{e.displayName ? ` · ${e.displayName}` : ''}<small>{when(e.createdAt)} · {seconds(e.durationMs)}</small>{e.error && <code>{e.error}</code>}</div>
               </li>)}</ul> : <p className="muted small">Ошибок за период не было.</p>}
             </div>
           </div>
