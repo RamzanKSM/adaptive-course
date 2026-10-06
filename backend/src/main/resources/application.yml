@@ -28,11 +28,19 @@ app:
   llm:
     enabled: ${APP_LLM_ENABLED:false}
     model: ${CODEX_MODEL:gpt-6-luna}
+    # Always offered in the admin model picker, even if the App Server's model/list does not report them.
+    extra-models: ${APP_LLM_EXTRA_MODELS:gpt-5.6-terra}
     # Fallback level; each purpose has its own: task generation needs careful checks, chat needs fast answers.
     reasoning-effort: ${CODEX_REASONING_EFFORT:medium}
     reasoning-effort-task: ${CODEX_REASONING_EFFORT_TASK:high}
     reasoning-effort-chat: ${CODEX_REASONING_EFFORT_CHAT:low}
     reasoning-effort-explanation: ${CODEX_REASONING_EFFORT_EXPLANATION:medium}
+    # Defaults until an admin changes them in «Аналитика LLM → Настройки». 0 = no limit.
+    limits:
+      chat-per-hour: ${APP_LLM_CHAT_PER_HOUR:30}
+      chat-per-day: ${APP_LLM_CHAT_PER_DAY:150}
+      tasks-per-hour: ${APP_LLM_TASKS_PER_HOUR:100}
+      explanations-per-hour: ${APP_LLM_EXPLANATIONS_PER_HOUR:30}
     app-server-command: ${CODEX_APP_SERVER_COMMAND:codex --disable shell_tool app-server --listen stdio://}
     account-namespace: ${CODEX_ACCOUNT_NAMESPACE:default}
     sandbox-directory: ${CODEX_SANDBOX_DIRECTORY:./data/codex-sandbox}

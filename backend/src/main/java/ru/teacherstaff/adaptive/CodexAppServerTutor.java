@@ -21,6 +21,19 @@ import java.util.concurrent.atomic.AtomicLong;
 interface LlmTutor {
   LlmStatus status(long userId);
   String reply(long userId, TutorContext context, String content);
+  /** Models the App Server offers with their reasoning levels; empty when they cannot be read (LLM off or unreachable). */
+  default List<ModelOption> availableModels() { return List.of(); }
+  /** Reasoning levels the current model accepts; empty when unknown. */
+  default List<String> supportedReasoningEfforts() { return List.of(); }
+}
+
+/**
+ * A model the admin can pick: the id sent in turn/start, its label and reasoning levels. listed=false marks a model
+ * from APP_LLM_EXTRA_MODELS that the App Server did not report, so its access is not confirmed.
+ */
+record ModelOption(String id, String displayName, String description, List<String> efforts, String defaultEffort, boolean listed) {
+  ModelOption(String id, String displayName, String description, List<String> efforts, String defaultEffort) { this(id, displayName, description, efforts, defaultEffort, true); }
+  Map<String, Object> view() { return Map.of("id", id, "displayName", displayName, "description", description, "efforts", efforts, "defaultEffort", defaultEffort == null ? "" : defaultEffort, "listed", listed); }
 }
 
 record LlmStatus(boolean globallyEnabled, boolean studentEnabled, boolean available, String reason, String model) {
@@ -47,9 +60,10 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   private final ObjectMapper json;
   private final boolean appEnabled;
   private final String command;
-  private final String model;
-  /** Reasoning level per purpose: tasks need careful checks, chat needs quick answers. */
-  private final Map<String, String> reasoningEfforts;
+  /** Reasoning level per purpose, changeable by the admin at runtime. */
+  private final LlmSettings settings;
+  private volatile List<ModelOption> models = List.of();
+  private volatile long modelsReadAt;
   private final String namespace;
   private final Path sandboxDirectory;
   private final boolean studentRuntimeValidated;
@@ -65,21 +79,15 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   private volatile long startupFailedAt;
   private final boolean logContent;
 
-  CodexAppServerTutor(JdbcTemplate db, ObjectMapper json,
+  CodexAppServerTutor(JdbcTemplate db, ObjectMapper json, LlmSettings settings,
                       @Value("${app.llm.enabled}") boolean appEnabled,
                       @Value("${app.llm.app-server-command}") String command,
-                      @Value("${app.llm.model}") String model,
-                      @Value("${app.llm.reasoning-effort:medium}") String reasoningEffort,
-                      @Value("${app.llm.reasoning-effort-chat:low}") String chatEffort,
-                      @Value("${app.llm.reasoning-effort-task:high}") String taskEffort,
-                      @Value("${app.llm.reasoning-effort-explanation:medium}") String explanationEffort,
                       @Value("${app.llm.account-namespace}") String namespace,
                       @Value("${app.llm.sandbox-directory}") String sandboxDirectory,
                       @Value("${app.llm.student-runtime-validated}") boolean studentRuntimeValidated,
                       @Value("${app.llm.log-content:false}") boolean logContent) {
     this.db = db; this.json = json; this.appEnabled = appEnabled;
-    this.command = command; this.model = model; this.reasoningEfforts = Map.of("CHAT", effort(chatEffort, reasoningEffort), "TASK", effort(taskEffort, reasoningEffort),
-        "TASK_REPAIR", effort(taskEffort, reasoningEffort), "EXPLANATION", effort(explanationEffort, reasoningEffort)); this.namespace = namespace;
+    this.command = command; this.settings = settings; this.namespace = namespace;
     this.sandboxDirectory = Path.of(sandboxDirectory).toAbsolutePath().normalize();
     this.studentRuntimeValidated = studentRuntimeValidated;
     this.logContent = logContent;
@@ -88,14 +96,14 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   @Override public LlmStatus status(long userId) {
     boolean student = db.queryForObject("select count(*) from users where id=? and llm_enabled=1", Integer.class, userId) > 0;
     boolean global = appEnabled && "true".equals(db.queryForObject("select value from app_settings where key='llm_enabled'", String.class));
-    if (!global) return new LlmStatus(false, student, false, appEnabled ? "DISABLED_GLOBALLY" : "DISABLED_BY_CONFIGURATION", model);
-    if (!student) return new LlmStatus(true, false, false, "DISABLED_FOR_STUDENT", model);
+    if (!global) return new LlmStatus(false, student, false, appEnabled ? "DISABLED_GLOBALLY" : "DISABLED_BY_CONFIGURATION", settings.model());
+    if (!student) return new LlmStatus(true, false, false, "DISABLED_FOR_STUDENT", settings.model());
     // App Server exposes sandboxed command tools, but its stable protocol has no
     // mechanism to disable those tools. Untrusted student input must never reach it.
-    if (!studentRuntimeValidated) return new LlmStatus(true, true, false, "STUDENT_RUNTIME_NOT_VALIDATED", model);
-    if (command == null || command.isBlank()) return new LlmStatus(true, true, false, "APP_SERVER_NOT_CONFIGURED", model);
-    if (recentlyFailed()) return new LlmStatus(true, true, false, "APP_SERVER_UNAVAILABLE", model);
-    return new LlmStatus(true, true, true, "READY", model);
+    if (!studentRuntimeValidated) return new LlmStatus(true, true, false, "STUDENT_RUNTIME_NOT_VALIDATED", settings.model());
+    if (command == null || command.isBlank()) return new LlmStatus(true, true, false, "APP_SERVER_NOT_CONFIGURED", settings.model());
+    if (recentlyFailed()) return new LlmStatus(true, true, false, "APP_SERVER_UNAVAILABLE", settings.model());
+    return new LlmStatus(true, true, true, "READY", settings.model());
   }
 
   @Override public String reply(long userId, TutorContext context, String content) {
@@ -194,15 +202,43 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   }
 
   private Map<String, Object> threadStartParams(String instructions) {
-    return Map.of("model", model, "serviceName", "adaptive_java_tutor", "cwd", sandboxDirectory.toString(),
+    return Map.of("model", settings.model(), "serviceName", "adaptive_java_tutor", "cwd", sandboxDirectory.toString(),
         "approvalPolicy", "never", "permissions", "student-tutor", "developerInstructions", instructions);
   }
 
   /** Who asked and why; recorded with every turn. */
   /** userId is null for background work (task repair). */
   record Call(Long userId, String purpose, Language language, String skillCode) {}
-  private static String effort(String specific, String fallback) { return specific == null || specific.isBlank() ? fallback : specific; }
-  String effortFor(String purpose) { return reasoningEfforts.get(purpose); }
+  String effortFor(String purpose) { return settings.effort(purpose); }
+
+  /** model/list from the App Server, cached for 10 minutes. Empty when the LLM is off or the list cannot be read. */
+  @Override public List<ModelOption> availableModels() {
+    if (!available()) return List.of();
+    if (!models.isEmpty() && System.currentTimeMillis() - modelsReadAt < 600_000) return models;
+    try {
+      startIfNeeded();
+      List<ModelOption> list = new ArrayList<>();
+      String cursor = null;
+      do {
+        Map<String, Object> params = new LinkedHashMap<>(); params.put("includeHidden", false); if (cursor != null) params.put("cursor", cursor);
+        JsonNode result = request("model/list", params, Duration.ofSeconds(10));
+        for (JsonNode m : result.path("data")) {
+          List<String> efforts = new ArrayList<>();
+          for (JsonNode option : m.path("supportedReasoningEfforts")) efforts.add(option.path("reasoningEffort").asText());
+          String id = m.path("model").asText(m.path("id").asText());
+          list.add(new ModelOption(id, m.path("displayName").asText(id), m.path("description").asText(""), List.copyOf(efforts), m.path("defaultReasoningEffort").asText(null)));
+        }
+        cursor = result.path("nextCursor").isTextual() ? result.path("nextCursor").asText() : null;
+      } while (cursor != null && list.size() < 200);
+      if (!list.isEmpty()) { models = List.copyOf(list); modelsReadAt = System.currentTimeMillis(); }
+      return models;
+    } catch (Exception e) { log.warn("Could not read models from model/list: {}", describe(e)); return List.of(); }
+  }
+
+  @Override public List<String> supportedReasoningEfforts() {
+    String current = settings.model();
+    return availableModels().stream().filter(m -> m.id().equals(current)).findFirst().map(ModelOption::efforts).orElse(List.of());
+  }
   @FunctionalInterface interface ThreadOpener { String open() throws Exception; }
 
   /**
@@ -213,7 +249,9 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     long started = System.nanoTime();
     String threadId = null, answer = null, status = "ERROR", error = null;
     TurnCapture capture = null;
-    log.info("LLM {} start: user={} language={} skill={} promptChars={} model={} effort={}", call.purpose(), call.userId(), call.language(), call.skillCode(), input.length(), model, reasoningEfforts.get(call.purpose()));
+    String effort = settings.effort(call.purpose());
+    String model = settings.model();
+    log.info("LLM {} start: user={} language={} skill={} promptChars={} model={} effort={}", call.purpose(), call.userId(), call.language(), call.skillCode(), input.length(), model, effort);
     if (logContent) log.info("LLM {} prompt (user={}):\n{}", call.purpose(), call.userId(), limit(input, 40_000));
     try {
       threadId = opener.open();
@@ -225,7 +263,9 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       params.put("cwd", sandboxDirectory.toString());
       params.put("approvalPolicy", "never");
       params.put("permissions", "student-tutor");
-      params.put("effort", reasoningEfforts.get(call.purpose()));
+      // Both are per-turn overrides, so a change in the admin applies to existing student threads too.
+      params.put("model", model);
+      params.put("effort", effort);
       if (outputSchema != null) params.put("outputSchema", outputSchema);
       JsonNode turn = request("turn/start", params, Duration.ofSeconds(10));
       capture.turnId = turn.path("turn").path("id").asText();
@@ -250,14 +290,14 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
             call.purpose(), ms, call.userId(), threadId, capture.turnId, usage.input, usage.cached, usage.output, usage.reasoning, usage.total, answer.length());
       else log.warn("LLM {} {} after {} ms: user={} thread={} error={}", call.purpose(), status, ms, call.userId(), threadId, error);
       if (logContent && answer != null) log.info("LLM {} answer (user={}):\n{}", call.purpose(), call.userId(), limit(answer, 40_000));
-      record(call, status, error, ms, input.length(), answer == null ? 0 : answer.length(), usage);
+      record(call, model, effort, status, error, ms, input.length(), answer == null ? 0 : answer.length(), usage);
     }
   }
 
-  private void record(Call call, String status, String error, long ms, int promptChars, int responseChars, TokenUsage usage) {
+  private void record(Call call, String model, String effort, String status, String error, long ms, int promptChars, int responseChars, TokenUsage usage) {
     try {
       db.update("insert into llm_calls(user_id,purpose,language,skill_code,model,reasoning_effort,status,error,duration_ms,prompt_chars,response_chars,input_tokens,cached_input_tokens,output_tokens,reasoning_tokens,total_tokens) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          call.userId(), call.purpose(), call.language().name(), call.skillCode(), model, reasoningEfforts.get(call.purpose()), status, error == null ? null : limit(error, 1000), ms, promptChars, responseChars,
+          call.userId(), call.purpose(), call.language().name(), call.skillCode(), model, effort, status, error == null ? null : limit(error, 1000), ms, promptChars, responseChars,
           usage.seen ? usage.input : null, usage.seen ? usage.cached : null, usage.seen ? usage.output : null, usage.seen ? usage.reasoning : null, usage.seen ? usage.total : null);
     } catch (Exception e) { log.error("Could not record LLM call statistics", e); }
   }
@@ -510,7 +550,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       try {
         request("initialize", Map.of("clientInfo", Map.of("name", "adaptive_java_tutor", "title", "Adaptive Java Tutor", "version", "0.1.0"), "capabilities", Map.of("experimentalApi", true)), Duration.ofSeconds(15));
         notifyServer("initialized", Map.of());
-        log.info("Codex App Server initialized (pid={}, model={})", created.pid(), model);
+        log.info("Codex App Server initialized (pid={}, model={})", created.pid(), settings.model());
       } catch (Exception e) { markProcessFailure(e); log.error("Codex App Server initialization failed: {}", describe(e)); created.destroyForcibly(); process = null; throw e; }
     }
   }

@@ -662,3 +662,45 @@ button.danger-solid:hover:not(:disabled) { background: #c8363b; }
 .detail-task-head .small-button { margin-top: 0; padding: 5px 10px; font-size: 12px; }
 summary.revoked { color: #a1440f; }
 .redo-note { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 12px; border-radius: 12px; background: #fff1e6; color: #8a3b0c; font-size: 14px; font-weight: 650; }
+
+/* ───────── Active lessons, LLM settings, chat quota ───────── */
+.segmented.three { grid-template-columns: repeat(3, 1fr); }
+.segmented.three .segmented-thumb { width: calc((100% - 8px) / 3); }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px rgb(16 160 103 / .18); animation: pulse 2s ease-in-out infinite; flex: none; }
+.studying-now { display: inline-flex; align-items: center; gap: 8px; margin: -4px 0 0; font-size: 13px; font-weight: 700; color: var(--success); }
+.active-lesson { display: inline-flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; font-weight: 700; color: var(--success); }
+.active-lesson .live-dot { width: 7px; height: 7px; }
+.settings-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings-page { display: grid; gap: 16px; }
+.settings-page .card > .muted { margin: 4px 0 12px; }
+.setting-rows { display: grid; gap: 4px; }
+.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); font-weight: 400; }
+.setting-row:first-child { border-top: 0; }
+.setting-row > div:first-child { display: grid; gap: 2px; }
+.setting-row b { font-size: 14.5px; }
+.effort-options { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: #e9e7df; }
+.effort-options button { position: relative; padding: 6px 12px; font-size: 13px; border-radius: 9px; background: transparent; color: var(--muted); }
+.effort-options button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.default-mark { position: absolute; top: 0; right: 4px; color: var(--brand); font-size: 14px; line-height: 1; }
+.limit-input { display: grid; justify-items: end; gap: 3px; }
+.limit-input input { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.usage-now { margin: 8px 0 0; }
+.quota-note { margin: 0; font-size: 12px; font-weight: 650; color: var(--muted); }
+.quota-note.limited { color: #a1440f; }
+@media (max-width: 800px) {
+  .setting-row { grid-template-columns: 1fr; }
+  .limit-input { justify-items: start; }
+}
+
+/* ───────── Model picker, grouped limits ───────── */
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.model-card { display: grid; justify-items: start; align-content: start; gap: 4px; padding: 14px; text-align: left; font-weight: 500; border-radius: 16px; background: var(--surface-2); border: 1.5px solid var(--line); color: var(--ink); }
+.model-card:hover:not(.active) { border-color: var(--line-strong); }
+.model-card.active { background: var(--brand-soft); border-color: var(--brand); box-shadow: 0 0 0 3px rgb(var(--brand-rgb) / .12); }
+.model-card b { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+.model-card code { font: 12px var(--font-mono); color: var(--muted); }
+.model-tag { padding: 1px 7px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); font-size: 10.5px; font-weight: 750; color: var(--muted); }
+.limits-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.limits-grid .setting-row { grid-template-columns: minmax(0, 1fr) auto; }
+@media (max-width: 1000px) { .limits-grid { grid-template-columns: 1fr; } }
+.model-tag.warn { background: #fff1e6; border-color: #f5c9a8; color: #a1440f; }

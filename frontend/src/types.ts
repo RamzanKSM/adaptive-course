@@ -17,7 +17,8 @@ export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; c
 /** Practice progress and, separately, the diagnostic result. confirmedByDiagnostic skips practice; it is not practice credit. */
 export interface SkillProgress { skillCode: string; title: string; blockNo?: number; completedIterations: number; iterationSuccesses: number; mastered: Flag; diagnosticCorrect?: number | null; diagnosticTotal?: number | null; confirmedByDiagnostic?: Flag }
 export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; activity?: string[] }
-export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag }
+export interface ActiveLesson { language: CourseLanguage; number: number; startedAt: string }
+export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; activeLessons?: ActiveLesson[] }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string; revokedAt?: string | null }
 export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; submissions: Submission[] }[] }
 export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
@@ -29,4 +30,13 @@ export interface LlmUsage {
   byLanguage: { language: CourseLanguage; calls: number; tokens: number }[]
   byStudent: { userId: Id | null; displayName: string; login?: string; calls: number; chatTurns: number; errors: number; tokens: number; lastAt: string }[]
   recentErrors: { createdAt: string; purpose: LlmPurpose; language: CourseLanguage; status: 'ERROR' | 'TIMEOUT'; error?: string; durationMs: number; displayName?: string }[]
+}
+export interface ChatQuota { hourUsed: number; hourLimit: number; dayUsed: number; dayLimit: number; retryAfterSeconds: number }
+export interface LlmLimits { chatPerHour: number; chatPerDay: number; tasksPerHour: number; explanationsPerHour: number }
+export interface LlmModel { id: string; displayName: string; description: string; efforts: string[]; defaultEffort: string; listed: boolean }
+export interface LlmSettings {
+  model: string; modelDefault: string; models: LlmModel[]
+  reasoning: { CHAT: string; TASK: string; EXPLANATION: string }; reasoningDefaults: LlmSettings['reasoning']
+  reasoningOptions: string[]; reasoningOptionsFromModel: boolean
+  limits: LlmLimits; limitDefaults: LlmLimits; usageLastHour: { tasks: number; explanations: number }
 }

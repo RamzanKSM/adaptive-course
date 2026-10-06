@@ -18,7 +18,7 @@ public class ApiController {
   private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(ApiController.class);
   /** Verification is strict (reference must pass, wrong solutions must fail), so the generator gets three tries. */
   static final int GENERATION_ATTEMPTS=3;
-  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx;
+  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings;
   /**
    * Serializes /learning/next per student and course. It replaces what the long transaction never really gave:
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
@@ -26,7 +26,7 @@ public class ApiController {
    */
   private final ConcurrentHashMap<String,Object> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
@@ -83,6 +83,7 @@ public class ApiController {
       // Generate the missing step of the easy→hard ladder; fall back to the nearest bank task when generation is impossible.
       String reason=null;
       if(!tutor.status(userId).available()) reason="NO_TASK_AVAILABLE";
+      else if(!llmSettings.taskGenerationAllowed()) { reason="LLM_RATE_LIMITED"; log.info("Task generation skipped for skill={}: course-wide task generation limit reached",skillCode); }
       else if(!codeRunner.status(lang).available()) reason="RUNNER_UNAVAILABLE";
       else {
         boolean stored=false;
@@ -138,6 +139,7 @@ public class ApiController {
   }
   private Map<String,Object> generatedExplanation(long studentId, String skillCode) {
     if(!tutor.status(studentId).available()) return null;
+    if(!llmSettings.explanationGenerationAllowed()) { log.info("Explanation generation for {} skipped: course-wide explanation limit reached",skillCode); return null; }
     return contentGenerator.generateExplanation(studentId, brief(studentId, skillCode, 1, null))
       .filter(ex -> skillCode.equals(ex.skillCode()) && ex.content()!=null && !ex.content().isBlank())
       .map(ex -> {
@@ -190,11 +192,71 @@ public class ApiController {
     });
     return ResponseEntity.ok(Map.of("id",submissionId,"passed",result.passed(),"output",result.output(),"progress",progress(u,lang))); }
   @GetMapping("/progress") public Map<String,Object> progress(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=uid(r);Language lang=Language.parse(language);return Map.of("language",lang.name(),"skills",progress(u,lang),"solvedTasks",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=?",u,lang.name()),"activity",db.queryForList("select s.created_at from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and l.language=? and s.passed=1 and s.created_at>=datetime('now','-90 days') order by s.id",String.class,u,lang.name()));}
-  @GetMapping("/chat") public Map<String,Object> chat(@RequestParam(name="language",required=false) String language,HttpServletRequest r){var l=active(uid(r),Language.parse(language));return Map.of("messages",l==null?List.of():db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",l.get("id")),"llm",llm(uid(r)));}
-  @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource),question);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u)));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
+  @GetMapping("/chat") public Map<String,Object> chat(@RequestParam(name="language",required=false) String language,HttpServletRequest r){var l=active(uid(r),Language.parse(language));return Map.of("messages",l==null?List.of():db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",l.get("id")),"llm",llm(uid(r)),"quota",llmSettings.chatQuota(uid(r)).view());}
+  @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}var quota=llmSettings.chatQuota(u);if(!quota.allowed()){log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})",u,quota.hourUsed(),quota.hourLimit(),quota.dayUsed(),quota.dayLimit());return ResponseEntity.status(429).header("Retry-After",String.valueOf(quota.retryAfterSeconds())).body(Map.of("error","LLM_RATE_LIMITED","message",rateLimitMessage(quota),"quota",quota.view()));}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource),question);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u),"quota",llmSettings.chatQuota(u).view()));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
 
   @PostMapping("/admin/students") public Map<String,Object> createStudent(@RequestBody Map<String,Object>b,HttpServletRequest r){admin(r);String login=(String)b.get("login"),password=(String)b.get("password"),name=(String)b.get("displayName");if(login==null||password==null||name==null)throw bad("INVALID_STUDENT","Нужны login, password, displayName");boolean enabled=!Boolean.FALSE.equals(b.get("llmEnabled"));if(count("select count(*) from users where login=?",login.trim())>0)throw bad("LOGIN_TAKEN","Логин «"+login.trim()+"» уже занят");validatePassword(password);db.update("insert into users(login,password_hash,role,display_name,llm_enabled) values(?,?,?,?,?)",login.trim(),passwords.encode(password),"STUDENT",name.trim(),enabled?1:0);log.info("Created student account login={}",login.trim());login=login.trim();return db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled from users where login=?",login);}
-  @GetMapping("/admin/students") public Map<String,Object> students(HttpServletRequest r){admin(r);return Map.of("students",db.queryForList("select id,login,display_name as displayName,llm_enabled as llmEnabled,created_at as createdAt from users where role='STUDENT' order by id"));}
+  /** Students with their open lessons, so the teacher sees at a glance who is studying right now. */
+  @GetMapping("/admin/students") public Map<String,Object> students(HttpServletRequest r){
+    admin(r);
+    var students=db.queryForList("select id,login,display_name as displayName,llm_enabled as llmEnabled,created_at as createdAt from users where role='STUDENT' order by id");
+    var open=db.queryForList("select user_id,language,coalesce(language_lesson_number,lesson_number) as number,started_at as startedAt from lessons where finished_at is null order by started_at");
+    for(var student:students){ var mine=new ArrayList<Map<String,Object>>(); for(var lesson:open) if(lesson.get("user_id").equals(student.get("id"))) mine.add(Map.of("language",lesson.get("language"),"number",lesson.get("number"),"startedAt",lesson.get("startedAt"))); student.put("activeLessons",mine); }
+    return Map.of("students",students);
+  }
+
+  /** Reasoning levels per purpose and LLM rate limits; options come from the model when the App Server can tell. */
+  @GetMapping("/admin/llm/settings") public Map<String,Object> llmSettings(HttpServletRequest r){ admin(r); return settingsView(); }
+  @PutMapping("/admin/llm/settings") public Map<String,Object> updateLlmSettings(@RequestBody Map<String,Object> body,HttpServletRequest r){
+    admin(r);
+    @SuppressWarnings("unchecked") Map<String,String> efforts=(Map<String,String>)body.get("reasoning");
+    Map<String,Integer> limits=null;
+    if(body.get("limits") instanceof Map<?,?> raw){ limits=new LinkedHashMap<>(); for(var e:raw.entrySet()) limits.put((String)e.getKey(),e.getValue() instanceof Number n?n.intValue():null); }
+    String model=body.get("model") instanceof String m&&!m.isBlank()?m.strip():null;
+    var models=offeredModels();
+    if(model!=null&&!model.equals(llmSettings.model())){
+      if(models.isEmpty())throw bad("MODELS_UNAVAILABLE","Список моделей сейчас недоступен — модель можно сменить, когда LLM включена и App Server отвечает");
+      if(models.stream().noneMatch(m->m.id().equals(model)))throw bad("INVALID_SETTING","Модель «"+model+"» недоступна в App Server");
+    }
+    String target=model==null?llmSettings.model():model;
+    // Reasoning levels are checked against the model they will be used with.
+    List<String> allowed=models.stream().filter(m->m.id().equals(target)).findFirst().map(ModelOption::efforts).filter(e->!e.isEmpty()).orElse(LlmSettings.FALLBACK_EFFORTS);
+    String previousModel=llmSettings.model();
+    llmSettings.update(model,efforts,limits,allowed);
+    log.info("LLM settings changed by admin {}: model={}{} reasoning={} limits={}",uid(r),llmSettings.model(),previousModel.equals(llmSettings.model())?"":" (was "+previousModel+")",llmSettings.efforts(),llmSettings.limits());
+    return settingsView();
+  }
+  private List<String> effortOptions(){ var fromModel=tutor.supportedReasoningEfforts(); return fromModel==null||fromModel.isEmpty()?LlmSettings.FALLBACK_EFFORTS:fromModel; }
+  private Map<String,Object> settingsView(){
+    var fromModel=tutor.supportedReasoningEfforts();
+    var models=offeredModels();
+    return obj("model",llmSettings.model(),"modelDefault",llmSettings.defaultModel(),"models",models.stream().map(ModelOption::view).toList(),"reasoning",llmSettings.efforts(),"reasoningDefaults",llmSettings.defaultEfforts(),"reasoningOptions",effortOptions(),"reasoningOptionsFromModel",fromModel!=null&&!fromModel.isEmpty(),
+        "limits",llmSettings.limits(),"limitDefaults",llmSettings.defaultLimits(),"usageLastHour",Map.of("tasks",llmSettings.tasksLastHour(),"explanations",llmSettings.explanationsLastHour()));
+  }
+  /**
+   * The App Server's own list, plus configured extra models it did not report (safe reasoning levels, marked as
+   * unconfirmed), plus the current model so it is always visible.
+   */
+  private List<ModelOption> offeredModels(){
+    var listed=tutor.availableModels()==null?List.<ModelOption>of():tutor.availableModels();
+    var all=new ArrayList<>(listed);
+    var extras=new ArrayList<>(llmSettings.extraModels()); if(!extras.contains(llmSettings.model()))extras.add(llmSettings.model());
+    for(String id:extras) if(all.stream().noneMatch(m->m.id().equals(id)))
+      all.add(new ModelOption(id,prettyModelName(id),"",LlmSettings.FALLBACK_EFFORTS,"medium",false));
+    return all;
+  }
+  /** gpt-5.6-terra → GPT-5.6-Terra, the way the App Server names its models. */
+  static String prettyModelName(String id){
+    var parts=new ArrayList<String>();
+    for(String part:id.split("-")) parts.add(part.equalsIgnoreCase("gpt")?"GPT":part.isEmpty()?part:Character.toUpperCase(part.charAt(0))+part.substring(1));
+    return String.join("-",parts);
+  }
+  private static String rateLimitMessage(LlmSettings.ChatQuota q){
+    long minutes=Math.max(1,(q.retryAfterSeconds()+59)/60);
+    String wait=minutes<60?minutes+" мин.":(minutes+59)/60+" ч.";
+    String which=q.hourLimit()>0&&q.hourUsed()>=q.hourLimit()?q.hourLimit()+" в час":q.dayLimit()+" в сутки";
+    return "Лимит сообщений помощнику — "+which+". Следующее сообщение можно отправить через "+wait;
+  }
   @PatchMapping("/admin/llm") public Map<String,Object> globalLlm(@RequestBody Map<String,Boolean>b,HttpServletRequest r){admin(r);db.update("update app_settings set value=? where key='llm_enabled'",Boolean.TRUE.equals(b.get("enabled"))?"true":"false");return Map.of("enabled",Boolean.TRUE.equals(b.get("enabled")));}
   @PatchMapping("/admin/students/{id}/llm") public Map<String,Object> studentLlm(@PathVariable long id,@RequestBody Map<String,Boolean>b,HttpServletRequest r){admin(r);db.update("update users set llm_enabled=? where id=? and role='STUDENT'",Boolean.TRUE.equals(b.get("enabled"))?1:0,id);return Map.of("id",id,"enabled",Boolean.TRUE.equals(b.get("enabled")));}
   /** Sets a new password and signs the student out everywhere, so an old password cannot keep a session alive. */

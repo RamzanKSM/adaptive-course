@@ -26,12 +26,13 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
   private final LearningContentGenerator generator;
   private final TaskVerifier verifier;
   private final PistonCodeRunner runner;
+  private final LlmSettings limits;
   private final boolean enabled;
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("task-audit").factory());
 
-  TaskAudit(JdbcTemplate db, LearningContentGenerator generator, TaskVerifier verifier, PistonCodeRunner runner,
+  TaskAudit(JdbcTemplate db, LearningContentGenerator generator, TaskVerifier verifier, PistonCodeRunner runner, LlmSettings limits,
             @Value("${app.task-audit.enabled:true}") boolean enabled) {
-    this.db = db; this.generator = generator; this.verifier = verifier; this.runner = runner; this.enabled = enabled;
+    this.db = db; this.generator = generator; this.verifier = verifier; this.runner = runner; this.limits = limits; this.enabled = enabled;
   }
 
   @Override public void run(ApplicationArguments args) {
@@ -52,6 +53,7 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
     for (var row : pending) {
       Language language = Language.of(row.get("language"));
       if (!runner.status(language).available()) { log.info("Task re-verification paused: {} runtime is unavailable", language); break; }
+      if (!limits.taskGenerationAllowed()) { log.info("Task re-verification paused: course-wide task generation limit reached"); break; }
       long id = ((Number) row.get("id")).longValue();
       try {
         if (repair(id, row, language)) repaired++;

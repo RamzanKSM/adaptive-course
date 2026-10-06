@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class LearningFlowIntegrationTest {
-  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit;
+  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit; @Autowired LlmSettings llmSettings;
   @MockBean PistonCodeRunner runner;
   @MockBean LlmTutor tutor;
   @MockBean LearningContentGenerator generator;
@@ -404,7 +404,117 @@ class LearningFlowIntegrationTest {
     mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student+1000,lessonId).cookie(cookie(admin))).andExpect(status().isBadRequest());
     assertTrue(json.readTree(mvc.perform(get("/api/lessons/current").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("lesson").isNull());
   }
+  private static com.fasterxml.jackson.databind.JsonNode findModel(com.fasterxml.jackson.databind.JsonNode settings,String id){for(var m:settings.path("models"))if(id.equals(m.path("id").asText()))return m;return null;}
   private static com.fasterxml.jackson.databind.JsonNode findTask(com.fasterxml.jackson.databind.JsonNode detail,long id){for(var t:detail.path("tasks"))if(t.path("id").asLong()==id)return t;throw new AssertionError(id);}
+
+  @Test void adminSeesWhoHasAnOpenLesson() throws Exception {
+    String token=createStudentAndLogin("active-list"); long student=studentId("active-list"); submitDiagnostic(token,student,false); start(token);
+    createStudentAndLogin("idle-list");
+    var list=json.readTree(mvc.perform(get("/api/admin/students").cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    for(var s:list.path("students")){
+      if("active-list".equals(s.path("login").asText())){ assertEquals(1,s.path("activeLessons").size()); assertEquals("JAVA",s.path("activeLessons").path(0).path("language").asText()); assertEquals(1,s.path("activeLessons").path(0).path("number").asInt()); }
+      if("idle-list".equals(s.path("login").asText())) assertEquals(0,s.path("activeLessons").size());
+    }
+  }
+
+  @Test void adminChangesReasoningAndLimitsWithValidation() throws Exception {
+    String admin=login("admin","admin-pass");
+    var settings=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("low",settings.path("reasoning").path("CHAT").asText()); assertEquals("high",settings.path("reasoning").path("TASK").asText());
+    assertFalse(settings.path("reasoningOptionsFromModel").asBoolean()); assertEquals(3,settings.path("reasoningOptions").size(),"fallback when the model list is unavailable");
+    var saved=json.readTree(mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON)
+        .content("{\"reasoning\":{\"CHAT\":\"medium\",\"TASK\":\"medium\"},\"limits\":{\"chatPerHour\":5,\"tasksPerHour\":0}}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("medium",saved.path("reasoning").path("CHAT").asText()); assertEquals(5,saved.path("limits").path("chatPerHour").asInt()); assertEquals(0,saved.path("limits").path("tasksPerHour").asInt());
+    assertEquals("medium",llmSettings.effort("TASK_REPAIR"),"repairs follow the task generation level");
+    mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"reasoning\":{\"CHAT\":\"ultra\"},\"limits\":{\"chatPerHour\":7}}")).andExpect(status().isBadRequest());
+    mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"limits\":{\"chatPerDay\":-1}}")).andExpect(status().isBadRequest());
+    assertEquals(5,llmSettings.limit("chatPerHour"),"an invalid request changes nothing");
+    when(tutor.availableModels()).thenReturn(List.of(new ModelOption("gpt-6-luna","Luna","",List.of("minimal","low","medium","high","xhigh"),"medium")));
+    mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"reasoning\":{\"TASK\":\"xhigh\"}}")).andExpect(status().isOk());
+    assertEquals("xhigh",llmSettings.effort("TASK"),"levels advertised by the model are accepted");
+    mvc.perform(get("/api/admin/llm/settings").cookie(cookie(createStudentAndLogin("settings-nosy")))).andExpect(status().isBadRequest());
+    db.update("delete from app_settings where key like 'llm_effort_%' or key like 'llm_limit_%'");
+  }
+
+  @Test void chatIsRateLimitedPerStudent() throws Exception {
+    String token=createStudentAndLogin("chatty"); long student=studentId("chatty"); submitDiagnostic(token,student,false); start(token);
+    when(tutor.reply(anyLong(),any(TutorContext.class),anyString())).thenReturn("Подумай о первой строке.");
+    db.update("insert into app_settings(key,value) values('llm_limit_chatPerHour','2') on conflict(key) do update set value=excluded.value");
+    try {
+      var ok=json.readTree(mvc.perform(post("/api/chat").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"Вопрос\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals(2,ok.path("quota").path("hourLimit").asInt());
+      db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms,created_at) values(?, 'CHAT','JAVA','OK',100,datetime('now','-50 minutes')),(?, 'CHAT','JAVA','OK',100,datetime('now','-10 minutes'))",student,student);
+      int messagesBefore=db.queryForObject("select count(*) from chat_messages",Integer.class);
+      var limited=mvc.perform(post("/api/chat").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"Ещё вопрос\"}")).andExpect(status().isTooManyRequests()).andReturn().getResponse();
+      var body=json.readTree(limited.getContentAsString());
+      assertEquals("LLM_RATE_LIMITED",body.path("error").asText()); assertTrue(body.path("message").asText().contains("2 в час"));
+      long retry=Long.parseLong(limited.getHeader("Retry-After"));
+      assertTrue(retry>=9*60&&retry<=11*60,"the second-newest call leaves the hour window in ~10 minutes: "+retry);
+      assertEquals(messagesBefore,db.queryForObject("select count(*) from chat_messages",Integer.class),"a rejected question is not stored");
+      verify(tutor,times(1)).reply(anyLong(),any(TutorContext.class),anyString());
+      var quota=json.readTree(mvc.perform(get("/api/chat").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("quota");
+      assertEquals(2,quota.path("hourUsed").asInt()); assertTrue(quota.path("retryAfterSeconds").asLong()>0);
+      db.update("update app_settings set value='0' where key='llm_limit_chatPerHour'");
+      mvc.perform(post("/api/chat").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"Без лимита\"}")).andExpect(status().isOk());
+    } finally { db.update("delete from app_settings where key like 'llm_limit_%'"); }
+  }
+
+  @Test void taskAndExplanationLimitsAreSeparateFromEachOtherAndFromChat() throws Exception {
+    String token=createStudentAndLogin("gen-limited"); long student=studentId("gen-limited"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"THROWS_BASIC"); // a topic no other test creates tasks for
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),brief("THROWS_BASIC"))).thenReturn(Optional.empty());
+    db.update("insert into app_settings(key,value) values('llm_limit_tasksPerHour','1'),('llm_limit_explanationsPerHour','1'),('llm_limit_chatPerHour','1') on conflict(key) do update set value=excluded.value");
+    try {
+      db.update("delete from llm_calls"); // other tests leave usage rows in the shared database
+      // Heavy chat use and an explanation do not touch the task budget.
+      db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms) values(?, 'CHAT','JAVA','OK',100),(?, 'CHAT','JAVA','OK',100),(null,'EXPLANATION','JAVA','OK',100)",student,student);
+      assertTrue(llmSettings.taskGenerationAllowed()); assertFalse(llmSettings.explanationGenerationAllowed()); assertFalse(llmSettings.chatQuota(student).allowed());
+      start(token);
+      json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      verify(generator,never()).generateExplanation(anyLong(),any());
+      verify(generator,atLeastOnce()).generateTask(eq(student),brief("THROWS_BASIC"));
+      // A generated task (or a repair) uses the task budget; the next task is then refused.
+      db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms) values(null,'TASK_REPAIR','JAVA','OK',100)");
+      assertFalse(llmSettings.taskGenerationAllowed());
+      db.update("delete from lesson_tasks where lesson_id in (select id from lessons where user_id=?)",student);
+      db.update("update tasks set active=0 where skill_code='THROWS_BASIC'");
+      var limited=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals("LLM_RATE_LIMITED",limited.path("reason").asText());
+    } finally { db.update("delete from app_settings where key like 'llm_limit_%'"); db.update("delete from llm_calls"); }
+  }
+
+
+  @Test void adminSwitchesTheModelAndLevelsFollowIt() throws Exception {
+    String admin=login("admin","admin-pass");
+    try {
+      // App Server unavailable: no list, so the model cannot be changed (keeping the current one is fine).
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"other-model\"}")).andExpect(status().isBadRequest());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-6-luna\"}")).andExpect(status().isOk());
+      // Terra is offered even without the App Server list, with safe levels, marked as unconfirmed.
+      var offline=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
+      var terra=findModel(offline,"gpt-5.6-terra");
+      assertEquals("GPT-5.6-Terra",terra.path("displayName").asText()); assertFalse(terra.path("listed").asBoolean()); assertEquals(3,terra.path("efforts").size());
+      assertNotNull(findModel(offline,"gpt-6-luna"),"the current model is always shown");
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-5.6-terra\",\"reasoning\":{\"TASK\":\"high\"}}")).andExpect(status().isOk());
+      assertEquals("gpt-5.6-terra",llmSettings.model());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-5.6-terra\",\"reasoning\":{\"TASK\":\"ultra\"}}")).andExpect(status().isBadRequest());
+      // When the App Server lists Terra, its own levels apply and it appears once.
+      when(tutor.availableModels()).thenReturn(List.of(new ModelOption("gpt-5.6-terra","GPT-5.6-Terra","",List.of("low","medium","high","xhigh","max","ultra"),"medium")));
+      var listed=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
+      assertEquals(1,java.util.stream.StreamSupport.stream(listed.path("models").spliterator(),false).filter(m->"gpt-5.6-terra".equals(m.path("id").asText())).count());
+      assertTrue(findModel(listed,"gpt-5.6-terra").path("listed").asBoolean());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"reasoning\":{\"TASK\":\"ultra\"}}")).andExpect(status().isOk());
+      db.update("delete from app_settings where key like 'llm_%' and key<>'llm_enabled'");
+      when(tutor.availableModels()).thenReturn(List.of(new ModelOption("gpt-6-luna","Luna","",List.of("low","medium","high"),"medium"),new ModelOption("gpt-6-sol","Sol","",List.of("minimal","low","medium","high","xhigh"),"high")));
+      var view=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals("gpt-6-luna",view.path("model").asText()); assertEquals(3,view.path("models").size(),"two listed models plus the configured Terra"); assertEquals("high",view.path("models").path(1).path("defaultEffort").asText());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-unknown\"}")).andExpect(status().isBadRequest());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-6-luna\",\"reasoning\":{\"TASK\":\"xhigh\"}}")).andExpect(status().isBadRequest());
+      var saved=json.readTree(mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-6-sol\",\"reasoning\":{\"TASK\":\"xhigh\"}}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals("gpt-6-sol",saved.path("model").asText()); assertEquals("xhigh",saved.path("reasoning").path("TASK").asText(),"levels are validated against the newly chosen model");
+      assertEquals("gpt-6-sol",llmSettings.model()); assertEquals("gpt-6-luna",saved.path("modelDefault").asText());
+    } finally { db.update("delete from app_settings where key like 'llm_%' and key<>'llm_enabled'"); }
+  }
 
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
 

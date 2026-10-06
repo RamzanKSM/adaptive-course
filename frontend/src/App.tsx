@@ -7,7 +7,8 @@ import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './
 import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
-import type { Attempt, ChatMessage, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
+import { LlmSettingsView } from './settings'
+import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
 
 const UNKNOWN = 'Не знаю'
 const fmt = (value?: string | null) => {
@@ -388,10 +389,11 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
   </section>
   const finished = lesson.reason === 'NO_DUE_SKILL' || lesson.reason === 'COURSE_COMPLETE'
   const title = lesson.skill?.title ?? (lesson.reason === 'COURSE_COMPLETE' ? 'Все темы курса закрыты' : lesson.reason === 'NO_DUE_SKILL' ? 'На сегодня задач больше нет' : 'Текущий урок')
-  const retryable = lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' || lesson.reason === 'RUNNER_UNAVAILABLE'
+  const retryable = lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' || lesson.reason === 'RUNNER_UNAVAILABLE' || lesson.reason === 'LLM_RATE_LIMITED'
   const emptyMessage = lesson.reason === 'NO_TASK_AVAILABLE' ? 'Подходящей задачи в банке пока нет. Преподаватель увидит это состояние.'
     : lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' ? 'Новая задача не прошла проверку. Попробуй запросить её ещё раз.'
       : lesson.reason === 'RUNNER_UNAVAILABLE' ? `Проверка ${course.title} сейчас недоступна. Попробуй ещё раз позже.`
+        : lesson.reason === 'LLM_RATE_LIMITED' ? 'Новые задачи сейчас создаются слишком часто — сработал лимит курса. Попробуй через несколько минут или спроси преподавателя.'
         : lesson.reason === 'COURSE_COMPLETE' ? 'Каждая тема освоена практикой или подтверждена диагностикой — задач для обязательной практики не осталось.'
           : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены — отличная работа! Повторения запланированы на следующие уроки.' : 'Контент урока загружается.'
   return <section className="lesson">
@@ -481,18 +483,25 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
   </section>
 }
 
-type ChatState = { messages: ChatMessage[]; llm: LlmStatus }
+type ChatState = { messages: ChatMessage[]; llm: LlmStatus; quota?: ChatQuota }
 
 function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [text, setText] = useState(''); const [status, setStatus] = useState<LlmStatus | undefined>(llm); const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const course = useCourse()
+  const [quota, setQuota] = useState<ChatQuota | undefined>()
   const sync = useCallback(async () => {
     const value = await request(() => api<ChatState>(withCourse('/chat', course.id)))
-    if (value) { setMessages(value.messages); setStatus(value.llm) }
+    if (value) { setMessages(value.messages); setStatus(value.llm); setQuota(value.quota) }
     return value
   }, [request, course.id])
   useEffect(() => { sync() }, [sync])
+  // When the limit is reached, check again as soon as the oldest counted message leaves the window.
+  useEffect(() => {
+    if (!quota?.retryAfterSeconds) return
+    const timer = setTimeout(() => { sync() }, Math.min(quota.retryAfterSeconds, 3600) * 1000 + 1000)
+    return () => clearTimeout(timer)
+  }, [quota?.retryAfterSeconds, sync])
   useEffect(() => { const list = listRef.current; if (list) list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' }) }, [messages, sending])
   async function send(e?: FormEvent) {
     e?.preventDefault()
@@ -500,9 +509,9 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
     setSending(true)
     setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'STUDENT', content, createdAt: new Date().toISOString() }]); setText('')
     const body = taskId !== undefined ? { content, taskId, sourceCode } : { content }
-    const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus }>(withCourse('/chat', course.id), body))
+    const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus; quota?: ChatQuota }>(withCourse('/chat', course.id), body))
     if (result) {
-      setMessages(m => [...m, result.message]); if (result.llm) setStatus(result.llm)
+      setMessages(m => [...m, result.message]); if (result.llm) setStatus(result.llm); if (result.quota) setQuota(result.quota)
     } else {
       // The server may or may not have stored the question; resync and give the text back if it was lost.
       const synced = await sync()
@@ -513,6 +522,8 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
   }
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() }
   const unavailable = status && !status.available ? humanize(status.reason) || 'Помощник временно недоступен.' : ''
+  const limited = !!quota?.retryAfterSeconds
+  const left = quota?.hourLimit ? Math.max(0, quota.hourLimit - quota.hourUsed) : null
   return <aside className="card chat">
     <div className="chat-head">
       <span className="bot-avatar" aria-hidden="true"><Icon name="sparkle" size={18} /></span>
@@ -526,9 +537,11 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
     {unavailable ? <p className="muted small chat-off">{unavailable}</p> : <form onSubmit={send} className="composer">
       {taskId !== undefined && <p className="chat-code-note"><Icon name="code" size={13} /> Помощник видит текущий код из редактора</p>}
       <div className="composer-row">
-        <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} placeholder="Опиши, где возникло затруднение…" aria-label="Ваш вопрос учебному помощнику" rows={2} />
-        <button className="primary icon-only" disabled={sending || !text.trim()} aria-label="Отправить" title="Отправить (Ctrl+Enter)">{sending ? <Spinner /> : <Icon name="send" />}</button>
+        <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} placeholder={limited ? 'Лимит сообщений исчерпан' : 'Опиши, где возникло затруднение…'} aria-label="Ваш вопрос учебному помощнику" rows={2} disabled={limited} />
+        <button className="primary icon-only" disabled={sending || !text.trim() || limited} aria-label="Отправить" title="Отправить (Ctrl+Enter)">{sending ? <Spinner /> : <Icon name="send" />}</button>
       </div>
+      {limited ? <p className="quota-note limited">Лимит сообщений помощнику исчерпан. Снова можно через {Math.max(1, Math.ceil(quota!.retryAfterSeconds / 60))} мин. — а пока перечитай объяснение или спроси преподавателя.</p>
+        : left !== null && left <= 5 && <p className="quota-note">Осталось сообщений в этот час: {left} из {quota!.hourLimit}</p>}
     </form>}
   </aside>
 }
@@ -606,13 +619,19 @@ function TeacherPage({ request }: { request: Request }) {
   const [students, setStudents] = useState<Student[] | null>(null); const [selected, setSelected] = useState<Student | null>(null)
   const [globalLlm, setGlobalLlm] = useState<LlmStatus | null>(null)
   const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [creating, setCreating] = useState(false)
-  const [view, setView] = useState<'students' | 'llm'>('students')
+  const [view, setView] = useState<'students' | 'llm' | 'settings'>('students')
   const toast = useToast()
   const load = useCallback(() => request(() => api<{ students: Student[] }>('/admin/students')).then(s => { if (s) setStudents(s.students) }), [request])
   useEffect(() => {
     load()
     request(() => api<MeResponse>('/auth/me')).then(value => { if (value) setGlobalLlm(value.llm) })
   }, [load, request])
+  // Keeps «урок идёт» current while the teacher has the list open.
+  useEffect(() => {
+    if (view !== 'students') return
+    const timer = setInterval(() => { api<{ students: Student[] }>('/admin/students').then(s => setStudents(s.students)).catch(() => {}) }, 60_000)
+    return () => clearInterval(timer)
+  }, [view])
   async function create(e: FormEvent) {
     e.preventDefault(); setCreating(true)
     const student = await request(() => post<Student>('/admin/students', { displayName: name.trim(), login: login.trim(), password }))
@@ -632,17 +651,21 @@ function TeacherPage({ request }: { request: Request }) {
   }
   const onLlmStatus = useCallback((llm: LlmStatus) => setGlobalLlm(current => current ? { ...current, globallyEnabled: llm.globallyEnabled } : current), [])
   const configDisabled = globalLlm?.reason === 'DISABLED_BY_CONFIGURATION'
-  const tabs = <nav className="segmented admin-tabs" role="tablist" style={{ '--active': view === 'students' ? 0 : 1 } as CSSProperties}>
+  const tabs = <nav className="segmented admin-tabs three" role="tablist" style={{ '--active': ['students', 'llm', 'settings'].indexOf(view) } as CSSProperties}>
     <span className="segmented-thumb" aria-hidden="true" />
     <button role="tab" aria-selected={view === 'students'} className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}><Icon name="user" size={16} /> Студенты</button>
     <button role="tab" aria-selected={view === 'llm'} className={view === 'llm' ? 'active' : ''} onClick={() => setView('llm')}><Icon name="chart" size={16} /> Аналитика LLM</button>
+    <button role="tab" aria-selected={view === 'settings'} className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}><Icon name="sparkle" size={16} /> Настройки LLM</button>
   </nav>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
+  if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
+  const studying = students?.filter(s => s.activeLessons?.length).length ?? 0
   return <>{tabs}<section className="admin">
     <div className="admin-main">
       <div className="enter">
         <p className="eyebrow">Преподаватель</p>
         <h1 className="display small">Студенты{students && <span className="count-badge">{students.length}</span>}</h1>
+        {studying > 0 && <p className="studying-now"><span className="live-dot" aria-hidden="true" />Сейчас занимаются: {studying}</p>}
       </div>
       <div className="card setting enter">
         <span className="chip-icon"><Icon name="sparkle" size={18} /></span>
@@ -662,7 +685,8 @@ function TeacherPage({ request }: { request: Request }) {
       <div className="student-list enter">{!students ? <p className="muted list-note">Загружаем…</p> : students.length
         ? students.map((s, i) => <button key={s.id} className={selected?.id === s.id ? 'student selected' : 'student'} aria-pressed={selected?.id === s.id} onClick={() => setSelected(s)} style={{ animationDelay: `${i * 30}ms` }}>
           <span className="avatar" aria-hidden="true">{initials(s.displayName)}</span>
-          <span className="student-meta"><b>{s.displayName}</b><small>{s.login}</small></span>
+          <span className="student-meta"><b>{s.displayName}</b><small>{s.login}</small>
+            {s.activeLessons?.map(l => <ActiveLessonBadge key={l.language} lesson={l} />)}</span>
           <i className={s.llmEnabled ? 'pill on' : 'pill'}>LLM</i>
         </button>)
         : <p className="muted list-note">Студентов пока нет. Создай первую учётную запись выше.</p>}</div>
@@ -719,6 +743,13 @@ function DiagnosticSummary({ skills }: { skills: SkillProgress[] }) {
     <span className="small"><b>Диагностика:</b> подтверждено {confirmed} из {taken.length} тем{gaps.length ? `, пробелов — ${gaps.length}` : ', пробелов нет'}</span>
     {gaps.length > 0 && <div className="gap-chips">{gaps.slice(0, 8).map(g => <span key={g.skillCode} className="diag-chip gap" title={`диагностика ${g.diagnosticCorrect ?? 0}/${g.diagnosticTotal}`}>{g.title} {g.diagnosticCorrect ?? 0}/{g.diagnosticTotal}</span>)}{gaps.length > 8 && <span className="muted small">и ещё {gaps.length - 8}</span>}</div>}
   </div>
+}
+
+/** «урок идёт · Java, 12 мин» — the open lesson and how long it has been going. */
+function ActiveLessonBadge({ lesson }: { lesson: ActiveLesson }) {
+  const minutes = Math.max(0, Math.round((Date.now() - parseDate(lesson.startedAt).getTime()) / 60_000))
+  const since = minutes < 60 ? `${minutes} мин` : minutes < 24 * 60 ? `${Math.floor(minutes / 60)} ч ${minutes % 60} мин` : `${Math.floor(minutes / (24 * 60))} дн`
+  return <span className="active-lesson" title={`Урок ${lesson.number} начат ${fmt(lesson.startedAt)}`}><span className="live-dot" aria-hidden="true" />урок идёт · {COURSES[lesson.language].title}, {since}</span>
 }
 
 function Switch({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: () => void; label: string }) {
