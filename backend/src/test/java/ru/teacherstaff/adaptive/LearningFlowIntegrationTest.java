@@ -348,6 +348,64 @@ class LearningFlowIntegrationTest {
     createStudentAndLogin("gone-student");
   }
 
+  @Test void revokedCreditRecalculatesProgressAndTheTaskComesBackFirst() throws Exception {
+    String token=createStudentAndLogin("revoke-student"); long student=studentId("revoke-student"); submitDiagnostic(token,student,false);
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,iteration_successes,mastered) select ?,code,3,0,1 from skills where code<>'BASIC_CODE_READING' and language='JAVA'",student);
+    int lesson1=start(token); solveThree(token); assertProgress(student,1,0,0);
+    long lessonId=db.queryForObject("select id from lessons where user_id=? and lesson_number=?",Long.class,student,lesson1);
+    long task=db.queryForObject("select task_id from lesson_tasks where lesson_id=? order by rowid limit 1",Long.class,lessonId);
+    finish(token,lesson1);
+    String admin=login("admin","admin-pass");
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/tasks/{t}/revoke",student,lessonId,task).cookie(cookie(token))).andExpect(status().isBadRequest());
+    var revoked=json.readTree(mvc.perform(post("/api/admin/students/{id}/lessons/{l}/tasks/{t}/revoke",student,lessonId,task).cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(1,revoked.path("revokedSubmissions").asInt()); assertFalse(revoked.path("redoInOpenLesson").asBoolean());
+    // The completed iteration loses one of its three tasks: progress is recomputed with the normal rules.
+    assertProgress(student,0,0,2);
+    assertEquals(0,db.queryForObject("select count(*) from skill_iterations where user_id=?",Integer.class,student));
+    assertEquals(0,db.queryForObject("select count(*) from successful_task_credit where user_id=? and task_id=?",Integer.class,student,task));
+    var detail=json.readTree(mvc.perform(get("/api/admin/students/{id}/lessons/{l}",student,lessonId).cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
+    var submission=findTask(detail,task).path("submissions").path(0);
+    assertEquals(0,submission.path("passed").asInt()); assertFalse(submission.path("revokedAt").isNull(),"history keeps the solution, marked revoked");
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/tasks/{t}/revoke",student,lessonId,task).cookie(cookie(admin))).andExpect(status().isBadRequest());
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(task,next.path("task").path("id").asLong(),"the revoked task is assigned before new work");
+    assertTrue(next.path("task").path("redo").asBoolean());
+    assertEquals(0,db.queryForObject("select count(*) from pending_redos where user_id=?",Integer.class,student));
+    mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());
+    assertEquals(1,db.queryForObject("select count(*) from successful_task_credit where user_id=? and task_id=?",Integer.class,student,task),"solving it again earns the credit back");
+  }
+
+  @Test void revokingInsideTheOpenLessonMakesTheTaskUnsolvedAgain() throws Exception {
+    String token=createStudentAndLogin("revoke-open"); long student=studentId("revoke-open"); submitDiagnostic(token,student,false); start(token);
+    long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
+    mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());
+    long lessonId=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    var revoked=json.readTree(mvc.perform(post("/api/admin/students/{id}/lessons/{l}/tasks/{t}/revoke",student,lessonId,task).cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertTrue(revoked.path("redoInOpenLesson").asBoolean());
+    assertEquals(0,db.queryForObject("select count(*) from pending_redos where user_id=?",Integer.class,student));
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString());
+    assertEquals(task,next.path("task").path("id").asLong()); assertTrue(next.path("task").path("redo").asBoolean());
+    // The lesson ends before the student redoes it: the task must still come back first.
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student,lessonId).cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk());
+    assertEquals(1,db.queryForObject("select count(*) from pending_redos where user_id=? and task_id=?",Integer.class,student,task));
+    start(token);
+    assertEquals(task,json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong());
+  }
+
+  @Test void adminFinishesAnyStudentsOpenLesson() throws Exception {
+    String token=createStudentAndLogin("finish-by-admin"); long student=studentId("finish-by-admin"); submitDiagnostic(token,student,false); start(token);
+    long lessonId=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student,lessonId).cookie(cookie(token))).andExpect(status().isBadRequest());
+    String admin=login("admin","admin-pass");
+    var finished=json.readTree(mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student,lessonId).cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertFalse(finished.path("lesson").path("finishedAt").isNull());
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student,lessonId).cookie(cookie(admin))).andExpect(status().isBadRequest());
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student+1000,lessonId).cookie(cookie(admin))).andExpect(status().isBadRequest());
+    assertTrue(json.readTree(mvc.perform(get("/api/lessons/current").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("lesson").isNull());
+  }
+  private static com.fasterxml.jackson.databind.JsonNode findTask(com.fasterxml.jackson.databind.JsonNode detail,long id){for(var t:detail.path("tasks"))if(t.path("id").asLong()==id)return t;throw new AssertionError(id);}
+
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
 
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }

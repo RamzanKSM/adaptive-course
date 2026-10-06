@@ -50,7 +50,7 @@ public class ApiController {
 
   @GetMapping("/lessons/current") public Map<String,Object> current(@RequestParam(name="language",required=false) String language,HttpServletRequest r){return obj("lesson",active(uid(r),Language.parse(language)));}
   @PostMapping("/lessons/start") public Map<String,Object> start(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);requireDiagnostic(u,lang);var current=active(u,lang);if(current!=null)return Map.of("lesson",current);int n=count("select coalesce(max(lesson_number),0) from lessons where user_id=?",u)+1;int inLanguage=count("select count(*) from lessons where user_id=? and language=?",u,lang.name())+1;db.update("insert into lessons(user_id,lesson_number,language,language_lesson_number) values(?,?,?,?)",u,n,lang.name(),inLanguage);return Map.of("lesson",active(u,lang));}
-  @PostMapping("/lessons/{id}/finish") public Map<String,Object> finish(@PathVariable long id,HttpServletRequest r){long u=student(r);if(db.update("update lessons set finished_at=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),id,u)==0)throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");return Map.of("lesson",lesson(id));}
+  @PostMapping("/lessons/{id}/finish") public Map<String,Object> finish(@PathVariable long id,HttpServletRequest r){long u=student(r);if(db.update("update lessons set finished_at=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),id,u)==0)throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");queueUnsolvedRedos(u,id);return Map.of("lesson",lesson(id));}
   /**
    * Not @Transactional on purpose: this request may wait for the LLM (explanation, task generation) and Piston
    * (verification) for tens of seconds. Holding a SQLite transaction that long blocked every other writer and ended in
@@ -65,6 +65,13 @@ public class ApiController {
     if(lesson==null) throw bad("NO_ACTIVE_LESSON","Сначала начните урок");
     var assigned=unsolvedTask(lesson);
     if(assigned!=null) return learningResponse(userId,lesson,assigned);
+    var redo=pendingRedo(userId,lang);
+    if(redo!=null){
+      db.update("insert or ignore into lesson_tasks(lesson_id,task_id) values(?,?)",lesson.get("id"),redo.get("id"));
+      db.update("delete from pending_redos where user_id=? and task_id=?",userId,redo.get("id"));
+      log.info("Re-assigned revoked task {} to lesson {} of student {}",redo.get("id"),lesson.get("id"),userId);
+      return learningResponse(userId,lesson,redo);
+    }
     var skill=nextSkill(userId,lang,((Number)lesson.get("number")).intValue(),((Number)lesson.get("id")).longValue());
     if(skill==null) return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason",remainingTopics(userId,lang)==0?"COURSE_COMPLETE":"NO_DUE_SKILL","llm",llm(userId));
     String skillCode=(String)skill.get("code");
@@ -97,11 +104,18 @@ public class ApiController {
           : obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason==null?"NO_TASK_AVAILABLE":reason,"llm",llm(userId));
     }
     var task=tasks.getFirst(); db.update("insert into lesson_tasks(lesson_id,task_id) values(?,?)",lesson.get("id"),task.get("id"));
-    return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(task));
+    return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(userId,task));
   }
   private Map<String,Object> unsolvedTask(Map<String,Object> lesson) { var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,ts.skill_code, s.title as skill_title,s.block_no from lesson_tasks lt join tasks t on t.id=lt.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where lt.lesson_id=? and t.active=1 and not exists(select 1 from submissions x where x.lesson_id=lt.lesson_id and x.task_id=lt.task_id and x.passed=1) order by lt.rowid desc limit 1",lesson.get("id"));return rows.isEmpty()?null:rows.getFirst(); }
-  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation=explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(task)); }
-  private Map<String,Object> taskView(Map<String,Object> task) { return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code")); }
+  /** The oldest task the teacher sent back that is still active; retired ones are dropped from the queue. */
+  private Map<String,Object> pendingRedo(long userId,Language lang){
+    db.update("delete from pending_redos where user_id=? and task_id in (select id from tasks where active=0)",userId);
+    var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,ts.skill_code,s.title as skill_title,s.block_no from pending_redos p join tasks t on t.id=p.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where p.user_id=? and t.language=? order by p.created_at,p.task_id limit 1",userId,lang.name());
+    return rows.isEmpty()?null:rows.getFirst();
+  }
+  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation=explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(userId,task)); }
+  /** redo: the teacher cancelled this student's accepted solution, so the task is being solved again. */
+  private Map<String,Object> taskView(long userId,Map<String,Object> task) { boolean redo=count("select count(*) from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and s.task_id=? and s.revoked_at is not null",userId,task.get("id"))>0; return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code"),"redo",redo); }
   /** Unsolved bank tasks for the skill, the requested difficulty first, then the nearest one, legacy tasks without difficulty last. */
   private List<Map<String,Object>> availableTasks(long userId,Map<String,Object> lesson,String skillCode,int difficulty) {
     return db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.difficulty from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1)) order by t.difficulty is null, abs(t.difficulty-?), t.difficulty, t.id",skillCode,userId,lesson.get("id"),userId,difficulty);
@@ -208,7 +222,8 @@ public class ApiController {
     db.update("delete from lesson_tasks where lesson_id in "+lessons,id);
     db.update("delete from skill_iterations where user_id=? or lesson_id in "+lessons,id,id);
     int lessonCount=db.update("delete from lessons where user_id=?",id);
-    for(String table:List.of("successful_task_credit","student_skills","diagnostic_answers","diagnostic_skill_results","student_languages","sessions"))
+    db.update("update submissions set revoked_by=null where revoked_by=?",id);
+    for(String table:List.of("pending_redos","successful_task_credit","student_skills","diagnostic_answers","diagnostic_skill_results","student_languages","sessions"))
       db.update("delete from "+table+" where user_id=?",id);
     int llmCalls=db.update("update llm_calls set user_id=null where user_id=?",id);
     db.update("delete from users where id=?",id);
@@ -233,7 +248,54 @@ public class ApiController {
   }
   @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled from users where id=? and role='STUDENT'",id);var byLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values())byLanguage.put(lang.name(),progress(id,lang));return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"llm",llm(id));}
   @GetMapping("/admin/students/{id}/lessons") public Map<String,Object> lessons(@PathVariable long id,HttpServletRequest r){admin(r);return Map.of("lessons",db.queryForList("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt from lessons where user_id=? order by lesson_number",id));}
-  @GetMapping("/admin/students/{id}/lessons/{lessonId}") public Map<String,Object> lessonDetail(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){admin(r);var l=db.queryForMap("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt from lessons where id=? and user_id=?",lessonId,id);var tasks=db.queryForList("select t.id,t.title,t.statement from tasks t join lesson_tasks x on x.task_id=t.id where x.lesson_id=?",lessonId);for(var t:tasks)t.put("submissions",db.queryForList("select id,source_code as sourceCode,passed,runner_output as output,created_at as createdAt from submissions where lesson_id=? and task_id=? order by id",lessonId,t.get("id")));return Map.of("lesson",l,"chat",db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",lessonId),"tasks",tasks);}
+  /** The same as the student's own «Завершить урок», for any student's open lesson. */
+  @PostMapping("/admin/students/{id}/lessons/{lessonId}/finish") public Map<String,Object> finishStudentLesson(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){
+    admin(r);
+    if(db.update("update lessons set finished_at=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),lessonId,id)==0)throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");
+    queueUnsolvedRedos(id,lessonId);
+    log.info("Lesson {} of student {} finished by admin {}",lessonId,id,uid(r));
+    return Map.of("lesson",lesson(lessonId));
+  }
+
+  /**
+   * Cancels an accepted solution: the student has to solve the task again. Accepted submissions in this lesson are
+   * kept in history but marked revoked and stop counting as passed; the task credit is removed and the progress of
+   * its skills is recomputed by replaying the normal crediting rules over the remaining credited lessons. The task
+   * comes back first: it is unsolved again in an open lesson, otherwise it is assigned at the start of the next one.
+   */
+  @PostMapping("/admin/students/{id}/lessons/{lessonId}/tasks/{taskId}/revoke") @Transactional public Map<String,Object> revokeTask(@PathVariable long id,@PathVariable long lessonId,@PathVariable long taskId,HttpServletRequest r){
+    admin(r);
+    var lessonRows=db.queryForList("select finished_at,language from lessons where id=? and user_id=?",lessonId,id);
+    if(lessonRows.isEmpty())throw bad("LESSON_NOT_FOUND","Урок не найден");
+    int revoked=db.update("update submissions set passed=0,revoked_at=?,revoked_by=? where lesson_id=? and task_id=? and passed=1",Instant.now().toString(),uid(r),lessonId,taskId);
+    if(revoked==0)throw bad("NOTHING_TO_REVOKE","У этой задачи нет принятого решения в уроке");
+    db.update("delete from successful_task_credit where user_id=? and task_id=?",id,taskId);
+    var skills=db.queryForList("select skill_code from task_target_skills where task_id=?",String.class,taskId);
+    for(String skill:skills) replayProgress(id,skill);
+    boolean openLesson=lessonRows.getFirst().get("finished_at")==null;
+    if(!openLesson) db.update("insert or ignore into pending_redos(user_id,task_id) values(?,?)",id,taskId);
+    log.info("Admin {} revoked accepted task {} of student {} in lesson {} ({} submission(s)); skills {} recalculated",uid(r),taskId,id,lessonId,revoked,skills);
+    return obj("revokedSubmissions",revoked,"skills",skills,"redoInOpenLesson",openLesson);
+  }
+
+  /**
+   * Rebuilds one skill's practice progress from the credited solutions that remain, lesson by lesson, with the same
+   * credit() rules that produced it. Diagnostic confirmation is separate and untouched.
+   */
+  /** A task sent back during a lesson and not solved before the lesson ended must not get lost: it moves to the redo queue. */
+  private void queueUnsolvedRedos(long user,long lessonId){
+    db.update("insert or ignore into pending_redos(user_id,task_id) select ?,lt.task_id from lesson_tasks lt where lt.lesson_id=? "
+        +"and exists(select 1 from submissions s where s.lesson_id=lt.lesson_id and s.task_id=lt.task_id and s.revoked_at is not null) "
+        +"and not exists(select 1 from submissions s where s.lesson_id=lt.lesson_id and s.task_id=lt.task_id and s.passed=1)",user,lessonId);
+  }
+  private void replayProgress(long user,String skill){
+    db.update("delete from skill_iterations where user_id=? and skill_code=?",user,skill);
+    db.update("update student_skills set completed_iterations=0,iteration_successes=0,first_iteration_lesson_number=null,mastered=0 where user_id=? and skill_code=?",user,skill);
+    var lessons=db.queryForList("select distinct l.id,coalesce(l.language_lesson_number,l.lesson_number) as number from lessons l join submissions s on s.lesson_id=l.id and s.passed=1 join successful_task_credit c on c.task_id=s.task_id and c.user_id=l.user_id join task_target_skills ts on ts.task_id=s.task_id and ts.skill_code=? where l.user_id=? order by number",skill,user);
+    for(var l:lessons) credit(user,skill,((Number)l.get("id")).longValue(),((Number)l.get("number")).intValue());
+  }
+
+  @GetMapping("/admin/students/{id}/lessons/{lessonId}") public Map<String,Object> lessonDetail(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){admin(r);var l=db.queryForMap("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt from lessons where id=? and user_id=?",lessonId,id);var tasks=db.queryForList("select t.id,t.title,t.statement from tasks t join lesson_tasks x on x.task_id=t.id where x.lesson_id=?",lessonId);for(var t:tasks)t.put("submissions",db.queryForList("select id,source_code as sourceCode,passed,runner_output as output,created_at as createdAt,revoked_at as revokedAt from submissions where lesson_id=? and task_id=? order by id",lessonId,t.get("id")));return Map.of("lesson",l,"chat",db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",lessonId),"tasks",tasks);}
 
   private TutorContext tutorContext(Language lang,Map<String,Object> lesson,String currentEditorSource) { long lessonId=((Number)lesson.get("id")).longValue(); var taskRows=db.queryForList("select t.id,t.title,t.statement,ts.skill_code from lesson_tasks lt join tasks t on t.id=lt.task_id join task_target_skills ts on ts.task_id=t.id where lt.lesson_id=? and t.active=1 and not exists(select 1 from submissions x where x.lesson_id=lt.lesson_id and x.task_id=lt.task_id and x.passed=1) order by lt.rowid desc limit 1",lessonId); String skillCode=null,skillTitle=null; Long taskId=null;String taskTitle=null,taskStatement=null,source=null,output=null;Boolean passed=null; if(!taskRows.isEmpty()){var task=taskRows.getFirst();taskId=((Number)task.get("id")).longValue();taskTitle=(String)task.get("title");taskStatement=(String)task.get("statement");skillCode=(String)task.get("skill_code");var titleRows=db.queryForList("select title from skills where code=?",skillCode);skillTitle=titleRows.isEmpty()?skillCode:(String)titleRows.getFirst().get("title");var submission=db.queryForList("select source_code,passed,runner_output from submissions where lesson_id=? and task_id=? order by id desc limit 1",lessonId,taskId);if(!submission.isEmpty()){var last=submission.getFirst();source=(String)last.get("source_code");passed=((Number)last.get("passed")).intValue()==1;output=(String)last.get("runner_output");}} return new TutorContext(lang,lessonId,((Number)lesson.get("number")).intValue(),skillCode,skillTitle,taskId,taskTitle,taskStatement,currentEditorSource,source,passed,output); }
   private Map<String,Object> status(Map<String,Object> u){return Map.of("user",viewUser(u),"llm",llm(((Number)u.get("id")).longValue()),"runner",runner(Language.JAVA));} private Map<String,Object> viewUser(Map<String,Object> u){return Map.of("id",u.get("id"),"login",u.get("login"),"role",u.get("role"),"displayName",u.get("display_name"),"llmEnabled",u.get("llm_enabled"));}

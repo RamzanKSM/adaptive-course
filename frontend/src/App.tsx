@@ -458,6 +458,7 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
       <span className="task-tag"><Icon name="code" size={14} /> Задача {step.done + 1}</span>
       {skillProgress && <IterationSteps done={step.done + (passed ? 1 : 0)} iteration={step.iteration} pulse={passed} />}
     </div>
+    {task.redo && <p className="redo-note"><Icon name="refresh" size={15} /> Преподаватель попросил решить эту задачу заново — прежнее решение не засчитано.</p>}
     <h2 className="title">{task.title}</h2>
     <Markdown>{task.statement}</Markdown>
     <div className="code-label"><span>Решение на {course.title}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
@@ -737,10 +738,35 @@ function StudentDetail({ student, request, toggle, onLlmStatus, onDeleted }: { s
     request(() => api<{ llm: LlmStatus; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }) } })
     return () => { alive = false }
   }, [student.id, request, onLlmStatus])
-  async function open(lesson: Lesson) {
-    openRef.current = lesson.id; setOpenLesson(lesson.id); setDetail(null)
+  const toast = useToast()
+  const chatRef = useRef<HTMLDivElement>(null)
+  async function open(lesson: Lesson, keepView = false) {
+    openRef.current = lesson.id; setOpenLesson(lesson.id); if (!keepView) setDetail(null)
     const value = await request(() => api<LessonDetail>(`/admin/students/${student.id}/lessons/${lesson.id}`))
     if (value && openRef.current === lesson.id) setDetail(value)
+  }
+  const reloadLessons = () => request(() => api<{ lessons: Lesson[] }>(`/admin/students/${student.id}/lessons`)).then(value => { if (value) setLessons(value.lessons) })
+  const reloadProgress = () => request(() => api<{ progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (value) setProgress(value.progressByLanguage ?? { JAVA: value.progress }) })
+  // Opening a lesson jumps to the latest messages: the end of the conversation is what the teacher usually needs.
+  useEffect(() => {
+    const chat = chatRef.current
+    if (!detail || !chat) return
+    chat.scrollTop = chat.scrollHeight
+    chat.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  }, [detail?.lesson.id])
+  async function finishLesson(lesson: Lesson) {
+    if (!window.confirm(`Завершить урок ${lesson.number} студента ${student.displayName}? Студент начнёт следующий урок сам.`)) return
+    const result = await request(() => post<{ lesson: Lesson }>(`/admin/students/${student.id}/lessons/${lesson.id}/finish`))
+    if (!result) return
+    toast({ tone: 'info', icon: 'flag', title: `Урок ${lesson.number} завершён`, text: student.displayName })
+    await reloadLessons(); open(result.lesson, true)
+  }
+  async function revoke(lesson: Lesson, task: { id: Id; title: string }) {
+    if (!window.confirm(`Отменить зачёт задачи «${task.title}»? Студенту придётся решить её заново, прогресс по теме будет пересчитан.`)) return
+    const result = await request(() => post<{ redoInOpenLesson: boolean }>(`/admin/students/${student.id}/lessons/${lesson.id}/tasks/${task.id}/revoke`))
+    if (!result) return
+    toast({ tone: 'info', icon: 'refresh', title: 'Зачёт отменён', text: result.redoInOpenLesson ? 'Задача снова ждёт решения в текущем уроке' : 'Задача будет первой в следующем уроке студента' })
+    reloadProgress(); open(lesson, true)
   }
   return <aside className="card student-detail enter-side">
     <div className="detail-head">
@@ -766,13 +792,21 @@ function StudentDetail({ student, request, toggle, onLlmStatus, onDeleted }: { s
       </button>)}</div> : <p className="muted">Уроков пока нет.</p>}
       {openLesson !== null && !detail && <p className="muted"><Spinner /> Загружаем урок…</p>}
       {detail && <div className="enter">
+        <div className="lesson-detail-head">
+          <div><b>{COURSES[detail.lesson.language ?? 'JAVA'].title} · урок {detail.lesson.number}</b>
+            <span className={detail.lesson.finishedAt ? 'muted small' : 'live small'}>{detail.lesson.finishedAt ? `завершён ${fmt(detail.lesson.finishedAt)}` : 'идёт сейчас'}</span></div>
+          {!detail.lesson.finishedAt && <button className="ghost small-button" onClick={() => finishLesson(detail.lesson)}><Icon name="flag" size={15} /> Завершить урок</button>}
+        </div>
         <h3 className="section-title">Задачи и попытки</h3>
         {detail.tasks.length ? detail.tasks.map(t => <article key={t.id} className="detail-task">
-          <b>{t.title}</b><Markdown>{t.statement}</Markdown>
-          {t.submissions.length ? t.submissions.map(a => <details key={a.id}><summary className={a.passed ? 'passed' : 'not-passed'}><Icon name={a.passed ? 'check' : 'x'} size={14} /> {a.passed ? 'принято' : 'не принято'} · {fmt(a.createdAt)}</summary><pre>{a.sourceCode}</pre>{a.output && <pre>{a.output}</pre>}</details>) : <p className="muted small">Попыток не было.</p>}
+          <div className="detail-task-head"><b>{t.title}</b>
+            {t.submissions.some(a => a.passed && !a.revokedAt) && <button className="ghost danger small-button" onClick={() => revoke(detail.lesson, t)} title="Студенту придётся решить задачу заново"><Icon name="refresh" size={14} /> Отменить зачёт</button>}
+          </div>
+          <Markdown>{t.statement}</Markdown>
+          {t.submissions.length ? t.submissions.map(a => <details key={a.id}><summary className={a.revokedAt ? 'revoked' : a.passed ? 'passed' : 'not-passed'}><Icon name={a.revokedAt ? 'refresh' : a.passed ? 'check' : 'x'} size={14} /> {a.revokedAt ? `зачёт отменён ${fmt(a.revokedAt)}` : a.passed ? 'принято' : 'не принято'} · {fmt(a.createdAt)}</summary><pre>{a.sourceCode}</pre>{a.output && <pre>{a.output}</pre>}</details>) : <p className="muted small">Попыток не было.</p>}
         </article>) : <p className="muted">Задач в этом уроке не было.</p>}
         <h3 className="section-title">Чат</h3>
-        {detail.chat.length ? <div className="messages static">{detail.chat.map(m => <div key={m.id} className={`message ${m.role === 'STUDENT' ? 'student' : 'assistant'}`}><Markdown>{m.content}</Markdown><small>{m.role === 'STUDENT' ? 'Студент' : 'Помощник'} · {fmt(m.createdAt)}</small></div>)}</div> : <p className="muted">Переписки не было.</p>}
+        {detail.chat.length ? <div className="messages static" ref={chatRef}>{detail.chat.map(m => <div key={m.id} className={`message ${m.role === 'STUDENT' ? 'student' : 'assistant'}`}><Markdown>{m.content}</Markdown><small>{m.role === 'STUDENT' ? 'Студент' : 'Помощник'} · {fmt(m.createdAt)}</small></div>)}</div> : <p className="muted">Переписки не было.</p>}
       </div>}
     </>}
     <DeleteAccount student={student} request={request} onDeleted={onDeleted} />

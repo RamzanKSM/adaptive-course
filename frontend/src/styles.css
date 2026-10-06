@@ -652,3 +652,13 @@ button.ghost.danger { color: #b42318; border-color: #f2b8bb; }
 button.ghost.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); }
 button.danger-solid { background: var(--danger); color: #fff; box-shadow: 0 10px 24px -12px rgb(229 72 77 / .8); }
 button.danger-solid:hover:not(:disabled) { background: #c8363b; }
+
+/* ───────── Admin lesson actions ───────── */
+.lesson-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 16px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.lesson-detail-head > div { display: grid; }
+.lesson-detail-head .small-button { margin-top: 0; }
+.lesson-detail-head .live { color: var(--success); font-weight: 650; }
+.detail-task-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.detail-task-head .small-button { margin-top: 0; padding: 5px 10px; font-size: 12px; }
+summary.revoked { color: #a1440f; }
+.redo-note { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 12px; border-radius: 12px; background: #fff1e6; color: #8a3b0c; font-size: 14px; font-weight: 650; }
