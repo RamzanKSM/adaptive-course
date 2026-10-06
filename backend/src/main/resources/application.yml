@@ -27,7 +27,11 @@ app:
   bootstrap-admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:}
   llm:
     enabled: ${APP_LLM_ENABLED:false}
+    # Fallback model; each purpose may have its own (empty = use CODEX_MODEL). Admins can change them in «Настройки LLM».
     model: ${CODEX_MODEL:gpt-6-luna}
+    model-chat: ${CODEX_MODEL_CHAT:}
+    model-task: ${CODEX_MODEL_TASK:}
+    model-explanation: ${CODEX_MODEL_EXPLANATION:}
     # Always offered in the admin model picker, even if the App Server's model/list does not report them.
     extra-models: ${APP_LLM_EXTRA_MODELS:gpt-5.6-terra}
     # Fallback level; each purpose has its own: task generation needs careful checks, chat needs fast answers.
@@ -49,6 +53,9 @@ app:
     student-runtime-validated: ${APP_LLM_STUDENT_RUNTIME_VALIDATED:false}
     # Logs full prompts and answers (student messages and code included). Keep off in production unless debugging.
     log-content: ${APP_LLM_LOG_CONTENT:false}
+    # Defaults for «Настройки LLM → Логирование»: the model's answer and its reasoning summary.
+    log-generation: ${APP_LLM_LOG_GENERATION:true}
+    log-chat: ${APP_LLM_LOG_CHAT:false}
   # Background re-verification of generated tasks accepted by older, output-only validation.
   task-audit:
     enabled: ${APP_TASK_AUDIT_ENABLED:true}
@@ -69,8 +76,8 @@ logging:
     root: INFO
     ru.teacherstaff.adaptive: ${APP_LOG_LEVEL:INFO}
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:--}] [user=%X{userId:--}] %logger{0}: %m%n%wEx"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:--}] [user=%X{userId:--}] %logger{0}: %m%n%wEx"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:--}] %X{who}%logger{0}: %m%n%wEx"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:--}] %X{who}%logger{0}: %m%n%wEx"
   # Optional file in addition to stdout, e.g. /app/data/logs/app.log; rotated by size.
   file:
     name: ${APP_LOG_FILE:}

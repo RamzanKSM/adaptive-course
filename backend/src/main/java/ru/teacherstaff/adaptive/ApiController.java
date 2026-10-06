@@ -30,10 +30,10 @@ public class ApiController {
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
-    var u=rows.getFirst(); String token=randomToken(); db.update("insert into sessions(token_hash,user_id,expires_at) values(?,?,?)",Hashing.sha256(token),u.get("id"),Instant.now().plus(Duration.ofHours(sessionHours)).toString());
+    var u=rows.getFirst(); if("STUDENT".equals(u.get("role")))LogContext.student(u.get("id"),u.get("login"));else LogContext.admin(u.get("login")); String token=randomToken(); db.update("insert into sessions(token_hash,user_id,expires_at) values(?,?,?)",Hashing.sha256(token),u.get("id"),Instant.now().plus(Duration.ofHours(sessionHours)).toString());
     Cookie c=new Cookie("adaptive_session",token); c.setHttpOnly(true); c.setPath("/api"); c.setMaxAge((int)Duration.ofHours(sessionHours).toSeconds()); c.setSecure(secureCookie); response.addCookie(c); return status(u);
   }
-  @PostMapping("/auth/logout") @ResponseStatus(HttpStatus.NO_CONTENT) public void logout(HttpServletRequest r,HttpServletResponse p) { cookie(r).ifPresent(t->db.update("delete from sessions where token_hash=?",Hashing.sha256(t))); Cookie c=new Cookie("adaptive_session","");c.setPath("/api");c.setMaxAge(0);p.addCookie(c); }
+  @PostMapping("/auth/logout") @ResponseStatus(HttpStatus.NO_CONTENT) public void logout(HttpServletRequest r,HttpServletResponse p) { finishOpenLessons(r); cookie(r).ifPresent(t->db.update("delete from sessions where token_hash=?",Hashing.sha256(t))); Cookie c=new Cookie("adaptive_session","");c.setPath("/api");c.setMaxAge(0);p.addCookie(c); }
   @GetMapping("/auth/me") public Map<String,Object> me(HttpServletRequest r) { return status(user(r)); }
 
   @GetMapping("/diagnostic") public Map<String,Object> diagnostic(@RequestParam(name="language",required=false) String language,HttpServletRequest r) { long id=uid(r); Language lang=Language.parse(language); boolean done=diagnosticDone(id,lang); var qs=db.queryForList("select id,ordinal,skill_code,prompt,options_json from diagnostic_questions where language=? order by ordinal",lang.name()); return Map.of("completed",done,"questions",done?List.of():qs.stream().map(q->Map.of("id",q.get("id"),"ordinal",q.get("ordinal"),"skillCode",q.get("skill_code"),"prompt",q.get("prompt"),"options",json(q.get("options_json")),"unknownOption",Map.of("label","Не знаю"))).toList()); }
@@ -50,7 +50,22 @@ public class ApiController {
 
   @GetMapping("/lessons/current") public Map<String,Object> current(@RequestParam(name="language",required=false) String language,HttpServletRequest r){return obj("lesson",active(uid(r),Language.parse(language)));}
   @PostMapping("/lessons/start") public Map<String,Object> start(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);requireDiagnostic(u,lang);var current=active(u,lang);if(current!=null)return Map.of("lesson",current);int n=count("select coalesce(max(lesson_number),0) from lessons where user_id=?",u)+1;int inLanguage=count("select count(*) from lessons where user_id=? and language=?",u,lang.name())+1;db.update("insert into lessons(user_id,lesson_number,language,language_lesson_number) values(?,?,?,?)",u,n,lang.name(),inLanguage);return Map.of("lesson",active(u,lang));}
-  @PostMapping("/lessons/{id}/finish") public Map<String,Object> finish(@PathVariable long id,HttpServletRequest r){long u=student(r);if(db.update("update lessons set finished_at=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),id,u)==0)throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");queueUnsolvedRedos(u,id);return Map.of("lesson",lesson(id));}
+  @PostMapping("/lessons/{id}/finish") public Map<String,Object> finish(@PathVariable long id,HttpServletRequest r){long u=student(r);if(!finishLesson(u,id))throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");log.info("Lesson {} finished by the student",id);return Map.of("lesson",lesson(id));}
+  /** Logging out ends the student's open lessons in every course, as «Завершить урок» would. */
+  private void finishOpenLessons(HttpServletRequest r){
+    if(!(r.getAttribute("user") instanceof Map<?,?> user)||!"STUDENT".equals(user.get("role")))return;
+    long u=((Number)user.get("id")).longValue();
+    for(long id:db.queryForList("select id from lessons where user_id=? and finished_at is null",Long.class,u)) if(finishLesson(u,id)) log.info("Lesson {} finished on logout",id);
+  }
+  /**
+   * Finishes an open lesson. It does not wait for a /learning/next that is still preparing content: that request
+   * notices the lesson is over and keeps what it generated (see nextLocked). Returns false if the lesson was not open.
+   */
+  private boolean finishLesson(long user,long lessonId){
+    if(db.update("update lessons set finished_at=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),lessonId,user)==0)return false;
+    queueUnsolvedRedos(user,lessonId);
+    return true;
+  }
   /**
    * Not @Transactional on purpose: this request may wait for the LLM (explanation, task generation) and Piston
    * (verification) for tens of seconds. Holding a SQLite transaction that long blocked every other writer and ended in
@@ -67,9 +82,9 @@ public class ApiController {
     if(assigned!=null) return learningResponse(userId,lesson,assigned);
     var redo=pendingRedo(userId,lang);
     if(redo!=null){
-      db.update("insert or ignore into lesson_tasks(lesson_id,task_id) values(?,?)",lesson.get("id"),redo.get("id"));
+      if(!assign(lesson,((Number)redo.get("id")).longValue())) return lessonFinished(lesson);
       db.update("delete from pending_redos where user_id=? and task_id=?",userId,redo.get("id"));
-      log.info("Re-assigned revoked task {} to lesson {} of student {}",redo.get("id"),lesson.get("id"),userId);
+      log.info("Assigned queued task {} ({}) to lesson {} of student {}",redo.get("id"),"GENERATED".equals(redo.get("reason"))?"generated for a lesson finished during generation":"credit revoked by the teacher",lesson.get("id"),userId);
       return learningResponse(userId,lesson,redo);
     }
     var skill=nextSkill(userId,lang,((Number)lesson.get("number")).intValue(),((Number)lesson.get("id")).longValue());
@@ -77,8 +92,12 @@ public class ApiController {
     String skillCode=(String)skill.get("code");
     long lessonId=((Number)lesson.get("id")).longValue();
     Object explanation=explanation(userId, skillCode);
+    // The lesson may have been finished (by the student, an admin or a logout) while the explanation was generated;
+    // the explanation is saved for the topic, a task is chosen in the next lesson.
+    if(!stillActive(lessonId)) return lessonFinished(lesson);
     int difficulty=targetDifficulty(userId, lessonId, skillCode);
     var tasks=availableTasks(userId, lesson, skillCode, difficulty);
+    Long generatedTaskId=null;
     if(!hasDifficulty(tasks, difficulty)) {
       // Generate the missing step of the easy→hard ladder; fall back to the nearest bank task when generation is impossible.
       String reason=null;
@@ -86,32 +105,48 @@ public class ApiController {
       else if(!llmSettings.taskGenerationAllowed()) { reason="LLM_RATE_LIMITED"; log.info("Task generation skipped for skill={}: course-wide task generation limit reached",skillCode); }
       else if(!codeRunner.status(lang).available()) reason="RUNNER_UNAVAILABLE";
       else {
-        boolean stored=false;
         var brief=brief(userId, skillCode, difficulty, explanation instanceof Map<?,?> m ? (String)m.get("content") : null);
-        for(int attempt=1;attempt<=GENERATION_ATTEMPTS&&!stored;attempt++) try {
+        for(int attempt=1;attempt<=GENERATION_ATTEMPTS&&generatedTaskId==null;attempt++) try {
+          if(attempt>1&&!stillActive(lessonId)) break; // no new attempts for a finished lesson
           log.info("Generating task: skill={} language={} difficulty={} attempt={}/{}",skillCode,lang,difficulty,attempt,GENERATION_ATTEMPTS);
-          long taskId=storeGeneratedTask(contentGenerator.generateTask(userId, brief), difficulty, lang);
+          generatedTaskId=storeGeneratedTask(contentGenerator.generateTask(userId, brief), difficulty, lang);
           markTaskOutcome(userId,skillCode,"ACCEPTED");
-          log.info("Generated task {} accepted for skill={} difficulty={}",taskId,skillCode,difficulty);
-          stored=true;
+          log.info("Generated task {} accepted for skill={} difficulty={}",generatedTaskId,skillCode,difficulty);
         }
         catch (InvalidGeneratedContentException e) { markTaskOutcome(userId,skillCode,"REJECTED"); log.warn("Generated task rejected (skill={}, attempt {}/{}): {}",skillCode,attempt,GENERATION_ATTEMPTS,e.getMessage()); }
         catch (LlmUnavailableException e) { log.warn("Task generation unavailable for skill={}: {}",skillCode,e.getMessage()); reason="NO_TASK_AVAILABLE"; break; }
-        if(!stored&&reason==null) reason="LLM_GENERATION_FAILED_VALIDATION";
+        if(generatedTaskId==null&&reason==null) reason="LLM_GENERATION_FAILED_VALIDATION";
         tasks=availableTasks(userId, lesson, skillCode, difficulty);
       }
+      if(!stillActive(lessonId)) return lessonFinished(lesson, userId, generatedTaskId);
       if(tasks.isEmpty()) return "RUNNER_UNAVAILABLE".equals(reason)
           ? obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason,"llm",llm(userId),"runner",runner(lang))
           : obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason==null?"NO_TASK_AVAILABLE":reason,"llm",llm(userId));
     }
-    var task=tasks.getFirst(); db.update("insert into lesson_tasks(lesson_id,task_id) values(?,?)",lesson.get("id"),task.get("id"));
+    var task=tasks.getFirst();
+    if(!assign(lesson,((Number)task.get("id")).longValue())) return lessonFinished(lesson, userId, generatedTaskId);
     return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(userId,task));
+  }
+  private boolean stillActive(long lessonId){ return count("select count(*) from lessons where id=? and finished_at is null",lessonId)>0; }
+  /** Assigns a task only to a lesson that is still open: a finish can land at any moment while content is prepared. */
+  private boolean assign(Map<String,Object> lesson,long taskId){
+    return db.update("insert or ignore into lesson_tasks(lesson_id,task_id) select ?,? where exists(select 1 from lessons where id=? and finished_at is null)",lesson.get("id"),taskId,lesson.get("id"))>0
+        || count("select count(*) from lesson_tasks x join lessons l on l.id=x.lesson_id where x.lesson_id=? and x.task_id=? and l.finished_at is null",lesson.get("id"),taskId)>0;
+  }
+  private Map<String,Object> lessonFinished(Map<String,Object> lesson){ return obj("lesson",lesson(((Number)lesson.get("id")).longValue()),"skill",null,"explanation",null,"task",null,"reason","LESSON_FINISHED"); }
+  /** A task generated for a lesson that ended meanwhile is reserved: the student gets it first in the next lesson of the course. */
+  private Map<String,Object> lessonFinished(Map<String,Object> lesson,long userId,Long generatedTaskId){
+    if(generatedTaskId!=null){
+      db.update("insert or ignore into pending_redos(user_id,task_id,reason) values(?,?,'GENERATED')",userId,generatedTaskId);
+      log.info("Lesson {} was finished during generation; task {} is kept for the student's next lesson",lesson.get("id"),generatedTaskId);
+    }
+    return lessonFinished(lesson);
   }
   private Map<String,Object> unsolvedTask(Map<String,Object> lesson) { var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,ts.skill_code, s.title as skill_title,s.block_no from lesson_tasks lt join tasks t on t.id=lt.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where lt.lesson_id=? and t.active=1 and not exists(select 1 from submissions x where x.lesson_id=lt.lesson_id and x.task_id=lt.task_id and x.passed=1) order by lt.rowid desc limit 1",lesson.get("id"));return rows.isEmpty()?null:rows.getFirst(); }
   /** The oldest task the teacher sent back that is still active; retired ones are dropped from the queue. */
   private Map<String,Object> pendingRedo(long userId,Language lang){
     db.update("delete from pending_redos where user_id=? and task_id in (select id from tasks where active=0)",userId);
-    var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,ts.skill_code,s.title as skill_title,s.block_no from pending_redos p join tasks t on t.id=p.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where p.user_id=? and t.language=? order by p.created_at,p.task_id limit 1",userId,lang.name());
+    var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,ts.skill_code,s.title as skill_title,s.block_no,p.reason from pending_redos p join tasks t on t.id=p.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where p.user_id=? and t.language=? order by p.created_at,p.task_id limit 1",userId,lang.name());
     return rows.isEmpty()?null:rows.getFirst();
   }
   private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation=explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(userId,task)); }
@@ -195,7 +230,7 @@ public class ApiController {
   @GetMapping("/chat") public Map<String,Object> chat(@RequestParam(name="language",required=false) String language,HttpServletRequest r){var l=active(uid(r),Language.parse(language));return Map.of("messages",l==null?List.of():db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",l.get("id")),"llm",llm(uid(r)),"quota",llmSettings.chatQuota(uid(r)).view());}
   @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}var quota=llmSettings.chatQuota(u);if(!quota.allowed()){log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})",u,quota.hourUsed(),quota.hourLimit(),quota.dayUsed(),quota.dayLimit());return ResponseEntity.status(429).header("Retry-After",String.valueOf(quota.retryAfterSeconds())).body(Map.of("error","LLM_RATE_LIMITED","message",rateLimitMessage(quota),"quota",quota.view()));}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource),question);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u),"quota",llmSettings.chatQuota(u).view()));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
 
-  @PostMapping("/admin/students") public Map<String,Object> createStudent(@RequestBody Map<String,Object>b,HttpServletRequest r){admin(r);String login=(String)b.get("login"),password=(String)b.get("password"),name=(String)b.get("displayName");if(login==null||password==null||name==null)throw bad("INVALID_STUDENT","Нужны login, password, displayName");boolean enabled=!Boolean.FALSE.equals(b.get("llmEnabled"));if(count("select count(*) from users where login=?",login.trim())>0)throw bad("LOGIN_TAKEN","Логин «"+login.trim()+"» уже занят");validatePassword(password);db.update("insert into users(login,password_hash,role,display_name,llm_enabled) values(?,?,?,?,?)",login.trim(),passwords.encode(password),"STUDENT",name.trim(),enabled?1:0);log.info("Created student account login={}",login.trim());login=login.trim();return db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled from users where login=?",login);}
+  @PostMapping("/admin/students") public Map<String,Object> createStudent(@RequestBody Map<String,Object>b,HttpServletRequest r){admin(r);String login=(String)b.get("login"),password=(String)b.get("password"),name=(String)b.get("displayName");if(login==null||password==null||name==null)throw bad("INVALID_STUDENT","Нужны login, password, displayName");boolean enabled=!Boolean.FALSE.equals(b.get("llmEnabled"));if(count("select count(*) from users where login=?",login.trim())>0)throw bad("LOGIN_TAKEN","Логин «"+login.trim()+"» уже занят");validatePassword(password);db.update("insert into users(login,password_hash,role,display_name,llm_enabled) values(?,?,?,?,?)",login.trim(),passwords.encode(password),"STUDENT",name.trim(),enabled?1:0);login=login.trim();var created=db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled from users where login=?",login);LogContext.student(created.get("id"),login);log.info("Created student account login={}",login);return created;}
   /** Students with their open lessons, so the teacher sees at a glance who is studying right now. */
   @GetMapping("/admin/students") public Map<String,Object> students(HttpServletRequest r){
     admin(r);
@@ -212,25 +247,23 @@ public class ApiController {
     @SuppressWarnings("unchecked") Map<String,String> efforts=(Map<String,String>)body.get("reasoning");
     Map<String,Integer> limits=null;
     if(body.get("limits") instanceof Map<?,?> raw){ limits=new LinkedHashMap<>(); for(var e:raw.entrySet()) limits.put((String)e.getKey(),e.getValue() instanceof Number n?n.intValue():null); }
-    String model=body.get("model") instanceof String m&&!m.isBlank()?m.strip():null;
-    var models=offeredModels();
-    if(model!=null&&!model.equals(llmSettings.model())){
-      if(models.isEmpty())throw bad("MODELS_UNAVAILABLE","Список моделей сейчас недоступен — модель можно сменить, когда LLM включена и App Server отвечает");
-      if(models.stream().noneMatch(m->m.id().equals(model)))throw bad("INVALID_SETTING","Модель «"+model+"» недоступна в App Server");
-    }
-    String target=model==null?llmSettings.model():model;
-    // Reasoning levels are checked against the model they will be used with.
-    List<String> allowed=models.stream().filter(m->m.id().equals(target)).findFirst().map(ModelOption::efforts).filter(e->!e.isEmpty()).orElse(LlmSettings.FALLBACK_EFFORTS);
-    String previousModel=llmSettings.model();
-    llmSettings.update(model,efforts,limits,allowed);
-    log.info("LLM settings changed by admin {}: model={}{} reasoning={} limits={}",uid(r),llmSettings.model(),previousModel.equals(llmSettings.model())?"":" (was "+previousModel+")",llmSettings.efforts(),llmSettings.limits());
+    @SuppressWarnings("unchecked") Map<String,String> models=(Map<String,String>)body.get("models");
+    Map<String,Boolean> logging=null;
+    if(body.get("logging") instanceof Map<?,?> raw){ logging=new LinkedHashMap<>(); for(var e:raw.entrySet()) logging.put((String)e.getKey(),e.getValue() instanceof Boolean v?v:null); }
+    var offered=offeredModels();
+    var before=llmSettings.models();
+    llmSettings.update(models,efforts,limits,logging,offered.stream().map(ModelOption::id).collect(java.util.stream.Collectors.toSet()),id->effortsOf(offered,id));
+    log.info("LLM settings changed by admin {}: models={} (was {}) reasoning={} limits={} logging={}",uid(r),llmSettings.models(),before,llmSettings.efforts(),llmSettings.limits(),llmSettings.logging());
     return settingsView();
   }
+  /** Levels of a model as the App Server reports them; the safe fallback when it does not. */
+  private static List<String> effortsOf(List<ModelOption> models,String id){ return models.stream().filter(m->m.id().equals(id)).findFirst().map(ModelOption::efforts).filter(e->!e.isEmpty()).orElse(LlmSettings.FALLBACK_EFFORTS); }
   private List<String> effortOptions(){ var fromModel=tutor.supportedReasoningEfforts(); return fromModel==null||fromModel.isEmpty()?LlmSettings.FALLBACK_EFFORTS:fromModel; }
   private Map<String,Object> settingsView(){
     var fromModel=tutor.supportedReasoningEfforts();
     var models=offeredModels();
-    return obj("model",llmSettings.model(),"modelDefault",llmSettings.defaultModel(),"models",models.stream().map(ModelOption::view).toList(),"reasoning",llmSettings.efforts(),"reasoningDefaults",llmSettings.defaultEfforts(),"reasoningOptions",effortOptions(),"reasoningOptionsFromModel",fromModel!=null&&!fromModel.isEmpty(),
+    return obj("purposeModels",llmSettings.models(),"purposeModelDefaults",llmSettings.defaultModels(),"logging",llmSettings.logging(),"loggingDefaults",llmSettings.defaultLogging(),
+        "models",models.stream().map(ModelOption::view).toList(),"reasoning",llmSettings.efforts(),"reasoningDefaults",llmSettings.defaultEfforts(),"reasoningOptions",effortOptions(),"reasoningOptionsFromModel",fromModel!=null&&!fromModel.isEmpty(),
         "limits",llmSettings.limits(),"limitDefaults",llmSettings.defaultLimits(),"usageLastHour",Map.of("tasks",llmSettings.tasksLastHour(),"explanations",llmSettings.explanationsLastHour()));
   }
   /**
@@ -240,7 +273,7 @@ public class ApiController {
   private List<ModelOption> offeredModels(){
     var listed=tutor.availableModels()==null?List.<ModelOption>of():tutor.availableModels();
     var all=new ArrayList<>(listed);
-    var extras=new ArrayList<>(llmSettings.extraModels()); if(!extras.contains(llmSettings.model()))extras.add(llmSettings.model());
+    var extras=new ArrayList<>(llmSettings.extraModels()); for(String current:llmSettings.models().values()) if(!extras.contains(current))extras.add(current);
     for(String id:extras) if(all.stream().noneMatch(m->m.id().equals(id)))
       all.add(new ModelOption(id,prettyModelName(id),"",LlmSettings.FALLBACK_EFFORTS,"medium",false));
     return all;
@@ -302,7 +335,7 @@ public class ApiController {
     var durations=db.queryForList("select c.duration_ms"+where+" and c.status='OK' order by c.duration_ms",Long.class,since);
     totals.put("p95Ms",durations.isEmpty()?0:durations.get(Math.min(durations.size()-1,(int)Math.ceil(durations.size()*0.95)-1)));
     var byDay=db.queryForList("select date(c.created_at) as day,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by date(c.created_at) order by day",since);
-    var byPurpose=db.queryForList("select c.purpose,max(c.reasoning_effort) as effort,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(round(avg(case when c.status='OK' then c.duration_ms end)),0) as avgMs,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by c.purpose order by calls desc",since);
+    var byPurpose=db.queryForList("select c.purpose,max(c.reasoning_effort) as effort,(select x.model from llm_calls x where x.purpose=c.purpose and x.created_at>=datetime('now',?) order by x.id desc limit 1) as model,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(round(avg(case when c.status='OK' then c.duration_ms end)),0) as avgMs,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by c.purpose order by calls desc",since,since);
     var byLanguage=db.queryForList("select c.language,count(*) as calls,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by c.language order by calls desc",since);
     var byStudent=db.queryForList("select c.user_id as userId,coalesce(u.display_name,'—') as displayName,u.login,count(*) as calls,coalesce(sum(c.purpose='CHAT'),0) as chatTurns,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens,max(c.created_at) as lastAt from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) group by c.user_id order by calls desc limit 100",since);
     var errors=db.queryForList("select c.created_at as createdAt,c.purpose,c.language,c.status,c.error,c.duration_ms as durationMs,u.display_name as displayName from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.status<>'OK' order by c.created_at desc,c.id desc limit 20",since);
@@ -313,8 +346,7 @@ public class ApiController {
   /** The same as the student's own «Завершить урок», for any student's open lesson. */
   @PostMapping("/admin/students/{id}/lessons/{lessonId}/finish") public Map<String,Object> finishStudentLesson(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){
     admin(r);
-    if(db.update("update lessons set finished_at=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),lessonId,id)==0)throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");
-    queueUnsolvedRedos(id,lessonId);
+    if(!finishLesson(id,lessonId))throw bad("LESSON_NOT_ACTIVE","Активный урок не найден");
     log.info("Lesson {} of student {} finished by admin {}",lessonId,id,uid(r));
     return Map.of("lesson",lesson(lessonId));
   }

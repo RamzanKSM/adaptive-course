@@ -186,6 +186,8 @@ function StudentPage({ request }: { request: Request }) {
   const [diagnostic, setDiagnostic] = useState<Diagnostic | null>(null)
   const [lesson, setLesson] = useState<LearningNext | null>(null)
   const [state, setState] = useState<LoadState>('loading')
+  /** The open lesson while its next task is being prepared: it can be finished without waiting. */
+  const [preparing, setPreparing] = useState<Lesson | null>(null)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [otherProgress, setOtherProgress] = useState<Partial<Record<CourseLanguage, Progress>>>({})
   const [othersReady, setOthersReady] = useState(false)
@@ -203,7 +205,7 @@ function StudentPage({ request }: { request: Request }) {
   const load = useCallback(async () => {
     const id = ++loadId.current
     const stale = () => id !== loadId.current
-    setState('loading')
+    setState('loading'); setPreparing(null)
     loadProgress()
     const d = await request(() => api<Diagnostic>(withCourse('/diagnostic', course.id)))
     if (stale()) return
@@ -214,10 +216,14 @@ function StudentPage({ request }: { request: Request }) {
     if (stale()) return
     if (!current) return setState('failed')
     if (!current.lesson) { setLesson(null); return setState('ready') }
-    const next = await request(() => api<LearningNext>(withCourse('/learning/next', course.id)))
+    setPreparing(current.lesson)
+    // A request the student left (finished the lesson, switched course) is ignored, its error too.
+    const next = await request(() => api<LearningNext>(withCourse('/learning/next', course.id)).catch(e => { if (stale()) return undefined; throw e }))
     if (stale()) return
+    setPreparing(null)
     if (!next) return setState('failed')
-    setLesson(next); setState('ready')
+    // Finished elsewhere (another tab, the teacher, a logout) while the task was being prepared.
+    setLesson(next.reason === 'LESSON_FINISHED' ? null : next); setState('ready')
   }, [request, loadProgress, course.id])
   useEffect(() => { load() }, [load])
 
@@ -260,7 +266,7 @@ function StudentPage({ request }: { request: Request }) {
     {/* Both tabs stay mounted so switching to progress does not discard the code in the editor. */}
     <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} otherProgress={otherProgress} /></div>
     <div hidden={tab !== 'lesson'} className={tab === 'lesson' ? 'enter' : ''}>
-      {state === 'loading' ? <LessonSkeleton />
+      {state === 'loading' ? <LessonSkeleton lesson={preparing} request={request} onFinished={load} />
         : state === 'failed' ? <section className="empty-state enter"><h2 className="title">Не удалось загрузить урок</h2><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
           : <LessonView lesson={lesson} skillProgress={currentSkill} request={request} refresh={load} onProgress={onProgress} />}
     </div>
@@ -365,9 +371,27 @@ function DiagnosticForm({ diagnostic, request, onDone }: { diagnostic: Diagnosti
   </section>
 }
 
-function LessonSkeleton() {
+/**
+ * Shown while the lesson content is prepared. The lesson can be finished right away: the server keeps preparing,
+ * and a task generated for a finished lesson is given first in the next one. The pending response is ignored.
+ */
+function LessonSkeleton({ lesson, request, onFinished }: { lesson: Lesson | null; request: Request; onFinished: () => void }) {
+  const [working, setWorking] = useState(false)
+  const course = useCourse()
+  const toast = useToast()
+  async function finish(current: Lesson) {
+    setWorking(true); const finished = await request(() => post(`/lessons/${current.id}/finish`)); setWorking(false)
+    if (!finished) return
+    toast({ tone: 'info', icon: 'flag', title: 'Урок завершён', text: 'Если задача ещё готовилась, она будет ждать тебя в начале следующего урока' })
+    onFinished()
+  }
   return <section className="lesson" aria-busy="true">
-    <div className="skeleton-head"><span className="sk sk-line short" /><span className="sk sk-title" /></div>
+    {lesson
+      ? <div className="lesson-heading">
+        <div className="preparing-title"><p className="eyebrow">{course.title} · Урок {lesson.number}</p><span className="sk sk-title" /></div>
+        <button className="ghost" disabled={working} onClick={() => finish(lesson)}>{working ? <><Spinner /> Завершаем…</> : <><Icon name="flag" size={16} /> Завершить урок</>}</button>
+      </div>
+      : <div className="skeleton-head"><span className="sk sk-line short" /><span className="sk sk-title" /></div>}
     <div className="loading-note"><Spinner /> Готовим урок… Подбор новой задачи может занять до минуты.</div>
     <div className="lesson-grid"><div className="sk sk-card tall" /><div className="sk sk-card" /></div>
   </section>

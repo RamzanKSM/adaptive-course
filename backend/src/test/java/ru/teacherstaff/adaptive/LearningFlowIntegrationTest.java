@@ -14,6 +14,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -160,6 +161,59 @@ class LearningFlowIntegrationTest {
     assertTrue(response.path("task").path("id").asLong()>0);
     assertEquals(1,db.queryForObject("select count(*) from tasks where title='generated WHILE_LOOP_BASIC'",Integer.class));
     verify(generator,times(2)).generateTask(eq(student),brief("WHILE_LOOP_BASIC"));
+  }
+
+  @Test void finishingALessonWhileATaskIsGeneratedKeepsTheTaskForTheNextLesson() throws Exception {
+    String token=createStudentAndLogin("finish-while-generating"); long student=studentId("finish-while-generating"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"LOOP_TERMINATION");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),brief("LOOP_TERMINATION"))).thenReturn(Optional.empty());
+    start(token); long first=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    // The student presses «Завершить урок» while the model is still writing the task.
+    when(generator.generateTask(eq(student),brief("LOOP_TERMINATION"))).thenAnswer(call->{
+      mvc.perform(post("/api/lessons/{id}/finish",first).cookie(cookie(token))).andExpect(status().isOk());
+      return generated("LOOP_TERMINATION",true);
+    });
+    var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("LESSON_FINISHED",response.path("reason").asText()); assertTrue(response.path("task").isNull());
+    long kept=db.queryForObject("select id from tasks where title='generated LOOP_TERMINATION'",Long.class);
+    assertEquals(0,db.queryForObject("select count(*) from lesson_tasks where lesson_id=?",Integer.class,first),"a finished lesson gets no new task");
+    assertEquals("GENERATED",db.queryForObject("select reason from pending_redos where user_id=? and task_id=?",String.class,student,kept));
+    // The next lesson starts with the kept task; it is not generated again.
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(kept,next.path("task").path("id").asLong()); assertFalse(next.path("task").path("redo").asBoolean(),"a kept task is new work, not a redo");
+    verify(generator,times(1)).generateTask(eq(student),brief("LOOP_TERMINATION"));
+    assertEquals(0,db.queryForObject("select count(*) from pending_redos where user_id=?",Integer.class,student));
+  }
+
+  @Test void finishingALessonWhileTheExplanationIsGeneratedKeepsTheExplanationAndStartsNoTask() throws Exception {
+    String token=createStudentAndLogin("finish-while-explaining"); long student=studentId("finish-while-explaining"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"FOR_LOOP_BASIC");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    db.update("delete from explanations where skill_code='FOR_LOOP_BASIC'");
+    start(token); long first=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    when(generator.generateExplanation(eq(student),brief("FOR_LOOP_BASIC"))).thenAnswer(call->{
+      mvc.perform(post("/api/admin/students/{id}/lessons/{lesson}/finish",student,first).cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk());
+      return Optional.of(new GeneratedExplanation("FOR_LOOP_BASIC","Цикл for повторяет тело, пока условие истинно."));
+    });
+    var response=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("LESSON_FINISHED",response.path("reason").asText());
+    assertEquals("LLM",db.queryForObject("select source from explanations where skill_code='FOR_LOOP_BASIC'",String.class),"the explanation is saved for the topic");
+    verify(generator,never()).generateTask(eq(student),brief("FOR_LOOP_BASIC"));
+    assertEquals(0,db.queryForObject("select count(*) from lesson_tasks where lesson_id=?",Integer.class,first));
+  }
+
+  @Test void logoutFinishesTheStudentsOpenLessonsInEveryCourse() throws Exception {
+    String token=createStudentAndLogin("logout-student"); long student=studentId("logout-student");
+    for(String lang:List.of("JAVA","PYTHON")) db.update("insert into lessons(user_id,lesson_number,language,language_lesson_number) values(?,(select coalesce(max(lesson_number),0)+1 from lessons where user_id=?),?,1)",student,student,lang);
+    String other=createStudentAndLogin("logout-bystander"); long bystander=studentId("logout-bystander");
+    db.update("insert into lessons(user_id,lesson_number,language,language_lesson_number) values(?,1,'JAVA',1)",bystander);
+    mvc.perform(post("/api/auth/logout").cookie(cookie(token))).andExpect(status().isNoContent());
+    assertEquals(0,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,student));
+    assertEquals(1,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,bystander),"only the student who logged out");
+    String admin=login("admin","admin-pass");
+    mvc.perform(post("/api/auth/logout").cookie(cookie(admin))).andExpect(status().isNoContent());
+    assertEquals(1,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,bystander),"an admin logout ends no lessons");
+    assertNotNull(other);
   }
 
   @Test void unavailableRunnerDoesNotCallGenerator() throws Exception {
@@ -484,39 +538,75 @@ class LearningFlowIntegrationTest {
   }
 
 
-  @Test void adminSwitchesTheModelAndLevelsFollowIt() throws Exception {
+  @Test void eachPurposeHasItsOwnModelAndLevel() throws Exception {
     String admin=login("admin","admin-pass");
+    String put="{\"models\":%s,\"reasoning\":%s}";
     try {
-      // App Server unavailable: no list, so the model cannot be changed (keeping the current one is fine).
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"other-model\"}")).andExpect(status().isBadRequest());
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-6-luna\"}")).andExpect(status().isOk());
-      // Terra is offered even without the App Server list, with safe levels, marked as unconfirmed.
-      var offline=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
-      var terra=findModel(offline,"gpt-5.6-terra");
-      assertEquals("GPT-5.6-Terra",terra.path("displayName").asText()); assertFalse(terra.path("listed").asBoolean()); assertEquals(3,terra.path("efforts").size());
-      assertNotNull(findModel(offline,"gpt-6-luna"),"the current model is always shown");
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-5.6-terra\",\"reasoning\":{\"TASK\":\"high\"}}")).andExpect(status().isOk());
-      assertEquals("gpt-5.6-terra",llmSettings.model());
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-5.6-terra\",\"reasoning\":{\"TASK\":\"ultra\"}}")).andExpect(status().isBadRequest());
-      // When the App Server lists Terra, its own levels apply and it appears once.
-      when(tutor.availableModels()).thenReturn(List.of(new ModelOption("gpt-5.6-terra","GPT-5.6-Terra","",List.of("low","medium","high","xhigh","max","ultra"),"medium")));
-      var listed=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
-      assertEquals(1,java.util.stream.StreamSupport.stream(listed.path("models").spliterator(),false).filter(m->"gpt-5.6-terra".equals(m.path("id").asText())).count());
-      assertTrue(findModel(listed,"gpt-5.6-terra").path("listed").asBoolean());
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"reasoning\":{\"TASK\":\"ultra\"}}")).andExpect(status().isOk());
-      db.update("delete from app_settings where key like 'llm_%' and key<>'llm_enabled'");
-      when(tutor.availableModels()).thenReturn(List.of(new ModelOption("gpt-6-luna","Luna","",List.of("low","medium","high"),"medium"),new ModelOption("gpt-6-sol","Sol","",List.of("minimal","low","medium","high","xhigh"),"high")));
-      var view=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-      assertEquals("gpt-6-luna",view.path("model").asText()); assertEquals(3,view.path("models").size(),"two listed models plus the configured Terra"); assertEquals("high",view.path("models").path(1).path("defaultEffort").asText());
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-unknown\"}")).andExpect(status().isBadRequest());
-      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-6-luna\",\"reasoning\":{\"TASK\":\"xhigh\"}}")).andExpect(status().isBadRequest());
-      var saved=json.readTree(mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"model\":\"gpt-6-sol\",\"reasoning\":{\"TASK\":\"xhigh\"}}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-      assertEquals("gpt-6-sol",saved.path("model").asText()); assertEquals("xhigh",saved.path("reasoning").path("TASK").asText(),"levels are validated against the newly chosen model");
-      assertEquals("gpt-6-sol",llmSettings.model()); assertEquals("gpt-6-luna",saved.path("modelDefault").asText());
+      // App Server list unavailable: configured Terra and current models are offered; Terra gets the safe levels.
+      var offline=json.readTree(mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals("gpt-6-luna",offline.path("purposeModels").path("CHAT").asText()); assertEquals("gpt-6-luna",offline.path("purposeModels").path("TASK").asText());
+      var terra=findModel(offline,"gpt-5.6-terra"); assertEquals("GPT-5.6-Terra",terra.path("displayName").asText()); assertFalse(terra.path("listed").asBoolean());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(put.formatted("{\"TASK\":\"other-model\"}","{}"))).andExpect(status().isBadRequest());
+      when(tutor.availableModels()).thenReturn(List.of(new ModelOption("gpt-6-luna","Luna","",List.of("low","medium","high"),"medium"),new ModelOption("gpt-5.6-terra","GPT-5.6-Terra","",List.of("low","medium","high","xhigh","max","ultra"),"medium")));
+      // Different models for different work, each with a level its model supports.
+      var saved=json.readTree(mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON)
+          .content(put.formatted("{\"CHAT\":\"gpt-6-luna\",\"TASK\":\"gpt-5.6-terra\",\"EXPLANATION\":\"gpt-5.6-terra\"}","{\"CHAT\":\"low\",\"TASK\":\"ultra\",\"EXPLANATION\":\"medium\"}"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertEquals("gpt-5.6-terra",saved.path("purposeModels").path("TASK").asText()); assertEquals("ultra",saved.path("reasoning").path("TASK").asText());
+      assertEquals("gpt-5.6-terra",llmSettings.model("TASK_REPAIR"),"repairs use the task model"); assertEquals("gpt-6-luna",llmSettings.model("CHAT"));
+      // A level is checked against the model of its own purpose.
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(put.formatted("{}","{\"CHAT\":\"ultra\"}"))).andExpect(status().isBadRequest());
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(put.formatted("{\"TASK\":\"gpt-6-luna\"}","{}"))).andExpect(status().isBadRequest());
+      assertEquals("gpt-5.6-terra",llmSettings.model("TASK"),"switching TASK to a model without its current level is refused as a whole");
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(put.formatted("{\"TASK\":\"gpt-6-luna\"}","{\"TASK\":\"high\"}"))).andExpect(status().isOk());
+      assertEquals("gpt-6-luna",llmSettings.model("TASK"));
+      // The single model saved before per-purpose models existed still applies until overridden.
+      db.update("delete from app_settings where key like 'llm_model_%'"); db.update("insert into app_settings(key,value) values('llm_model','gpt-5.6-terra')");
+      assertEquals("gpt-5.6-terra",llmSettings.model("EXPLANATION"));
     } finally { db.update("delete from app_settings where key like 'llm_%' and key<>'llm_enabled'"); }
   }
 
+  @Test void llmOutputLoggingIsSwitchedSeparatelyForGenerationAndChat() throws Exception {
+    String admin=login("admin","admin-pass");
+    try {
+      assertTrue(llmSettings.logOutput("TASK")); assertTrue(llmSettings.logOutput("TASK_REPAIR")); assertTrue(llmSettings.logOutput("EXPLANATION"));
+      assertFalse(llmSettings.logOutput("CHAT"),"chat contains students' messages and code: off by default");
+      var saved=json.readTree(mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"logging\":{\"generation\":false,\"chat\":true}}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      assertFalse(saved.path("logging").path("generation").asBoolean()); assertTrue(saved.path("logging").path("chat").asBoolean());
+      assertFalse(llmSettings.logOutput("TASK")); assertTrue(llmSettings.logOutput("CHAT"));
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"logging\":{\"everything\":true}}")).andExpect(status().isBadRequest());
+    } finally { db.update("delete from app_settings where key like 'llm_log_%'"); }
+  }
+
+
   private static ContentBrief brief(String skill){return argThat(b->b!=null&&skill.equals(b.skillCode()));}
+
+  @Test void everyRequestLogLineNamesTheStudentItIsAbout() throws Exception {
+    var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>(); appender.start();
+    var root=(ch.qos.logback.classic.Logger)org.slf4j.LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME); root.addAppender(appender);
+    try {
+      String student=createStudentAndLogin("traced-student"); long id=studentId("traced-student"); String admin=login("admin","admin-pass");
+      Map<String,String> created=lastHttp(appender,"POST /api/admin/students");
+      assertEquals("admin=admin student=traced-student#"+id+" ",created.get("who"),"creating an account is attributed to the new student");
+      mvc.perform(get("/api/progress").cookie(cookie(student))).andExpect(status().isOk());
+      Map<String,String> own=lastHttp(appender,"GET /api/progress");
+      assertEquals(String.valueOf(id),own.get("studentId")); assertEquals("student=traced-student#"+id+" ",own.get("who")); assertNull(own.get("admin"));
+      long lesson=db.queryForObject("insert into lessons(user_id,lesson_number,language,language_lesson_number) values(?,1,'JAVA',1) returning id",Long.class,id);
+      mvc.perform(post("/api/admin/students/"+id+"/lessons/"+lesson+"/finish").cookie(cookie(admin))).andExpect(status().isOk());
+      var finished=appender.list.stream().filter(e->e.getFormattedMessage().startsWith("Lesson "+lesson+" of student")).reduce((a,b)->b).orElseThrow().getMDCPropertyMap();
+      assertEquals("admin=admin student=traced-student#"+id+" ",finished.get("who"),"an admin action names the student it changes");
+      mvc.perform(get("/api/admin/llm/settings").cookie(cookie(admin))).andExpect(status().isOk());
+      Map<String,String> course=lastHttp(appender,"GET /api/admin/llm/settings");
+      assertEquals("admin=admin ",course.get("who")); assertNull(course.get("studentId"),"course-wide admin work has no student");
+      // The Codex reader thread logs with the context of the turn's student, then returns to its own (system) context.
+      var context=new AtomicReference<Map<String,String>>();
+      org.slf4j.MDC.clear(); LogContext.student(id,"traced-student"); var captured=LogContext.capture(); org.slf4j.MDC.clear();
+      Thread.ofVirtual().start(()->{LogContext.with(captured,()->context.set(LogContext.capture())); assertNull(org.slf4j.MDC.get("who"));}).join();
+      assertEquals("student=traced-student#"+id+" ",context.get().get("who"));
+    } finally { root.detachAppender(appender); org.slf4j.MDC.clear(); }
+  }
+  private static Map<String,String> lastHttp(ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender,String request){
+    return appender.list.stream().filter(e->"http".equals(e.getLoggerName())&&e.getFormattedMessage().startsWith(request+" ")).reduce((a,b)->b).orElseThrow(()->new AssertionError("no log line for "+request)).getMDCPropertyMap();
+  }
 
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }
   private String login(String login,String password) throws Exception { var r=mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password",password)))).andExpect(status().isOk()).andReturn().getResponse(); return r.getCookie("adaptive_session").getValue(); }

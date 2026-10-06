@@ -126,6 +126,36 @@ class TransactionBoundariesTest {
     assertEquals(1, db.queryForObject("select count(*) from lesson_tasks where lesson_id=(select id from lessons where user_id=? and finished_at is null)", Integer.class, student));
   }
 
+  /** Logging out (or «Завершить урок») must not wait for a generation in progress, and the generated task must not be lost. */
+  @Test void logoutDuringGenerationIsImmediateAndKeepsTheTask() throws Exception {
+    String token = studentInLesson("logout-generating");
+    long student = studentId("logout-generating");
+    db.update("update tasks set active=0 where skill_code='BASIC_CODE_READING'"); // force generation
+    CountDownLatch generating = new CountDownLatch(1), release = new CountDownLatch(1);
+    AtomicReference<String> title = new AtomicReference<>();
+    when(generator.generateTask(eq(student), any())).thenAnswer(call -> {
+      generating.countDown();
+      assertTrue(release.await(30, TimeUnit.SECONDS));
+      GeneratedTask task = functionTask(((ContentBrief) call.getArgument(1)).skillCode()); title.set(task.title()); return task;
+    });
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      var next = pool.submit(() -> json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()));
+      assertTrue(generating.await(30, TimeUnit.SECONDS));
+      // The model is still writing the task: logout answers at once and ends the lesson.
+      pool.submit(() -> mvc.perform(post("/api/auth/logout").cookie(cookie(token))).andExpect(status().isNoContent())).get(5, TimeUnit.SECONDS);
+      assertEquals(0, db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null", Integer.class, student));
+      release.countDown();
+      assertEquals("LESSON_FINISHED", next.get(30, TimeUnit.SECONDS).path("reason").asText());
+    } finally { pool.shutdownNow(); }
+    long kept = db.queryForObject("select id from tasks where title=?", Long.class, title.get());
+    String again = login("logout-generating", "student-pass");
+    mvc.perform(post("/api/lessons/start").cookie(cookie(again))).andExpect(status().isOk());
+    var next = json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(again))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(kept, next.path("task").path("id").asLong(), "the next lesson starts with the task generated during the logout");
+    verify(generator, times(1)).generateTask(eq(student), any());
+  }
+
   /** A write from a different thread (so a different pooled connection) while the request is mid-flight. */
   private Throwable writeFromAnotherConnection() {
     try {

@@ -10,6 +10,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class AuthFilter extends OncePerRequestFilter {
@@ -22,7 +24,19 @@ public class AuthFilter extends OncePerRequestFilter {
     if (token == null) { s.sendError(HttpStatus.UNAUTHORIZED.value(), "Authentication required"); return; }
     var rows = db.queryForList("select u.id,u.login,u.role,u.display_name,u.llm_enabled from sessions x join users u on u.id=x.user_id where x.token_hash=? and x.expires_at>?", Hashing.sha256(token), Instant.now().toString());
     if (rows.isEmpty()) { s.sendError(HttpStatus.UNAUTHORIZED.value(), "Session expired"); return; }
-    r.setAttribute("user", rows.getFirst()); org.slf4j.MDC.put("userId", String.valueOf(rows.getFirst().get("id"))); chain.doFilter(r, s);
+    var user = rows.getFirst();
+    r.setAttribute("user", user); traceUser(r, user); chain.doFilter(r, s);
+  }
+  private static final Pattern MANAGED_STUDENT = Pattern.compile("^/api/admin/students/(\\d+)(/.*)?$");
+  /** Log lines of a student request name the student; admin requests name the admin and, if any, the student being managed. */
+  private void traceUser(HttpServletRequest r, Map<String, Object> user) {
+    if ("STUDENT".equals(user.get("role"))) { LogContext.student(user.get("id"), user.get("login")); return; }
+    LogContext.admin(user.get("login"));
+    Matcher m = MANAGED_STUDENT.matcher(r.getRequestURI());
+    if (!m.matches()) return;
+    long id = Long.parseLong(m.group(1));
+    var login = db.queryForList("select login from users where id=?", String.class, id);
+    LogContext.student(id, login.isEmpty() ? null : login.getFirst());
   }
 }
 final class Hashing {

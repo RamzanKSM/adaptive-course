@@ -26,7 +26,7 @@ export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR'
 export interface LlmUsage {
   days: number; totals: LlmUsageTotals; llm: LlmStatus
   byDay: { day: string; calls: number; errors: number; tokens: number }[]
-  byPurpose: { purpose: LlmPurpose; effort?: string | null; calls: number; errors: number; avgMs: number; tokens: number }[]
+  byPurpose: { purpose: LlmPurpose; effort?: string | null; model?: string | null; calls: number; errors: number; avgMs: number; tokens: number }[]
   byLanguage: { language: CourseLanguage; calls: number; tokens: number }[]
   byStudent: { userId: Id | null; displayName: string; login?: string; calls: number; chatTurns: number; errors: number; tokens: number; lastAt: string }[]
   recentErrors: { createdAt: string; purpose: LlmPurpose; language: CourseLanguage; status: 'ERROR' | 'TIMEOUT'; error?: string; durationMs: number; displayName?: string }[]
@@ -34,9 +34,12 @@ export interface LlmUsage {
 export interface ChatQuota { hourUsed: number; hourLimit: number; dayUsed: number; dayLimit: number; retryAfterSeconds: number }
 export interface LlmLimits { chatPerHour: number; chatPerDay: number; tasksPerHour: number; explanationsPerHour: number }
 export interface LlmModel { id: string; displayName: string; description: string; efforts: string[]; defaultEffort: string; listed: boolean }
+export type LlmPurposeKey = 'CHAT' | 'TASK' | 'EXPLANATION'
+export interface LlmLogging { generation: boolean; chat: boolean }
 export interface LlmSettings {
-  model: string; modelDefault: string; models: LlmModel[]
-  reasoning: { CHAT: string; TASK: string; EXPLANATION: string }; reasoningDefaults: LlmSettings['reasoning']
+  purposeModels: Record<LlmPurposeKey, string>; purposeModelDefaults: Record<LlmPurposeKey, string>; models: LlmModel[]
+  reasoning: Record<LlmPurposeKey, string>; reasoningDefaults: Record<LlmPurposeKey, string>
   reasoningOptions: string[]; reasoningOptionsFromModel: boolean
   limits: LlmLimits; limitDefaults: LlmLimits; usageLastHour: { tasks: number; explanations: number }
+  logging: LlmLogging; loggingDefaults: LlmLogging
 }

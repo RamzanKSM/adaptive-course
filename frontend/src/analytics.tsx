@@ -63,8 +63,8 @@ export function LlmAnalytics({ request }: { request: Request }) {
           <div className="analytics-grid">
             <div className="card">
               <h2 className="card-title">Для чего используется</h2>
-              <table className="data-table"><thead><tr><th>Назначение</th><th>Размышления</th><th>Вызовы</th><th>Ошибки</th><th>Ср. время</th><th>Токены</th></tr></thead>
-                <tbody>{usage.byPurpose.map(p => <tr key={p.purpose}><td>{PURPOSES[p.purpose] ?? p.purpose}</td><td>{p.effort ? EFFORTS[p.effort] ?? p.effort : '—'}</td><td>{number.format(p.calls)}</td><td>{p.errors ? number.format(p.errors) : '—'}</td><td>{seconds(p.avgMs)}</td><td>{p.tokens ? compact.format(p.tokens) : '—'}</td></tr>)}</tbody>
+              <table className="data-table"><thead><tr><th>Назначение</th><th>Модель</th><th>Размышления</th><th>Вызовы</th><th>Ошибки</th><th>Ср. время</th><th>Токены</th></tr></thead>
+                <tbody>{usage.byPurpose.map(p => <tr key={p.purpose}><td>{PURPOSES[p.purpose] ?? p.purpose}</td><td>{p.model ?? '—'}</td><td>{p.effort ? EFFORTS[p.effort] ?? p.effort : '—'}</td><td>{number.format(p.calls)}</td><td>{p.errors ? number.format(p.errors) : '—'}</td><td>{seconds(p.avgMs)}</td><td>{p.tokens ? compact.format(p.tokens) : '—'}</td></tr>)}</tbody>
               </table>
               {(t.tasksAccepted + t.tasksRejected) > 0 && <p className="muted small table-note">Сгенерированные задачи: принято {t.tasksAccepted}, отклонено проверкой {t.tasksRejected} ({percent(t.tasksRejected, t.tasksAccepted + t.tasksRejected)}).</p>}
               {usage.byLanguage.length > 0 && <p className="muted small table-note">По курсам: {usage.byLanguage.map(l => `${LANGUAGE_TITLES[l.language] ?? l.language} — ${number.format(l.calls)}`).join(' · ')}</p>}

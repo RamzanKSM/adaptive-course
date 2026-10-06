@@ -4,12 +4,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * LLM settings an admin can change at runtime, stored in app_settings. Environment values are the defaults until
  * an admin overrides them.
  * <ul>
- *   <li>reasoning effort per purpose (chat, task generation incl. repair, explanations);</li>
+ *   <li>model and reasoning effort per purpose (chat, task generation incl. repair, explanations);</li>
+ *   <li>whether answers and reasoning are written to the log: for generation and, separately, for chat (which
+ *       contains students' messages and code);</li>
  *   <li>rate limits, independent of each other: assistant (chat) messages per student per hour and per day;
  *       course-wide generations per hour of tasks (incl. repairs) and, separately, of explanations (lectures). The whole
  *       course. 0 means no limit. Usage is counted from llm_calls, so limits survive restarts.</li>
@@ -26,11 +29,17 @@ class LlmSettings {
   private final JdbcTemplate db;
   private final Map<String, String> defaultEfforts;
   private final Map<String, Integer> defaultLimits;
-  private final String defaultModel;
+  private final Map<String, String> defaultModels;
   private final List<String> extraModels;
+  private final boolean defaultLogGeneration, defaultLogChat;
 
   LlmSettings(JdbcTemplate db,
               @Value("${app.llm.model}") String defaultModel,
+              @Value("${app.llm.model-chat:}") String chatModel,
+              @Value("${app.llm.model-task:}") String taskModel,
+              @Value("${app.llm.model-explanation:}") String explanationModel,
+              @Value("${app.llm.log-generation:true}") boolean logGeneration,
+              @Value("${app.llm.log-chat:false}") boolean logChat,
               @Value("${app.llm.extra-models:gpt-5.6-terra}") String extraModels,
               @Value("${app.llm.reasoning-effort:medium}") String fallback,
               @Value("${app.llm.reasoning-effort-chat:low}") String chat,
@@ -41,23 +50,36 @@ class LlmSettings {
               @Value("${app.llm.limits.tasks-per-hour:100}") int tasksPerHour,
               @Value("${app.llm.limits.explanations-per-hour:30}") int explanationsPerHour) {
     this.db = db;
-    this.defaultModel = defaultModel;
+    this.defaultModels = Map.of("CHAT", or(chatModel, defaultModel), "TASK", or(taskModel, defaultModel), "EXPLANATION", or(explanationModel, defaultModel));
+    this.defaultLogGeneration = logGeneration; this.defaultLogChat = logChat;
     this.extraModels = Arrays.stream(extraModels.split(",")).map(String::strip).filter(m -> !m.isEmpty()).distinct().toList();
     this.defaultEfforts = Map.of("CHAT", or(chat, fallback), "TASK", or(task, fallback), "EXPLANATION", or(explanation, fallback));
     this.defaultLimits = Map.of("chatPerHour", chatPerHour, "chatPerDay", chatPerDay, "tasksPerHour", tasksPerHour, "explanationsPerHour", explanationsPerHour);
   }
   private static String or(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
 
-  /** The model for every LLM call; CODEX_MODEL until an admin picks another one. */
-  String model() { return stored("llm_model").orElse(defaultModel); }
-  String defaultModel() { return defaultModel; }
+  /** Purposes share settings in pairs: a task repair is task generation. */
+  private static String key(String purpose) { return "TASK_REPAIR".equals(purpose) ? "TASK" : purpose; }
+
+  /** The model for this purpose; llm_model is the single model saved before models were set per purpose. */
+  String model(String purpose) { String k = key(purpose); return stored("llm_model_" + k).or(() -> stored("llm_model")).orElse(defaultModels.getOrDefault(k, defaultModels.get("TASK"))); }
+  /** The chat model, shown as "the" model in statuses. */
+  String model() { return model("CHAT"); }
+  Map<String, String> models() { var map = new LinkedHashMap<String, String>(); for (String p : EFFORT_PURPOSES) map.put(p, model(p)); return map; }
+  Map<String, String> defaultModels() { var map = new LinkedHashMap<String, String>(); for (String p : EFFORT_PURPOSES) map.put(p, defaultModels.get(p)); return map; }
+
+  /** Whether this turn's answer and reasoning go to the log. Chat is separate: it contains students' messages and code. */
+  boolean logOutput(String purpose) { return "CHAT".equals(key(purpose)) ? flag("llm_log_chat", defaultLogChat) : flag("llm_log_generation", defaultLogGeneration); }
+  Map<String, Boolean> logging() { return Map.of("generation", flag("llm_log_generation", defaultLogGeneration), "chat", flag("llm_log_chat", defaultLogChat)); }
+  Map<String, Boolean> defaultLogging() { return Map.of("generation", defaultLogGeneration, "chat", defaultLogChat); }
+  private boolean flag(String key, boolean fallback) { return stored(key).map(Boolean::parseBoolean).orElse(fallback); }
   /** Models always offered in the admin even if the App Server does not list them (APP_LLM_EXTRA_MODELS). */
   List<String> extraModels() { return extraModels; }
 
   /** TASK_REPAIR uses the task generation level. */
   String effort(String purpose) {
-    String key = "TASK_REPAIR".equals(purpose) ? "TASK" : purpose;
-    return stored("llm_effort_" + key).orElse(defaultEfforts.getOrDefault(key, defaultEfforts.get("TASK")));
+    String k = key(purpose);
+    return stored("llm_effort_" + k).orElse(defaultEfforts.getOrDefault(k, defaultEfforts.get("TASK")));
   }
   Map<String, String> efforts() { var map = new LinkedHashMap<String, String>(); for (String p : EFFORT_PURPOSES) map.put(p, effort(p)); return map; }
   Map<String, String> defaultEfforts() { var map = new LinkedHashMap<String, String>(); for (String p : EFFORT_PURPOSES) map.put(p, defaultEfforts.get(p)); return map; }
@@ -66,18 +88,37 @@ class LlmSettings {
   Map<String, Integer> limits() { var map = new LinkedHashMap<String, Integer>(); for (String k : LIMIT_KEYS) map.put(k, limit(k)); return map; }
   Map<String, Integer> defaultLimits() { var map = new LinkedHashMap<String, Integer>(); for (String k : LIMIT_KEYS) map.put(k, defaultLimits.get(k)); return map; }
 
-  /** Validates everything first, then saves; an invalid value changes nothing. */
-  void update(String model, Map<String, String> efforts, Map<String, Integer> limits, List<String> allowedEfforts) {
-    if (efforts != null) for (var e : efforts.entrySet()) {
-      if (!EFFORT_PURPOSES.contains(e.getKey())) throw new ApiError("INVALID_SETTING", "Неизвестное назначение: " + e.getKey());
-      if (!allowedEfforts.contains(e.getValue())) throw new ApiError("INVALID_SETTING", "Модель не поддерживает уровень размышлений «" + e.getValue() + "»");
+  /**
+   * Validates everything first, then saves; an invalid value changes nothing. A changed model must be one of
+   * offeredModels (empty when the list is unknown: then models cannot change). Each purpose's level is checked
+   * against the levels of the model it will run on.
+   */
+  void update(Map<String, String> models, Map<String, String> efforts, Map<String, Integer> limits, Map<String, Boolean> logging,
+              Set<String> offeredModels, Function<String, List<String>> effortsOfModel) {
+    for (var map : Arrays.asList(models, efforts)) if (map != null) for (String purpose : map.keySet())
+      if (!EFFORT_PURPOSES.contains(purpose)) throw new ApiError("INVALID_SETTING", "Неизвестное назначение: " + purpose);
+    if (models != null) for (var m : models.entrySet()) {
+      if (m.getValue() == null || m.getValue().isBlank()) throw new ApiError("INVALID_SETTING", "Модель не выбрана");
+      if (!m.getValue().equals(model(m.getKey())) && !offeredModels.contains(m.getValue()))
+        throw new ApiError(offeredModels.isEmpty() ? "MODELS_UNAVAILABLE" : "INVALID_SETTING", offeredModels.isEmpty()
+            ? "Список моделей сейчас недоступен — модель можно сменить, когда LLM включена и App Server отвечает"
+            : "Модель «" + m.getValue() + "» недоступна в App Server");
+    }
+    for (String purpose : EFFORT_PURPOSES) {
+      String model = models != null && models.containsKey(purpose) ? models.get(purpose) : model(purpose);
+      String effort = efforts != null && efforts.containsKey(purpose) ? efforts.get(purpose) : effort(purpose);
+      boolean touched = models != null && models.containsKey(purpose) || efforts != null && efforts.containsKey(purpose);
+      if (touched && !effortsOfModel.apply(model).contains(effort))
+        throw new ApiError("INVALID_SETTING", "Модель " + model + " не поддерживает уровень размышлений «" + effort + "»");
     }
     if (limits != null) for (var l : limits.entrySet()) {
       if (!LIMIT_KEYS.contains(l.getKey())) throw new ApiError("INVALID_SETTING", "Неизвестный лимит: " + l.getKey());
       if (l.getValue() == null || l.getValue() < 0 || l.getValue() > LIMIT_MAX.get(l.getKey())) throw new ApiError("INVALID_SETTING", "Лимит должен быть от 0 до " + LIMIT_MAX.get(l.getKey()));
     }
-    if (model != null) save("llm_model", model);
+    if (logging != null) for (var e : logging.entrySet()) if (!Set.of("generation", "chat").contains(e.getKey()) || e.getValue() == null) throw new ApiError("INVALID_SETTING", "Неизвестная настройка логирования: " + e.getKey());
+    if (models != null) models.forEach((purpose, value) -> save("llm_model_" + purpose, value));
     if (efforts != null) efforts.forEach((purpose, value) -> save("llm_effort_" + purpose, value));
+    if (logging != null) logging.forEach((k, v) -> save("generation".equals(k) ? "llm_log_generation" : "llm_log_chat", String.valueOf(v)));
     if (limits != null) limits.forEach((key, value) -> save("llm_limit_" + key, String.valueOf(value)));
   }
 

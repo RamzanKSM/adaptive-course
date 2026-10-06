@@ -17,7 +17,7 @@ import java.util.HexFormat;
 
 /**
  * One line per API request with status and duration. Runs before AuthFilter so every log line of the request
- * (including LLM and runner logs) carries the same requestId; AuthFilter adds the userId.
+ * (including LLM and runner logs) carries the same requestId; AuthFilter adds who the request is about (LogContext).
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
