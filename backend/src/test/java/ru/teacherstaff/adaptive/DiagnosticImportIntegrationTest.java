@@ -21,6 +21,7 @@ class DiagnosticImportIntegrationTest {
     p.add("app.diagnostic.source", () -> Path.of("..", "java_initial_diagnostic_mvp_v2.md").toAbsolutePath().toString());
     p.add("app.bootstrap-admin-login", () -> "admin");
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
+    p.add("app.task-audit.enabled", () -> "false"); // background re-verification would race the tests; it is called directly where tested
   }
   @Test void importsTheSpecifiedDiagnosticAndSeedContent() {
     assertEquals(56, db.queryForObject("select count(*) from diagnostic_questions where language='JAVA'", Integer.class));

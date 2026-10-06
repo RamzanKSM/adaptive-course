@@ -32,6 +32,7 @@ class LearningFlowIntegrationTest {
     p.add("app.diagnostic.source", () -> Path.of("..", "java_initial_diagnostic_mvp_v2.md").toAbsolutePath().toString());
     p.add("app.bootstrap-admin-login", () -> "admin");
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
+    p.add("app.task-audit.enabled", () -> "false"); // background re-verification would race the tests; it is called directly where tested
   }
   @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenAnswer(call->((String)call.getArgument(1)).contains("WRONG")?new PistonCodeRunner.Run(false,"Неверный вывод программы."):new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna")); }
 
@@ -300,6 +301,7 @@ class LearningFlowIntegrationTest {
 
   @Test void legacyWeakTaskGetsVerifiedChecksWithoutRecalculatingCredit() throws Exception {
     String token=createStudentAndLogin("legacy-student"); long student=studentId("legacy-student");
+    db.update("update tasks set quality_version=? where coalesce(quality_version,0)<?",LearningContentGenerator.TASK_QUALITY_VERSION,LearningContentGenerator.TASK_QUALITY_VERSION); // only this test's tasks are pending
     db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,language,source) values('PY_ARITHMETIC_BASIC','Считаем стоимость билетов','Посчитай стоимость 4 билетов по 6 рублей умножением.','','def run_checks():\n    assert True\n','test_solution.py','PYTHON','LLM')");
     long weak=db.queryForObject("select last_insert_rowid()",Long.class); db.update("insert into task_target_skills(task_id,skill_code) values(?, 'PY_ARITHMETIC_BASIC')",weak);
     db.update("insert into successful_task_credit(user_id,task_id) values(?,?)",student,weak);

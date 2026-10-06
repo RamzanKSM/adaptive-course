@@ -351,8 +351,9 @@ class DiagnosticImporter implements ApplicationRunner {
       db.update("insert or ignore into task_target_skills(task_id,skill_code) values(?,?)",id,skill);
       return;
     }
-    db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language,source,goal_json,quality_version) values(?,?,?,?,?,?,?,?,'SEED',?,?)",skill,title,statement,starter,test,testFile,difficulty,language.name(),goal,LearningContentGenerator.TASK_QUALITY_VERSION);
-    db.update("insert into task_target_skills(task_id,skill_code) values(last_insert_rowid(),?)",skill);
+    // RETURNING keeps the id on the same statement; last_insert_rowid() in a second statement may run on another pooled connection.
+    long id=db.queryForObject("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language,source,goal_json,quality_version) values(?,?,?,?,?,?,?,?,'SEED',?,?) returning id",Long.class,skill,title,statement,starter,test,testFile,difficulty,language.name(),goal,LearningContentGenerator.TASK_QUALITY_VERSION);
+    db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",id,skill);
   }
 
 

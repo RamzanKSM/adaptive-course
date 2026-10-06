@@ -75,6 +75,7 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
     for (int attempt = 1; attempt <= REPAIR_ATTEMPTS; attempt++) {
       try {
         GeneratedTask candidate = generator.repairTask(brief, existing);
+        if (candidate == null) throw new InvalidGeneratedContentException("empty response");
         if (!ApiController.validHarness(language, candidate.testSource())) throw new InvalidGeneratedContentException("test harness does not follow the " + language.title + " contract");
         TaskVerifier.Verified verified = verifier.verify(language, candidate);
         db.update("update tasks set test_source=?, goal_json=?, quality_version=? where id=?", verified.testSource(), verified.goalJson(), LearningContentGenerator.TASK_QUALITY_VERSION, id);
