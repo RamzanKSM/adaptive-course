@@ -8,7 +8,8 @@ import { achievements, commonAchievements, experience, skillState, type SkillSta
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
 import { LlmSettingsView } from './settings'
-import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
+import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
+import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
 
 const UNKNOWN = 'Не знаю'
 const fmt = (value?: string | null) => {
@@ -91,12 +92,25 @@ function Shell() {
     onUnauthorized(() => { setMe(null); setError('Сессия истекла. Войдите снова.') })
     return () => onUnauthorized(null)
   }, [me])
+  // The header stays on top; sticky panels below it (chat, student card, messages) are offset by its real height.
+  const header = useRef<HTMLElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const element = header.current
+    if (!element) return
+    const root = document.documentElement
+    const observer = new ResizeObserver(() => root.style.setProperty('--topbar-h', `${element.offsetHeight}px`))
+    observer.observe(element)
+    const onScroll = () => setScrolled(window.scrollY > 4)
+    onScroll(); window.addEventListener('scroll', onScroll, { passive: true })
+    return () => { observer.disconnect(); window.removeEventListener('scroll', onScroll) }
+  }, [me])
   const login = (user: User) => { setError(''); setMe(user) }
   const logout = async () => { await request(() => post<void>('/auth/logout')); setError(''); setMe(null) }
   if (loading) return <div className="center"><Spinner /><span>Загружаем…</span></div>
   if (!me) return <Login onLogin={login} onError={setError} error={error} />
   return <main className="app">
-    <header className="topbar">
+    <header ref={header} className={`topbar ${scrolled ? 'scrolled' : ''}`}>
       <div className="brand"><span className="logo" aria-hidden="true">R</span><b>Rmzn Tutor</b></div>
       {isStudent && language && <LanguageSwitch value={language} onChange={chooseLanguage} />}
       <div className="user-chip">
@@ -447,12 +461,16 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
   </section>
 }
 
+type ConsoleState = { run: ConsoleRun; origin: ConsoleOrigin }
+
 function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress }: { task: Task; skillProgress?: SkillProgress; llm?: LlmStatus; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void }) {
   const course = useCourse()
   const [code, setCode] = useState(task.starterCode || course.fallback)
+  // The console on screen; the assistant sees the same text when the student asks about it.
+  const [screen, setScreen] = useState<ConsoleState | null>(null)
   return <div className="lesson-grid enter">
-    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} />
-    <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} />
+    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} />
+    <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} consoleOutput={screen ? consoleText(screen.run) : undefined} />
   </div>
 }
 
@@ -463,9 +481,11 @@ function IterationSteps({ done, iteration, pulse }: { done: number; iteration: n
   </div>
 }
 
-function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress }: { task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void }) {
+function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole }: { task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void; console: ConsoleState | null; onConsole: (console: ConsoleState) => void }) {
   const [attempt, setAttempt] = useState<Attempt | null>(null); const [sending, setSending] = useState(false); const [tries, setTries] = useState(0)
+  const [running, setRunning] = useState(false); const [runs, setRuns] = useState(0)
   const resultRef = useRef<HTMLDivElement>(null)
+  const consoleRef = useRef<HTMLElement>(null)
   const course = useCourse()
   // Snapshot the step on mount: after the iteration closes the server resets successes to 0, but this task still was step 3 of 3.
   const [step] = useState(() => ({ done: Math.min(skillProgress?.iterationSuccesses ?? 0, TASKS_PER_ITERATION - 1), iteration: Math.min((skillProgress?.completedIterations ?? 0) + 1, ITERATIONS) }))
@@ -475,8 +495,18 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     setSending(false)
     if (!result) return
     setAttempt(result); setTries(t => t + 1)
+    if (result.console) onConsole({ run: result.console, origin: 'attempt' })
     if (result.progress) onProgress(result.progress)
   }
+  /** «Запустить»: runs the code as is and shows the console. Not a submission: no attempt, no credit, no «Попытка N». */
+  async function run() {
+    setRunning(true)
+    const result = await request(() => post<{ console: ConsoleRun }>(withCourse('/run', course.id), { sourceCode: code }))
+    setRunning(false)
+    if (!result) return
+    onConsole({ run: result.console, origin: 'run' }); setRuns(n => n + 1)
+  }
+  useEffect(() => { if (runs) consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [runs])
   useEffect(() => { if (attempt) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [attempt, tries])
   const passed = !!attempt?.passed
   return <section className={`card task ${passed ? 'is-passed' : ''}`}>
@@ -491,7 +521,10 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     <div className="task-actions">
       {passed
         ? <button className="reward big" onClick={onNext}>Следующая задача <Icon name="arrow" /></button>
-        : <button className="primary big" disabled={sending || !code.trim()} onClick={submit}>{sending ? <><Spinner /> Проверяем…</> : <><Icon name="play" size={16} /> Отправить на проверку</>}</button>}
+        : <>
+          <button className="primary big" disabled={sending || running || !code.trim()} onClick={submit}>{sending ? <><Spinner /> Проверяем…</> : <><Icon name="play" size={16} /> Отправить на проверку</>}</button>
+          <button className="ghost big" disabled={sending || running || !code.trim()} onClick={run} title="Запустить программу и посмотреть вывод. Попытка не засчитывается.">{running ? <><Spinner /> Запускаем…</> : <><Icon name="terminal" size={16} /> Запустить</>}</button>
+        </>}
       {tries > 0 && !passed && <span className="muted small">Попытка {tries}</span>}
     </div>
     {attempt && <div ref={resultRef} key={tries} className={`result ${passed ? 'success' : 'failed'}`} role="status">
@@ -504,12 +537,13 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
       {!passed && <p className="muted small">Посмотри на вывод проверки ниже или спроси помощника, где искать ошибку.</p>}
       {attempt.output && <pre>{attempt.output}</pre>}
     </div>}
+    {screen && (!passed || screen.origin === 'attempt') && <ConsolePanel ref={consoleRef} key={`${screen.origin}-${runs}-${tries}`} run={screen.run} origin={screen.origin} language={course.id} />}
   </section>
 }
 
 type ChatState = { messages: ChatMessage[]; llm: LlmStatus; quota?: ChatQuota }
 
-function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string }) {
+function Chat({ llm, request, taskId, sourceCode, consoleOutput }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string; consoleOutput?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [text, setText] = useState(''); const [status, setStatus] = useState<LlmStatus | undefined>(llm); const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const course = useCourse()
@@ -532,7 +566,7 @@ function Chat({ llm, request, taskId, sourceCode }: { llm?: LlmStatus; request: 
     const content = text.trim(); if (!content || sending) return
     setSending(true)
     setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'STUDENT', content, createdAt: new Date().toISOString() }]); setText('')
-    const body = taskId !== undefined ? { content, taskId, sourceCode } : { content }
+    const body = taskId !== undefined ? { content, taskId, sourceCode, consoleOutput } : { content }
     const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus; quota?: ChatQuota }>(withCourse('/chat', course.id), body))
     if (result) {
       setMessages(m => [...m, result.message]); if (result.llm) setStatus(result.llm); if (result.quota) setQuota(result.quota)
@@ -858,7 +892,7 @@ function StudentDetail({ student, request, toggle, onLlmStatus, onDeleted }: { s
             {t.submissions.some(a => a.passed && !a.revokedAt) && <button className="ghost danger small-button" onClick={() => revoke(detail.lesson, t)} title="Студенту придётся решить задачу заново"><Icon name="refresh" size={14} /> Отменить зачёт</button>}
           </div>
           <Markdown>{t.statement}</Markdown>
-          {t.submissions.length ? t.submissions.map(a => <details key={a.id}><summary className={a.revokedAt ? 'revoked' : a.passed ? 'passed' : 'not-passed'}><Icon name={a.revokedAt ? 'refresh' : a.passed ? 'check' : 'x'} size={14} /> {a.revokedAt ? `зачёт отменён ${fmt(a.revokedAt)}` : a.passed ? 'принято' : 'не принято'} · {fmt(a.createdAt)}</summary><pre>{a.sourceCode}</pre>{a.output && <pre>{a.output}</pre>}</details>) : <p className="muted small">Попыток не было.</p>}
+          {t.submissions.length ? t.submissions.map(a => <details key={a.id}><summary className={a.revokedAt ? 'revoked' : a.passed ? 'passed' : 'not-passed'}><Icon name={a.revokedAt ? 'refresh' : a.passed ? 'check' : 'x'} size={14} /> {a.revokedAt ? `зачёт отменён ${fmt(a.revokedAt)}` : a.passed ? 'принято' : 'не принято'} · {fmt(a.createdAt)}</summary><pre>{a.sourceCode}</pre>{a.output && <pre>{a.output}</pre>}{a.console && <ConsolePanel run={a.console} origin="attempt" language={detail.lesson.language ?? 'JAVA'} />}</details>) : <p className="muted small">Попыток не было.</p>}
         </article>) : <p className="muted">Задач в этом уроке не было.</p>}
         <h3 className="section-title">Чат</h3>
         {detail.chat.length ? <div className="messages static" ref={chatRef}>{detail.chat.map(m => <div key={m.id} className={`message ${m.role === 'STUDENT' ? 'student' : 'assistant'}`}><Markdown>{m.content}</Markdown><small>{m.role === 'STUDENT' ? 'Студент' : 'Помощник'} · {fmt(m.createdAt)}</small></div>)}</div> : <p className="muted">Переписки не было.</p>}

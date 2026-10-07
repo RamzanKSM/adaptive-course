@@ -89,6 +89,102 @@ class PistonCodeRunner {
     } catch(Exception e){return new Run(false,"Piston execution service is unavailable");}
   }
 
+  static final int CONSOLE_MAX_CHARS=10_000, CONSOLE_MAX_LINES=200;
+  /** Runs Solution.main with UTF-8 console streams; appended after the student's code so its line numbers stay unchanged. */
+  static final String CONSOLE_LAUNCHER="public class ConsoleRunner { public static void main(String[] args) throws Throwable { "
+      +"System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, \"UTF-8\")); "
+      +"System.setErr(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), true, \"UTF-8\")); "
+      +"Solution.main(new String[0]); } }";
+  /** Runs solution.py as a script (so `if __name__ == "__main__"` blocks run) with UTF-8 console streams. */
+  static final String PYTHON_CONSOLE_ENTRY="""
+      import runpy, sys
+      sys.stdout.reconfigure(encoding="utf-8")
+      sys.stderr.reconfigure(encoding="utf-8")
+      runpy.run_path("solution.py", run_name="__main__")
+      """;
+  private static final Pattern JAVA_MAIN=Pattern.compile("\\bstatic\\s+(?:final\\s+)?void\\s+main\\s*\\(");
+
+  /**
+   * The program run as is, without hidden checks — what the student would see in a console. Nothing here is secret:
+   * no checks, no pass marker. Keyboard input is empty.
+   */
+  Console console(Language language,String source) {
+    try { return language==Language.PYTHON?consolePython(source):consoleJava(source); }
+    catch(Exception e) { return Console.of("UNAVAILABLE","Запуск сейчас недоступен."); }
+  }
+  private Console consoleJava(String source) throws Exception {
+    if(source==null||!JAVA_MAIN.matcher(source).find()) return Console.of("NO_MAIN",null);
+    String version=version(Language.JAVA); if(version.isBlank()) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
+    ObjectNode request=execution(Language.JAVA,version);
+    request.putArray("files").addObject().put("name","ConsoleRunner").put("content",consoleSource(source));
+    JsonNode root=execute(request); if(root==null) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
+    JsonNode compile=root.path("compile"),run=root.path("run");
+    if(!compile.isMissingNode()&&!compile.isNull()) {
+      if(limitFeedback(compile)!=null) return Console.of("LIMIT",limitFeedback(compile));
+      Integer code=exitCode(compile); if(code!=null&&code!=0) return Console.of("COMPILE_ERROR",javaConsoleDiagnostic(output(compile)));
+    }
+    if(run.isMissingNode()||run.isNull()||!run.isObject()) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
+    if(isCompilerFailure(run)&&run.path("stdout").asText("").isEmpty()) return Console.of("COMPILE_ERROR",javaConsoleDiagnostic(output(run)));
+    return consoleResult(run,javaConsoleDiagnostic(run.path("stderr").asText("")));
+  }
+  private Console consolePython(String source) throws Exception {
+    String version=version(Language.PYTHON); if(version.isBlank()) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
+    ObjectNode request=execution(Language.PYTHON,version); request.put("stdin","");
+    ArrayNode files=request.putArray("files");
+    files.addObject().put("name","main.py").put("content",PYTHON_CONSOLE_ENTRY.strip()+"\n");
+    files.addObject().put("name","solution.py").put("content",source==null?"":source);
+    JsonNode root=execute(request); if(root==null) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
+    JsonNode run=root.path("run"); if(run.isMissingNode()||run.isNull()||!run.isObject()) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
+    String traceback=studentTraceback(run.path("stderr").asText(""));
+    String last=traceback.lines().filter(l->!l.isBlank()).reduce((a,b)->b).orElse("").strip();
+    if(last.startsWith("SyntaxError")||last.startsWith("IndentationError")||last.startsWith("TabError")) return new Console("COMPILE_ERROR",clip(run.path("stdout").asText("")),clip(traceback),false);
+    return consoleResult(run,traceback);
+  }
+  /** Common tail: output limits, a crash with its message, or a normal exit. stdout printed before a crash is kept. */
+  private Console consoleResult(JsonNode run,String error) {
+    String stdout=run.path("stdout").asText("");
+    String status=run.path("status").asText("");
+    boolean tooLong="OL".equals(status)||"EL".equals(status)||stdout.length()>CONSOLE_MAX_CHARS||stdout.lines().count()>CONSOLE_MAX_LINES;
+    String limit="OL".equals(status)||"EL".equals(status)?null:limitFeedback(run);
+    if(limit!=null) return new Console("LIMIT",clip(stdout),limit,tooLong);
+    Integer code=exitCode(run);
+    if(code!=null&&code!=0&&!tooLong) {
+      String message=error.isBlank()?"Программа завершилась с кодом "+code+".":error;
+      if(message.contains("EOFError")||message.contains("NoSuchElementException")) message+="\n\nВвод с клавиатуры в консоли пока не поддерживается: программа получает пустой ввод.";
+      return new Console("RUNTIME_ERROR",clip(stdout),clip(message),false);
+    }
+    return new Console("OK",clip(stdout),null,tooLong);
+  }
+  static String consoleSource(String student) {
+    String solution=student.replaceFirst("(?m)\\bpublic\\s+(?=(?:(?:final|abstract)\\s+)*class\\s+Solution\\b)","");
+    return javaUnicodeEscapes(solution+"\n"+CONSOLE_LAUNCHER);
+  }
+  /** Compiler and JVM messages in the student's terms: Solution.java, their own line numbers, readable Cyrillic. */
+  static String javaConsoleDiagnostic(String output) {
+    if(output==null) return "";
+    String text=output.lines().filter(l->!l.contains("at ConsoleRunner.")).reduce((a,b)->a+"\n"+b).orElse("").replace("ConsoleRunner.java","Solution.java");
+    var escape=Pattern.compile("\\\\u([0-9A-Fa-f]{4})").matcher(text); var unescaped=new StringBuilder();
+    while(escape.find()) escape.appendReplacement(unescaped,java.util.regex.Matcher.quoteReplacement(String.valueOf((char)Integer.parseInt(escape.group(1),16))));
+    escape.appendTail(unescaped);
+    return clip(unescaped.toString().strip());
+  }
+  private static String clip(String text) {
+    if(text==null) return "";
+    var lines=text.lines().limit(CONSOLE_MAX_LINES).toList();
+    String kept=String.join("\n",lines)+(text.endsWith("\n")&&lines.size()==text.lines().count()?"\n":"");
+    return kept.length()>CONSOLE_MAX_CHARS?kept.substring(0,CONSOLE_MAX_CHARS):kept;
+  }
+  /**
+   * The console of one run. status: OK, COMPILE_ERROR, RUNTIME_ERROR, LIMIT, NO_MAIN (a Java task without main —
+   * nothing to run), UNAVAILABLE. truncated: the output was cut to the first lines.
+   */
+  record Console(String status,String stdout,String error,boolean truncated) {
+    static Console of(String status,String error){return new Console(status,"",error,false);}
+    Map<String,Object> view(){var m=new LinkedHashMap<String,Object>();m.put("status",status);m.put("stdout",stdout);m.put("error",error);m.put("truncated",truncated);return m;}
+    /** Plain text for the assistant's context. */
+    String text(){return "статус="+status+(truncated?" (вывод обрезан)":"")+"\nвывод:\n"+(stdout==null||stdout.isEmpty()?"(пусто)":stdout)+(error==null||error.isBlank()?"":"\nошибка:\n"+error);}
+  }
+
   private String pythonFeedback(JsonNode run) {
     String limit=limitFeedback(run); if(limit!=null)return limit;
     String stderr=run.path("stderr").asText("");
@@ -104,7 +200,7 @@ class PistonCodeRunner {
     if(stderr==null)return "";
     var kept=new ArrayList<String>(); boolean skipCode=false;
     for(String line:stderr.split("\\R")) {
-      if(line.matches("\\s*File \".*(main|test_solution)\\.py\".*")) { skipCode=true; continue; }
+      if(line.matches("\\s*File \"(.*(main|test_solution)\\.py|<frozen [^>]+>)\".*")) { skipCode=true; continue; }
       if(skipCode&&line.startsWith("    ")&&!line.stripLeading().startsWith("File ")) continue;
       skipCode=false;
       kept.add(studentFrame(line));

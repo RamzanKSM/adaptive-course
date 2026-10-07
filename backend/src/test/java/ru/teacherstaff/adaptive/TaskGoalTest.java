@@ -82,6 +82,14 @@ class TaskGoalTest {
     assertFalse(passes(dir, checks, "print(2 * 2 * 6)\n"));
     assertFalse(passes(dir, checks, "price = 6\nprice = 3\nprint(4 * price * 2)\n"));
     assertFalse(passes(dir, checks, "print((4 * 6) + 1)\n"), "right calculation, wrong output is caught by the task's own check");
+    // The printed value may come from the calculation through variables or the student's own function.
+    assertTrue(passes(dir, checks, "bilet = 4 * 6\nprint(bilet)\n"));
+    assertTrue(passes(dir, checks, "price = 6\ncount = 4\ntotal = price * count\nshown = total\nprint(shown)\n"));
+    assertTrue(passes(dir, checks, "def cost(price, count):\n    return price * count\n\nprint(cost(6, 4))\n"));
+    assertTrue(passes(dir, checks, "def cost(price, count):\n    total = price * count\n    return total\n\nprice = 6\ncount = 4\nprint(cost(count=count, price=price))\n"));
+    assertFalse(passes(dir, checks, "def cost(price, count):\n    return price * count\n\nprint(cost(12, 2))\n"));
+    assertFalse(passes(dir, checks, "total = 4 * 6\nprint(24)\n"), "calculated but the ready number is printed");
+    assertFalse(passes(dir, checks, "x = 0\nx = x + 1\nprint(24)\n"));
   }
 
   @Test void pythonCheckEnforcesRequiredConstructs(@TempDir Path dir) throws Exception {

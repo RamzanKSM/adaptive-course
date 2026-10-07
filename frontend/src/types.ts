@@ -12,7 +12,9 @@ export interface Diagnostic { completed: boolean; questions: DiagnosticQuestion[
 export interface Task { id: Id; title: string; statement: string; starterCode?: string; redo?: boolean }
 export interface Lesson { id: Id; number: number; language?: CourseLanguage; startedAt: string; finishedAt?: string | null }
 export interface LearningNext { lesson: Lesson; skill: { code: string; title: string; blockNo: number } | null; explanation: { content: string; source: string } | null; task: Task | null; reason?: string; llm?: LlmStatus }
-export interface Attempt { id: Id; passed: Flag; output?: string | null }
+/** The program run as is, without hidden checks (POST /run, or alongside a check). */
+export interface ConsoleRun { status: 'OK' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'LIMIT' | 'NO_MAIN' | 'UNAVAILABLE'; stdout: string; error?: string | null; truncated: boolean }
+export interface Attempt { id: Id; passed: Flag; output?: string | null; console?: ConsoleRun | null }
 export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; content: string; createdAt?: string }
 /** Practice progress and, separately, the diagnostic result. confirmedByDiagnostic skips practice; it is not practice credit. */
 export interface SkillProgress { skillCode: string; title: string; blockNo?: number; completedIterations: number; iterationSuccesses: number; mastered: Flag; diagnosticCorrect?: number | null; diagnosticTotal?: number | null; confirmedByDiagnostic?: Flag }

@@ -26,6 +26,24 @@ class TaskVerificationTest {
     assertNull(JavaStructureCheck.problem(TICKETS, "public class Solution { broken"), "syntax errors are left to the compiler");
   }
 
+  /** The reported case: the answer is calculated into a variable and the variable is printed. */
+  @Test void javaTreeCheckFollowsThePrintedValueThroughVariablesAndMethods() {
+    var five = new TaskGoal(TaskGoal.Kind.FIXED_ARITHMETIC, "*", List.of(new BigDecimal(5), new BigDecimal(6)), "30\n", null, List.of());
+    assertNull(JavaStructureCheck.problem(five, "public class Solution {\n    public static void main(String[] args) {\n        int bilet = 5 * 6;\n      System.out.println(bilet);}\n    }\n"));
+    assertNull(JavaStructureCheck.problem(TICKETS, main("int price = 6; int count = 4; int total = price * count; System.out.println(total);")));
+    assertNull(JavaStructureCheck.problem(TICKETS, main("int total = 4 * 6; int shown = total; System.out.println(\"Итого: \" + shown);")));
+    assertNull(JavaStructureCheck.problem(TICKETS, "public class Solution { static int cost() { return 4 * 6; } public static void main(String[] args) { System.out.println(cost()); } }"));
+    assertNull(JavaStructureCheck.problem(TICKETS, "public class Solution { static int cost(int price, int count) { return price * count; } public static void main(String[] args) { System.out.println(cost(6, 4)); } }"));
+    assertNull(JavaStructureCheck.problem(TICKETS, "public class Solution { static int cost(int price, int count) { int sum = price * count; return sum; } public static void main(String[] args) { int price = 6; int count = 4; System.out.println(cost(price, count)); } }"),
+        "parameters named like the caller's variables do not hide them");
+    assertNotNull(JavaStructureCheck.problem(TICKETS, "public class Solution { static int cost(int price, int count) { return price * count; } public static void main(String[] args) { System.out.println(cost(12, 2)); } }"));
+    assertNotNull(JavaStructureCheck.problem(TICKETS, main("int total = 4 * 6; System.out.println(24);")), "calculated but the ready number is printed");
+    assertNotNull(JavaStructureCheck.problem(TICKETS, main("int total = 12 * 2; System.out.println(total);")));
+    assertNotNull(JavaStructureCheck.problem(TICKETS, main("int x = 0; x = x + 1; System.out.println(x);")), "a self-referencing variable terminates");
+    assertNotNull(JavaStructureCheck.problem(TICKETS, "public class Solution { static int f(int n) { return f(n - 1); } public static void main(String[] args) { System.out.println(f(3)); } }"), "recursion terminates");
+    assertTrue(JavaStructureCheck.problem(TICKETS, main("System.out.println(24);")).contains("через переменную"));
+  }
+
   @Test void javaTreeCheckFindsRequiredConstructs() {
     var loop = new TaskGoal(TaskGoal.Kind.CONSTRUCT, null, List.of(), null, null, List.of("for"));
     assertNull(JavaStructureCheck.problem(loop, main("for (int i = 1; i <= 3; i++) System.out.println(i);")));

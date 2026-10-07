@@ -216,6 +216,35 @@ class LearningFlowIntegrationTest {
     assertNotNull(other);
   }
 
+  @Test void runShowsTheConsoleWithoutCountingAnAttempt() throws Exception {
+    String token=createStudentAndLogin("console-runner"); long student=studentId("console-runner");
+    when(runner.console(any(Language.class),anyString())).thenReturn(new PistonCodeRunner.Console("OK","30\n",null,false));
+    var run=json.readTree(mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(5 * 6)\"}").param("language","PYTHON"))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("OK",run.path("console").path("status").asText()); assertEquals("30\n",run.path("console").path("stdout").asText());
+    assertEquals(0,db.queryForObject("select count(*) from submissions s join lessons l on l.id=s.lesson_id where l.user_id=?",Integer.class,student),"a run is not a submission");
+    mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\" \"}")).andExpect(status().isBadRequest());
+    // Free practice, but limited per student so the shared runner cannot be flooded.
+    for(int i=1;i<30;i++) mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(1)\"}")).andExpect(status().isOk());
+    mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(1)\"}"))
+        .andExpect(status().isTooManyRequests()).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().exists("Retry-After"));
+    String other=createStudentAndLogin("console-neighbour");
+    mvc.perform(post("/api/run").cookie(cookie(other)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(1)\"}")).andExpect(status().isOk());
+  }
+
+  @Test void submissionShowsAndKeepsWhatTheProgramPrinted() throws Exception {
+    String token=createStudentAndLogin("console-attempt"); long student=studentId("console-attempt"); submitDiagnostic(token,student,false);
+    addTask("console task"); prepareOnlySkill(student,"BASIC_CODE_READING"); start(token);
+    when(runner.console(any(Language.class),anyString())).thenReturn(new PistonCodeRunner.Console("OK","Итого: 24\n",null,false));
+    long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
+    var attempt=json.readTree(mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","WRONG"))))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertFalse(attempt.path("passed").asBoolean()); assertEquals("Итого: 24\n",attempt.path("console").path("stdout").asText());
+    long lesson=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    var detail=json.readTree(mvc.perform(get("/api/admin/students/{id}/lessons/{lesson}",student,lesson).cookie(cookie(login("admin","admin-pass")))).andReturn().getResponse().getContentAsString());
+    assertEquals("Итого: 24\n",detail.path("tasks").path(0).path("submissions").path(0).path("console").path("stdout").asText(),"the teacher sees it in the lesson history");
+  }
+
   @Test void unavailableRunnerDoesNotCallGenerator() throws Exception {
     String token=createStudentAndLogin("runner-unavailable-student"); long student=studentId("runner-unavailable-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"SWITCH_BASIC");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));

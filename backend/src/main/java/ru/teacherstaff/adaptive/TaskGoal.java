@@ -75,6 +75,10 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
     ArrayNode constructs = node.putArray("requiredConstructs"); requiredConstructs.forEach(constructs::add);
     return node.toString();
   }
+  /** What the student hears when the printed answer is not calculated from the statement's numbers. */
+  static String calculationHint(String operation, String numbers) {
+    return "вычисли ответ в программе действием «" + operation + "» над числами из условия (" + numbers + ") и выведи его — сразу или через переменную; готовое число или другие числа не подойдут";
+  }
   private static String text(JsonNode node, String field) { JsonNode value = node.path(field); return value.isNull() || value.isMissingNode() ? null : value.asText(); }
 
   boolean structural() { return kind == Kind.FIXED_ARITHMETIC || !requiredConstructs.isEmpty(); }
@@ -184,6 +188,7 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
         ? "print(" + expression + (newline ? "" : ", end=\"\"") + ")\n"
         : "public class Solution {\n    public static void main(String[] args) {\n        System.out." + (newline ? "println" : "print") + "(" + expression + ");\n    }\n}\n";
   }
+  private static String capitalize(String text) { return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1); }
   private static String number(BigDecimal value) { return value.stripTrailingZeros().scale() <= 0 ? value.toBigInteger().toString() : value.toPlainString(); }
   private static String literal(String text) { return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""; }
   private static String quote(String text) { return "\"" + text.replace("\n", "\\n") + "\""; }
@@ -192,7 +197,9 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
 
   /**
    * Python AST check appended to the task's checks. It runs before them, so the student first hears about the
-   * missing calculation or construct. Operands may be literals or variables assigned a literal at top level.
+   * missing calculation or construct. Operands may be literals, variables assigned a literal at top level, or
+   * parameters of the student's function bound to such values; the printed value may come from the calculation
+   * through variables or a function's return (the same rules as JavaStructureCheck).
    */
   String pythonCheck() {
     if (!structural()) return "";
@@ -214,13 +221,18 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
                 op = ops[%s]
                 expected = [%s]
                 known = {}
-                def value(node):
+                definitions, returns, parameters, scopes = {}, {}, {}, []
+                def value(node, scope=None, depth=0):
+                    if depth > 16:
+                        return None
                     if isinstance(node, ast.Constant) and type(node.value) in (int, float):
                         return node.value
                     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-                        inner = value(node.operand)
+                        inner = value(node.operand, scope, depth + 1)
                         return None if inner is None else -inner
                     if isinstance(node, ast.Name):
+                        if scope is not None and node.id in scope[0]:
+                            return value(scope[0][node.id], scope[1], depth + 1)
                         return known.get(node.id)
                     return None
                 for statement in tree.body:
@@ -230,6 +242,17 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
                             known.pop(statement.targets[0].id, None)
                         else:
                             known[statement.targets[0].id] = assigned
+                # A printed value may come from the calculation through variables or the student's own function.
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Assign):
+                        for target in node.targets:
+                            if isinstance(target, ast.Name):
+                                definitions.setdefault(target.id, []).append(node.value)
+                    elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and isinstance(node.target, ast.Name) and node.value is not None:
+                        definitions.setdefault(node.target.id, []).append(node.value)
+                    elif isinstance(node, ast.FunctionDef):
+                        parameters.setdefault(node.name, [a.arg for a in node.args.args])
+                        returns.setdefault(node.name, []).extend(n.value for n in ast.walk(node) if isinstance(n, ast.Return) and n.value is not None)
                 def leaves(node):
                     if isinstance(node, ast.BinOp) and isinstance(node.op, op):
                         return leaves(node.left) + leaves(node.right)
@@ -239,15 +262,36 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
                         return False
                     pairs = zip(sorted(found), sorted(expected)) if %s else zip(found, expected)
                     return all(abs(a - b) < 1e-9 for a, b in pairs)
+                def derived(expression, scope, visited, depth):
+                    if depth > 16:
+                        return False
+                    for node in ast.walk(expression):
+                        if isinstance(node, ast.BinOp) and isinstance(node.op, op) and same([value(leaf, scope) for leaf in leaves(node)]):
+                            return True
+                    for node in ast.walk(expression):
+                        if isinstance(node, ast.Name) and (node.id, id(scope)) not in visited:
+                            visited.add((node.id, id(scope)))
+                            if scope is not None and node.id in scope[0]:
+                                if derived(scope[0][node.id], scope[1], visited, depth + 1):
+                                    return True
+                            elif any(derived(d, scope, visited, depth + 1) for d in definitions.get(node.id, [])):
+                                return True
+                        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in returns:
+                            bound = dict(zip(parameters.get(node.func.id, []), node.args))
+                            bound.update({k.arg: k.value for k in node.keywords if k.arg})
+                            inner = (bound, scope)
+                            scopes.append(inner)  # keeps id(inner) unique while the visited set refers to it
+                            if any(derived(r, inner, visited, depth + 1) for r in returns[node.func.id]):
+                                return True
+                    return False
                 calculated = any(
                     isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "print"
-                    and any(isinstance(node, ast.BinOp) and isinstance(node.op, op) and same([value(leaf) for leaf in leaves(node)])
-                            for argument in call.args for node in ast.walk(argument))
+                    and any(derived(argument, None, set(), 0) for argument in call.args)
                     for call in ast.walk(tree)
                 )
                 assert calculated, %s
             """.formatted(literal(operation), expected, commutative ? "True" : "False",
-          literal("Вычисли ответ в программе действием «" + operation + "» над числами из условия (" + expected + "), а не готовым числом или другими числами")));
+          literal(capitalize(calculationHint(operation, expected)))));
     }
     if (!requiredConstructs.isEmpty()) {
       code.append("    present = {type(node).__name__ for node in ast.walk(tree)}\n");
