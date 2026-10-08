@@ -890,3 +890,10 @@ summary.revoked { color: #a1440f; }
 .hard-switch.locked { color: var(--muted); border: 1.5px dashed var(--line-strong); background: transparent; }
 .hard-switch.locked:hover:not(:disabled) { color: var(--ink-2); background: var(--surface-2); border-style: dashed; }
 .hard-ready { margin: 8px 0 0; line-height: 1.4; overflow-wrap: anywhere; }
+
+/* ───────── Lesson inactivity: warning before the auto-finish, notice after it ───────── */
+.lesson-notice { position: sticky; top: calc(var(--topbar-h, 84px) + 8px); z-index: 19; display: flex; align-items: center; gap: 10px; margin: 0 0 18px; padding: 12px 12px 12px 16px; border-radius: 14px; background: var(--brand-soft); color: var(--brand-ink); box-shadow: var(--shadow); animation: drop-in var(--mid) var(--ease-out); font-weight: 650; line-height: 1.4; }
+.lesson-notice > .icon { flex: none; }
+.lesson-notice > span { flex: 1; min-width: 0; }
+.lesson-notice.warn { background: #fff1e6; color: #8a3b0c; border: 1px solid #ffd9bd; }
+@media (max-width: 520px) { .lesson-notice { padding: 10px 8px 10px 12px; font-size: 14px; } }

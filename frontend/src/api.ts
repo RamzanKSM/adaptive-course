@@ -11,6 +11,7 @@ const REASONS: Record<string, string> = {
   STUDENT_RUNTIME_NOT_VALIDATED: 'Учебный помощник ещё не допущен к работе со студентами.',
   APP_SERVER_NOT_CONFIGURED: 'Учебный помощник не настроен на сервере.',
   APP_SERVER_UNAVAILABLE: 'Учебный помощник временно недоступен.',
+  LESSON_FINISHED: 'Урок уже завершён. Начни новый урок.',
 }
 export const humanize = (reason?: string | null) => reason ? REASONS[reason] ?? reason : ''
 

@@ -13,6 +13,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class LearningFlowIntegrationTest {
-  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit; @Autowired LlmSettings llmSettings; @Autowired HardTaskBank hardTaskBank;
+  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit; @Autowired LlmSettings llmSettings; @Autowired HardTaskBank hardTaskBank; @Autowired ApiController api;
   @MockBean PistonCodeRunner runner;
   @MockBean LlmTutor tutor;
   @MockBean LearningContentGenerator generator;
@@ -212,10 +214,73 @@ class LearningFlowIntegrationTest {
     mvc.perform(post("/api/auth/logout").cookie(cookie(token))).andExpect(status().isNoContent());
     assertEquals(0,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,student));
     assertEquals(1,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,bystander),"only the student who logged out");
+    assertEquals(2,db.queryForObject("select count(*) from lessons where user_id=? and finish_reason='LOGOUT'",Integer.class,student));
     String admin=login("admin","admin-pass");
     mvc.perform(post("/api/auth/logout").cookie(cookie(admin))).andExpect(status().isNoContent());
     assertEquals(1,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,bystander),"an admin logout ends no lessons");
     assertNotNull(other);
+  }
+
+  @Test void aLessonWithoutActivityIsFinishedAfterTwentyMinutes() throws Exception {
+    String token=createStudentAndLogin("idle-student"); long student=studentId("idle-student"); submitDiagnostic(token,student,false);
+    start(token); long lesson=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    var current=json.readTree(mvc.perform(get("/api/lessons/current").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("lesson");
+    assertEquals(20,current.path("idleMinutes").asInt()); assertFalse(current.path("lastActivityAt").asText().isEmpty());
+    db.update("update lessons set last_activity_at=? where id=?",Instant.now().minus(Duration.ofMinutes(19)).toString(),lesson);
+    api.finishIdleLessons(Instant.now());
+    assertNull(db.queryForObject("select finished_at from lessons where id=?",String.class,lesson),"19 minutes is not yet idle");
+    db.update("update lessons set last_activity_at=? where id=?",Instant.now().minus(Duration.ofMinutes(21)).toString(),lesson);
+    api.finishIdleLessons(Instant.now());
+    assertEquals("IDLE",db.queryForObject("select finish_reason from lessons where id=?",String.class,lesson));
+    assertNotNull(db.queryForObject("select finished_at from lessons where id=?",String.class,lesson));
+    assertTrue(json.readTree(mvc.perform(get("/api/lessons/current").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("lesson").isNull());
+    var history=json.readTree(mvc.perform(get("/api/admin/students/{id}/lessons",student).cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("IDLE",history.path("lessons").get(0).path("finishReason").asText());
+  }
+
+  @Test void codeRunsChatAndNewContentKeepTheLessonOpen() throws Exception {
+    String token=createStudentAndLogin("busy-student"); long student=studentId("busy-student"); submitDiagnostic(token,student,false);
+    start(token); long lesson=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    String old=Instant.now().minus(Duration.ofMinutes(19)).toString();
+    when(runner.console(any(Language.class),anyString(),anyString())).thenReturn(new PistonCodeRunner.Console("OK","1\n",null,false));
+    db.update("update lessons set last_activity_at=? where id=?",old,lesson);
+    mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(1)\"}")).andExpect(status().isOk());
+    assertTrue(db.queryForObject("select last_activity_at from lessons where id=?",String.class,lesson).compareTo(old)>0,"a console run is activity");
+    db.update("update lessons set last_activity_at=? where id=?",old,lesson);
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(tutor.reply(eq(student),any(),anyString())).thenReturn("Подумай о шаге цикла.");
+    mvc.perform(post("/api/chat").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"Что не так?\"}")).andExpect(status().isOk());
+    assertTrue(db.queryForObject("select last_activity_at from lessons where id=?",String.class,lesson).compareTo(old)>0,"a chat message is activity");
+    db.update("update lessons set last_activity_at=? where id=?",old,lesson);
+    mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk());
+    assertTrue(db.queryForObject("select last_activity_at from lessons where id=?",String.class,lesson).compareTo(old)>0,"new content is activity");
+    api.finishIdleLessons(Instant.now().plus(Duration.ofMinutes(5)));
+    assertNull(db.queryForObject("select finished_at from lessons where id=?",String.class,lesson));
+  }
+
+  @Test void aLessonIsNotClosedAsIdleWhileItsContentIsGenerated() throws Exception {
+    String token=createStudentAndLogin("idle-generating"); long student=studentId("idle-generating"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"CONSTRUCTOR_BASIC");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    start(token); long lesson=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    when(generator.generateTask(eq(student),brief("CONSTRUCTOR_BASIC"))).thenAnswer(call->{
+      api.finishIdleLessons(Instant.now().plus(Duration.ofHours(1))); // the model is slow; the minute check runs meanwhile
+      return generated("CONSTRUCTOR_BASIC",true);
+    });
+    when(runner.runRaw(any(Language.class),anyString(),anyString())).thenReturn(recordedAnswers(6));
+    when(runner.run(any(Language.class),anyString(),anyString())).thenAnswer(call->((String)call.getArgument(1)).contains("WRONG")?new PistonCodeRunner.Run(false,"Неверно"):new PistonCodeRunner.Run(true,"ok"));
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertNull(db.queryForObject("select finished_at from lessons where id=?",String.class,lesson),next.toString());
+    assertTrue(next.path("task").path("id").asLong()>0,next.toString());
+  }
+
+  @Test void finishReasonsSayWhoFinishedTheLesson() throws Exception {
+    String token=createStudentAndLogin("reason-student"); long student=studentId("reason-student"); submitDiagnostic(token,student,false);
+    int lesson=start(token); finish(token,lesson);
+    assertEquals("STUDENT",db.queryForObject("select finish_reason from lessons where user_id=? and lesson_number=?",String.class,student,lesson));
+    start(token); long open=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
+    var finished=json.readTree(mvc.perform(post("/api/admin/students/{id}/lessons/{l}/finish",student,open).cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("TEACHER",finished.path("lesson").path("finishReason").asText());
   }
 
   @Test void runShowsTheConsoleWithoutCountingAnAttempt() throws Exception {

@@ -64,6 +64,9 @@ app:
   # Default for «Настройки LLM → Помощник в hard mode»; task generation is not affected.
   hard-mode:
     chat: ${APP_HARD_MODE_CHAT:true}
+  lesson:
+    # A lesson without code runs, submissions, new content or chat messages for this long is finished automatically.
+    idle-minutes: ${APP_LESSON_IDLE_MINUTES:20}
   # Background re-verification of generated tasks accepted by older, output-only validation.
   task-audit:
     enabled: ${APP_TASK_AUDIT_ENABLED:true}

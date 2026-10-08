@@ -20,6 +20,12 @@ const fmt = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ru-RU')
 }
 
+/** «завершён …» for the teacher's lesson history: says how the lesson was closed when it was not the student's own button. */
+const FINISHED_BY: Partial<Record<NonNullable<Lesson['finishReason']>, string>> = { IDLE: 'завершён по бездействию', LOGOUT: 'завершён при выходе', TEACHER: 'завершён преподавателем' }
+const finishedLabel = (lesson: Lesson) => `${(lesson.finishReason && FINISHED_BY[lesson.finishReason]) ?? 'завершён'} ${fmt(lesson.finishedAt)}`
+/** 20 минут, 21 минуту, 22 минуты. */
+const minutesText = (n: number) => { const d = n % 10, h = n % 100; return `${n} ${d === 1 && h !== 11 ? 'минуту' : d >= 2 && d <= 4 && (h < 12 || h > 14) ? 'минуты' : 'минут'}` }
+
 const COURSES = {
   JAVA: {
     id: 'JAVA', key: 'java', title: 'Java', logo: 'J',
@@ -38,6 +44,12 @@ const EDITOR_EXTENSIONS = { JAVA: [java()], PYTHON: [python()] }
 const LANGUAGES = Object.keys(COURSES) as CourseLanguage[]
 const CourseContext = createContext<Course>(COURSES.JAVA)
 const useCourse = () => useContext(CourseContext)
+/** Reports a run, submission or chat message to the lesson page: success restarts the inactivity countdown, a failure re-checks the lesson. */
+const LessonActivity = createContext<(ok: boolean) => void>(() => {})
+const IDLE_WARNING_MS = 3 * 60_000, IDLE_GRACE_MS = 70_000, IDLE_TICK_MS = 10_000
+type LessonEnd = { reason: Lesson['finishReason']; minutes: number }
+const lessonEndText = ({ reason, minutes }: LessonEnd) => `${reason === 'IDLE' ? `Урок завершён автоматически: ${minutesText(minutes)} без активности.`
+  : reason === 'TEACHER' ? 'Урок завершил преподаватель.' : reason === 'LOGOUT' ? 'Урок завершён: был выход из аккаунта.' : 'Урок уже завершён — например, в другой вкладке.'} Начни новый урок, когда будешь готов.`
 /** Adds the course to a student API path; the backend treats a missing value as Java. */
 const withCourse = (path: string, language: CourseLanguage) => `${path}${path.includes('?') ? '&' : '?'}language=${language}`
 const LANGUAGE_KEY = 'rmzn.language'
@@ -258,6 +270,23 @@ function StudentPage({ request }: { request: Request }) {
   const toast = useToast()
   const course = useCourse()
   const loadId = useRef(0)
+  // Inactivity: the server finishes an open lesson idleMinutes after its last activity (task load, run, submission, chat message).
+  // The page mirrors that countdown with the client clock to warn the student and to notice when the server has closed the lesson.
+  const idleMs = useRef(0) // 0 = no countdown: no open lesson, content being prepared, or the server does not finish idle lessons
+  const idleMinutes = useRef(20) // for the notice text
+  const deadline = useRef(0); const warned = useRef(false); const checking = useRef(false)
+  const [idleWarning, setIdleWarning] = useState(false)
+  const [ended, setEnded] = useState<LessonEnd | null>(null)
+  /** Starts the countdown for a freshly loaded lesson (null stops it). The load itself is activity, so it starts no earlier than now. */
+  const armIdle = useCallback((open: Lesson | null) => {
+    const minutes = open?.idleMinutes ?? 0
+    idleMs.current = minutes > 0 ? minutes * 60_000 : 0
+    if (minutes > 0) idleMinutes.current = minutes
+    const last = open ? parseDate(open.lastActivityAt ?? open.startedAt).getTime() : NaN
+    deadline.current = Math.max(Number.isNaN(last) ? 0 : last, Date.now()) + idleMs.current
+    warned.current = false; setIdleWarning(false)
+  }, [])
+  const touch = useCallback(() => { if (!idleMs.current) return; deadline.current = Date.now() + idleMs.current; warned.current = false; setIdleWarning(false) }, [])
   const loadProgress = useCallback(() => request(() => api<Progress>(withCourse('/progress', course.id))).then(value => { if (value) setProgress(value) }), [request, course.id])
   // Other courses only feed the shared achievements, so they load once and quietly.
   useEffect(() => {
@@ -268,7 +297,7 @@ function StudentPage({ request }: { request: Request }) {
   const load = useCallback(async () => {
     const id = ++loadId.current
     const stale = () => id !== loadId.current
-    setState('loading'); setPreparing(null)
+    setState('loading'); setPreparing(null); armIdle(null)
     loadProgress()
     const d = await request(() => api<Diagnostic>(withCourse('/diagnostic', course.id)))
     if (stale()) return
@@ -285,10 +314,50 @@ function StudentPage({ request }: { request: Request }) {
     if (stale()) return
     setPreparing(null)
     if (!next) return setState('failed')
-    // Finished elsewhere (another tab, the teacher, a logout) while the task was being prepared.
-    setLesson(next.reason === 'LESSON_FINISHED' ? null : next); setState('ready')
-  }, [request, loadProgress, course.id])
+    // Finished elsewhere (another tab, the teacher, a logout, inactivity) while the task was being prepared.
+    if (next.reason === 'LESSON_FINISHED') { setLesson(null); setEnded({ reason: next.lesson?.finishReason ?? null, minutes: next.lesson?.idleMinutes || idleMinutes.current }); return setState('ready') }
+    armIdle(next.lesson); setEnded(null); setLesson(next); setState('ready')
+  }, [request, loadProgress, course.id, armIdle])
   useEffect(() => { load() }, [load])
+  // Responses that arrive after the page is gone (logout, course switch) are ignored.
+  useEffect(() => () => { loadId.current++ }, [])
+
+  /** The lesson is no longer open on the server: back to «Начать урок», as after «Завершить урок», with a notice why. */
+  const lessonEnded = useCallback((reason: Lesson['finishReason']) => { armIdle(null); setLesson(null); setEnded({ reason, minutes: idleMinutes.current }); load() }, [armIdle, load])
+  const openId = state === 'ready' && lesson ? lesson.lesson.id : null
+  /** Asks the server whether the lesson is still open; called after the deadline (+ grace for its minute check) and after failed actions. */
+  const recheck = useCallback(async () => {
+    if (openId === null || checking.current) return
+    const id = loadId.current; checking.current = true
+    const value = await api<{ lesson: Lesson | null }>(withCourse('/lessons/current', course.id)).catch(() => undefined)
+    checking.current = false
+    if (!value || id !== loadId.current) return // offline: the next tick tries again; a newer load wins
+    const current = value.lesson
+    if (current && current.id !== openId) return load() // finished and a new one started in another tab
+    if (!current) return lessonEnded(Date.now() >= deadline.current ? 'IDLE' : null)
+    const minutes = current.idleMinutes ?? 0
+    if (minutes <= 0) return armIdle(null)
+    idleMs.current = minutes * 60_000; idleMinutes.current = minutes
+    // Activity elsewhere moves the deadline; otherwise the server closes the lesson at its next minute check — look again in a minute.
+    const last = parseDate(current.lastActivityAt ?? current.startedAt).getTime()
+    deadline.current = Math.max(Number.isNaN(last) ? 0 : last + idleMs.current, Date.now() - IDLE_GRACE_MS + 60_000)
+    if (Date.now() < deadline.current - IDLE_WARNING_MS) { warned.current = false; setIdleWarning(false) }
+  }, [openId, course.id, load, lessonEnded, armIdle])
+  const activity = useCallback((ok: boolean) => { if (ok) touch(); else recheck() }, [touch, recheck])
+  // One timer per open lesson: the warning 3 minutes before the deadline, the re-check after it. Hidden tabs throttle timers, so waking up checks at once.
+  useEffect(() => {
+    if (openId === null) return
+    const tick = () => {
+      if (!idleMs.current) return
+      const now = Date.now()
+      if (now >= deadline.current + IDLE_GRACE_MS) recheck()
+      else if (now >= deadline.current - IDLE_WARNING_MS && !warned.current) { warned.current = true; setIdleWarning(true) }
+    }
+    const timer = setInterval(tick, IDLE_TICK_MS)
+    const onWake = () => { if (document.visibilityState === 'visible') tick() }
+    document.addEventListener('visibilitychange', onWake); window.addEventListener('focus', onWake)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onWake); window.removeEventListener('focus', onWake) }
+  }, [openId, recheck])
 
   // Celebrate milestones that the attempt response reveals (iteration closed, topic mastered), then refresh stats.
   const onProgress = useCallback((skills: SkillProgress[]) => {
@@ -326,12 +395,14 @@ function StudentPage({ request }: { request: Request }) {
       <button role="tab" aria-selected={tab === 'lesson'} className={tab === 'lesson' ? 'active' : ''} onClick={() => setTab('lesson')}><Icon name="code" size={16} /> Текущий урок</button>
       <button role="tab" aria-selected={tab === 'progress'} className={tab === 'progress' ? 'active' : ''} onClick={() => setTab('progress')}><Icon name="chart" size={16} /> Мой прогресс</button>
     </nav>
+    {idleWarning && openId !== null && <div className="lesson-notice warn" role="alert"><Icon name="clock" size={18} /><span>Урок завершится через 3 минуты: нет запусков кода, отправок и сообщений помощнику. Запусти код или напиши помощнику, чтобы продолжить.</span></div>}
+    {ended && !lesson && <div className="lesson-notice" role="status"><Icon name="flag" size={18} /><span>{lessonEndText(ended)}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setEnded(null)}><Icon name="x" size={16} /></button></div>}
     {/* Both tabs stay mounted so switching to progress does not discard the code in the editor. */}
     <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} otherProgress={otherProgress} /></div>
     <div hidden={tab !== 'lesson'} className={tab === 'lesson' ? 'enter' : ''}>
       {state === 'loading' ? <LessonSkeleton lesson={preparing} request={request} onFinished={load} />
         : state === 'failed' ? <section className="empty-state enter"><h2 className="title">Не удалось загрузить урок</h2><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
-          : <LessonView lesson={lesson} skillProgress={currentSkill} request={request} refresh={load} onProgress={onProgress} />}
+          : <LessonActivity.Provider value={activity}><LessonView lesson={lesson} skillProgress={currentSkill} request={request} refresh={load} onProgress={onProgress} /></LessonActivity.Provider>}
     </div>
   </>
 }
@@ -542,12 +613,13 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
   const resultRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLElement>(null)
   const course = useCourse()
+  const activity = useContext(LessonActivity)
   // Snapshot the step on mount: after the iteration closes the server resets successes to 0, but this task still was step 3 of 3.
   const [step] = useState(() => { const completed = skillProgress?.completedIterations ?? 0; return { done: Math.min(skillProgress?.iterationSuccesses ?? 0, iterationTasks(completed) - 1), iteration: Math.min(completed + 1, ITERATIONS) } })
   async function submit() {
     setSending(true)
     const result = await request(() => post<Attempt & { progress?: SkillProgress[] }>('/attempts', { taskId: task.id, sourceCode: code }))
-    setSending(false)
+    setSending(false); activity(!!result)
     if (!result) return
     setAttempt(result); setTries(t => t + 1)
     // A hard task reads input: a run without it shows only an input error, so its console is not shown here.
@@ -558,7 +630,7 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
   async function run() {
     setRunning(true)
     const result = await request(() => post<{ console: ConsoleRun }>(withCourse('/run', course.id), task.hard ? { sourceCode: code, stdin } : { sourceCode: code }))
-    setRunning(false)
+    setRunning(false); activity(!!result)
     if (!result) return
     onConsole({ run: result.console, origin: 'run' }); setRuns(n => n + 1)
   }
@@ -646,6 +718,7 @@ function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { ll
   useEffect(() => { if (prefill) { setText(prefill.text); composer.current?.focus() } }, [prefill])
   const listRef = useRef<HTMLDivElement>(null)
   const course = useCourse()
+  const activity = useContext(LessonActivity)
   const [quota, setQuota] = useState<ChatQuota | undefined>()
   const sync = useCallback(async () => {
     const value = await request(() => api<ChatState>(withCourse('/chat', course.id)))
@@ -667,6 +740,7 @@ function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { ll
     setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'STUDENT', content, createdAt: new Date().toISOString() }]); setText('')
     const body = taskId !== undefined ? { content, taskId, sourceCode, consoleOutput } : { content }
     const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus; quota?: ChatQuota }>(withCourse('/chat', course.id), body))
+    activity(!!result)
     if (result) {
       setMessages(m => [...m, result.message]); if (result.llm) setStatus(result.llm); if (result.quota) setQuota(result.quota)
     } else {
@@ -1068,13 +1142,13 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
     {!lessons ? <p className="muted">Загружаем данные…</p> : <>
       <h3 className="section-title">Уроки</h3>
       {lessons.length ? <div className="lesson-list">{lessons.map(l => <button key={l.id} className={openLesson === l.id ? 'lesson-item selected' : 'lesson-item'} aria-pressed={openLesson === l.id} onClick={() => open(l)}>
-        <b><span className={`lang-dot ${COURSES[l.language ?? 'JAVA'].key}`} title={COURSES[l.language ?? 'JAVA'].title} /> {COURSES[l.language ?? 'JAVA'].title} · урок {l.number}</b><span className={l.finishedAt ? '' : 'live'}>{l.finishedAt ? `завершён ${fmt(l.finishedAt)}` : `идёт · начат ${fmt(l.startedAt)}`}</span>
+        <b><span className={`lang-dot ${COURSES[l.language ?? 'JAVA'].key}`} title={COURSES[l.language ?? 'JAVA'].title} /> {COURSES[l.language ?? 'JAVA'].title} · урок {l.number}</b><span className={l.finishedAt ? '' : 'live'}>{l.finishedAt ? finishedLabel(l) : `идёт · начат ${fmt(l.startedAt)}`}</span>
       </button>)}</div> : <p className="muted">Уроков пока нет.</p>}
       {openLesson !== null && !detail && <p className="muted"><Spinner /> Загружаем урок…</p>}
       {detail && <div className="enter">
         <div className="lesson-detail-head">
           <div><b>{COURSES[detail.lesson.language ?? 'JAVA'].title} · урок {detail.lesson.number}</b>
-            <span className={detail.lesson.finishedAt ? 'muted small' : 'live small'}>{detail.lesson.finishedAt ? `завершён ${fmt(detail.lesson.finishedAt)}` : 'идёт сейчас'}</span></div>
+            <span className={detail.lesson.finishedAt ? 'muted small' : 'live small'}>{detail.lesson.finishedAt ? finishedLabel(detail.lesson) : 'идёт сейчас'}</span></div>
           {!detail.lesson.finishedAt && <button className="ghost small-button" onClick={() => finishLesson(detail.lesson)}><Icon name="flag" size={15} /> Завершить урок</button>}
         </div>
         <h3 className="section-title">Задачи и попытки</h3>
