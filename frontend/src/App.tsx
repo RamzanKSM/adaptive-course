@@ -9,7 +9,7 @@ import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from
 import { LlmAnalytics } from './analytics'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
-import { DangerFrame, HardModeDialog, HardModeSwitch } from './hardmode'
+import { DangerFrame, HardModeDialog, HardModeSwitch, HeaderTapes } from './hardmode'
 import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
 import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
 
@@ -103,14 +103,26 @@ function Shell() {
     const root = document.documentElement
     const observer = new ResizeObserver(() => root.style.setProperty('--topbar-h', `${element.offsetHeight}px`))
     observer.observe(element)
-    const onScroll = () => setScrolled(window.scrollY > 4)
+    // --scroll-y lets the header's copy of the hard-mode tapes follow the page without re-rendering.
+    const onScroll = () => { setScrolled(window.scrollY > 4); root.style.setProperty('--scroll-y', `${window.scrollY}px`) }
     onScroll(); window.addEventListener('scroll', onScroll, { passive: true })
     return () => { observer.disconnect(); window.removeEventListener('scroll', onScroll) }
   }, [me])
-  // Hard mode: the teacher allows it, the student switches it on; the whole screen shows it.
-  const hardOn = isStudent && !!me?.hardModeOn
+  // Hard mode: the teacher allows it, the student switches it on; it works only in a course passed once. The whole screen shows it.
+  const hardReady = !!(language && me?.hardModeCourses?.[language]?.ready)
+  const hardOn = isStudent && !!me?.hardModeOn && hardReady
   const [hardDialog, setHardDialog] = useState(false); const [hardBusy, setHardBusy] = useState(false)
+  /** Bumped after a hard-mode switch: the lesson loads again, since the server may have replaced the current task. */
+  const [lessonReload, setLessonReload] = useState(0)
   const toast = useToast()
+  /** Re-reads the user quietly (readiness changes as the student learns); null on failure. */
+  const refreshMe = useCallback(() => api<MeResponse>('/auth/me').then(value => { setMe(value.user); return value.user }).catch(() => null), [])
+  const shownLanguage = useRef(language)
+  useEffect(() => {
+    if (shownLanguage.current === language) return
+    shownLanguage.current = language
+    if (isStudent && language) refreshMe()
+  }, [isStudent, language, refreshMe])
   useEffect(() => {
     const root = document.documentElement
     if (hardOn) root.dataset.hard = 'on'; else delete root.dataset.hard
@@ -118,13 +130,25 @@ function Shell() {
   }, [hardOn])
   async function setHardMode(enabled: boolean) {
     setHardDialog(false); setHardBusy(true)
-    const result = await request(() => api<{ hardModeOn: boolean }>('/me/hard-mode', { method: 'PATCH', body: JSON.stringify({ enabled }) }))
+    const result = await request(() => patch<{ hardModeOn: boolean; replacedTask?: boolean }>('/me/hard-mode', { enabled, language }))
     setHardBusy(false)
-    if (!result) return
+    if (!result) { if (enabled) refreshMe(); return } // e.g. HARD_MODE_NOT_READY: the switch falls back to locked
     setMe(m => m && { ...m, hardModeOn: result.hardModeOn })
+    setLessonReload(n => n + 1)
     toast(result.hardModeOn
-      ? { tone: 'reward', icon: 'flame', title: 'Hard mode включён', text: `Следующие задачи — алгоритмические, +${XP.hardTask} XP за каждую` }
-      : { tone: 'info', icon: 'check', title: 'Hard mode выключен', text: 'Следующие задачи будут обычными' })
+      ? { tone: 'reward', icon: 'flame', title: 'Hard mode включён', text: `${result.replacedTask ? 'Текущая задача заменена на hard-задачу. ' : ''}Следующие задачи — алгоритмические, +${XP.hardTask} XP за каждую` }
+      : { tone: 'info', icon: 'check', title: 'Hard mode выключен', text: result.replacedTask ? 'Текущая задача заменена на обычную задачу' : 'Следующие задачи будут обычными' })
+  }
+  /** A locked switch: the course may have become ready meanwhile — otherwise explain what is left. */
+  async function unlockHardMode() {
+    if (!language) return
+    setHardBusy(true)
+    const fresh = await refreshMe()
+    setHardBusy(false)
+    const course = (fresh ?? me)?.hardModeCourses?.[language]
+    if (course?.ready) { if (!fresh?.hardModeOn) setHardDialog(true); return }
+    const left = course ? `: осталось тем — ${course.remaining}` : ''
+    toast({ tone: 'info', icon: 'lock', title: 'Hard mode пока закрыт', text: `Пройди хотя бы одну итерацию по каждой теме курса ${COURSES[language].title}${left}. Темы, подтверждённые диагностикой, уже засчитаны.` })
   }
   const login = (user: User) => { setError(''); setMe(user) }
   const logout = async () => { await request(() => post<void>('/auth/logout')); setError(''); setMe(null) }
@@ -134,10 +158,11 @@ function Shell() {
     {hardOn && <DangerFrame />}
     {hardDialog && <HardModeDialog onConfirm={() => setHardMode(true)} onCancel={() => setHardDialog(false)} />}
     <header ref={header} className={`topbar ${scrolled ? 'scrolled' : ''}`}>
+      {hardOn && <HeaderTapes />}
       <div className="brand"><span className="logo" aria-hidden="true">R</span><b>Rmzn Tutor</b></div>
       {isStudent && language && <LanguageSwitch value={language} onChange={chooseLanguage} />}
       <div className={`user-chip ${hardOn ? 'on-fire' : ''}`}>
-        {isStudent && me.hardModeAllowed && <HardModeSwitch on={hardOn} busy={hardBusy} onToggle={() => hardOn ? setHardMode(false) : setHardDialog(true)} />}
+        {isStudent && me.hardModeAllowed && language && <HardModeSwitch on={hardOn} locked={!hardReady} busy={hardBusy} onToggle={() => !hardReady ? unlockHardMode() : hardOn ? setHardMode(false) : setHardDialog(true)} />}
         <span className="avatar" aria-hidden="true">{initials(me.displayName)}</span>
         <span className="user-meta"><b>{me.displayName}</b><small>{hardOn ? 'Hard mode' : me.role === 'STUDENT' ? 'Студент' : 'Преподаватель'}</small></span>
         <button className="icon-button" onClick={logout} aria-label="Выйти" title="Выйти"><Icon name="logout" /></button>
@@ -146,7 +171,7 @@ function Shell() {
     {error && <div className="flash error" role="alert"><span>{error}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setError('')}><Icon name="x" size={16} /></button></div>}
     {!isStudent ? <TeacherPage request={request} />
       : !language ? <LanguagePicker request={request} onPick={chooseLanguage} />
-        : <CourseContext.Provider value={COURSES[language]}><StudentPage key={language} request={request} /></CourseContext.Provider>}
+        : <CourseContext.Provider value={COURSES[language]}><StudentPage key={`${language}:${lessonReload}`} request={request} /></CourseContext.Provider>}
   </main>
 }
 
@@ -966,6 +991,7 @@ function EditStudent({ student, groups, request, onUpdated }: { student: Student
 function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdated, onDeleted }: { student: Student; groups: string[]; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void; onUpdated: (student: Student) => void; onDeleted: () => void }) {
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
+  const [hardCourses, setHardCourses] = useState<Student['hardModeCourses']>(student.hardModeCourses)
   const [openLesson, setOpenLesson] = useState<Id | null>(null)
   const [detail, setDetail] = useState<LessonDetail | null>(null)
   const openRef = useRef<Id | null>(null)
@@ -973,7 +999,7 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
     let alive = true
     setLessons(null); setDetail(null); setOpenLesson(null); openRef.current = null
     request(() => api<{ lessons: Lesson[] }>(`/admin/students/${student.id}/lessons`)).then(value => { if (alive && value) setLessons(value.lessons) })
-    request(() => api<{ llm: LlmStatus; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }) } })
+    request(() => api<{ llm: LlmStatus; student?: Student; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }); if (value.student?.hardModeCourses) setHardCourses(value.student.hardModeCourses) } })
     return () => { alive = false }
   }, [student.id, request, onLlmStatus])
   const toast = useToast()
@@ -984,7 +1010,7 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
     if (value && openRef.current === lesson.id) setDetail(value)
   }
   const reloadLessons = () => request(() => api<{ lessons: Lesson[] }>(`/admin/students/${student.id}/lessons`)).then(value => { if (value) setLessons(value.lessons) })
-  const reloadProgress = () => request(() => api<{ progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (value) setProgress(value.progressByLanguage ?? { JAVA: value.progress }) })
+  const reloadProgress = () => request(() => api<{ student?: Student; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (value) { setProgress(value.progressByLanguage ?? { JAVA: value.progress }); if (value.student?.hardModeCourses) setHardCourses(value.student.hardModeCourses) } })
   // Opening a lesson jumps to the latest messages: the end of the conversation is what the teacher usually needs.
   useEffect(() => {
     const chat = chatRef.current
@@ -1022,6 +1048,11 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
         <label className="switch-label hard" title="Допуск к hard mode: студент сам включает алгоритмические задачи"><span className="muted small"><Icon name="flame" size={13} /> Hard</span><Switch checked={!!student.hardModeAllowed} onChange={toggleHard} label={`Допуск к hard mode для ${student.displayName}`} /></label>
       </div>
     </div>
+    {!!student.hardModeAllowed && hardCourses && LANGUAGES.some(language => hardCourses[language]) && <p className="hard-ready muted small">
+      Hard mode: {LANGUAGES.filter(language => hardCourses[language]).map(language => {
+        const course = hardCourses[language]!
+        return `${COURSES[language].title} — ${course.ready ? 'открыт' : `осталось тем: ${course.remaining}`}`
+      }).join(', ')}</p>}
     {!!student.hardModeOn && <p className="hard-note"><Icon name="flame" size={14} /> Студент сейчас в hard mode</p>}
     <div className="detail-actions"><EditStudent key={`${student.login}|${student.displayName}|${student.group ?? ''}`} student={student} groups={groups} request={request} onUpdated={onUpdated} /><PasswordReset student={student} request={request} /></div>
     {progress && <div className="lang-stats">{LANGUAGES.filter(language => progress[language]).map(language => {
@@ -1048,7 +1079,7 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
         </div>
         <h3 className="section-title">Задачи и попытки</h3>
         {detail.tasks.length ? detail.tasks.map(t => <article key={t.id} className="detail-task">
-          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{t.title}</b>
+          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{t.title}{!!t.replaced && <span className="replaced-chip" title="Студент переключил hard mode, и вместо этой задачи выдана задача нового режима">заменена при смене режима</span>}</b>
             {t.submissions.some(a => a.passed && !a.revokedAt) && <button className="ghost danger small-button" onClick={() => revoke(detail.lesson, t)} title="Студенту придётся решить задачу заново"><Icon name="refresh" size={14} /> Отменить зачёт</button>}
           </div>
           <Markdown>{t.statement}</Markdown>

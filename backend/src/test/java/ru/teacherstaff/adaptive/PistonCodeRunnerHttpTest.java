@@ -9,6 +9,8 @@ import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -218,5 +220,85 @@ class PistonCodeRunnerHttpTest {
       assertEquals("Превышен лимит времени выполнения.",runner.run("public class Solution { static void loopForever() {} }",harness).output());
       assertEquals("Превышен лимит памяти.",runner.run("public class Solution { static void useLotsMemory() {} }",harness).output());
     } finally { server.stop(0); }
+  }
+
+  static final String KEEPER_CRASH="{\"compile\":null,\"run\":{\"code\":null,\"signal\":null,\"status\":\"XX\",\"message\":\"Sandbox keeper received fatal signal 6\",\"stdout\":\"\",\"stderr\":\"\"}}";
+  static final String KEEPER_CRASH_IN_STDERR="{\"run\":{\"code\":1,\"signal\":null,\"status\":\"RE\",\"stdout\":\"\",\"stderr\":\"Sandbox keeper received fatal signal 6\\n\"}}";
+  static final String JAVA_HARNESS="public class TestHarness { public static void main(String[] a) { if (Solution.answer()!=1) throw new AssertionError(); System.out.print(\"{{PASS_MARKER}}\"); } }";
+
+  /** A Piston stub: execute answers respond(request number from 1, the request's file contents). */
+  private static HttpServer pistonStub(AtomicInteger executes,BiFunction<Integer,String,String> respond) throws Exception {
+    ObjectMapper json=new ObjectMapper(); HttpServer server;
+    try { server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0); }
+    catch(SocketException e) { Assumptions.assumeTrue(false,"test sandbox does not permit a local TCP listener"); return null; }
+    server.createContext("/api/v2/execute", exchange -> {
+      var content=new StringBuilder(); for(var file:json.readTree(exchange.getRequestBody().readAllBytes()).path("files")) content.append(file.path("content").asText()).append('\n');
+      byte[] bytes=respond.apply(executes.incrementAndGet(),content.toString()).getBytes(StandardCharsets.UTF_8); exchange.sendResponseHeaders(200,bytes.length); exchange.getResponseBody().write(bytes); exchange.close();
+    });
+    server.start(); return server;
+  }
+  private static PistonCodeRunner stubRunner(HttpServer server){return new PistonCodeRunner(new ObjectMapper(),"http://127.0.0.1:"+server.getAddress().getPort(),"15.0.2","3.12.0",1_000,1_000,32_000_000,32_000_000);}
+
+  @Test void aSandboxKeeperCrashIsRetriedOnceAndTheCheckThenPasses() throws Exception {
+    AtomicInteger executes=new AtomicInteger();
+    HttpServer server=pistonStub(executes,(n,content)->{
+      if(n==1) return KEEPER_CRASH;
+      Matcher marker=Pattern.compile("__ADAPTIVE_PASS_[A-Za-z0-9_-]+__").matcher(content); assertTrue(marker.find());
+      return "{\"compile\":null,\"run\":{\"code\":0,\"status\":null,\"stdout\":\""+marker.group()+"\"}}";
+    });
+    try {
+      var run=stubRunner(server).run("public class Solution { static int answer() { return 1; } }",JAVA_HARNESS);
+      assertTrue(run.passed(),run.output()); assertEquals(PistonCodeRunner.Outcome.PASSED,run.outcome());
+      assertEquals(2,executes.get());
+    } finally { server.stop(0); }
+  }
+
+  @Test void aRepeatedSandboxCrashIsUnavailableNotTheStudentsRuntimeError() throws Exception {
+    AtomicInteger executes=new AtomicInteger();
+    HttpServer server=pistonStub(executes,(n,content)->n%2==1?KEEPER_CRASH:KEEPER_CRASH_IN_STDERR);
+    try {
+      var runner=stubRunner(server);
+      var java=runner.run("public class Solution { static int answer() { return 1; } }",JAVA_HARNESS);
+      assertEquals(PistonCodeRunner.Outcome.UNAVAILABLE,java.outcome()); assertFalse(java.output().startsWith("Ошибка выполнения"),java.output()); assertFalse(java.output().contains("Sandbox keeper"));
+      assertEquals(2,executes.get());
+      var python=runner.run(Language.PYTHON,"def add(a, b):\n    return a + b\n","import solution\n\ndef run_checks():\n    assert solution.add(2, 3) == 5\n");
+      assertEquals(PistonCodeRunner.Outcome.UNAVAILABLE,python.outcome()); assertFalse(python.output().startsWith("Ошибка выполнения"),python.output());
+      assertEquals(4,executes.get());
+      assertEquals(new PistonCodeRunner.Raw(false,"","Piston execution service is unavailable"),runner.runRaw(Language.JAVA,"public class Solution {}","public class TestHarness { public static void main(String[] a) {} }"));
+      assertEquals(6,executes.get());
+    } finally { server.stop(0); }
+  }
+
+  @Test void theConsoleReportsARepeatedSandboxCrashAsASandboxFailure() throws Exception {
+    AtomicInteger executes=new AtomicInteger();
+    HttpServer server=pistonStub(executes,(n,content)->n%2==1?KEEPER_CRASH_IN_STDERR:KEEPER_CRASH);
+    try {
+      var runner=stubRunner(server);
+      var java=runner.console(Language.JAVA,"public class Solution { public static void main(String[] args) { System.out.println(1); } }");
+      assertEquals("UNAVAILABLE",java.status()); assertEquals("Запуск не удался из-за сбоя песочницы. Попробуй ещё раз.",java.error());
+      assertEquals(2,executes.get());
+      var python=runner.console(Language.PYTHON,"print(1)");
+      assertEquals("UNAVAILABLE",python.status()); assertEquals("Запуск не удался из-за сбоя песочницы. Попробуй ещё раз.",python.error());
+      assertEquals(4,executes.get());
+    } finally { server.stop(0); }
+  }
+
+  @Test void anOrdinaryRuntimeErrorIsNotRetried() throws Exception {
+    AtomicInteger executes=new AtomicInteger();
+    HttpServer server=pistonStub(executes,(n,content)->"{\"compile\":null,\"run\":{\"code\":1,\"signal\":null,\"status\":\"RE\",\"message\":\"Exited with error status 1\",\"stdout\":\"\",\"stderr\":\"Exception in thread \\\"main\\\" java.lang.ArithmeticException: / by zero\\n\\tat Solution.answer(TestHarness.java:3)\"}}");
+    try {
+      var run=stubRunner(server).run("public class Solution { static int answer() { return 1 / 0; } }",JAVA_HARNESS);
+      assertEquals(PistonCodeRunner.Outcome.RUNTIME_ERROR,run.outcome()); assertTrue(run.output().startsWith("Ошибка выполнения:\n"),run.output()); assertTrue(run.output().contains("ArithmeticException"));
+      assertEquals(1,executes.get());
+    } finally { server.stop(0); }
+  }
+
+  @Test void recognisesOnlyIsolatesOwnFailures() throws Exception {
+    ObjectMapper json=new ObjectMapper();
+    assertTrue(PistonCodeRunner.sandboxFailure(json.readTree(KEEPER_CRASH)));
+    assertTrue(PistonCodeRunner.sandboxFailure(json.readTree(KEEPER_CRASH_IN_STDERR)));
+    assertTrue(PistonCodeRunner.sandboxFailure(json.readTree("{\"compile\":{\"code\":null,\"status\":\"XX\",\"message\":\"Cannot set up the sandbox\"},\"run\":null}")));
+    for(String status:new String[]{"TO","OL","EL","RE","SG"}) assertFalse(PistonCodeRunner.sandboxFailure(json.readTree("{\"run\":{\"code\":null,\"signal\":\"SIGKILL\",\"status\":\""+status+"\",\"message\":\"Killed\",\"stderr\":\"boom\"}}")),status);
+    assertFalse(PistonCodeRunner.sandboxFailure(json.readTree("{\"run\":{\"code\":0,\"stdout\":\"Sandbox keeper received fatal signal 6\",\"stderr\":\"\",\"output\":\"Sandbox keeper received fatal signal 6\"}}")),"the student's own stdout is not the sandbox");
   }
 }

@@ -2,6 +2,8 @@ package ru.teacherstaff.adaptive;
 
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,6 +17,7 @@ import java.util.regex.Pattern;
 
 @Component
 class PistonCodeRunner {
+  private static final Logger log=LoggerFactory.getLogger(PistonCodeRunner.class);
   static final String PASS_MARKER_PLACEHOLDER="{{PASS_MARKER}}";
   /**
    * Fixed Python entry point. The pass marker arrives on stdin and is read before the student's module is imported,
@@ -55,7 +58,7 @@ class PistonCodeRunner {
 
   private Run runJava(String studentSource,String testSource) {
     try { if(!testSource.contains(PASS_MARKER_PLACEHOLDER)) return new Run(false,"Hidden test harness has no pass marker"); String javaVersion=version(Language.JAVA); if(javaVersion.isBlank()) return new Run(false,"Piston does not expose a Java runtime"); String passMarker=randomPassMarker(); ObjectNode request=execution(Language.JAVA,javaVersion);ArrayNode files=request.putArray("files");files.addObject().put("name","TestHarness").put("content",combinedSource(studentSource,testSource.replace(PASS_MARKER_PLACEHOLDER,passMarker)));
-      JsonNode root=execute(request); if(root==null)return new Run(false,"Piston execution service is unavailable");
+      JsonNode root=executeRetrying(Language.JAVA,request); if(root==null)return new Run(false,"Piston execution service is unavailable");
       JsonNode compile=root.path("compile"),run=root.path("run");
       // Piston returns compile: null for a successful Java compilation.
       if(!compile.isMissingNode()&&!compile.isNull()) {
@@ -80,7 +83,7 @@ class PistonCodeRunner {
       files.addObject().put("name","main.py").put("content",PYTHON_ENTRY.strip()+"\n");
       files.addObject().put("name","test_solution.py").put("content",testSource);
       files.addObject().put("name","solution.py").put("content",studentSource==null?"":studentSource);
-      JsonNode root=execute(request); if(root==null)return new Run(false,"Piston execution service is unavailable");
+      JsonNode root=executeRetrying(Language.PYTHON,request); if(root==null)return new Run(false,"Piston execution service is unavailable");
       JsonNode run=root.path("run"); if(run.isMissingNode()||run.isNull()||!run.isObject())return new Run(false,"Piston execution service is unavailable");
       Integer code=exitCode(run); String stdout=run.path("stdout").asText("");
       List<String> lines=stdout.lines().map(String::strip).filter(l->!l.isEmpty()).toList();
@@ -116,6 +119,7 @@ class PistonCodeRunner {
   Console console(Language language,String source,String stdin) {
     String input=stdin==null?"":stdin;
     try { return language==Language.PYTHON?consolePython(source,input):consoleJava(source,input); }
+    catch(SandboxFailure e) { return Console.of("UNAVAILABLE","Запуск не удался из-за сбоя песочницы. Попробуй ещё раз."); }
     catch(Exception e) { return Console.of("UNAVAILABLE","Запуск сейчас недоступен."); }
   }
   private Console consoleJava(String source,String stdin) throws Exception {
@@ -123,7 +127,7 @@ class PistonCodeRunner {
     String version=version(Language.JAVA); if(version.isBlank()) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
     ObjectNode request=execution(Language.JAVA,version); request.put("stdin",stdin);
     request.putArray("files").addObject().put("name","ConsoleRunner").put("content",consoleSource(source));
-    JsonNode root=execute(request); if(root==null) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
+    JsonNode root=executeRetrying(Language.JAVA,request); if(root==null) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
     JsonNode compile=root.path("compile"),run=root.path("run");
     if(!compile.isMissingNode()&&!compile.isNull()) {
       if(limitFeedback(compile)!=null) return Console.of("LIMIT",limitFeedback(compile));
@@ -139,7 +143,7 @@ class PistonCodeRunner {
     ArrayNode files=request.putArray("files");
     files.addObject().put("name","main.py").put("content",PYTHON_CONSOLE_ENTRY.strip()+"\n");
     files.addObject().put("name","solution.py").put("content",source==null?"":source);
-    JsonNode root=execute(request); if(root==null) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
+    JsonNode root=executeRetrying(Language.PYTHON,request); if(root==null) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
     JsonNode run=root.path("run"); if(run.isMissingNode()||run.isNull()||!run.isObject()) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
     String traceback=studentTraceback(run.path("stderr").asText(""));
     String last=traceback.lines().filter(l->!l.isBlank()).reduce((a,b)->b).orElse("").strip();
@@ -211,7 +215,7 @@ class PistonCodeRunner {
       ArrayNode files=request.putArray("files");
       if(language==Language.PYTHON){ files.addObject().put("name","main.py").put("content",program); files.addObject().put("name","solution.py").put("content",solution==null?"":solution); }
       else files.addObject().put("name","TestHarness").put("content",combinedSource(solution==null?"":solution,program));
-      JsonNode root=execute(request); if(root==null) return new Raw(false,"","Piston execution service is unavailable");
+      JsonNode root=executeRetrying(language,request); if(root==null) return new Raw(false,"","Piston execution service is unavailable");
       JsonNode compile=root.path("compile"),run=root.path("run");
       if(!compile.isMissingNode()&&!compile.isNull()){ Integer code=exitCode(compile); if(code!=null&&code!=0) return new Raw(false,"",output(compile)); }
       if(run.isMissingNode()||run.isNull()||!run.isObject()) return new Raw(false,"","Piston execution service is unavailable");
@@ -255,6 +259,32 @@ class PistonCodeRunner {
     var response=http.send(HttpRequest.newBuilder(URI.create(baseUrl+"/api/v2/execute")).timeout(Duration.ofSeconds(20)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(request))).build(),HttpResponse.BodyHandlers.ofString());
     return response.statusCode()/100!=2?null:json.readTree(response.body());
   }
+  /**
+   * execute with one retry when isolate itself failed (see sandboxFailure). A second failure throws SandboxFailure:
+   * the checks and runRaw report the service as unavailable, the console says the sandbox failed.
+   */
+  private JsonNode executeRetrying(Language language,ObjectNode request) throws Exception {
+    for(int attempt=1;;attempt++) {
+      JsonNode root=execute(request); if(root==null||!sandboxFailure(root)) return root;
+      JsonNode stage=sandboxFailure(root.path("compile"))?root.path("compile"):root.path("run");
+      log.warn("Piston sandbox failure ({} attempt {}): status={} message={}",language,attempt,stage.path("status").asText(""),firstLine(stage.path("message").asText("").isBlank()?stage.path("stderr").asText(""):stage.path("message").asText("")));
+      if(attempt>=2) throw new SandboxFailure();
+    }
+  }
+  private static final Pattern KEEPER_CRASH=Pattern.compile("(?i)sandbox keeper received fatal signal");
+  /**
+   * isolate failed, not the program: status XX (isolate's internal error) or the keeper crash it prints to stderr.
+   * The program's own outcomes (TO, OL, EL, RE, SG) never match. stdout is ignored: only the student writes there.
+   */
+  static boolean sandboxFailure(JsonNode response) {
+    if(response==null||!response.isObject()) return false;
+    if(response.has("run")||response.has("compile")) return sandboxFailure(response.path("compile"))||sandboxFailure(response.path("run"));
+    if("XX".equals(response.path("status").asText(""))) return true;
+    String text=response.path("message").asText("")+"\n"+(response.has("stderr")?response.path("stderr").asText(""):response.path("output").asText(""));
+    return KEEPER_CRASH.matcher(text).find();
+  }
+  private static String firstLine(String text){return text.lines().findFirst().orElse("").strip();}
+  private static final class SandboxFailure extends Exception { SandboxFailure(){super("Piston sandbox failed twice",null,false,false);} }
   private String randomPassMarker(){byte[] bytes=new byte[24];new SecureRandom().nextBytes(bytes);return "__ADAPTIVE_PASS_"+Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)+"__";}
   /**
    * Starts the checks with UTF-8 output and error streams. Piston runs Java in single-file mode, which starts the first

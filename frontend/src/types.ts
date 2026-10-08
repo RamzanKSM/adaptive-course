@@ -3,8 +3,11 @@ export type Id = number
 export type Flag = boolean | 0 | 1
 export type Role = 'STUDENT' | 'TEACHER' | 'ADMIN'
 export type CourseLanguage = 'JAVA' | 'PYTHON'
-/** hardModeAllowed — the teacher's permission; hardModeOn — the student's own switch (only while allowed). */
-export interface User { id: Id; login: string; role: Role; displayName: string; llmEnabled: Flag; hardModeAllowed?: boolean; hardModeOn?: boolean }
+/** Hard mode readiness of one course: ready once every topic has a completed iteration, is mastered or confirmed by the diagnostic. */
+export interface HardModeCourse { ready: boolean; remaining: number }
+/** hardModeAllowed — the teacher's permission; hardModeOn — the student's own switch (only while allowed);
+ *  hard mode is effective in a course only while hardModeCourses[course].ready (students only). */
+export interface User { id: Id; login: string; role: Role; displayName: string; llmEnabled: Flag; hardModeAllowed?: boolean; hardModeOn?: boolean; hardModeCourses?: Partial<Record<CourseLanguage, HardModeCourse>> }
 export interface MeResponse { user: User; llm: LlmStatus; runner: ServiceStatus }
 export interface LlmStatus { globallyEnabled: boolean; studentEnabled: boolean; available: boolean; reason?: string; model?: string }
 export interface ServiceStatus { available: boolean; reason?: string }
@@ -26,9 +29,9 @@ export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; c
 export interface SkillProgress { skillCode: string; title: string; blockNo?: number; completedIterations: number; iterationSuccesses: number; mastered: Flag; diagnosticCorrect?: number | null; diagnosticTotal?: number | null; confirmedByDiagnostic?: Flag }
 export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; hardSolved?: number; activity?: string[] }
 export interface ActiveLesson { language: CourseLanguage; number: number; startedAt: string }
-export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; group?: string | null; activeLessons?: ActiveLesson[]; hardModeAllowed?: Flag; hardModeOn?: Flag }
+export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; group?: string | null; activeLessons?: ActiveLesson[]; hardModeAllowed?: Flag; hardModeOn?: Flag; hardModeCourses?: Partial<Record<CourseLanguage, HardModeCourse>> }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string; revokedAt?: string | null }
-export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; hard?: Flag; submissions: Submission[] }[] }
+export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; hard?: Flag; replaced?: Flag; submissions: Submission[] }[] }
 export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
 export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR' | 'REVIEW'
 export interface LlmUsage {
