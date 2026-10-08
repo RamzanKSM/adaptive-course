@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class LearningFlowIntegrationTest {
-  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit; @Autowired LlmSettings llmSettings;
+  @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit; @Autowired LlmSettings llmSettings; @Autowired HardTaskBank hardTaskBank;
   @MockBean PistonCodeRunner runner;
   @MockBean LlmTutor tutor;
   @MockBean LearningContentGenerator generator;
@@ -769,6 +769,26 @@ class LearningFlowIntegrationTest {
     assertEquals(0,db.queryForObject("select hard_mode_on from users where id=?",Integer.class,student));
     var list=json.readTree(mvc.perform(get("/api/admin/students").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
     for(var row:list.path("students")) if(row.path("id").asLong()==student) assertEquals(0,row.path("hardModeAllowed").asInt());
+  }
+
+  @Test void hardModeTasksComeFromTheExercismBankBeforeAnyGeneration() throws Exception {
+    assertEquals(51,db.queryForObject("select count(*) from tasks where source='EXERCISM' and mode='HARD' and active=1",Integer.class),"every bank task found its topic");
+    assertEquals(0,db.queryForObject("select count(*) from tasks t where t.source='EXERCISM' and (select count(*) from task_cases c where c.task_id=t.id)<6",Integer.class));
+    assertEquals(0,db.queryForObject("select count(*) from tasks t where t.source='EXERCISM' and not exists(select 1 from task_cases c where c.task_id=t.id and c.is_public=1)",Integer.class));
+    String token=createStudentAndLogin("bank-student"); long student=studentId("bank-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"WHILE_LOOP_BASIC");
+    db.update("update users set hard_mode_allowed=1, hard_mode_on=1 where id=?",student);
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertTrue(next.path("task").path("hard").asBoolean());
+    assertEquals("Гипотеза Коллатца",next.path("task").path("title").asText(),"the step-1 bank task of the topic");
+    assertTrue(next.path("task").path("starterCode").asText().contains("Scanner in = new Scanner(System.in)"));
+    assertTrue(next.path("task").path("statement").asText().contains("Exercism"),"the source is credited");
+    verify(generator,never()).generateTask(eq(student),any());
+    // Loading the bank again updates the same tasks instead of adding new ones.
+    hardTaskBank.run(null);
+    assertEquals(51,db.queryForObject("select count(*) from tasks where source='EXERCISM'",Integer.class));
   }
 
   @Test void regularTasksNeverReadInput() throws Exception {

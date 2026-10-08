@@ -9,7 +9,9 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.regex.*;
 
+/** Runs first: the course topics it imports are what the hard-task bank (HardTaskBank, order 10) attaches to. */
 @Component
+@org.springframework.core.annotation.Order(0)
 class DiagnosticImporter implements ApplicationRunner {
   private final JdbcTemplate db; private final ObjectMapper json; private final String source; private final String pythonSource;
   @org.springframework.beans.factory.annotation.Autowired DiagnosticImporter(JdbcTemplate db, ObjectMapper json, @Value("${app.diagnostic.source}") String source, @Value("${app.diagnostic.python-source:../python_initial_diagnostic_mvp.md}") String pythonSource) { this.db=db; this.json=json; this.source=source; this.pythonSource=pythonSource; }

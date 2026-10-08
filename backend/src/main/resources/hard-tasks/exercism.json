@@ -1,0 +1,4757 @@
+{
+ "source": "https://github.com/exercism/problem-specifications",
+ "license": "MIT",
+ "tasks": [
+  {
+   "slug": "leap",
+   "title": "Високосный год",
+   "statement": "В календаре, которым мы пользуемся, год високосный, если он делится на 4. Но годы, которые делятся на 100, не високосные — кроме тех, что делятся на 400. Так 1996 и 2000 — високосные, а 1900 — нет.\n\nОпредели, високосный ли год.\n\n## Входные данные\nОдно целое число `year` (1 ≤ year ≤ 10000) — год. Оно уже прочитано в переменную в редакторе.\n\n## Выходные данные\nВыведи `да`, если год високосный, и `нет` — если нет.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOGICAL_OR",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int year = Integer.parseInt(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int year = Integer.parseInt(in.nextLine().trim());\n        boolean leap = year % 4 == 0 && year % 100 != 0 || year % 400 == 0;\n        System.out.println(leap ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "2015\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1970\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1996\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1960\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2100\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1900\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2000\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2400\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1800\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В календаре, которым мы пользуемся, год високосный, если он делится на 4. Но годы, которые делятся на 100, не високосные — кроме тех, что делятся на 400. Так 1996 и 2000 — високосные, а 1900 — нет.\n\nОпредели, високосный ли год.\n\n## Входные данные\nОдно целое число `year` (1 ≤ year ≤ 10000) — год. Оно уже прочитано в переменную в редакторе.\n\n## Выходные данные\nВыведи `да`, если год високосный, и `нет` — если нет.\n\n## Примеры\n\nВвод:\n```text\n1996\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n2100\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [leap](https://github.com/exercism/problem-specifications/tree/main/exercises/leap) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LOGICAL_OR",
+     "difficulty": 2,
+     "starter": "year = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "year = int(input())\nleap = year % 4 == 0 and year % 100 != 0 or year % 400 == 0\nprint(\"да\" if leap else \"нет\")\n",
+     "cases": [
+      {
+       "input": "2015\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1970\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1996\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1960\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2100\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1900\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2000\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2400\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1800\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В календаре, которым мы пользуемся, год високосный, если он делится на 4. Но годы, которые делятся на 100, не високосные — кроме тех, что делятся на 400. Так 1996 и 2000 — високосные, а 1900 — нет.\n\nОпредели, високосный ли год.\n\n## Входные данные\nОдно целое число `year` (1 ≤ year ≤ 10000) — год. Оно уже прочитано в переменную в редакторе.\n\n## Выходные данные\nВыведи `да`, если год високосный, и `нет` — если нет.\n\n## Примеры\n\nВвод:\n```text\n1996\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n2100\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [leap](https://github.com/exercism/problem-specifications/tree/main/exercises/leap) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "darts",
+   "title": "Дартс",
+   "statement": "Мишень для дартса — три круга с общим центром в точке (0, 0): внутренний радиуса 1, средний радиуса 5 и внешний радиуса 10. Попадание во внутренний круг даёт 10 очков, в средний — 5, во внешний — 1, мимо мишени — 0. Точка на границе круга считается попавшей в него.\n\nПосчитай очки за бросок.\n\n## Входные данные\nДва числа `x` и `y` через пробел — координаты точки попадания (могут быть дробными). Они уже прочитаны в редакторе.\n\n## Выходные данные\nОдно целое число — очки за бросок.\n\n## Подсказка\nРасстояние до центра сравнивать удобнее в квадрате: x² + y² ≤ r².",
+   "variants": {
+    "JAVA": {
+     "skill": "COMPARISON_OPERATORS",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        double x = Double.parseDouble(in.next());\n        double y = Double.parseDouble(in.next());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        double x = Double.parseDouble(in.next());\n        double y = Double.parseDouble(in.next());\n        double d = x * x + y * y;\n        if (d <= 1) System.out.println(10);\n        else if (d <= 25) System.out.println(5);\n        else if (d <= 100) System.out.println(1);\n        else System.out.println(0);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "-9 9\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "0 10\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-5 0\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 -1\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "0 0\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-0.1 -0.1\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.7 0.7\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.8 -0.8\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-3.5 3.5\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-3.6 -3.6\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-7.0 7.0\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7.1 -7.1\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 -4\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Мишень для дартса — три круга с общим центром в точке (0, 0): внутренний радиуса 1, средний радиуса 5 и внешний радиуса 10. Попадание во внутренний круг даёт 10 очков, в средний — 5, во внешний — 1, мимо мишени — 0. Точка на границе круга считается попавшей в него.\n\nПосчитай очки за бросок.\n\n## Входные данные\nДва числа `x` и `y` через пробел — координаты точки попадания (могут быть дробными). Они уже прочитаны в редакторе.\n\n## Выходные данные\nОдно целое число — очки за бросок.\n\n## Подсказка\nРасстояние до центра сравнивать удобнее в квадрате: x² + y² ≤ r².\n\n## Примеры\n\nВвод:\n```text\n-9 9\n```\nВывод:\n```text\n0\n```\n\nВвод:\n```text\n0 -1\n```\nВывод:\n```text\n10\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [darts](https://github.com/exercism/problem-specifications/tree/main/exercises/darts) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_ELIF",
+     "difficulty": 2,
+     "starter": "x, y = map(float, input().split())\n\n# Напиши решение здесь\n",
+     "reference": "x, y = map(float, input().split())\nd = x * x + y * y\nif d <= 1:\n    print(10)\nelif d <= 25:\n    print(5)\nelif d <= 100:\n    print(1)\nelse:\n    print(0)\n",
+     "cases": [
+      {
+       "input": "-9 9\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "0 10\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-5 0\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 -1\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "0 0\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-0.1 -0.1\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.7 0.7\n",
+       "expected": "10\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.8 -0.8\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-3.5 3.5\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-3.6 -3.6\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-7.0 7.0\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7.1 -7.1\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 -4\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Мишень для дартса — три круга с общим центром в точке (0, 0): внутренний радиуса 1, средний радиуса 5 и внешний радиуса 10. Попадание во внутренний круг даёт 10 очков, в средний — 5, во внешний — 1, мимо мишени — 0. Точка на границе круга считается попавшей в него.\n\nПосчитай очки за бросок.\n\n## Входные данные\nДва числа `x` и `y` через пробел — координаты точки попадания (могут быть дробными). Они уже прочитаны в редакторе.\n\n## Выходные данные\nОдно целое число — очки за бросок.\n\n## Подсказка\nРасстояние до центра сравнивать удобнее в квадрате: x² + y² ≤ r².\n\n## Примеры\n\nВвод:\n```text\n-9 9\n```\nВывод:\n```text\n0\n```\n\nВвод:\n```text\n0 -1\n```\nВывод:\n```text\n10\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [darts](https://github.com/exercism/problem-specifications/tree/main/exercises/darts) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "triangle",
+   "title": "Какой это треугольник",
+   "statement": "Даны длины трёх отрезков. Треугольник из них существует, если все длины больше нуля и сумма любых двух не меньше третьей. Треугольник равносторонний, если все три стороны равны, равнобедренный — если равны ровно две, и разносторонний — если все разные.\n\nОпредели, какой треугольник получится.\n\n## Входные данные\nТри числа через пробел — длины сторон (могут быть дробными). Они уже прочитаны в редакторе.\n\n## Выходные данные\nОдно из слов: `равносторонний`, `равнобедренный`, `разносторонний` или `не треугольник`.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOGICAL_AND",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        double a = Double.parseDouble(in.next());\n        double b = Double.parseDouble(in.next());\n        double c = Double.parseDouble(in.next());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        double a = Double.parseDouble(in.next());\n        double b = Double.parseDouble(in.next());\n        double c = Double.parseDouble(in.next());\n        if (a <= 0 || b <= 0 || c <= 0 || a + b < c || b + c < a || a + c < b) System.out.println(\"не треугольник\");\n        else if (a == b && b == c) System.out.println(\"равносторонний\");\n        else if (a == b || b == c || a == c) System.out.println(\"равнобедренный\");\n        else System.out.println(\"разносторонний\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "2 2 2\n",
+       "expected": "равносторонний\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "2 3 2\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "5 4 6\n",
+       "expected": "разносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 0 0\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 0.5 0.5\n",
+       "expected": "равносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3 4 4\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4 4 3\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4 3 4\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "4 4 4\n",
+       "expected": "равносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2 3 4\n",
+       "expected": "разносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 1 3\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 3 1\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3 1 1\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 0.4 0.5\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3 4 3\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4 3 3\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7 3 2\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 0.4 0.6\n",
+       "expected": "разносторонний\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Даны длины трёх отрезков. Треугольник из них существует, если все длины больше нуля и сумма любых двух не меньше третьей. Треугольник равносторонний, если все три стороны равны, равнобедренный — если равны ровно две, и разносторонний — если все разные.\n\nОпредели, какой треугольник получится.\n\n## Входные данные\nТри числа через пробел — длины сторон (могут быть дробными). Они уже прочитаны в редакторе.\n\n## Выходные данные\nОдно из слов: `равносторонний`, `равнобедренный`, `разносторонний` или `не треугольник`.\n\n## Примеры\n\nВвод:\n```text\n2 2 2\n```\nВывод:\n```text\nравносторонний\n```\n\nВвод:\n```text\n4 3 4\n```\nВывод:\n```text\nравнобедренный\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [triangle](https://github.com/exercism/problem-specifications/tree/main/exercises/triangle) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_ELIF",
+     "difficulty": 3,
+     "starter": "a, b, c = map(float, input().split())\n\n# Напиши решение здесь\n",
+     "reference": "a, b, c = map(float, input().split())\nif a <= 0 or b <= 0 or c <= 0 or a + b < c or b + c < a or a + c < b:\n    print(\"не треугольник\")\nelif a == b == c:\n    print(\"равносторонний\")\nelif a == b or b == c or a == c:\n    print(\"равнобедренный\")\nelse:\n    print(\"разносторонний\")\n",
+     "cases": [
+      {
+       "input": "2 2 2\n",
+       "expected": "равносторонний\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "2 3 2\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "5 4 6\n",
+       "expected": "разносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 0 0\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 0.5 0.5\n",
+       "expected": "равносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3 4 4\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4 4 3\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4 3 4\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "4 4 4\n",
+       "expected": "равносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2 3 4\n",
+       "expected": "разносторонний\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 1 3\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 3 1\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3 1 1\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 0.4 0.5\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3 4 3\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4 3 3\n",
+       "expected": "равнобедренный\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7 3 2\n",
+       "expected": "не треугольник\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0.5 0.4 0.6\n",
+       "expected": "разносторонний\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Даны длины трёх отрезков. Треугольник из них существует, если все длины больше нуля и сумма любых двух не меньше третьей. Треугольник равносторонний, если все три стороны равны, равнобедренный — если равны ровно две, и разносторонний — если все разные.\n\nОпредели, какой треугольник получится.\n\n## Входные данные\nТри числа через пробел — длины сторон (могут быть дробными). Они уже прочитаны в редакторе.\n\n## Выходные данные\nОдно из слов: `равносторонний`, `равнобедренный`, `разносторонний` или `не треугольник`.\n\n## Примеры\n\nВвод:\n```text\n2 2 2\n```\nВывод:\n```text\nравносторонний\n```\n\nВвод:\n```text\n4 3 4\n```\nВывод:\n```text\nравнобедренный\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [triangle](https://github.com/exercism/problem-specifications/tree/main/exercises/triangle) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "raindrops",
+   "title": "Капли дождя",
+   "statement": "Преврати число в «звук дождя». Если число делится на 3, добавь к ответу `Pling`, если делится на 5 — `Plang`, если на 7 — `Plong` (именно в таком порядке). Если число не делится ни на 3, ни на 5, ни на 7, ответом будет само число.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10⁶). Оно уже прочитано в редакторе.\n\n## Выходные данные\nОдна строка — «звук» числа.",
+   "variants": {
+    "JAVA": {
+     "skill": "IF_ELSE_BASIC",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        String sound = \"\";\n        if (n % 3 == 0) sound = sound + \"Pling\";\n        if (n % 5 == 0) sound = sound + \"Plang\";\n        if (n % 7 == 0) sound = sound + \"Plong\";\n        if (sound.isEmpty()) sound = \"\" + n;\n        System.out.println(sound);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "5\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7\n",
+       "expected": "Plong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "8\n",
+       "expected": "8\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "14\n",
+       "expected": "Plong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "15\n",
+       "expected": "PlingPlang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "21\n",
+       "expected": "PlingPlong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "25\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "27\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "35\n",
+       "expected": "PlangPlong\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "49\n",
+       "expected": "Plong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "52\n",
+       "expected": "52\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "105\n",
+       "expected": "PlingPlangPlong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3125\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Преврати число в «звук дождя». Если число делится на 3, добавь к ответу `Pling`, если делится на 5 — `Plang`, если на 7 — `Plong` (именно в таком порядке). Если число не делится ни на 3, ни на 5, ни на 7, ответом будет само число.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10⁶). Оно уже прочитано в редакторе.\n\n## Выходные данные\nОдна строка — «звук» числа.\n\n## Примеры\n\nВвод:\n```text\n3\n```\nВывод:\n```text\nPling\n```\n\nВвод:\n```text\n35\n```\nВывод:\n```text\nPlangPlong\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [raindrops](https://github.com/exercism/problem-specifications/tree/main/exercises/raindrops) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_IF_ELSE_BASIC",
+     "difficulty": 3,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nsound = \"\"\nif n % 3 == 0:\n    sound += \"Pling\"\nif n % 5 == 0:\n    sound += \"Plang\"\nif n % 7 == 0:\n    sound += \"Plong\"\nif sound == \"\":\n    sound = str(n)\nprint(sound)\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "5\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7\n",
+       "expected": "Plong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "8\n",
+       "expected": "8\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "14\n",
+       "expected": "Plong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "15\n",
+       "expected": "PlingPlang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "21\n",
+       "expected": "PlingPlong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "25\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "27\n",
+       "expected": "Pling\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "35\n",
+       "expected": "PlangPlong\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "49\n",
+       "expected": "Plong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "52\n",
+       "expected": "52\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "105\n",
+       "expected": "PlingPlangPlong\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3125\n",
+       "expected": "Plang\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Преврати число в «звук дождя». Если число делится на 3, добавь к ответу `Pling`, если делится на 5 — `Plang`, если на 7 — `Plong` (именно в таком порядке). Если число не делится ни на 3, ни на 5, ни на 7, ответом будет само число.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10⁶). Оно уже прочитано в редакторе.\n\n## Выходные данные\nОдна строка — «звук» числа.\n\n## Примеры\n\nВвод:\n```text\n3\n```\nВывод:\n```text\nPling\n```\n\nВвод:\n```text\n35\n```\nВывод:\n```text\nPlangPlong\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [raindrops](https://github.com/exercism/problem-specifications/tree/main/exercises/raindrops) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "clock",
+   "title": "Часы без даты",
+   "statement": "Электронные часы показывают время в формате `ЧЧ:ММ` — от `00:00` до `23:59`. Им передают часы и минуты, которые могут выходить за пределы суток и даже быть отрицательными: 25 часов — это `01:00`, а −1 минута от полуночи — `23:59`.\n\nПокажи, что будет на часах.\n\n## Входные данные\nДва целых числа через пробел: часы `h` и минуты `m` (−10⁶ ≤ h, m ≤ 10⁶). Они уже прочитаны в редакторе.\n\n## Выходные данные\nВремя в формате `ЧЧ:ММ`: часы и минуты всегда двумя цифрами.\n\n## Подсказка\nПереведи всё в минуты от полуночи и учти, что в сутках 1440 минут; остаток отрицательного числа нужно поправить.",
+   "variants": {
+    "JAVA": {
+     "skill": "COMPARISON_OPERATORS",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long h = Long.parseLong(in.next());\n        long m = Long.parseLong(in.next());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long h = Long.parseLong(in.next());\n        long m = Long.parseLong(in.next());\n        long total = ((h * 60 + m) % 1440 + 1440) % 1440;\n        long hours = total / 60, minutes = total % 60;\n        String hh = hours < 10 ? \"0\" + hours : \"\" + hours;\n        String mm = minutes < 10 ? \"0\" + minutes : \"\" + minutes;\n        System.out.println(hh + \":\" + mm);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "8 0\n",
+       "expected": "08:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "11 9\n",
+       "expected": "11:09\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "24 0\n",
+       "expected": "00:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "25 0\n",
+       "expected": "01:00\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "100 0\n",
+       "expected": "04:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 60\n",
+       "expected": "02:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 160\n",
+       "expected": "02:40\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 1723\n",
+       "expected": "04:43\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "25 160\n",
+       "expected": "03:40\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "201 3001\n",
+       "expected": "11:01\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "72 8640\n",
+       "expected": "00:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-1 15\n",
+       "expected": "23:15\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-25 0\n",
+       "expected": "23:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-91 0\n",
+       "expected": "05:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 -40\n",
+       "expected": "00:20\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 -160\n",
+       "expected": "22:20\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 -4820\n",
+       "expected": "16:40\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2 -60\n",
+       "expected": "01:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-25 -160\n",
+       "expected": "20:20\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-121 -5810\n",
+       "expected": "22:10\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Электронные часы показывают время в формате `ЧЧ:ММ` — от `00:00` до `23:59`. Им передают часы и минуты, которые могут выходить за пределы суток и даже быть отрицательными: 25 часов — это `01:00`, а −1 минута от полуночи — `23:59`.\n\nПокажи, что будет на часах.\n\n## Входные данные\nДва целых числа через пробел: часы `h` и минуты `m` (−10⁶ ≤ h, m ≤ 10⁶). Они уже прочитаны в редакторе.\n\n## Выходные данные\nВремя в формате `ЧЧ:ММ`: часы и минуты всегда двумя цифрами.\n\n## Подсказка\nПереведи всё в минуты от полуночи и учти, что в сутках 1440 минут; остаток отрицательного числа нужно поправить.\n\n## Примеры\n\nВвод:\n```text\n11 9\n```\nВывод:\n```text\n11:09\n```\n\nВвод:\n```text\n25 0\n```\nВывод:\n```text\n01:00\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [clock](https://github.com/exercism/problem-specifications/tree/main/exercises/clock) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_IF_ELSE_BASIC",
+     "difficulty": 2,
+     "starter": "h, m = map(int, input().split())\n\n# Напиши решение здесь\n",
+     "reference": "h, m = map(int, input().split())\ntotal = (h * 60 + m) % 1440\nhours, minutes = total // 60, total % 60\nhh = \"0\" + str(hours) if hours < 10 else str(hours)\nmm = \"0\" + str(minutes) if minutes < 10 else str(minutes)\nprint(hh + \":\" + mm)\n",
+     "cases": [
+      {
+       "input": "8 0\n",
+       "expected": "08:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "11 9\n",
+       "expected": "11:09\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "24 0\n",
+       "expected": "00:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "25 0\n",
+       "expected": "01:00\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "100 0\n",
+       "expected": "04:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 60\n",
+       "expected": "02:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 160\n",
+       "expected": "02:40\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0 1723\n",
+       "expected": "04:43\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "25 160\n",
+       "expected": "03:40\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "201 3001\n",
+       "expected": "11:01\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "72 8640\n",
+       "expected": "00:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-1 15\n",
+       "expected": "23:15\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-25 0\n",
+       "expected": "23:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-91 0\n",
+       "expected": "05:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 -40\n",
+       "expected": "00:20\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 -160\n",
+       "expected": "22:20\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 -4820\n",
+       "expected": "16:40\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2 -60\n",
+       "expected": "01:00\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-25 -160\n",
+       "expected": "20:20\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-121 -5810\n",
+       "expected": "22:10\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Электронные часы показывают время в формате `ЧЧ:ММ` — от `00:00` до `23:59`. Им передают часы и минуты, которые могут выходить за пределы суток и даже быть отрицательными: 25 часов — это `01:00`, а −1 минута от полуночи — `23:59`.\n\nПокажи, что будет на часах.\n\n## Входные данные\nДва целых числа через пробел: часы `h` и минуты `m` (−10⁶ ≤ h, m ≤ 10⁶). Они уже прочитаны в редакторе.\n\n## Выходные данные\nВремя в формате `ЧЧ:ММ`: часы и минуты всегда двумя цифрами.\n\n## Подсказка\nПереведи всё в минуты от полуночи и учти, что в сутках 1440 минут; остаток отрицательного числа нужно поправить.\n\n## Примеры\n\nВвод:\n```text\n11 9\n```\nВывод:\n```text\n11:09\n```\n\nВвод:\n```text\n25 0\n```\nВывод:\n```text\n01:00\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [clock](https://github.com/exercism/problem-specifications/tree/main/exercises/clock) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "bob",
+   "title": "Подросток Боб",
+   "statement": "Боб — подросток, и его ответы предсказуемы:\n\n- на вопрос (фраза, которая заканчивается знаком `?`, не считая пробелов в конце) он отвечает `Конечно.`;\n- если на него кричат (в фразе есть буквы, и все они заглавные), отвечает `Эй, полегче!`;\n- на крик-вопрос отвечает `Спокойно, я знаю, что делаю!`;\n- если к нему обращаются, ничего не сказав (пустая строка или одни пробелы и табуляции), отвечает `Ну и ладно!`;\n- на всё остальное — `Как скажешь.`\n\n## Входные данные\nОдна строка — что сказали Бобу (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\nОтвет Боба.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOGICAL_OR",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        String t = s.trim();\n        boolean question = t.endsWith(\"?\");\n        boolean yell = !t.equals(t.toLowerCase()) && t.equals(t.toUpperCase());\n        if (t.isEmpty()) System.out.println(\"Ну и ладно!\");\n        else if (question && yell) System.out.println(\"Спокойно, я знаю, что делаю!\");\n        else if (yell) System.out.println(\"Эй, полегче!\");\n        else if (question) System.out.println(\"Конечно.\");\n        else System.out.println(\"Как скажешь.\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "Does this cryogenic chamber make me look fat?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "WATCH OUT!\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "WHAT'S GOING ON?\n",
+       "expected": "Спокойно, я знаю, что делаю!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\n",
+       "expected": "Ну и ладно!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Tom-ay-to, tom-aaaah-to.\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "You are, what, like 15?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "fffbbcbeab?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": ":) ?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Wait! Hang on. Are you going to be OK?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Okay if like my  spacebar  quite a bit?   \n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "FCECDFCAAB\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "DO LIONS EAT PEOPLE? AHHHHH.\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1, 2, 3 GO!\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "ZOMG THE %^*@#$(*^ ZOMBIES ARE COMING!!11!!1!\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "I HATE THE DENTIST\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "          \n",
+       "expected": "Ну и ладно!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\t\t\t\t\t\t\t\t\t\t\n",
+       "expected": "Ну и ладно!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Hi there!\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "It's OK if you don't want to go work for NASA.\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1, 2, 3\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Ending with ? means a question.\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "         hmmmmmmm...\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "This is a statement ending with whitespace      \n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Боб — подросток, и его ответы предсказуемы:\n\n- на вопрос (фраза, которая заканчивается знаком `?`, не считая пробелов в конце) он отвечает `Конечно.`;\n- если на него кричат (в фразе есть буквы, и все они заглавные), отвечает `Эй, полегче!`;\n- на крик-вопрос отвечает `Спокойно, я знаю, что делаю!`;\n- если к нему обращаются, ничего не сказав (пустая строка или одни пробелы и табуляции), отвечает `Ну и ладно!`;\n- на всё остальное — `Как скажешь.`\n\n## Входные данные\nОдна строка — что сказали Бобу (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\nОтвет Боба.\n\n## Примеры\n\nВвод:\n```text\nDoes this cryogenic chamber make me look fat?\n```\nВывод:\n```text\nКонечно.\n```\n\nВвод:\n```text\nWATCH OUT!\n```\nВывод:\n```text\nЭй, полегче!\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [bob](https://github.com/exercism/problem-specifications/tree/main/exercises/bob) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_STRING_METHODS",
+     "difficulty": 3,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\nt = s.strip()\nquestion = t.endswith(\"?\")\nyell = t.isupper()\nif t == \"\":\n    print(\"Ну и ладно!\")\nelif question and yell:\n    print(\"Спокойно, я знаю, что делаю!\")\nelif yell:\n    print(\"Эй, полегче!\")\nelif question:\n    print(\"Конечно.\")\nelse:\n    print(\"Как скажешь.\")\n",
+     "cases": [
+      {
+       "input": "Does this cryogenic chamber make me look fat?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "WATCH OUT!\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "WHAT'S GOING ON?\n",
+       "expected": "Спокойно, я знаю, что делаю!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\n",
+       "expected": "Ну и ладно!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Tom-ay-to, tom-aaaah-to.\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "You are, what, like 15?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "fffbbcbeab?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": ":) ?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Wait! Hang on. Are you going to be OK?\n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Okay if like my  spacebar  quite a bit?   \n",
+       "expected": "Конечно.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "FCECDFCAAB\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "DO LIONS EAT PEOPLE? AHHHHH.\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1, 2, 3 GO!\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "ZOMG THE %^*@#$(*^ ZOMBIES ARE COMING!!11!!1!\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "I HATE THE DENTIST\n",
+       "expected": "Эй, полегче!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "          \n",
+       "expected": "Ну и ладно!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\t\t\t\t\t\t\t\t\t\t\n",
+       "expected": "Ну и ладно!\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Hi there!\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "It's OK if you don't want to go work for NASA.\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1, 2, 3\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Ending with ? means a question.\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "         hmmmmmmm...\n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "This is a statement ending with whitespace      \n",
+       "expected": "Как скажешь.\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Боб — подросток, и его ответы предсказуемы:\n\n- на вопрос (фраза, которая заканчивается знаком `?`, не считая пробелов в конце) он отвечает `Конечно.`;\n- если на него кричат (в фразе есть буквы, и все они заглавные), отвечает `Эй, полегче!`;\n- на крик-вопрос отвечает `Спокойно, я знаю, что делаю!`;\n- если к нему обращаются, ничего не сказав (пустая строка или одни пробелы и табуляции), отвечает `Ну и ладно!`;\n- на всё остальное — `Как скажешь.`\n\n## Входные данные\nОдна строка — что сказали Бобу (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\nОтвет Боба.\n\n## Примеры\n\nВвод:\n```text\nDoes this cryogenic chamber make me look fat?\n```\nВывод:\n```text\nКонечно.\n```\n\nВвод:\n```text\nWATCH OUT!\n```\nВывод:\n```text\nЭй, полегче!\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [bob](https://github.com/exercism/problem-specifications/tree/main/exercises/bob) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "collatz-conjecture",
+   "title": "Гипотеза Коллатца",
+   "statement": "Возьми положительное число. Если оно чётное, раздели его пополам, если нечётное — умножь на 3 и прибавь 1. Повторяй, пока не получится 1. Гипотеза Коллатца утверждает, что единица получится всегда.\n\nПосчитай, сколько шагов для этого понадобится.\n\n## Входные данные\nОдно целое число `n` (−10⁶ ≤ n ≤ 10⁶). Оно уже прочитано в редакторе.\n\n## Выходные данные\nКоличество шагов до единицы. Если `n` не положительное, выведи `ошибка`.",
+   "variants": {
+    "JAVA": {
+     "skill": "WHILE_LOOP_BASIC",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        if (n <= 0) { System.out.println(\"ошибка\"); return; }\n        int steps = 0;\n        while (n != 1) { if (n % 2 == 0) n = n / 2; else n = 3 * n + 1; steps++; }\n        System.out.println(steps);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "16\n",
+       "expected": "4\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "12\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1000000\n",
+       "expected": "152\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "-15\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Возьми положительное число. Если оно чётное, раздели его пополам, если нечётное — умножь на 3 и прибавь 1. Повторяй, пока не получится 1. Гипотеза Коллатца утверждает, что единица получится всегда.\n\nПосчитай, сколько шагов для этого понадобится.\n\n## Входные данные\nОдно целое число `n` (−10⁶ ≤ n ≤ 10⁶). Оно уже прочитано в редакторе.\n\n## Выходные данные\nКоличество шагов до единицы. Если `n` не положительное, выведи `ошибка`.\n\n## Примеры\n\nВвод:\n```text\n16\n```\nВывод:\n```text\n4\n```\n\nВвод:\n```text\n0\n```\nВывод:\n```text\nошибка\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [collatz-conjecture](https://github.com/exercism/problem-specifications/tree/main/exercises/collatz-conjecture) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_WHILE_LOOP_BASIC",
+     "difficulty": 1,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nif n <= 0:\n    print(\"ошибка\")\nelse:\n    steps = 0\n    while n != 1:\n        if n % 2 == 0:\n            n = n // 2\n        else:\n            n = 3 * n + 1\n        steps += 1\n    print(steps)\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "16\n",
+       "expected": "4\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "12\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1000000\n",
+       "expected": "152\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "-15\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Возьми положительное число. Если оно чётное, раздели его пополам, если нечётное — умножь на 3 и прибавь 1. Повторяй, пока не получится 1. Гипотеза Коллатца утверждает, что единица получится всегда.\n\nПосчитай, сколько шагов для этого понадобится.\n\n## Входные данные\nОдно целое число `n` (−10⁶ ≤ n ≤ 10⁶). Оно уже прочитано в редакторе.\n\n## Выходные данные\nКоличество шагов до единицы. Если `n` не положительное, выведи `ошибка`.\n\n## Примеры\n\nВвод:\n```text\n16\n```\nВывод:\n```text\n4\n```\n\nВвод:\n```text\n0\n```\nВывод:\n```text\nошибка\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [collatz-conjecture](https://github.com/exercism/problem-specifications/tree/main/exercises/collatz-conjecture) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "square-root",
+   "title": "Квадратный корень без функций",
+   "statement": "Найди целый квадратный корень числа, не пользуясь готовыми функциями вроде `sqrt`: такое число `r`, что `r · r` равно данному числу. Гарантируется, что число — точный квадрат.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10⁹), точный квадрат. Оно уже прочитано в редакторе.\n\n## Выходные данные\nКорень числа.",
+   "variants": {
+    "JAVA": {
+     "skill": "WHILE_LOOP_BASIC",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        long r = 0;\n        while (r * r < n) r++;\n        System.out.println(r);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "25\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "81\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "196\n",
+       "expected": "14\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "65025\n",
+       "expected": "255\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1000000\n",
+       "expected": "1000\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "998001\n",
+       "expected": "999\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Найди целый квадратный корень числа, не пользуясь готовыми функциями вроде `sqrt`: такое число `r`, что `r · r` равно данному числу. Гарантируется, что число — точный квадрат.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10⁹), точный квадрат. Оно уже прочитано в редакторе.\n\n## Выходные данные\nКорень числа.\n\n## Примеры\n\nВвод:\n```text\n4\n```\nВывод:\n```text\n2\n```\n\nВвод:\n```text\n81\n```\nВывод:\n```text\n9\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [square-root](https://github.com/exercism/problem-specifications/tree/main/exercises/square-root) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_WHILE_LOOP_BASIC",
+     "difficulty": 2,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nr = 0\nwhile r * r < n:\n    r += 1\nprint(r)\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "25\n",
+       "expected": "5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "81\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "196\n",
+       "expected": "14\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "65025\n",
+       "expected": "255\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1000000\n",
+       "expected": "1000\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "998001\n",
+       "expected": "999\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Найди целый квадратный корень числа, не пользуясь готовыми функциями вроде `sqrt`: такое число `r`, что `r · r` равно данному числу. Гарантируется, что число — точный квадрат.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10⁹), точный квадрат. Оно уже прочитано в редакторе.\n\n## Выходные данные\nКорень числа.\n\n## Примеры\n\nВвод:\n```text\n4\n```\nВывод:\n```text\n2\n```\n\nВвод:\n```text\n81\n```\nВывод:\n```text\n9\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [square-root](https://github.com/exercism/problem-specifications/tree/main/exercises/square-root) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "eliuds-eggs",
+   "title": "Яйца в курятнике",
+   "statement": "Элюд записывает, в каких гнёздах курятника лежат яйца, одним числом: в двоичной записи числа единица означает яйцо, ноль — пустое гнездо. Например, число 89 = 1011001₂ означает четыре яйца.\n\nПосчитай яйца.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 2·10⁹). Оно уже прочитано в редакторе.\n\n## Выходные данные\nКоличество единиц в двоичной записи `n`.\n\n## Подсказка\nОстаток от деления на 2 — последняя двоичная цифра, а деление на 2 её отбрасывает.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOOP_TERMINATION",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        int eggs = 0;\n        while (n > 0) { eggs += n % 2; n = n / 2; }\n        System.out.println(eggs);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "0\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "16\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "89\n",
+       "expected": "4\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "2000000000\n",
+       "expected": "13\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "255\n",
+       "expected": "8\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "1024\n",
+       "expected": "1\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "1023\n",
+       "expected": "10\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Элюд записывает, в каких гнёздах курятника лежат яйца, одним числом: в двоичной записи числа единица означает яйцо, ноль — пустое гнездо. Например, число 89 = 1011001₂ означает четыре яйца.\n\nПосчитай яйца.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 2·10⁹). Оно уже прочитано в редакторе.\n\n## Выходные данные\nКоличество единиц в двоичной записи `n`.\n\n## Подсказка\nОстаток от деления на 2 — последняя двоичная цифра, а деление на 2 её отбрасывает.\n\n## Примеры\n\nВвод:\n```text\n16\n```\nВывод:\n```text\n1\n```\n\nВвод:\n```text\n89\n```\nВывод:\n```text\n4\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [eliuds-eggs](https://github.com/exercism/problem-specifications/tree/main/exercises/eliuds-eggs) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LOOP_TERMINATION",
+     "difficulty": 1,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\neggs = 0\nwhile n > 0:\n    eggs += n % 2\n    n //= 2\nprint(eggs)\n",
+     "cases": [
+      {
+       "input": "0\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "16\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "89\n",
+       "expected": "4\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "2000000000\n",
+       "expected": "13\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "255\n",
+       "expected": "8\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "1024\n",
+       "expected": "1\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "1023\n",
+       "expected": "10\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Элюд записывает, в каких гнёздах курятника лежат яйца, одним числом: в двоичной записи числа единица означает яйцо, ноль — пустое гнездо. Например, число 89 = 1011001₂ означает четыре яйца.\n\nПосчитай яйца.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 2·10⁹). Оно уже прочитано в редакторе.\n\n## Выходные данные\nКоличество единиц в двоичной записи `n`.\n\n## Подсказка\nОстаток от деления на 2 — последняя двоичная цифра, а деление на 2 её отбрасывает.\n\n## Примеры\n\nВвод:\n```text\n16\n```\nВывод:\n```text\n1\n```\n\nВвод:\n```text\n89\n```\nВывод:\n```text\n4\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [eliuds-eggs](https://github.com/exercism/problem-specifications/tree/main/exercises/eliuds-eggs) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "difference-of-squares",
+   "title": "Разность квадратов",
+   "statement": "Для числа `n` посчитай три величины: квадрат суммы чисел от 1 до `n`, сумму квадратов этих чисел и разность первого и второго. Например, для `n = 5`: (1 + 2 + 3 + 4 + 5)² = 225, 1² + 2² + 3² + 4² + 5² = 55, разность — 170.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 1000). Оно уже прочитано в редакторе.\n\n## Выходные данные\nТри строки: квадрат суммы, сумма квадратов и их разность.",
+   "variants": {
+    "JAVA": {
+     "skill": "ACCUMULATOR_PATTERN",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        long sum = 0, squares = 0;\n        for (long i = 1; i <= n; i++) { sum += i; squares += i * i; }\n        System.out.println(sum * sum);\n        System.out.println(squares);\n        System.out.println(sum * sum - squares);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "1\n1\n0\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "5\n",
+       "expected": "225\n55\n170\n",
+       "origin": "own",
+       "public": true
+      },
+      {
+       "input": "100\n",
+       "expected": "25502500\n338350\n25164150\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "9\n5\n4\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "3025\n385\n2640\n",
+       "origin": "own",
+       "public": true
+      },
+      {
+       "input": "1000\n",
+       "expected": "250500250000\n333833500\n250166416500\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Для числа `n` посчитай три величины: квадрат суммы чисел от 1 до `n`, сумму квадратов этих чисел и разность первого и второго. Например, для `n = 5`: (1 + 2 + 3 + 4 + 5)² = 225, 1² + 2² + 3² + 4² + 5² = 55, разность — 170.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 1000). Оно уже прочитано в редакторе.\n\n## Выходные данные\nТри строки: квадрат суммы, сумма квадратов и их разность.\n\n## Примеры\n\nВвод:\n```text\n5\n```\nВывод:\n```text\n225\n55\n170\n```\n\nВвод:\n```text\n10\n```\nВывод:\n```text\n3025\n385\n2640\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [difference-of-squares](https://github.com/exercism/problem-specifications/tree/main/exercises/difference-of-squares) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_ACCUMULATOR_PATTERN",
+     "difficulty": 1,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\ntotal = 0\nsquares = 0\nfor i in range(1, n + 1):\n    total += i\n    squares += i * i\nprint(total * total)\nprint(squares)\nprint(total * total - squares)\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "1\n1\n0\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "5\n",
+       "expected": "225\n55\n170\n",
+       "origin": "own",
+       "public": true
+      },
+      {
+       "input": "100\n",
+       "expected": "25502500\n338350\n25164150\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "9\n5\n4\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "3025\n385\n2640\n",
+       "origin": "own",
+       "public": true
+      },
+      {
+       "input": "1000\n",
+       "expected": "250500250000\n333833500\n250166416500\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Для числа `n` посчитай три величины: квадрат суммы чисел от 1 до `n`, сумму квадратов этих чисел и разность первого и второго. Например, для `n = 5`: (1 + 2 + 3 + 4 + 5)² = 225, 1² + 2² + 3² + 4² + 5² = 55, разность — 170.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 1000). Оно уже прочитано в редакторе.\n\n## Выходные данные\nТри строки: квадрат суммы, сумма квадратов и их разность.\n\n## Примеры\n\nВвод:\n```text\n5\n```\nВывод:\n```text\n225\n55\n170\n```\n\nВвод:\n```text\n10\n```\nВывод:\n```text\n3025\n385\n2640\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [difference-of-squares](https://github.com/exercism/problem-specifications/tree/main/exercises/difference-of-squares) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "armstrong-numbers",
+   "title": "Числа Армстронга",
+   "statement": "Число Армстронга равно сумме своих цифр, каждая из которых возведена в степень, равную количеству цифр. Например, 153 = 1³ + 5³ + 3³ — число Армстронга, а 154 — нет.\n\nПроверь, является ли число числом Армстронга.\n\n## Входные данные\nОдно целое неотрицательное число `n`. Оно уже прочитано в редакторе.\n\n## Выходные данные\n`да` или `нет`.",
+   "variants": {
+    "JAVA": {
+     "skill": "ACCUMULATOR_PATTERN",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        int digits = 0;\n        for (long t = n; t > 0; t /= 10) digits++;\n        if (n == 0) digits = 1;\n        long sum = 0;\n        for (long t = n; t > 0; t /= 10) { long d = t % 10, p = 1; for (int i = 0; i < digits; i++) p *= d; sum += p; }\n        System.out.println(sum == n ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "0\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "5\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "153\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "100\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "9474\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9475\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9926315\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9926314\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Число Армстронга равно сумме своих цифр, каждая из которых возведена в степень, равную количеству цифр. Например, 153 = 1³ + 5³ + 3³ — число Армстронга, а 154 — нет.\n\nПроверь, является ли число числом Армстронга.\n\n## Входные данные\nОдно целое неотрицательное число `n`. Оно уже прочитано в редакторе.\n\n## Выходные данные\n`да` или `нет`.\n\n## Примеры\n\nВвод:\n```text\n153\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n100\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [armstrong-numbers](https://github.com/exercism/problem-specifications/tree/main/exercises/armstrong-numbers) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_ACCUMULATOR_PATTERN",
+     "difficulty": 3,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\ndigits = str(n)\ntotal = 0\nfor d in digits:\n    total += int(d) ** len(digits)\nprint(\"да\" if total == n else \"нет\")\n",
+     "cases": [
+      {
+       "input": "0\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "5\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "153\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "100\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "9474\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9475\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9926315\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9926314\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "186709961001538790100634132976990\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "115132219018763992565095597973971522401\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Число Армстронга равно сумме своих цифр, каждая из которых возведена в степень, равную количеству цифр. Например, 153 = 1³ + 5³ + 3³ — число Армстронга, а 154 — нет.\n\nПроверь, является ли число числом Армстронга.\n\n## Входные данные\nОдно целое неотрицательное число `n`. Оно уже прочитано в редакторе.\n\n## Выходные данные\n`да` или `нет`.\n\n## Примеры\n\nВвод:\n```text\n153\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n100\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [armstrong-numbers](https://github.com/exercism/problem-specifications/tree/main/exercises/armstrong-numbers) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "perfect-numbers",
+   "title": "Совершенные числа",
+   "statement": "Сложи все делители числа, меньшие его самого (для 12 это 1 + 2 + 3 + 4 + 6 = 16). Если сумма равна числу, оно `совершенное`, если больше — `избыточное`, если меньше — `недостаточное`.\n\n## Входные данные\nОдно целое число `n` (−10⁹ ≤ n ≤ 10⁹). Оно уже прочитано в редакторе.\n\n## Выходные данные\nОдно из слов `совершенное`, `избыточное`, `недостаточное`. Если `n` не положительное, выведи `ошибка`.\n\n## Подсказка\nПеребирать делители до самого `n` слишком долго для больших чисел: делители идут парами `d` и `n / d`.",
+   "variants": {
+    "JAVA": {
+     "skill": "ACCUMULATOR_PATTERN",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        if (n <= 0) { System.out.println(\"ошибка\"); return; }\n        long sum = 0;\n        for (long d = 1; d * d <= n; d++) { if (n % d == 0) { sum += d; long pair = n / d; if (pair != d) sum += pair; } }\n        sum -= n;\n        if (sum == n) System.out.println(\"совершенное\");\n        else if (sum > n) System.out.println(\"избыточное\");\n        else System.out.println(\"недостаточное\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "6\n",
+       "expected": "совершенное\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "28\n",
+       "expected": "совершенное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "33550336\n",
+       "expected": "совершенное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "12\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "30\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "33550335\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "196\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "32\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "33550337\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-1\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Сложи все делители числа, меньшие его самого (для 12 это 1 + 2 + 3 + 4 + 6 = 16). Если сумма равна числу, оно `совершенное`, если больше — `избыточное`, если меньше — `недостаточное`.\n\n## Входные данные\nОдно целое число `n` (−10⁹ ≤ n ≤ 10⁹). Оно уже прочитано в редакторе.\n\n## Выходные данные\nОдно из слов `совершенное`, `избыточное`, `недостаточное`. Если `n` не положительное, выведи `ошибка`.\n\n## Подсказка\nПеребирать делители до самого `n` слишком долго для больших чисел: делители идут парами `d` и `n / d`.\n\n## Примеры\n\nВвод:\n```text\n6\n```\nВывод:\n```text\nсовершенное\n```\n\nВвод:\n```text\n12\n```\nВывод:\n```text\nизбыточное\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [perfect-numbers](https://github.com/exercism/problem-specifications/tree/main/exercises/perfect-numbers) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_ACCUMULATOR_PATTERN",
+     "difficulty": 2,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nif n <= 0:\n    print(\"ошибка\")\nelse:\n    total = 0\n    d = 1\n    while d * d <= n:\n        if n % d == 0:\n            total += d\n            if n // d != d:\n                total += n // d\n        d += 1\n    total -= n\n    if total == n:\n        print(\"совершенное\")\n    elif total > n:\n        print(\"избыточное\")\n    else:\n        print(\"недостаточное\")\n",
+     "cases": [
+      {
+       "input": "6\n",
+       "expected": "совершенное\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "28\n",
+       "expected": "совершенное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "33550336\n",
+       "expected": "совершенное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "12\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "30\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "33550335\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "196\n",
+       "expected": "избыточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "32\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "33550337\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1\n",
+       "expected": "недостаточное\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "-1\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Сложи все делители числа, меньшие его самого (для 12 это 1 + 2 + 3 + 4 + 6 = 16). Если сумма равна числу, оно `совершенное`, если больше — `избыточное`, если меньше — `недостаточное`.\n\n## Входные данные\nОдно целое число `n` (−10⁹ ≤ n ≤ 10⁹). Оно уже прочитано в редакторе.\n\n## Выходные данные\nОдно из слов `совершенное`, `избыточное`, `недостаточное`. Если `n` не положительное, выведи `ошибка`.\n\n## Подсказка\nПеребирать делители до самого `n` слишком долго для больших чисел: делители идут парами `d` и `n / d`.\n\n## Примеры\n\nВвод:\n```text\n6\n```\nВывод:\n```text\nсовершенное\n```\n\nВвод:\n```text\n12\n```\nВывод:\n```text\nизбыточное\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [perfect-numbers](https://github.com/exercism/problem-specifications/tree/main/exercises/perfect-numbers) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "nth-prime",
+   "title": "N-е простое число",
+   "statement": "Простые числа — 2, 3, 5, 7, 11, 13, … Найди простое число с заданным номером: первое — 2, шестое — 13.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 10⁴). Оно уже прочитано в редакторе.\n\n## Выходные данные\n`n`-е простое число. Если `n` равно 0, выведи `ошибка`.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOOP_TERMINATION",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        if (n < 1) { System.out.println(\"ошибка\"); return; }\n        long count = 0, candidate = 1;\n        while (count < n) {\n            candidate++;\n            boolean prime = true;\n            for (long d = 2; d * d <= candidate; d++) { if (candidate % d == 0) { prime = false; break; } }\n            if (prime) count++;\n        }\n        System.out.println(candidate);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "13\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "10001\n",
+       "expected": "104743\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "100\n",
+       "expected": "541\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "25\n",
+       "expected": "97\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Простые числа — 2, 3, 5, 7, 11, 13, … Найди простое число с заданным номером: первое — 2, шестое — 13.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 10⁴). Оно уже прочитано в редакторе.\n\n## Выходные данные\n`n`-е простое число. Если `n` равно 0, выведи `ошибка`.\n\n## Примеры\n\nВвод:\n```text\n6\n```\nВывод:\n```text\n13\n```\n\nВвод:\n```text\n0\n```\nВывод:\n```text\nошибка\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [nth-prime](https://github.com/exercism/problem-specifications/tree/main/exercises/nth-prime) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LOOP_CONTROL",
+     "difficulty": 3,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nif n < 1:\n    print(\"ошибка\")\nelse:\n    count = 0\n    candidate = 1\n    while count < n:\n        candidate += 1\n        prime = True\n        d = 2\n        while d * d <= candidate:\n            if candidate % d == 0:\n                prime = False\n                break\n            d += 1\n        if prime:\n            count += 1\n    print(candidate)\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "13\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "10001\n",
+       "expected": "104743\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "100\n",
+       "expected": "541\n",
+       "origin": "own",
+       "public": false
+      },
+      {
+       "input": "25\n",
+       "expected": "97\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Простые числа — 2, 3, 5, 7, 11, 13, … Найди простое число с заданным номером: первое — 2, шестое — 13.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 10⁴). Оно уже прочитано в редакторе.\n\n## Выходные данные\n`n`-е простое число. Если `n` равно 0, выведи `ошибка`.\n\n## Примеры\n\nВвод:\n```text\n6\n```\nВывод:\n```text\n13\n```\n\nВвод:\n```text\n0\n```\nВывод:\n```text\nошибка\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [nth-prime](https://github.com/exercism/problem-specifications/tree/main/exercises/nth-prime) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "prime-factors",
+   "title": "Разложение на простые множители",
+   "statement": "Разложи число на простые множители. Например, 60 = 2 · 2 · 3 · 5.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10¹²). Оно уже прочитано в редакторе.\n\n## Выходные данные\nПростые множители в порядке возрастания через пробел, с повторениями. У числа 1 множителей нет — выведи пустую строку.\n\n## Подсказка\nДелить достаточно на числа, квадрат которых не больше оставшегося числа: то, что останется больше единицы, — тоже простой множитель.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOOP_TERMINATION",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        long n = Long.parseLong(in.nextLine().trim());\n        String out = \"\";\n        for (long d = 2; d * d <= n; d++) {\n            while (n % d == 0) { out = out.isEmpty() ? \"\" + d : out + \" \" + d; n /= d; }\n        }\n        if (n > 1) out = out.isEmpty() ? \"\" + n : out + \" \" + n;\n        System.out.println(out);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9\n",
+       "expected": "3 3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "2 2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "8\n",
+       "expected": "2 2 2\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "27\n",
+       "expected": "3 3 3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "625\n",
+       "expected": "5 5 5 5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "2 3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "12\n",
+       "expected": "2 2 3\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "901255\n",
+       "expected": "5 17 23 461\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "93819012551\n",
+       "expected": "11 9539 894119\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Разложи число на простые множители. Например, 60 = 2 · 2 · 3 · 5.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10¹²). Оно уже прочитано в редакторе.\n\n## Выходные данные\nПростые множители в порядке возрастания через пробел, с повторениями. У числа 1 множителей нет — выведи пустую строку.\n\n## Подсказка\nДелить достаточно на числа, квадрат которых не больше оставшегося числа: то, что останется больше единицы, — тоже простой множитель.\n\n## Примеры\n\nВвод:\n```text\n8\n```\nВывод:\n```text\n2 2 2\n```\n\nВвод:\n```text\n12\n```\nВывод:\n```text\n2 2 3\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [prime-factors](https://github.com/exercism/problem-specifications/tree/main/exercises/prime-factors) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LOOP_TERMINATION",
+     "difficulty": 3,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nfactors = []\nd = 2\nwhile d * d <= n:\n    while n % d == 0:\n        factors.append(str(d))\n        n //= d\n    d += 1\nif n > 1:\n    factors.append(str(n))\nprint(\" \".join(factors))\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9\n",
+       "expected": "3 3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "2 2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "8\n",
+       "expected": "2 2 2\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "27\n",
+       "expected": "3 3 3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "625\n",
+       "expected": "5 5 5 5\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "2 3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "12\n",
+       "expected": "2 2 3\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "901255\n",
+       "expected": "5 17 23 461\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "93819012551\n",
+       "expected": "11 9539 894119\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Разложи число на простые множители. Например, 60 = 2 · 2 · 3 · 5.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 10¹²). Оно уже прочитано в редакторе.\n\n## Выходные данные\nПростые множители в порядке возрастания через пробел, с повторениями. У числа 1 множителей нет — выведи пустую строку.\n\n## Подсказка\nДелить достаточно на числа, квадрат которых не больше оставшегося числа: то, что останется больше единицы, — тоже простой множитель.\n\n## Примеры\n\nВвод:\n```text\n8\n```\nВывод:\n```text\n2 2 2\n```\n\nВвод:\n```text\n12\n```\nВывод:\n```text\n2 2 3\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [prime-factors](https://github.com/exercism/problem-specifications/tree/main/exercises/prime-factors) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "hamming",
+   "title": "Расстояние Хэмминга",
+   "statement": "Две цепочки ДНК одинаковой длины сравнивают по позициям: расстояние Хэмминга — число позиций, где буквы различаются. Например, у `GAGCCTACTAACGGGAT` и `CATCGTAATGACGGCCT` оно равно 7.\n\n## Входные данные\nДве строки — цепочки ДНК (могут быть пустыми). Они уже прочитаны в редакторе.\n\n## Выходные данные\nРасстояние Хэмминга. Если длины цепочек разные, выведи `ошибка`.",
+   "variants": {
+    "JAVA": {
+     "skill": "FOR_LOOP_BASIC",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String a = in.nextLine();\n        String b = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String a = in.nextLine();\n        String b = in.nextLine();\n        if (a.length() != b.length()) { System.out.println(\"ошибка\"); return; }\n        int distance = 0;\n        for (int i = 0; i < a.length(); i++) if (a.charAt(i) != b.charAt(i)) distance++;\n        System.out.println(distance);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "\n\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "A\nA\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "G\nT\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "GGACTGAAATCTG\nGGACTGAAATCTG\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "GGACGGATTCTG\nAGGACGGATTCT\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "AATG\nAAA\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "ATA\nAGTG\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\nG\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "G\n\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Две цепочки ДНК одинаковой длины сравнивают по позициям: расстояние Хэмминга — число позиций, где буквы различаются. Например, у `GAGCCTACTAACGGGAT` и `CATCGTAATGACGGCCT` оно равно 7.\n\n## Входные данные\nДве строки — цепочки ДНК (могут быть пустыми). Они уже прочитаны в редакторе.\n\n## Выходные данные\nРасстояние Хэмминга. Если длины цепочек разные, выведи `ошибка`.\n\n## Примеры\n\nВвод:\n```text\nGGACGGATTCTG\nAGGACGGATTCT\n```\nВывод:\n```text\n9\n```\n\nВвод:\n```text\nAATG\nAAA\n```\nВывод:\n```text\nошибка\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [hamming](https://github.com/exercism/problem-specifications/tree/main/exercises/hamming) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_FOR_RANGE",
+     "difficulty": 2,
+     "starter": "a = input()\nb = input()\n\n# Напиши решение здесь\n",
+     "reference": "a = input()\nb = input()\nif len(a) != len(b):\n    print(\"ошибка\")\nelse:\n    distance = 0\n    for i in range(len(a)):\n        if a[i] != b[i]:\n            distance += 1\n    print(distance)\n",
+     "cases": [
+      {
+       "input": "\n\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "A\nA\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "G\nT\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "GGACTGAAATCTG\nGGACTGAAATCTG\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "GGACGGATTCTG\nAGGACGGATTCT\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "AATG\nAAA\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "ATA\nAGTG\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\nG\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "G\n\n",
+       "expected": "ошибка\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Две цепочки ДНК одинаковой длины сравнивают по позициям: расстояние Хэмминга — число позиций, где буквы различаются. Например, у `GAGCCTACTAACGGGAT` и `CATCGTAATGACGGCCT` оно равно 7.\n\n## Входные данные\nДве строки — цепочки ДНК (могут быть пустыми). Они уже прочитаны в редакторе.\n\n## Выходные данные\nРасстояние Хэмминга. Если длины цепочек разные, выведи `ошибка`.\n\n## Примеры\n\nВвод:\n```text\nGGACGGATTCTG\nAGGACGGATTCT\n```\nВывод:\n```text\n9\n```\n\nВвод:\n```text\nAATG\nAAA\n```\nВывод:\n```text\nошибка\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [hamming](https://github.com/exercism/problem-specifications/tree/main/exercises/hamming) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "reverse-string",
+   "title": "Строка задом наперёд",
+   "statement": "Выведи строку задом наперёд: `robot` → `tobor`.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\nЭта строка в обратном порядке.",
+   "variants": {
+    "JAVA": {
+     "skill": "FOR_LOOP_BASIC",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        String out = \"\";\n        for (int i = s.length() - 1; i >= 0; i--) out = out + s.charAt(i);\n        System.out.println(out);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "\n",
+       "expected": "\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "robot\n",
+       "expected": "tobor\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "Ramen\n",
+       "expected": "nemaR\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "I'm hungry!\n",
+       "expected": "!yrgnuh m'I\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "racecar\n",
+       "expected": "racecar\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "drawer\n",
+       "expected": "reward\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "子猫\n",
+       "expected": "猫子\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Привет, мир\n",
+       "expected": "рим ,тевирП\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Выведи строку задом наперёд: `robot` → `tobor`.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\nЭта строка в обратном порядке.\n\n## Примеры\n\nВвод:\n```text\nrobot\n```\nВывод:\n```text\ntobor\n```\n\nВвод:\n```text\nRamen\n```\nВывод:\n```text\nnemaR\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [reverse-string](https://github.com/exercism/problem-specifications/tree/main/exercises/reverse-string) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_STRING_SLICING",
+     "difficulty": 1,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\nprint(s[::-1])\n",
+     "cases": [
+      {
+       "input": "\n",
+       "expected": "\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "robot\n",
+       "expected": "tobor\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "Ramen\n",
+       "expected": "nemaR\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "I'm hungry!\n",
+       "expected": "!yrgnuh m'I\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "racecar\n",
+       "expected": "racecar\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "drawer\n",
+       "expected": "reward\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "子猫\n",
+       "expected": "猫子\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Привет, мир\n",
+       "expected": "рим ,тевирП\n",
+       "origin": "own",
+       "public": false
+      }
+     ],
+     "statement": "Выведи строку задом наперёд: `robot` → `tobor`.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\nЭта строка в обратном порядке.\n\n## Примеры\n\nВвод:\n```text\nrobot\n```\nВывод:\n```text\ntobor\n```\n\nВвод:\n```text\nRamen\n```\nВывод:\n```text\nnemaR\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [reverse-string](https://github.com/exercism/problem-specifications/tree/main/exercises/reverse-string) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "scrabble-score",
+   "title": "Очки в «Эрудите»",
+   "statement": "В английской версии игры «Эрудит» (Scrabble) каждая буква приносит очки:\n\n| Буквы | Очки |\n|---|---|\n| A, E, I, O, U, L, N, R, S, T | 1 |\n| D, G | 2 |\n| B, C, M, P | 3 |\n| F, H, V, W, Y | 4 |\n| K | 5 |\n| J, X | 8 |\n| Q, Z | 10 |\n\nПосчитай очки за слово. Регистр букв не важен.\n\n## Входные данные\nОдно слово из латинских букв (может быть пустым). Оно уже прочитано в редакторе.\n\n## Выходные данные\nСумма очков за слово.",
+   "variants": {
+    "JAVA": {
+     "skill": "FOR_LOOP_BASIC",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        String w = s.toUpperCase();\n        int score = 0;\n        for (int i = 0; i < w.length(); i++) {\n            switch (w.charAt(i)) {\n                case 'D': case 'G': score += 2; break;\n                case 'B': case 'C': case 'M': case 'P': score += 3; break;\n                case 'F': case 'H': case 'V': case 'W': case 'Y': score += 4; break;\n                case 'K': score += 5; break;\n                case 'J': case 'X': score += 8; break;\n                case 'Q': case 'Z': score += 10; break;\n                default: score += 1;\n            }\n        }\n        System.out.println(score);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "a\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "A\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "f\n",
+       "expected": "4\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "at\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "zoo\n",
+       "expected": "12\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "street\n",
+       "expected": "6\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "quirky\n",
+       "expected": "22\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "OxyphenButazone\n",
+       "expected": "41\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "pinata\n",
+       "expected": "8\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "abcdefghijklmnopqrstuvwxyz\n",
+       "expected": "87\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В английской версии игры «Эрудит» (Scrabble) каждая буква приносит очки:\n\n| Буквы | Очки |\n|---|---|\n| A, E, I, O, U, L, N, R, S, T | 1 |\n| D, G | 2 |\n| B, C, M, P | 3 |\n| F, H, V, W, Y | 4 |\n| K | 5 |\n| J, X | 8 |\n| Q, Z | 10 |\n\nПосчитай очки за слово. Регистр букв не важен.\n\n## Входные данные\nОдно слово из латинских букв (может быть пустым). Оно уже прочитано в редакторе.\n\n## Выходные данные\nСумма очков за слово.\n\n## Примеры\n\nВвод:\n```text\nzoo\n```\nВывод:\n```text\n12\n```\n\nВвод:\n```text\nquirky\n```\nВывод:\n```text\n22\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [scrabble-score](https://github.com/exercism/problem-specifications/tree/main/exercises/scrabble-score) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_DICT_BASIC",
+     "difficulty": 1,
+     "starter": "word = input()\n\n# Напиши решение здесь\n",
+     "reference": "word = input()\npoints = {}\nfor letters, value in [(\"AEIOULNRST\", 1), (\"DG\", 2), (\"BCMP\", 3), (\"FHVWY\", 4), (\"K\", 5), (\"JX\", 8), (\"QZ\", 10)]:\n    for letter in letters:\n        points[letter] = value\nscore = 0\nfor letter in word.upper():\n    score += points[letter]\nprint(score)\n",
+     "cases": [
+      {
+       "input": "a\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "A\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "f\n",
+       "expected": "4\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "at\n",
+       "expected": "2\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "zoo\n",
+       "expected": "12\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "street\n",
+       "expected": "6\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "quirky\n",
+       "expected": "22\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "OxyphenButazone\n",
+       "expected": "41\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "pinata\n",
+       "expected": "8\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "abcdefghijklmnopqrstuvwxyz\n",
+       "expected": "87\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В английской версии игры «Эрудит» (Scrabble) каждая буква приносит очки:\n\n| Буквы | Очки |\n|---|---|\n| A, E, I, O, U, L, N, R, S, T | 1 |\n| D, G | 2 |\n| B, C, M, P | 3 |\n| F, H, V, W, Y | 4 |\n| K | 5 |\n| J, X | 8 |\n| Q, Z | 10 |\n\nПосчитай очки за слово. Регистр букв не важен.\n\n## Входные данные\nОдно слово из латинских букв (может быть пустым). Оно уже прочитано в редакторе.\n\n## Выходные данные\nСумма очков за слово.\n\n## Примеры\n\nВвод:\n```text\nzoo\n```\nВывод:\n```text\n12\n```\n\nВвод:\n```text\nquirky\n```\nВывод:\n```text\n22\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [scrabble-score](https://github.com/exercism/problem-specifications/tree/main/exercises/scrabble-score) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "pangram",
+   "title": "Панграмма",
+   "statement": "Панграмма — фраза, в которой есть все 26 букв латинского алфавита, например «The quick brown fox jumps over the lazy dog». Регистр букв не важен, остальные символы не учитываются.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если строка — панграмма, иначе `нет`.",
+   "variants": {
+    "JAVA": {
+     "skill": "LOOP_TERMINATION",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        String t = s.toLowerCase();\n        boolean all = true;\n        for (char c = 'a'; c <= 'z'; c++) { if (t.indexOf(c) < 0) { all = false; break; } }\n        System.out.println(all ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "abcdefghijklmnopqrstuvwxyz\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "the quick brown fox jumps over the lazy dog\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "a quick movement of the enemy will jeopardize five gunboats\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "five boxing wizards jump quickly at it\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "the_quick_brown_fox_jumps_over_the_lazy_dog\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "the 1 quick brown fox jumps over the 2 lazy dogs\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7h3 qu1ck brown fox jumps ov3r 7h3 lazy dog\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\"Five quacking Zephyrs jolt my wax bed.\"\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "abcdefghijklm ABCDEFGHIJKLM\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Панграмма — фраза, в которой есть все 26 букв латинского алфавита, например «The quick brown fox jumps over the lazy dog». Регистр букв не важен, остальные символы не учитываются.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если строка — панграмма, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\nthe quick brown fox jumps over the lazy dog\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\nfive boxing wizards jump quickly at it\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [pangram](https://github.com/exercism/problem-specifications/tree/main/exercises/pangram) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_STRING_METHODS",
+     "difficulty": 1,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\nt = s.lower()\nall_letters = True\nfor letter in \"abcdefghijklmnopqrstuvwxyz\":\n    if letter not in t:\n        all_letters = False\nprint(\"да\" if all_letters else \"нет\")\n",
+     "cases": [
+      {
+       "input": "\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "abcdefghijklmnopqrstuvwxyz\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "the quick brown fox jumps over the lazy dog\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "a quick movement of the enemy will jeopardize five gunboats\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "five boxing wizards jump quickly at it\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "the_quick_brown_fox_jumps_over_the_lazy_dog\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "the 1 quick brown fox jumps over the 2 lazy dogs\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7h3 qu1ck brown fox jumps ov3r 7h3 lazy dog\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\"Five quacking Zephyrs jolt my wax bed.\"\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "abcdefghijklm ABCDEFGHIJKLM\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Панграмма — фраза, в которой есть все 26 букв латинского алфавита, например «The quick brown fox jumps over the lazy dog». Регистр букв не важен, остальные символы не учитываются.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если строка — панграмма, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\nthe quick brown fox jumps over the lazy dog\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\nfive boxing wizards jump quickly at it\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [pangram](https://github.com/exercism/problem-specifications/tree/main/exercises/pangram) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "isogram",
+   "title": "Изограмма",
+   "statement": "Изограмма — слово или фраза, в которой ни одна буква не повторяется. Пробелы и дефисы могут встречаться сколько угодно, регистр букв не важен: `lumberjacks` и `six-year-old` — изограммы, `isograms` — нет.\n\n## Входные данные\nОдна строка из латинских букв, пробелов и дефисов (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если это изограмма, иначе `нет`.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_BASIC",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        boolean[] seen = new boolean[26];\n        boolean ok = true;\n        String t = s.toLowerCase();\n        for (int i = 0; i < t.length(); i++) {\n            char c = t.charAt(i);\n            if (c < 'a' || c > 'z') continue;\n            if (seen[c - 'a']) { ok = false; break; }\n            seen[c - 'a'] = true;\n        }\n        System.out.println(ok ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "isogram\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "eleven\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "zzyzx\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "subdermatoglyphic\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Alphabet\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "alphAbet\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "thumbscrew-japingly\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "thumbscrew-jappingly\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "six-year-old\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Emily Jung Schwartzkopf\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "accentor\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "angola\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "up-to-date\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Изограмма — слово или фраза, в которой ни одна буква не повторяется. Пробелы и дефисы могут встречаться сколько угодно, регистр букв не важен: `lumberjacks` и `six-year-old` — изограммы, `isograms` — нет.\n\n## Входные данные\nОдна строка из латинских букв, пробелов и дефисов (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если это изограмма, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\nisogram\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\neleven\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [isogram](https://github.com/exercism/problem-specifications/tree/main/exercises/isogram) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_STRING_METHODS",
+     "difficulty": 2,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\nletters = s.lower().replace(\"-\", \"\").replace(\" \", \"\")\nok = True\nfor i in range(len(letters)):\n    if letters[i] in letters[i + 1:]:\n        ok = False\nprint(\"да\" if ok else \"нет\")\n",
+     "cases": [
+      {
+       "input": "\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "isogram\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "eleven\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "zzyzx\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "subdermatoglyphic\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Alphabet\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "alphAbet\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "thumbscrew-japingly\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "thumbscrew-jappingly\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "six-year-old\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Emily Jung Schwartzkopf\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "accentor\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "angola\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "up-to-date\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Изограмма — слово или фраза, в которой ни одна буква не повторяется. Пробелы и дефисы могут встречаться сколько угодно, регистр букв не важен: `lumberjacks` и `six-year-old` — изограммы, `isograms` — нет.\n\n## Входные данные\nОдна строка из латинских букв, пробелов и дефисов (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если это изограмма, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\nisogram\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\neleven\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [isogram](https://github.com/exercism/problem-specifications/tree/main/exercises/isogram) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "luhn",
+   "title": "Алгоритм Луна",
+   "statement": "Номера банковских карт проверяют алгоритмом Луна. Пробелы в номере не учитываются; номер из одной цифры или с другими символами, кроме цифр и пробелов, неверный. Каждую вторую цифру, считая справа, удваивают; если получилось больше 9, вычитают 9. Номер верный, если сумма всех цифр после этого делится на 10.\n\n## Входные данные\nОдна строка — номер. Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если номер верный, иначе `нет`.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_ITERATION",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        String digits = s.replace(\" \", \"\");\n        boolean ok = digits.length() > 1;\n        int sum = 0;\n        for (int i = 0; i < digits.length() && ok; i++) {\n            char c = digits.charAt(digits.length() - 1 - i);\n            if (c < '0' || c > '9') { ok = false; break; }\n            int d = c - '0';\n            if (i % 2 == 1) { d *= 2; if (d > 9) d -= 9; }\n            sum += d;\n        }\n        System.out.println(ok && sum % 10 == 0 ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "059\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "59\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055 444 285\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055 444 286\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "8273 1232 7352 0569\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 2345 6789 1234 5678 9012\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 2345 6789 1234 5678 9013\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "095 245 88\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "234 567 891 234\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "059a\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055-444-285\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055# 444$ 285\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": " 0\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0000 0\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "091\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9999999999 9999999999 9999999999 9999999999\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "109\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055b 444 285\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": ":9\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "59%59\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Номера банковских карт проверяют алгоритмом Луна. Пробелы в номере не учитываются; номер из одной цифры или с другими символами, кроме цифр и пробелов, неверный. Каждую вторую цифру, считая справа, удваивают; если получилось больше 9, вычитают 9. Номер верный, если сумма всех цифр после этого делится на 10.\n\n## Входные данные\nОдна строка — номер. Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если номер верный, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\n059\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n055 444 286\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [luhn](https://github.com/exercism/problem-specifications/tree/main/exercises/luhn) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LIST_ITERATION",
+     "difficulty": 3,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\ndigits = s.replace(\" \", \"\")\nok = len(digits) > 1 and digits.isdigit()\ntotal = 0\nif ok:\n    for i, c in enumerate(reversed(digits)):\n        d = int(c)\n        if i % 2 == 1:\n            d *= 2\n            if d > 9:\n                d -= 9\n        total += d\nprint(\"да\" if ok and total % 10 == 0 else \"нет\")\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "059\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "59\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055 444 285\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055 444 286\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "8273 1232 7352 0569\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 2345 6789 1234 5678 9012\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1 2345 6789 1234 5678 9013\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "095 245 88\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "234 567 891 234\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "059a\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055-444-285\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055# 444$ 285\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": " 0\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "0000 0\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "091\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9999999999 9999999999 9999999999 9999999999\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "109\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "055b 444 285\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": ":9\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "59%59\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Номера банковских карт проверяют алгоритмом Луна. Пробелы в номере не учитываются; номер из одной цифры или с другими символами, кроме цифр и пробелов, неверный. Каждую вторую цифру, считая справа, удваивают; если получилось больше 9, вычитают 9. Номер верный, если сумма всех цифр после этого делится на 10.\n\n## Входные данные\nОдна строка — номер. Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если номер верный, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\n059\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n055 444 286\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [luhn](https://github.com/exercism/problem-specifications/tree/main/exercises/luhn) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "isbn-verifier",
+   "title": "Проверка ISBN-10",
+   "statement": "ISBN-10 — номер книги из 10 символов, между которыми могут стоять дефисы: `3-598-21508-8`. Первые девять символов — цифры, последний — цифра или `X` (означает 10). Номер верный, если сумма `x₁·10 + x₂·9 + … + x₁₀·1` делится на 11.\n\n## Входные данные\nОдна строка — номер. Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если номер верный, иначе `нет`.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_ITERATION",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        String t = s.replace(\"-\", \"\");\n        boolean ok = t.length() == 10;\n        int sum = 0;\n        for (int i = 0; i < t.length() && ok; i++) {\n            char c = t.charAt(i);\n            int v;\n            if (c >= '0' && c <= '9') v = c - '0';\n            else if (c == 'X' && i == 9) v = 10;\n            else { ok = false; break; }\n            sum += v * (10 - i);\n        }\n        System.out.println(ok && sum % 11 == 0 ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "3-598-21508-8\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "3-598-21508-9\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21507-X\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "3-598-21507-A\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4-598-21507-B\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-P1581-X\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-2X507-9\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21508-96\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-2X507-5\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3598215088\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "359821507X\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "359821507\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3598215078X\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "00\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21507\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21515-X\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "134456729\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3132P34035\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3598P215088\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "98245726788\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "ISBN-10 — номер книги из 10 символов, между которыми могут стоять дефисы: `3-598-21508-8`. Первые девять символов — цифры, последний — цифра или `X` (означает 10). Номер верный, если сумма `x₁·10 + x₂·9 + … + x₁₀·1` делится на 11.\n\n## Входные данные\nОдна строка — номер. Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если номер верный, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\n3-598-21508-8\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n3-598-21507-X\n```\nВывод:\n```text\nда\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [isbn-verifier](https://github.com/exercism/problem-specifications/tree/main/exercises/isbn-verifier) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_STRING_METHODS",
+     "difficulty": 3,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\nt = s.replace(\"-\", \"\")\nok = len(t) == 10\ntotal = 0\nif ok:\n    for i in range(10):\n        c = t[i]\n        if c.isdigit():\n            v = int(c)\n        elif c == \"X\" and i == 9:\n            v = 10\n        else:\n            ok = False\n            break\n        total += v * (10 - i)\nprint(\"да\" if ok and total % 11 == 0 else \"нет\")\n",
+     "cases": [
+      {
+       "input": "3-598-21508-8\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "3-598-21508-9\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21507-X\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "3-598-21507-A\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4-598-21507-B\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-P1581-X\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-2X507-9\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21508-96\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-2X507-5\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3598215088\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "359821507X\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "359821507\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3598215078X\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "00\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21507\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3-598-21515-X\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "134456729\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3132P34035\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3598P215088\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "98245726788\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "ISBN-10 — номер книги из 10 символов, между которыми могут стоять дефисы: `3-598-21508-8`. Первые девять символов — цифры, последний — цифра или `X` (означает 10). Номер верный, если сумма `x₁·10 + x₂·9 + … + x₁₀·1` делится на 11.\n\n## Входные данные\nОдна строка — номер. Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если номер верный, иначе `нет`.\n\n## Примеры\n\nВвод:\n```text\n3-598-21508-8\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n3-598-21507-X\n```\nВывод:\n```text\nда\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [isbn-verifier](https://github.com/exercism/problem-specifications/tree/main/exercises/isbn-verifier) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "roman-numerals",
+   "title": "Римские числа",
+   "statement": "Запиши число римскими цифрами: I = 1, V = 5, X = 10, L = 50, C = 100, D = 500, M = 1000. Меньшая цифра перед большей вычитается: IV = 4, IX = 9, XL = 40, XC = 90, CD = 400, CM = 900. Например, 1994 = MCMXCIV.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 3999). Оно уже прочитано в редакторе.\n\n## Выходные данные\nЧисло римскими цифрами.\n\n## Подсказка\nПомогут два массива одинаковой длины: значения 1000, 900, 500, …, 1 и их записи M, CM, D, …, I.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_INDEXING",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        int[] values = {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1};\n        String[] digits = {\"M\", \"CM\", \"D\", \"CD\", \"C\", \"XC\", \"L\", \"XL\", \"X\", \"IX\", \"V\", \"IV\", \"I\"};\n        String out = \"\";\n        for (int i = 0; i < values.length; i++) { while (n >= values[i]) { out = out + digits[i]; n -= values[i]; } }\n        System.out.println(out);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "I\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "II\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "III\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "IV\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "5\n",
+       "expected": "V\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "VI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9\n",
+       "expected": "IX\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "16\n",
+       "expected": "XVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "27\n",
+       "expected": "XXVII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "48\n",
+       "expected": "XLVIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "49\n",
+       "expected": "XLIX\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "59\n",
+       "expected": "LIX\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "66\n",
+       "expected": "LXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "93\n",
+       "expected": "XCIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "141\n",
+       "expected": "CXLI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "163\n",
+       "expected": "CLXIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "166\n",
+       "expected": "CLXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "402\n",
+       "expected": "CDII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "575\n",
+       "expected": "DLXXV\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "666\n",
+       "expected": "DCLXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "911\n",
+       "expected": "CMXI\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1024\n",
+       "expected": "MXXIV\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1666\n",
+       "expected": "MDCLXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3000\n",
+       "expected": "MMM\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3001\n",
+       "expected": "MMMI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3888\n",
+       "expected": "MMMDCCCLXXXVIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3999\n",
+       "expected": "MMMCMXCIX\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Запиши число римскими цифрами: I = 1, V = 5, X = 10, L = 50, C = 100, D = 500, M = 1000. Меньшая цифра перед большей вычитается: IV = 4, IX = 9, XL = 40, XC = 90, CD = 400, CM = 900. Например, 1994 = MCMXCIV.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 3999). Оно уже прочитано в редакторе.\n\n## Выходные данные\nЧисло римскими цифрами.\n\n## Подсказка\nПомогут два массива одинаковой длины: значения 1000, 900, 500, …, 1 и их записи M, CM, D, …, I.\n\n## Примеры\n\nВвод:\n```text\n4\n```\nВывод:\n```text\nIV\n```\n\nВвод:\n```text\n911\n```\nВывод:\n```text\nCMXI\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [roman-numerals](https://github.com/exercism/problem-specifications/tree/main/exercises/roman-numerals) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LIST_INDEXING",
+     "difficulty": 2,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nvalues = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]\ndigits = [\"M\", \"CM\", \"D\", \"CD\", \"C\", \"XC\", \"L\", \"XL\", \"X\", \"IX\", \"V\", \"IV\", \"I\"]\nout = \"\"\nfor i in range(len(values)):\n    while n >= values[i]:\n        out += digits[i]\n        n -= values[i]\nprint(out)\n",
+     "cases": [
+      {
+       "input": "1\n",
+       "expected": "I\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "II\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "III\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n",
+       "expected": "IV\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "5\n",
+       "expected": "V\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "VI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "9\n",
+       "expected": "IX\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "16\n",
+       "expected": "XVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "27\n",
+       "expected": "XXVII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "48\n",
+       "expected": "XLVIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "49\n",
+       "expected": "XLIX\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "59\n",
+       "expected": "LIX\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "66\n",
+       "expected": "LXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "93\n",
+       "expected": "XCIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "141\n",
+       "expected": "CXLI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "163\n",
+       "expected": "CLXIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "166\n",
+       "expected": "CLXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "402\n",
+       "expected": "CDII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "575\n",
+       "expected": "DLXXV\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "666\n",
+       "expected": "DCLXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "911\n",
+       "expected": "CMXI\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1024\n",
+       "expected": "MXXIV\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1666\n",
+       "expected": "MDCLXVI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3000\n",
+       "expected": "MMM\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3001\n",
+       "expected": "MMMI\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3888\n",
+       "expected": "MMMDCCCLXXXVIII\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3999\n",
+       "expected": "MMMCMXCIX\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Запиши число римскими цифрами: I = 1, V = 5, X = 10, L = 50, C = 100, D = 500, M = 1000. Меньшая цифра перед большей вычитается: IV = 4, IX = 9, XL = 40, XC = 90, CD = 400, CM = 900. Например, 1994 = MCMXCIV.\n\n## Входные данные\nОдно целое число `n` (1 ≤ n ≤ 3999). Оно уже прочитано в редакторе.\n\n## Выходные данные\nЧисло римскими цифрами.\n\n## Подсказка\nПомогут два массива одинаковой длины: значения 1000, 900, 500, …, 1 и их записи M, CM, D, …, I.\n\n## Примеры\n\nВвод:\n```text\n4\n```\nВывод:\n```text\nIV\n```\n\nВвод:\n```text\n911\n```\nВывод:\n```text\nCMXI\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [roman-numerals](https://github.com/exercism/problem-specifications/tree/main/exercises/roman-numerals) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "sum-of-multiples",
+   "title": "Сумма кратных",
+   "statement": "В игре за прохождение уровня дают очки: это сумма всех различных чисел меньше заданного предела, которые кратны хотя бы одному из «волшебных» чисел. Например, при пределе 20 и числах 3 и 5 подходят 3, 5, 6, 9, 10, 12, 15, 18 — сумма 78. Число 0 среди волшебных ничего не даёт.\n\n## Входные данные\nВ первой строке — предел (1 ≤ предел ≤ 10⁵), во второй — волшебные числа через пробел (строка может быть пустой). Они уже прочитаны в редакторе.\n\n## Выходные данные\nСумма очков.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_ITERATION",
+     "difficulty": 1,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int limit = Integer.parseInt(in.nextLine().trim());\n        String line = in.hasNextLine() ? in.nextLine().trim() : \"\";\n        String[] parts = line.isEmpty() ? new String[0] : line.split(\"\\\\s+\");\n        int[] factors = new int[parts.length];\n        for (int i = 0; i < parts.length; i++) factors[i] = Integer.parseInt(parts[i]);\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int limit = Integer.parseInt(in.nextLine().trim());\n        String line = in.hasNextLine() ? in.nextLine().trim() : \"\";\n        String[] parts = line.isEmpty() ? new String[0] : line.split(\"\\\\s+\");\n        int[] factors = new int[parts.length];\n        for (int i = 0; i < parts.length; i++) factors[i] = Integer.parseInt(parts[i]);\n        long sum = 0;\n        for (int k = 1; k < limit; k++) {\n            boolean multiple = false;\n            for (int f : factors) if (f != 0 && k % f == 0) multiple = true;\n            if (multiple) sum += k;\n        }\n        System.out.println(sum);\n    }\n}\n",
+     "cases": [
+      {
+       "input": "1\n3 5\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n3 5\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7\n3\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n3 5\n",
+       "expected": "23\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "100\n3 5\n",
+       "expected": "2318\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1000\n3 5\n",
+       "expected": "233168\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "20\n7 13 17\n",
+       "expected": "51\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "15\n4 6\n",
+       "expected": "30\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "150\n5 6 8\n",
+       "expected": "4419\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "51\n5 25\n",
+       "expected": "275\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10000\n43 47\n",
+       "expected": "2203160\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "100\n1\n",
+       "expected": "4950\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10000\n\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1\n0\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n3 0\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10000\n2 3 5 7 11\n",
+       "expected": "39614537\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В игре за прохождение уровня дают очки: это сумма всех различных чисел меньше заданного предела, которые кратны хотя бы одному из «волшебных» чисел. Например, при пределе 20 и числах 3 и 5 подходят 3, 5, 6, 9, 10, 12, 15, 18 — сумма 78. Число 0 среди волшебных ничего не даёт.\n\n## Входные данные\nВ первой строке — предел (1 ≤ предел ≤ 10⁵), во второй — волшебные числа через пробел (строка может быть пустой). Они уже прочитаны в редакторе.\n\n## Выходные данные\nСумма очков.\n\n## Примеры\n\nВвод:\n```text\n100\n3 5\n```\nВывод:\n```text\n2318\n```\n\nВвод:\n```text\n15\n4 6\n```\nВывод:\n```text\n30\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [sum-of-multiples](https://github.com/exercism/problem-specifications/tree/main/exercises/sum-of-multiples) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LIST_ITERATION",
+     "difficulty": 1,
+     "starter": "limit = int(input())\nfactors = [int(x) for x in input().split()]\n\n# Напиши решение здесь\n",
+     "reference": "limit = int(input())\nfactors = [int(x) for x in input().split()]\ntotal = 0\nfor k in range(1, limit):\n    for f in factors:\n        if f != 0 and k % f == 0:\n            total += k\n            break\nprint(total)\n",
+     "cases": [
+      {
+       "input": "1\n3 5\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n3 5\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "7\n3\n",
+       "expected": "9\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n3 5\n",
+       "expected": "23\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "100\n3 5\n",
+       "expected": "2318\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "1000\n3 5\n",
+       "expected": "233168\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "20\n7 13 17\n",
+       "expected": "51\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "15\n4 6\n",
+       "expected": "30\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "150\n5 6 8\n",
+       "expected": "4419\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "51\n5 25\n",
+       "expected": "275\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10000\n43 47\n",
+       "expected": "2203160\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "100\n1\n",
+       "expected": "4950\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10000\n\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1\n0\n",
+       "expected": "0\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "4\n3 0\n",
+       "expected": "3\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10000\n2 3 5 7 11\n",
+       "expected": "39614537\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В игре за прохождение уровня дают очки: это сумма всех различных чисел меньше заданного предела, которые кратны хотя бы одному из «волшебных» чисел. Например, при пределе 20 и числах 3 и 5 подходят 3, 5, 6, 9, 10, 12, 15, 18 — сумма 78. Число 0 среди волшебных ничего не даёт.\n\n## Входные данные\nВ первой строке — предел (1 ≤ предел ≤ 10⁵), во второй — волшебные числа через пробел (строка может быть пустой). Они уже прочитаны в редакторе.\n\n## Выходные данные\nСумма очков.\n\n## Примеры\n\nВвод:\n```text\n100\n3 5\n```\nВывод:\n```text\n2318\n```\n\nВвод:\n```text\n15\n4 6\n```\nВывод:\n```text\n30\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [sum-of-multiples](https://github.com/exercism/problem-specifications/tree/main/exercises/sum-of-multiples) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "pascals-triangle",
+   "title": "Треугольник Паскаля",
+   "statement": "В треугольнике Паскаля первая строка — `1`, а каждая следующая начинается и заканчивается единицей; остальные числа — суммы двух соседних чисел над ними:\n\n```text\n1\n1 1\n1 2 1\n1 3 3 1\n```\n\nВыведи первые `n` строк треугольника.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 30). Оно уже прочитано в редакторе.\n\n## Выходные данные\n`n` строк, числа в строке через пробел. При `n = 0` ничего не выводи.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_BASIC",
+     "difficulty": 3,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        int n = Integer.parseInt(in.nextLine().trim());\n        long[] row = new long[n + 1];\n        for (int r = 0; r < n; r++) {\n            row[r] = 1;\n            for (int i = r - 1; i > 0; i--) row[i] = row[i] + row[i - 1];\n            String line = \"\";\n            for (int i = 0; i <= r; i++) line = i == 0 ? \"\" + row[i] : line + \" \" + row[i];\n            System.out.println(line);\n        }\n    }\n}\n",
+     "cases": [
+      {
+       "input": "0\n",
+       "expected": "",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "1\n1 1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "1\n1 1\n1 2 1\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "4\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "5\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1\n1 5 10 10 5 1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1\n1 5 10 10 5 1\n1 6 15 20 15 6 1\n1 7 21 35 35 21 7 1\n1 8 28 56 70 56 28 8 1\n1 9 36 84 126 126 84 36 9 1\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В треугольнике Паскаля первая строка — `1`, а каждая следующая начинается и заканчивается единицей; остальные числа — суммы двух соседних чисел над ними:\n\n```text\n1\n1 1\n1 2 1\n1 3 3 1\n```\n\nВыведи первые `n` строк треугольника.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 30). Оно уже прочитано в редакторе.\n\n## Выходные данные\n`n` строк, числа в строке через пробел. При `n = 0` ничего не выводи.\n\n## Примеры\n\nВвод:\n```text\n3\n```\nВывод:\n```text\n1\n1 1\n1 2 1\n```\n\nВвод:\n```text\n4\n```\nВывод:\n```text\n1\n1 1\n1 2 1\n1 3 3 1\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [pascals-triangle](https://github.com/exercism/problem-specifications/tree/main/exercises/pascals-triangle) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LIST_BASIC",
+     "difficulty": 3,
+     "starter": "n = int(input())\n\n# Напиши решение здесь\n",
+     "reference": "n = int(input())\nrow = []\nfor r in range(n):\n    row = [1] + [row[i] + row[i + 1] for i in range(len(row) - 1)] + ([1] if row else [])\n    print(\" \".join(str(x) for x in row))\n",
+     "cases": [
+      {
+       "input": "0\n",
+       "expected": "",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "1\n",
+       "expected": "1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "2\n",
+       "expected": "1\n1 1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "3\n",
+       "expected": "1\n1 1\n1 2 1\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "4\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "5\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "6\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1\n1 5 10 10 5 1\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "10\n",
+       "expected": "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1\n1 5 10 10 5 1\n1 6 15 20 15 6 1\n1 7 21 35 35 21 7 1\n1 8 28 56 70 56 28 8 1\n1 9 36 84 126 126 84 36 9 1\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "В треугольнике Паскаля первая строка — `1`, а каждая следующая начинается и заканчивается единицей; остальные числа — суммы двух соседних чисел над ними:\n\n```text\n1\n1 1\n1 2 1\n1 3 3 1\n```\n\nВыведи первые `n` строк треугольника.\n\n## Входные данные\nОдно целое число `n` (0 ≤ n ≤ 30). Оно уже прочитано в редакторе.\n\n## Выходные данные\n`n` строк, числа в строке через пробел. При `n = 0` ничего не выводи.\n\n## Примеры\n\nВвод:\n```text\n3\n```\nВывод:\n```text\n1\n1 1\n1 2 1\n```\n\nВвод:\n```text\n4\n```\nВывод:\n```text\n1\n1 1\n1 2 1\n1 3 3 1\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [pascals-triangle](https://github.com/exercism/problem-specifications/tree/main/exercises/pascals-triangle) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "matching-brackets",
+   "title": "Парные скобки",
+   "statement": "Проверь, правильно ли расставлены скобки `()`, `[]` и `{}`: каждая открывающая закрыта скобкой того же вида, и пары не пересекаются. Остальные символы не учитываются: `{[()]}` и `f(x) = [1, 2]` — правильно, `([)]` — нет.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если скобки расставлены правильно, иначе `нет`.\n\n## Подсказка\nХраните ещё не закрытые скобки: закрывающая должна совпадать с последней открытой.",
+   "variants": {
+    "JAVA": {
+     "skill": "ARRAY_BASIC",
+     "difficulty": 2,
+     "starter": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        // Напиши решение здесь\n    }\n}\n",
+     "reference": "import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String s = in.nextLine();\n        char[] stack = new char[s.length()];\n        int top = 0;\n        boolean ok = true;\n        for (int i = 0; i < s.length() && ok; i++) {\n            char c = s.charAt(i);\n            if (c == '(' || c == '[' || c == '{') stack[top++] = c;\n            else if (c == ')' || c == ']' || c == '}') {\n                char open = c == ')' ? '(' : c == ']' ? '[' : '{';\n                if (top == 0 || stack[top - 1] != open) ok = false; else top--;\n            }\n        }\n        System.out.println(ok && top == 0 ? \"да\" : \"нет\");\n    }\n}\n",
+     "cases": [
+      {
+       "input": "[]\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[[\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "}{\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{]\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{ }\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{[])\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{[]}\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{}[]\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "([{}({}[])])\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{[)][]}\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "([{])\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[({]})\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[({}])\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{}[\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[]]\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": ")()\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{)()\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "(((185 + 223.85) * 15) - 543)/2\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\\left(\\begin{array}{cc} \\frac{1}{3} & x\\\\ \\mathrm{e}^{x} &... x^2 \\end{array}\\right)\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Проверь, правильно ли расставлены скобки `()`, `[]` и `{}`: каждая открывающая закрыта скобкой того же вида, и пары не пересекаются. Остальные символы не учитываются: `{[()]}` и `f(x) = [1, 2]` — правильно, `([)]` — нет.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если скобки расставлены правильно, иначе `нет`.\n\n## Подсказка\nХраните ещё не закрытые скобки: закрывающая должна совпадать с последней открытой.\n\n## Примеры\n\nВвод:\n```text\n[]\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n[[\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [matching-brackets](https://github.com/exercism/problem-specifications/tree/main/exercises/matching-brackets) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    },
+    "PYTHON": {
+     "skill": "PY_LIST_BASIC",
+     "difficulty": 2,
+     "starter": "s = input()\n\n# Напиши решение здесь\n",
+     "reference": "s = input()\npairs = {\")\": \"(\", \"]\": \"[\", \"}\": \"{\"}\nstack = []\nok = True\nfor c in s:\n    if c in \"([{\":\n        stack.append(c)\n    elif c in \")]}\":\n        if not stack or stack[-1] != pairs[c]:\n            ok = False\n            break\n        stack.pop()\nprint(\"да\" if ok and not stack else \"нет\")\n",
+     "cases": [
+      {
+       "input": "[]\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[[\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "}{\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{]\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{ }\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{[])\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{[]}\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{}[]\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "([{}({}[])])\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{[)][]}\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "([{])\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[({]})\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[({}])\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{}[\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "[]]\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": ")()\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "{)()\n",
+       "expected": "нет\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "(((185 + 223.85) * 15) - 543)/2\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "\\left(\\begin{array}{cc} \\frac{1}{3} & x\\\\ \\mathrm{e}^{x} &... x^2 \\end{array}\\right)\n",
+       "expected": "да\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Проверь, правильно ли расставлены скобки `()`, `[]` и `{}`: каждая открывающая закрыта скобкой того же вида, и пары не пересекаются. Остальные символы не учитываются: `{[()]}` и `f(x) = [1, 2]` — правильно, `([)]` — нет.\n\n## Входные данные\nОдна строка (может быть пустой). Она уже прочитана в редакторе.\n\n## Выходные данные\n`да`, если скобки расставлены правильно, иначе `нет`.\n\n## Подсказка\nХраните ещё не закрытые скобки: закрывающая должна совпадать с последней открытой.\n\n## Примеры\n\nВвод:\n```text\n[]\n```\nВывод:\n```text\nда\n```\n\nВвод:\n```text\n[[\n```\nВывод:\n```text\nнет\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [matching-brackets](https://github.com/exercism/problem-specifications/tree/main/exercises/matching-brackets) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  },
+  {
+   "slug": "acronym",
+   "title": "Аббревиатура",
+   "statement": "Составь аббревиатуру из фразы: первые буквы слов, заглавные. Слова разделяются пробелами и дефисами, знаки препинания и подчёркивания не учитываются: `Portable Network Graphics` → `PNG`, `Complementary metal-oxide semiconductor` → `CMOS`.\n\n## Входные данные\nОдна строка — фраза. Она уже прочитана в редакторе.\n\n## Выходные данные\nАббревиатура.",
+   "variants": {
+    "PYTHON": {
+     "skill": "PY_STRING_METHODS",
+     "difficulty": 2,
+     "starter": "phrase = input()\n\n# Напиши решение здесь\n",
+     "reference": "phrase = input()\nwords = phrase.replace(\"-\", \" \").replace(\"_\", \" \").split()\nout = \"\"\nfor word in words:\n    for c in word:\n        if c.isalpha():\n            out += c.upper()\n            break\nprint(out)\n",
+     "cases": [
+      {
+       "input": "Portable Network Graphics\n",
+       "expected": "PNG\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "Ruby on Rails\n",
+       "expected": "ROR\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "First In, First Out\n",
+       "expected": "FIFO\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "GNU Image Manipulation Program\n",
+       "expected": "GIMP\n",
+       "origin": "exercism",
+       "public": true
+      },
+      {
+       "input": "Complementary metal-oxide semiconductor\n",
+       "expected": "CMOS\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Rolling On The Floor Laughing So Hard That My Dogs Came Over And Licked Me\n",
+       "expected": "ROTFLSHTMDCOALM\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Something - I made up from thin air\n",
+       "expected": "SIMUFTA\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "Halley's Comet\n",
+       "expected": "HC\n",
+       "origin": "exercism",
+       "public": false
+      },
+      {
+       "input": "The Road _Not_ Taken\n",
+       "expected": "TRNT\n",
+       "origin": "exercism",
+       "public": false
+      }
+     ],
+     "statement": "Составь аббревиатуру из фразы: первые буквы слов, заглавные. Слова разделяются пробелами и дефисами, знаки препинания и подчёркивания не учитываются: `Portable Network Graphics` → `PNG`, `Complementary metal-oxide semiconductor` → `CMOS`.\n\n## Входные данные\nОдна строка — фраза. Она уже прочитана в редакторе.\n\n## Выходные данные\nАббревиатура.\n\n## Примеры\n\nВвод:\n```text\nPortable Network Graphics\n```\nВывод:\n```text\nPNG\n```\n\nВвод:\n```text\nGNU Image Manipulation Program\n```\nВывод:\n```text\nGIMP\n```\n\nПосле каждой строки вывода нужен перевод строки.\n\n---\n_Задача по мотивам упражнения [acronym](https://github.com/exercism/problem-specifications/tree/main/exercises/acronym) из Exercism problem-specifications (лицензия MIT); тесты основаны на его эталонных данных._"
+    }
+   }
+  }
+ ]
+}

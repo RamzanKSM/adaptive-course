@@ -95,6 +95,33 @@ class TestCasesTest {
     assertNotEquals(run.subList(2, run.size()), TestCases.sample(all, new Random(8)).subList(2, run.size()), "hidden cases differ between runs");
   }
 
+  /** Every bank task: its reference passes the platform's checker over all of its cases, in Java and in Python. */
+  @Test void everyBankReferencePassesItsOwnCases(@TempDir Path dir) throws Exception {
+    Assumptions.assumeTrue(javaAvailable() && pythonAvailable(), "java and python3 are needed");
+    var bank = new com.fasterxml.jackson.databind.ObjectMapper().readTree(getClass().getClassLoader().getResourceAsStream(HardTaskBank.RESOURCE));
+    var goal = new TaskGoal(TaskGoal.Kind.IO_BEHAVIOR, null, List.of(), null, null, List.of());
+    List<String> failures = new ArrayList<>();
+    int checked = 0;
+    for (var task : bank.path("tasks")) {
+      for (var entry : (Iterable<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>>) task.path("variants")::fields) {
+        Language language = Language.of(entry.getKey());
+        List<TestCases.Case> cases = new ArrayList<>();
+        int i = 0;
+        for (var c : entry.getValue().path("cases")) cases.add(new TestCases.Case(++i, c.path("input").asText(), c.path("expected").asText(), c.path("public").asBoolean()));
+        String checker = TestCases.checker(language, goal, cases), reference = entry.getValue().path("reference").asText();
+        boolean passed = language == Language.JAVA ? java(dir, reference, checker).out().endsWith(PistonCodeRunner.PASS_MARKER_PLACEHOLDER) : python(dir, reference, checker, true).passed();
+        if (!passed) failures.add(task.path("slug").asText() + " " + language);
+        // The starter only reads the input: it must not pass on its own.
+        boolean starterPasses = language == Language.JAVA ? java(dir, entry.getValue().path("starter").asText(), checker).out().endsWith(PistonCodeRunner.PASS_MARKER_PLACEHOLDER)
+            : python(dir, entry.getValue().path("starter").asText(), checker, true).passed();
+        if (starterPasses) failures.add(task.path("slug").asText() + " " + language + " starter passes");
+        checked++;
+      }
+    }
+    assertEquals(51, checked);
+    assertTrue(failures.isEmpty(), failures.toString());
+  }
+
   // ───────── Running like Piston ─────────
 
   record Result(int code, String out, String err) { boolean passed() { return code == 0 && out.strip().endsWith("__PASS__"); } }
