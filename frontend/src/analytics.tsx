@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api } from './api'
-import { Icon } from './fx'
+import { api, download } from './api'
+import { Icon, useToast } from './fx'
 import { parseDate } from './game'
 import { GroupFilter, groupCounts, inGroup, useGroupFilter } from './groups'
 import type { LlmPurpose, LlmUsage } from './types'
@@ -91,7 +91,36 @@ export function LlmAnalytics({ request }: { request: Request }) {
           </div>
         </>}
       </div>}
+    <TaskExport request={request} />
   </section>
+}
+
+const EXPORT_LANGUAGES = [['ALL', 'Все'], ['JAVA', 'Java'], ['PYTHON', 'Python']] as const
+
+/** The whole task bank with its topics as CSV, to hand to an assistant that reviews the order of topics and tasks. */
+function TaskExport({ request }: { request: Request }) {
+  const [language, setLanguage] = useState<typeof EXPORT_LANGUAGES[number][0]>('ALL')
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  async function save() {
+    setBusy(true)
+    const fallback = `rmzn-tasks-${language.toLowerCase()}.csv`
+    const name = await request(() => download(`/admin/tasks/export?language=${language}`, fallback))
+    setBusy(false)
+    if (name) toast({ tone: 'info', icon: 'download', title: 'Задачи выгружены', text: name })
+  }
+  return <div className="card task-export">
+    <div>
+      <h2 className="card-title">Темы и задачи</h2>
+      <p className="muted small">Все темы курса и задачи к ним в CSV (для Excel): ступень, режим, условие, заготовка, нужные конструкции и где задача требует то, что ещё не пройдено. Файл можно отдать ИИ-ассистенту, чтобы проверить порядок тем и задач.</p>
+    </div>
+    <div className="task-export-actions">
+      <div className="period" role="group" aria-label="Курс">
+        {EXPORT_LANGUAGES.map(([value, title]) => <button key={value} type="button" className={value === language ? 'active' : ''} aria-pressed={value === language} disabled={busy} onClick={() => setLanguage(value)}>{title}</button>)}
+      </div>
+      <button type="button" className="primary" disabled={busy} onClick={save}>{busy ? <><span className="spinner" aria-hidden="true" /> Готовим файл…</> : <><Icon name="download" size={16} /> Выгрузить задачи (CSV)</>}</button>
+    </div>
+  </div>
 }
 
 function plural(n: number, one: string, few: string, many: string) {

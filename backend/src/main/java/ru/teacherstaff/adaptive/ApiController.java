@@ -224,6 +224,7 @@ public class ApiController {
     for(String target:task.targetSkillCodes()) if(count("select count(*) from skills where code=?",target)==0) throw rejected("unknown target skill "+target);
     for(String prerequisite:task.prerequisiteSkillCodes()) if(count("select count(*) from skills where code=?",prerequisite)==0) throw rejected("unknown prerequisite skill "+prerequisite);
     String leak=internalTerm(task.statement()); if(leak!=null) throw rejected("statement mentions platform internals: "+leak);
+    if(!hard){ var late=CourseConstructs.beyondTopic(db,lang,task.skillCode(),task.goal(),task.testSource(),task.starterCode(),task.referenceSolutionSource()); if(!late.isEmpty()) throw rejected("task needs what the student has not been taught yet: "+CourseConstructs.describe(lang,late)); }
     if(!codeRunner.configured()) throw new LlmUnavailableException("Piston is required to validate generated content");
     // Piston runs (reference and wrong solutions) happen here, outside any transaction.
     var verified=verifier.verify(lang,task);

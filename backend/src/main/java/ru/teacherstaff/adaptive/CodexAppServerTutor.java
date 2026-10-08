@@ -489,7 +489,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
 
         Требования к условию (поле statement, Markdown, по-русски, обращение на «ты»):
         1. Одно-два предложения о небольшой жизненной ситуации и о том, зачем это нужно.
-        2. Раздел «Что нужно сделать» — нумерованные шаги простыми словами; точно укажи, что написать (для Java — код в методе класса Solution, который студент видит в редакторе; для Python — программу или функцию с точным именем), сигнатуру и что программа должна вывести или функция вернуть.
+        2. Раздел «Что нужно сделать» — нумерованные шаги простыми словами; точно укажи, что написать и что программа должна вывести (или, если пройдены методы и функции, что функция должна вернуть — с точным именем и сигнатурой).
         3. Раздел «Пример» — ожидаемый вывод или пример вызова и результата в блоке кода. Если проверяется вывод, сразу после блока одной фразой явно напиши, нужен ли перевод строки после последней строки вывода (например: «После последней строки нужен перевод строки» или «Перевода строки в конце нет»), и упомяни пустые строки, если они есть: по блоку кода это не видно.
         4. Раздел «Подсказка» — одна подсказка, которая напоминает нужную идею из объяснения, без готового кода решения.
         Каждый пример кода оформляй в корректный fenced-блок Markdown с языком. Не используй термины, которые студент ещё не проходил, без пояснения.
@@ -498,6 +498,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         .append(python ? pythonTaskRules(b) : javaTaskRules(b))
         .append("Keep the checks aligned with the statement: every checked case must follow from what the statement asks. ")
         .append(GOAL_RULES)
+        .append(notTaughtRules(b))
         .append("skillCode must be '").append(b.skillCode()).append("'; targetSkillCodes must contain only '").append(b.skillCode()).append("'; prerequisiteSkillCodes must be an empty array.");
     return prompt.toString();
   }
@@ -533,6 +534,25 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     return prompt.toString();
   }
 
+  /** Whether the course teaches the construct at this topic or earlier. */
+  static boolean taught(ContentBrief b, CourseConstructs.Construct construct) {
+    String topic = construct.topic(b.language());
+    return topic != null && (topic.equals(b.skillCode()) || b.earlierSkills().stream().anyMatch(s -> s.equals(topic) || s.startsWith(topic + " — ")));
+  }
+
+  /** Methods and classes are never asked for before their topic; the platform also rejects such tasks. */
+  static String notTaughtRules(ContentBrief b) {
+    boolean python = b.language() == Language.PYTHON;
+    StringBuilder rules = new StringBuilder();
+    if (!taught(b, CourseConstructs.Construct.METHOD))
+      rules.append(python
+          ? "\nСтудент ещё не проходил функции. Вся программа — несколько строк на верхнем уровне solution.py: никаких def и lambda ни в условии, ни в starterCode, ни в referenceSolutionSource, ни в wrongSolutions. goal.kind FUNCTION_BEHAVIOR и конструкции function и return запрещены; проверки сравнивают вывод программы.\n"
+          : "\nСтудент ещё не проходил методы. Весь код пишется внутри main класса Solution: никаких других методов ни в условии, ни в starterCode, ни в referenceSolutionSource, ни в wrongSolutions. goal.kind FUNCTION_BEHAVIOR и конструкции function и return запрещены; проверки вызывают только Solution.main и сравнивают вывод.\n");
+    if (!taught(b, CourseConstructs.Construct.CLASS))
+      rules.append(python ? "Классы студент ещё не проходил: не объявляй class.\n" : "Собственные классы студент ещё не проходил: кроме Solution, никаких class, interface, enum и record.\n");
+    return rules.toString();
+  }
+
   /** What the task teaches and how it can be cheated; the platform enforces the first and runs the second. */
   static final String GOAL_RULES = """
 
@@ -558,6 +578,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         + "\n\nВерни задачу в той же JSON-схеме: title, statement и starterCode скопируй без изменений, а testSource, testFileName, referenceSolutionSource, goal и wrongSolutions составь заново так, чтобы проверки соответствовали именно этому условию.\n"
         + (b.language() == Language.PYTHON ? pythonTaskRules(b) : javaTaskRules(b))
         + GOAL_RULES
+        + (b.hard() ? "" : notTaughtRules(b))
         + "skillCode must be '" + b.skillCode() + "'; targetSkillCodes must contain only '" + b.skillCode() + "'; prerequisiteSkillCodes must be an empty array.";
   }
 
@@ -566,7 +587,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         ? "The harness must capture stdout from Solution.main(new String[0]), restore System.out in finally, compare exact expected output, throw AssertionError when it differs, and print the literal {{PASS_MARKER}} only after that check passes. Never use Solution.answer() or a return-string/output-prediction task. "
         : "The harness must call Solution, include at least three deterministic checks, throw AssertionError when a check fails, and print the literal {{PASS_MARKER}} only after all checks pass. ";
     harnessRule += "Every AssertionError must carry a short Russian message for the student that says what went wrong (for example which output or call is wrong) without revealing the whole expected answer. ";
-    return "starterCode — читаемый многострочный Java-код с отступами: public class Solution с нужной сигнатурой и комментарием «// Напиши решение здесь» в месте, где нужно писать код. Не клади в starterCode решение.\n"
+    return "starterCode — читаемый многострочный Java-код с отступами: public class Solution " + (taught(b, CourseConstructs.Construct.METHOD) ? "с нужной сигнатурой" : "с одним методом main") + " и комментарием «// Напиши решение здесь» в месте, где нужно писать код. Не клади в starterCode решение.\n"
         + "Use public class Solution in starterCode and public class TestHarness in testSource. Code runs on Java 15: no records, text blocks are fine, no APIs newer than Java 15. "
         + "For a FUNCTION_BEHAVIOR task the method is a static method of Solution that returns a value, and testSource is an empty string: the platform builds the checks from testInputs. The harness rules below are for the other kinds. "
         + harnessRule
@@ -577,7 +598,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     String checks = "PY_BASIC_CODE_READING".equals(b.skillCode())
         ? "This is an output task: the student writes top-level code in solution.py that prints. run_checks() must capture stdout while importing the module (buf = io.StringIO(); with contextlib.redirect_stdout(buf): import solution) and compare buf.getvalue() with the exact expected output. Never ask the student to predict output. "
         : "If the task asks for a function or class, run_checks() must import it from solution and make at least three deterministic assert checks with different inputs. If the task asks to print, capture stdout while importing solution or while calling the function (contextlib.redirect_stdout) and compare exactly. ";
-    return "starterCode — содержимое solution.py: читаемый Python 3.12 с отступами в 4 пробела и комментарием «# Напиши решение здесь» там, где нужно писать код; для задач на функцию — заготовка def с нужной сигнатурой и телом pass. Не клади в starterCode решение. Задачи не используют input(): данные приходят как аргументы функции или прямо в условии.\n"
+    return "starterCode — содержимое solution.py: читаемый Python 3.12 с отступами в 4 пробела и комментарием «# Напиши решение здесь» там, где нужно писать код" + (taught(b, CourseConstructs.Construct.METHOD) ? "; для задач на функцию — заготовка def с нужной сигнатурой и телом pass" : "") + ". Не клади в starterCode решение. Задачи не используют input(): данные приходят как аргументы функции или прямо в условии.\n"
         + "testSource is test_solution.py and testFileName must be \"test_solution.py\". It must define def run_checks(): and use only the standard library. "
         + "For a FUNCTION_BEHAVIOR task the function returns its result and testSource is an empty string: the platform builds the checks from testInputs. The rules below are for the other kinds. "
         + checks
@@ -588,9 +609,12 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
 
   private String explanationPrompt(ContentBrief b) {
     boolean python = b.language() == Language.PYTHON;
+    boolean methods = taught(b, CourseConstructs.Construct.METHOD);
     String workspace = python
-        ? "в задачах студент пишет программу прямо в редакторе: на первых темах — несколько строк, которые печатают результат через print, позже — функции и классы с указанными в условии именами. Не упоминай файлы и устройство проверки"
-        : "в задачах нужно будет дописывать код в класс Solution (обычно в метод main или в указанный метод)";
+        ? (methods ? "в задачах студент пишет программу прямо в редакторе: несколько строк или функции и классы с указанными в условии именами. Не упоминай файлы и устройство проверки"
+                   : "в задачах студент пишет прямо в редакторе несколько строк, которые печатают результат через print; функций он ещё не знает. Не упоминай файлы и устройство проверки")
+        : (methods ? "в задачах нужно будет дописывать код в класс Solution (в метод main или в указанный метод)"
+                   : "в задачах нужно будет дописывать код в метод main класса Solution; собственных методов студент ещё не знает, так что main показывай как готовую обёртку, без объяснения методов");
     return "Напиши подробное объяснение темы для студента, который раньше никогда не программировал. Оно будет показано перед серией из трёх практических задач по этой теме.\n\n"
         + courseContext(b)
         + """

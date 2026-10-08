@@ -597,6 +597,12 @@ pre { overflow: auto; background: var(--surface-2); padding: 12px; border-radius
 .status-pill.timeout { background: #fff1d6; color: #8a5300; }
 
 .chart-card { margin-top: 14px; }
+.task-export { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; }
+.task-export > div:first-child { flex: 1 1 320px; min-width: 0; }
+.analytics .task-export .card-title { margin-bottom: 6px; }
+.task-export p { margin: 0; max-width: 62ch; }
+.task-export-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 520px) { .task-export-actions, .task-export-actions .primary { width: 100%; } .task-export-actions .period { flex: 1; } .task-export-actions .period button { flex: 1; } }
 .chart-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .chart-head .card-title { margin: 0; }
 .legend { display: flex; align-items: center; gap: 14px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }

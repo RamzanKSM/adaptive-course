@@ -70,9 +70,9 @@ class TransactionBoundariesTest {
 
   /** The reported failure: a 40-second generation inside @Transactional locked out every other writer. */
   @Test void otherWritersAreNotBlockedWhileATaskIsGenerated() throws Exception {
-    String token = studentInLesson("gen-writer");
+    String token = studentInLesson("gen-writer", "METHOD_BASIC");
     long student = studentId("gen-writer");
-    db.update("update tasks set active=0 where skill_code='BASIC_CODE_READING'"); // force generation
+    db.update("update tasks set active=0 where skill_code='METHOD_BASIC'"); // force generation
     AtomicReference<Throwable> concurrentWrite = new AtomicReference<>();
     AtomicReference<Boolean> transactionDuringLlm = new AtomicReference<>();
     when(generator.generateTask(eq(student), any())).thenAnswer(call -> {
@@ -108,9 +108,9 @@ class TransactionBoundariesTest {
 
   /** Without one long transaction, two requests for the same lesson (double click, React StrictMode) must still yield one task. */
   @Test void parallelNextRequestsGenerateAndAssignOnlyOneTask() throws Exception {
-    String token = studentInLesson("parallel");
+    String token = studentInLesson("parallel", "METHOD_BASIC");
     long student = studentId("parallel");
-    db.update("update tasks set active=0 where skill_code='BASIC_CODE_READING'"); // force generation
+    db.update("update tasks set active=0 where skill_code='METHOD_BASIC'"); // force generation
     AtomicInteger generations = new AtomicInteger();
     when(generator.generateTask(eq(student), any())).thenAnswer(call -> {
       generations.incrementAndGet();
@@ -129,9 +129,9 @@ class TransactionBoundariesTest {
 
   /** Logging out (or «Завершить урок») must not wait for a generation in progress, and the generated task must not be lost. */
   @Test void logoutDuringGenerationIsImmediateAndKeepsTheTask() throws Exception {
-    String token = studentInLesson("logout-generating");
+    String token = studentInLesson("logout-generating", "METHOD_BASIC");
     long student = studentId("logout-generating");
-    db.update("update tasks set active=0 where skill_code='BASIC_CODE_READING'"); // force generation
+    db.update("update tasks set active=0 where skill_code='METHOD_BASIC'"); // force generation
     CountDownLatch generating = new CountDownLatch(1), release = new CountDownLatch(1);
     AtomicReference<String> title = new AtomicReference<>();
     when(generator.generateTask(eq(student), any())).thenAnswer(call -> {
@@ -174,13 +174,16 @@ class TransactionBoundariesTest {
         List.of(skill), List.of(), goal, List.of(new TaskGoal.Mutant("constant", "class Solution { static int answer(int x) { return 1; } } // WRONG"), new TaskGoal.Mutant("off by one", "class Solution { static int answer(int x) { return x + 1; } } // WRONG")), inputs);
   }
 
-  private String studentInLesson(String login) throws Exception {
+  private String studentInLesson(String login) throws Exception { return studentInLesson(login, null); }
+  /** onlySkill: every other topic is mastered, so the lesson works on it (generated function tasks need a topic after methods). */
+  private String studentInLesson(String login, String onlySkill) throws Exception {
     String admin = login("admin", "admin-pass");
     mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login", login, "password", "student-pass", "displayName", login)))).andExpect(status().isOk());
     String token = login(login, "student-pass");
     var answers = new ArrayList<Map<String, Object>>();
     for (var id : db.queryForList("select id from diagnostic_questions where language='JAVA' order by id", Long.class)) answers.add(Map.of("questionId", id));
     mvc.perform(post("/api/diagnostic").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers", answers)))).andExpect(status().isOk());
+    if (onlySkill != null) db.update("insert into student_skills(user_id,skill_code,completed_iterations,mastered) select ?,code,3,1 from skills where language='JAVA' and code<>?", studentId(login), onlySkill);
     mvc.perform(post("/api/lessons/start").cookie(cookie(token))).andExpect(status().isOk());
     return token;
   }

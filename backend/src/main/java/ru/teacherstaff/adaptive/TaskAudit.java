@@ -1,5 +1,7 @@
 package ru.teacherstaff.adaptive;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -18,10 +20,13 @@ import java.util.concurrent.TimeUnit;
  * The statement students see is kept; the generator writes a goal, a reference solution, wrong solutions and new
  * checks, and TaskVerifier must accept them. A task that cannot be repaired is retired and a new one is generated
  * on demand. Past submissions, credit and progress are not recalculated — only future submissions use the new checks.
+ * At startup it also retires regular tasks that need methods, classes or input before the course teaches them
+ * (see CourseConstructs); new tasks for those topics are generated on demand.
  */
 @Component
 class TaskAudit implements ApplicationRunner, DisposableBean {
   private static final Logger log = LoggerFactory.getLogger(TaskAudit.class);
+  private static final ObjectMapper JSON = new ObjectMapper();
   static final int REPAIR_ATTEMPTS = 2;
   private final JdbcTemplate db;
   private final LearningContentGenerator generator;
@@ -37,12 +42,34 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
   }
 
   @Override public void run(ApplicationArguments args) {
+    retireBeyondTopic();
     if (!enabled) return;
     // Retries every 15 minutes: the LLM or Piston may be unavailable at startup.
     scheduler.scheduleWithFixedDelay(this::auditPending, 30, 15 * 60, TimeUnit.SECONDS);
   }
 
   @Override public void destroy() { scheduler.shutdownNow(); }
+
+  /** Retires active regular tasks that need what their topic's students have not been taught; returns how many. */
+  int retireBeyondTopic() {
+    int retired = 0;
+    for (var row : db.queryForList("select id,title,skill_code,language,starter_code,test_source,goal_json from tasks where active=1 and mode='NORMAL'")) {
+      Language language = Language.of(row.get("language"));
+      JsonNode goal = goal((String) row.get("goal_json"));
+      var late = CourseConstructs.beyondTopic(db, language, (String) row.get("skill_code"), goal, (String) row.get("test_source"), (String) row.get("starter_code"));
+      if (late.isEmpty()) continue;
+      db.update("update tasks set active=0 where id=?", row.get("id"));
+      log.warn("Task {} '{}' (skill={}) retired: it needs what the course teaches later ({}); a new task will be generated when needed",
+          row.get("id"), row.get("title"), row.get("skill_code"), CourseConstructs.describe(language, late));
+      retired++;
+    }
+    return retired;
+  }
+
+  private JsonNode goal(String json) {
+    if (json == null || json.isBlank()) return null;
+    try { return JSON.readTree(json); } catch (Exception e) { return null; }
+  }
 
   /** Returns how many tasks were repaired; stops early when the LLM or Piston is unavailable. */
   int auditPending() {
@@ -80,6 +107,10 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
       try {
         GeneratedTask candidate = generator.repairTask(brief, existing);
         if (candidate == null) throw new InvalidGeneratedContentException("empty response");
+        if (!"HARD".equals(row.get("mode"))) {
+          var late = CourseConstructs.beyondTopic(db, language, skill, candidate.goal(), candidate.testSource(), candidate.starterCode(), candidate.referenceSolutionSource());
+          if (!late.isEmpty()) throw new InvalidGeneratedContentException("task needs what the student has not been taught yet: " + CourseConstructs.describe(language, late));
+        }
         if (!ApiController.validHarness(language, candidate.testSource())) throw new InvalidGeneratedContentException("test harness does not follow the " + language.title + " contract");
         TaskVerifier.Verified verified = verifier.verify(language, candidate);
         db.update("update tasks set test_source=?, goal_json=?, quality_version=? where id=?", verified.testSource(), verified.goalJson(), LearningContentGenerator.TASK_QUALITY_VERSION, id);

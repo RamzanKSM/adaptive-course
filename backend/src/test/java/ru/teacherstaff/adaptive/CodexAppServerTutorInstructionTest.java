@@ -38,4 +38,15 @@ class CodexAppServerTutorInstructionTest {
     assertEquals("Не принято.\n\n• Строка 2: Готовое число.\n  Подсказка: Посчитай.", review.text());
     assertTrue(CodexAppServerTutor.parseReview(mapper.readTree("{\"accepted\":true,\"summary\":\"Ок\",\"issues\":[{\"line\":1,\"problem\":\"совет\",\"hint\":\"\"}]}")).issues().isEmpty());
   }
+
+  @Test void methodsAreForbiddenInTasksBeforeTheirTopic() {
+    var early = new ContentBrief(Language.JAVA, "LOGICAL_AND", "Логическое И (&&)", 3, 1, 1, java.util.List.of("VARIABLE_BASIC — Переменные"), java.util.List.of(), java.util.List.of(), null);
+    var later = new ContentBrief(Language.JAVA, "METHOD_PARAMETERS", "Параметры", 4, 1, 1, java.util.List.of("METHOD_BASIC — Методы"), java.util.List.of(), java.util.List.of(), null);
+    var python = new ContentBrief(Language.PYTHON, "PY_FUNCTION_BASIC", "Функции", 4, 1, 1, java.util.List.of("PY_LIST_BASIC — Списки"), java.util.List.of(), java.util.List.of(), null);
+    assertTrue(CodexAppServerTutor.notTaughtRules(early).contains("Весь код пишется внутри main"));
+    assertTrue(CodexAppServerTutor.notTaughtRules(early).contains("FUNCTION_BEHAVIOR"));
+    assertFalse(CodexAppServerTutor.notTaughtRules(later).contains("методы"), "methods are taught by then");
+    assertFalse(CodexAppServerTutor.notTaughtRules(python).contains("функции"), "the functions topic itself may ask for functions");
+    assertTrue(CodexAppServerTutor.notTaughtRules(python).contains("class"), "classes come later");
+  }
 }
