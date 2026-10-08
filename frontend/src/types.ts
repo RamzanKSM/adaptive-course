@@ -3,28 +3,34 @@ export type Id = number
 export type Flag = boolean | 0 | 1
 export type Role = 'STUDENT' | 'TEACHER' | 'ADMIN'
 export type CourseLanguage = 'JAVA' | 'PYTHON'
-export interface User { id: Id; login: string; role: Role; displayName: string; llmEnabled: Flag }
+/** hardModeAllowed — the teacher's permission; hardModeOn — the student's own switch (only while allowed). */
+export interface User { id: Id; login: string; role: Role; displayName: string; llmEnabled: Flag; hardModeAllowed?: boolean; hardModeOn?: boolean }
 export interface MeResponse { user: User; llm: LlmStatus; runner: ServiceStatus }
 export interface LlmStatus { globallyEnabled: boolean; studentEnabled: boolean; available: boolean; reason?: string; model?: string }
 export interface ServiceStatus { available: boolean; reason?: string }
 export interface DiagnosticQuestion { id: Id; ordinal: number; skillCode: string; prompt: string; options: string[] }
 export interface Diagnostic { completed: boolean; questions: DiagnosticQuestion[] }
-export interface Task { id: Id; title: string; statement: string; starterCode?: string; redo?: boolean }
+export interface Task { id: Id; title: string; statement: string; starterCode?: string; redo?: boolean; hard?: boolean }
 export interface Lesson { id: Id; number: number; language?: CourseLanguage; startedAt: string; finishedAt?: string | null }
 export interface LearningNext { lesson: Lesson; skill: { code: string; title: string; blockNo: number } | null; explanation: { content: string; source: string } | null; task: Task | null; reason?: string; llm?: LlmStatus }
 /** The program run as is, without hidden checks (POST /run, or alongside a check). */
 export interface ConsoleRun { status: 'OK' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'LIMIT' | 'NO_MAIN' | 'UNAVAILABLE'; stdout: string; error?: string | null; truncated: boolean }
-export interface Attempt { id: Id; passed: Flag; output?: string | null; console?: ConsoleRun | null }
+/** The LLM reviewer's verdict (experimental grading). A rejection always says why: summary plus issues. */
+export interface Review { accepted: boolean; summary: string; issues: { line: number | null; problem: string; hint: string }[] }
+export type Grader = 'TESTS' | 'LLM'
+/** A wrong output in a task without hidden tests: the statement's expected output next to what the program printed. */
+export interface OutputMismatch { expected: string; actual: string }
+export interface Attempt { id: Id; passed: Flag; output?: string | null; console?: ConsoleRun | null; grader?: Grader; review?: Review | null; mismatch?: OutputMismatch | null }
 export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; content: string; createdAt?: string }
 /** Practice progress and, separately, the diagnostic result. confirmedByDiagnostic skips practice; it is not practice credit. */
 export interface SkillProgress { skillCode: string; title: string; blockNo?: number; completedIterations: number; iterationSuccesses: number; mastered: Flag; diagnosticCorrect?: number | null; diagnosticTotal?: number | null; confirmedByDiagnostic?: Flag }
-export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; activity?: string[] }
+export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; hardSolved?: number; activity?: string[] }
 export interface ActiveLesson { language: CourseLanguage; number: number; startedAt: string }
-export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; group?: string | null; activeLessons?: ActiveLesson[] }
+export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; group?: string | null; activeLessons?: ActiveLesson[]; hardModeAllowed?: Flag; hardModeOn?: Flag }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string; revokedAt?: string | null }
-export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; submissions: Submission[] }[] }
+export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; hard?: Flag; submissions: Submission[] }[] }
 export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
-export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR'
+export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR' | 'REVIEW'
 export interface LlmUsage {
   days: number; totals: LlmUsageTotals; llm: LlmStatus
   byDay: { day: string; calls: number; errors: number; tokens: number }[]
@@ -34,14 +40,15 @@ export interface LlmUsage {
   recentErrors: { createdAt: string; purpose: LlmPurpose; language: CourseLanguage; status: 'ERROR' | 'TIMEOUT'; error?: string; durationMs: number; displayName?: string }[]
 }
 export interface ChatQuota { hourUsed: number; hourLimit: number; dayUsed: number; dayLimit: number; retryAfterSeconds: number }
-export interface LlmLimits { chatPerHour: number; chatPerDay: number; tasksPerHour: number; explanationsPerHour: number }
+export interface LlmLimits { chatPerHour: number; chatPerDay: number; tasksPerHour: number; explanationsPerHour: number; reviewsPerHour: number }
 export interface LlmModel { id: string; displayName: string; description: string; efforts: string[]; defaultEffort: string; listed: boolean }
-export type LlmPurposeKey = 'CHAT' | 'TASK' | 'EXPLANATION'
-export interface LlmLogging { generation: boolean; chat: boolean }
+export type LlmPurposeKey = 'CHAT' | 'TASK' | 'EXPLANATION' | 'REVIEW'
+export interface LlmLogging { generation: boolean; chat: boolean; review: boolean }
 export interface LlmSettings {
   purposeModels: Record<LlmPurposeKey, string>; purposeModelDefaults: Record<LlmPurposeKey, string>; models: LlmModel[]
   reasoning: Record<LlmPurposeKey, string>; reasoningDefaults: Record<LlmPurposeKey, string>
   reasoningOptions: string[]; reasoningOptionsFromModel: boolean
-  limits: LlmLimits; limitDefaults: LlmLimits; usageLastHour: { tasks: number; explanations: number }
+  limits: LlmLimits; limitDefaults: LlmLimits; usageLastHour: { tasks: number; explanations: number; reviews: number }
+  hardModeChat: boolean; hardModeChatDefault: boolean
   logging: LlmLogging; loggingDefaults: LlmLogging
 }

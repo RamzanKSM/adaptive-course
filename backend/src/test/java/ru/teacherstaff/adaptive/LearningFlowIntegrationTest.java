@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,7 +36,7 @@ class LearningFlowIntegrationTest {
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
     p.add("app.task-audit.enabled", () -> "false"); // background re-verification would race the tests; it is called directly where tested
   }
-  @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenAnswer(call->((String)call.getArgument(1)).contains("WRONG")?new PistonCodeRunner.Run(false,"Неверный вывод программы."):new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna")); }
+  @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenAnswer(call->((String)call.getArgument(1)).contains("WRONG")?new PistonCodeRunner.Run(false,"Неверный вывод программы."):new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna"));  when(runner.runRaw(any(Language.class),anyString(),anyString())).thenReturn(recordedAnswers(6)); }
 
   @Test void diagnosticConfirmsTopicsSoPracticeSkipsThemWithoutFakeProgress() throws Exception {
     String cookie=createStudentAndLogin("block-student"); long student=studentId("block-student");
@@ -116,10 +117,11 @@ class LearningFlowIntegrationTest {
     db.update("update student_languages set starting_block=0 where user_id=?",student);
     db.update("insert into student_skills(user_id,skill_code,completed_iterations,iteration_successes,mastered) select ?,code,3,0,1 from skills where code<>'BASIC_CODE_READING'",student);
     for(int i=4;i<=9;i++) addTask("extra "+i);
-    int lesson1=start(token); solveThree(token); assertProgress(student,1,0,0); finish(token,lesson1);
-    int lesson2=start(token); solveThree(token); assertProgress(student,2,0,0); finish(token,lesson2);
+    // Iterations shrink: three tasks to learn the topic, two to repeat it, one to confirm it.
+    int lesson1=start(token); solve(token,3); assertProgress(student,1,0,0); finish(token,lesson1);
+    int lesson2=start(token); solve(token,2); assertProgress(student,2,0,0); finish(token,lesson2);
     int lesson3=start(token); var skipped=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()); assertEquals("NO_DUE_SKILL",skipped.path("reason").asText()); finish(token,lesson3);
-    int lesson4=start(token); solveThree(token); assertProgress(student,3,1,0);
+    int lesson4=start(token); solve(token,1); assertProgress(student,3,1,0);
   }
 
   @Test void generatedTaskIsValidatedStoredOnceAndThenRestored() throws Exception {
@@ -218,9 +220,10 @@ class LearningFlowIntegrationTest {
 
   @Test void runShowsTheConsoleWithoutCountingAnAttempt() throws Exception {
     String token=createStudentAndLogin("console-runner"); long student=studentId("console-runner");
-    when(runner.console(any(Language.class),anyString())).thenReturn(new PistonCodeRunner.Console("OK","30\n",null,false));
-    var run=json.readTree(mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(5 * 6)\"}").param("language","PYTHON"))
+    when(runner.console(any(Language.class),anyString(),anyString())).thenReturn(new PistonCodeRunner.Console("OK","30\n",null,false));
+    var run=json.readTree(mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(int(input()) * 6)\",\"stdin\":\"5\\n\"}").param("language","PYTHON"))
         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    verify(runner).console(Language.PYTHON,"print(int(input()) * 6)","5\n"); // what the student typed into «Входные данные»
     assertEquals("OK",run.path("console").path("status").asText()); assertEquals("30\n",run.path("console").path("stdout").asText());
     assertEquals(0,db.queryForObject("select count(*) from submissions s join lessons l on l.id=s.lesson_id where l.user_id=?",Integer.class,student),"a run is not a submission");
     mvc.perform(post("/api/run").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\" \"}")).andExpect(status().isBadRequest());
@@ -687,20 +690,136 @@ class LearningFlowIntegrationTest {
     return appender.list.stream().filter(e->"http".equals(e.getLoggerName())&&e.getFormattedMessage().startsWith(request+" ")).reduce((a,b)->b).orElseThrow(()->new AssertionError("no log line for "+request)).getMDCPropertyMap();
   }
 
+  /** «Calculate» tasks: running decides whether the output is right, the LLM whether it was calculated, the syntax tree when the LLM cannot. */
+  @Test void calculateTasksAreCheckedByRunningAndTheirApproachByTheLlm() throws Exception {
+    String token=createStudentAndLogin("calculate-student"); long student=studentId("calculate-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"SET_BASIC");
+    addTask("SET_BASIC","tickets task");
+    db.update("update tasks set goal_json=? where title='tickets task'","{\"kind\":\"FIXED_ARITHMETIC\",\"operation\":\"*\",\"operands\":[5,6],\"expectedOutput\":\"30\\n\",\"functionName\":null,\"requiredConstructs\":[]}");
+    start(token);
+    long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    String ready="public class Solution { public static void main(String[] a) { System.out.println(30); } }";
+    String calculated="public class Solution { public static void main(String[] a) { int bilet = 5 * 6; System.out.println(bilet); } }";
+    // Right output, ready-made answer: the LLM rejects and says why.
+    when(generator.checkCalculation(eq(student),argThat(r->r!=null&&ready.equals(r.source())))).thenReturn(new SolutionReview(false,"Ответ напечатан готовым.",
+        List.of(new SolutionReview.Issue(1,"В println стоит готовое число 30.","Посчитай стоимость в программе."))));
+    var rejected=attempt(token,task,ready);
+    assertFalse(rejected.path("passed").asBoolean()); assertEquals("LLM",rejected.path("grader").asText());
+    assertTrue(rejected.path("output").asText().contains("Строка 1: В println стоит готовое число 30."),rejected.toString());
+    verify(generator).checkCalculation(eq(student),argThat(r->r!=null&&"*".equals(r.operation())&&"5, 6".equals(r.operands())));
+    // A wrong output never reaches the LLM; the student sees the expected and the actual output side by side.
+    when(runner.console(any(Language.class),eq("WRONG"))).thenReturn(new PistonCodeRunner.Console("OK","24\n",null,false));
+    var wrong=attempt(token,task,"WRONG");
+    assertFalse(wrong.path("passed").asBoolean()); assertEquals("30\n",wrong.path("mismatch").path("expected").asText()); assertEquals("24\n",wrong.path("mismatch").path("actual").asText());
+    verify(generator,never()).checkCalculation(eq(student),argThat(r->r!=null&&"WRONG".equals(r.source())));
+    // The LLM cannot answer: the syntax tree decides, with a clear message.
+    when(generator.checkCalculation(eq(student),argThat(r->r!=null&&ready.equals(r.source())))).thenThrow(new LlmUnavailableException("timeout"));
+    var byTree=attempt(token,task,ready);
+    assertFalse(byTree.path("passed").asBoolean()); assertEquals("TESTS",byTree.path("grader").asText());
+    assertTrue(byTree.path("output").asText().startsWith("Неверный подход: вычисли ответ"),byTree.toString());
+    // Calculated through a variable: accepted.
+    when(generator.checkCalculation(eq(student),argThat(r->r!=null&&calculated.equals(r.source())))).thenReturn(new SolutionReview(true,"Принято.",List.of()));
+    assertTrue(attempt(token,task,calculated).path("passed").asBoolean());
+    assertEquals(1,db.queryForObject("select count(*) from successful_task_credit where user_id=? and task_id=?",Integer.class,student,task));
+  }
+
+  @Test void theAssistantCanBeSwitchedOffForHardModeOnly() throws Exception {
+    String admin=login("admin","admin-pass");
+    String token=createStudentAndLogin("hard-no-chat"); long student=studentId("hard-no-chat"); submitDiagnostic(token,student,false);
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    try {
+      mvc.perform(put("/api/admin/llm/settings").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"hardModeChat\":false}")).andExpect(status().isOk());
+      start(token);
+      assertTrue(json.readTree(mvc.perform(get("/api/chat").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("llm").path("available").asBoolean(),"not in hard mode: the assistant works");
+      db.update("update users set hard_mode_allowed=1, hard_mode_on=1 where id=?",student);
+      var chat=json.readTree(mvc.perform(get("/api/chat").cookie(cookie(token))).andReturn().getResponse().getContentAsString());
+      assertEquals("DISABLED_IN_HARD_MODE",chat.path("llm").path("reason").asText());
+      mvc.perform(post("/api/chat").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"подскажи\"}")).andExpect(status().isServiceUnavailable());
+      verify(tutor,never()).reply(eq(student),any(),anyString());
+    } finally { db.update("delete from app_settings where key='hard_mode_chat'"); }
+  }
+
+  @Test void hardModeNeedsTheTeachersPermissionAndUsesItsOwnAlgorithmicTasks() throws Exception {
+    String admin=login("admin","admin-pass");
+    String token=createStudentAndLogin("hard-student"); long student=studentId("hard-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"MAP_BASIC");
+    mvc.perform(patch("/api/me/hard-mode").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}")).andExpect(status().isBadRequest());
+    mvc.perform(patch("/api/admin/students/{id}/hard-mode",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"allowed\":true}")).andExpect(status().isOk());
+    mvc.perform(patch("/api/me/hard-mode").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}")).andExpect(status().isOk());
+    var me=json.readTree(mvc.perform(get("/api/auth/me").cookie(cookie(token))).andReturn().getResponse().getContentAsString());
+    assertTrue(me.path("user").path("hardModeOn").asBoolean());
+    addTask("MAP_BASIC","regular map task"); // the regular pool is not used in hard mode
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(student),argThat(b->b!=null&&b.hard()&&"MAP_BASIC".equals(b.skillCode())))).thenReturn(hardTask("MAP_BASIC"));
+    when(runner.runRaw(any(Language.class),anyString(),anyString())).thenReturn(recordedProducts());
+    // The platform's own trap — the first example's answer printed for any input — must fail the test cases.
+    when(runner.run(any(Language.class),contains("println(\"20\")"),anyString())).thenReturn(new PistonCodeRunner.Run(false,"Неверный результат: Тест 2 из 6 не пройден"));
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    long hardTaskId=next.path("task").path("id").asLong();
+    assertTrue(next.path("task").path("hard").asBoolean(),next.toString());
+    assertEquals("HARD",db.queryForObject("select mode from tasks where id=?",String.class,hardTaskId));
+    assertEquals(6,db.queryForObject("select count(*) from task_cases where task_id=?",Integer.class,hardTaskId),"answers recorded from the reference");
+    assertEquals("20\n",db.queryForObject("select expected from task_cases where task_id=? and is_public=1",String.class,hardTaskId));
+    attempt(token,hardTaskId,"import java.util.Scanner; public class Solution { public static void main(String[] a) { } }");
+    var progress=json.readTree(mvc.perform(get("/api/progress").cookie(cookie(token))).andReturn().getResponse().getContentAsString());
+    assertEquals(1,progress.path("hardSolved").asInt()); assertEquals(1,progress.path("solvedTasks").asInt());
+    // Taking the permission away switches the mode off.
+    mvc.perform(patch("/api/admin/students/{id}/hard-mode",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"allowed\":false}")).andExpect(status().isOk());
+    assertEquals(0,db.queryForObject("select hard_mode_on from users where id=?",Integer.class,student));
+    var list=json.readTree(mvc.perform(get("/api/admin/students").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
+    for(var row:list.path("students")) if(row.path("id").asLong()==student) assertEquals(0,row.path("hardModeAllowed").asInt());
+  }
+
+  @Test void regularTasksNeverReadInput() throws Exception {
+    String token=createStudentAndLogin("no-input-student"); long student=studentId("no-input-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"LIST_OPERATIONS");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(student),brief("LIST_OPERATIONS"))).thenReturn(hardTask("LIST_OPERATIONS"));
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("LLM_GENERATION_FAILED_VALIDATION",next.path("reason").asText());
+    assertEquals(0,db.queryForObject("select count(*) from tasks where title='hard LIST_OPERATIONS'",Integer.class));
+  }
+
+  private com.fasterxml.jackson.databind.JsonNode attempt(String token,long task,String source) throws Exception {
+    return json.readTree(mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode",source))))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+  }
+  /** A hard-mode task: reads two numbers, prints their product; the platform records the answers from the reference. */
+  private GeneratedTask hardTask(String skill) throws Exception {
+    var goal=json.readTree("{\"kind\":\"IO_BEHAVIOR\",\"operation\":null,\"operands\":[],\"expectedOutput\":null,\"functionName\":null,\"requiredConstructs\":[]}");
+    var inputs=List.of(new TestCases.Input("4 5\n",true),new TestCases.Input("2 3\n",false),new TestCases.Input("0 9\n",false),new TestCases.Input("7 7\n",false),new TestCases.Input("10 1\n",false),new TestCases.Input("3 3\n",false));
+    return new GeneratedTask(skill,"hard "+skill,"Перемножь два числа.","import java.util.Scanner;\npublic class Solution { public static void main(String[] args) { Scanner in = new Scanner(System.in); int a = in.nextInt(); int b = in.nextInt(); } }",
+        "","TestHarness.java","import java.util.Scanner; public class Solution { public static void main(String[] args) { Scanner in = new Scanner(System.in); System.out.println(in.nextInt() * in.nextInt()); } }",List.of(skill),List.of(),goal,
+        List.of(new TaskGoal.Mutant("adds instead of multiplying","public class Solution { public static void main(String[] args) { } } // WRONG"),new TaskGoal.Mutant("ignores the second number","public class Solution { public static void main(String[] args) { } } // WRONG 2")),inputs);
+  }
+  /** What the reference prints for hardTask's inputs, as the platform's recorder reports it. */
+  private static PistonCodeRunner.Raw recordedProducts() {
+    StringBuilder out=new StringBuilder(); String[] answers={"20\n","6\n","0\n","49\n","10\n","9\n"};
+    for(int i=0;i<answers.length;i++) out.append("__CASE__").append(i).append(':').append(java.util.Base64.getEncoder().encodeToString(answers[i].getBytes(java.nio.charset.StandardCharsets.UTF_8))).append('\n');
+    return new PistonCodeRunner.Raw(true,out.toString(),"");
+  }
+
   private String createStudentAndLogin(String login) throws Exception { String admin=login("admin","admin-pass"); mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password","student-pass","displayName",login)))).andExpect(status().isOk()); return login(login,"student-pass"); }
   private String login(String login,String password) throws Exception { var r=mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("login",login,"password",password)))).andExpect(status().isOk()).andReturn().getResponse(); return r.getCookie("adaptive_session").getValue(); }
   private long studentId(String login){return db.queryForObject("select id from users where login=?",Long.class,login);}
   private void submitDiagnostic(String token,long user,boolean correctBlockZero) throws Exception { var rows=db.queryForList("select id,correct_option,block_no from diagnostic_questions where language='JAVA' order by id"); var answers=new ArrayList<Map<String,Object>>();for(var q:rows){boolean correct=correctBlockZero&&((Number)q.get("block_no")).intValue()==0;var answer=new LinkedHashMap<String,Object>();answer.put("questionId",q.get("id"));if(correct)answer.put("selectedOption",q.get("correct_option"));answers.add(answer);}mvc.perform(post("/api/diagnostic").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("answers",answers)))).andExpect(status().isOk());}
   private int start(String token) throws Exception { return json.readTree(mvc.perform(post("/api/lessons/start").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("lesson").path("number").asInt(); }
   private void finish(String token,int lesson) throws Exception { long id=db.queryForObject("select id from lessons where user_id=(select user_id from sessions where token_hash=?) and lesson_number=?",Long.class,Hashing.sha256(token),lesson);mvc.perform(post("/api/lessons/{id}/finish",id).cookie(cookie(token))).andExpect(status().isOk()); }
-  private void solveThree(String token) throws Exception { for(int i=0;i<3;i++){var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());long task=next.path("task").path("id").asLong();assertTrue(task>0);mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());} }
+  private void solveThree(String token) throws Exception { solve(token,3); }
+  private void solve(String token,int tasks) throws Exception { for(int i=0;i<tasks;i++){var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());long task=next.path("task").path("id").asLong();assertTrue(task>0);mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());} }
   private void assertProgress(long user,int iterations,int mastered,int current){var row=db.queryForMap("select completed_iterations,mastered,iteration_successes from student_skills where user_id=? and skill_code='BASIC_CODE_READING'",user);assertEquals(iterations,((Number)row.get("completed_iterations")).intValue());assertEquals(mastered,((Number)row.get("mastered")).intValue());assertEquals(current,((Number)row.get("iteration_successes")).intValue());}
   private void addTask(String title){addTask("BASIC_CODE_READING", title);}
   private void addTask(String skillCode,String title){db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?, '', 'class TestHarness {}','TestHarness.java')",skillCode,title,title);long id=db.queryForObject("select last_insert_rowid()",Long.class);db.update("insert into task_target_skills(task_id,skill_code) values(?, ?)",id,skillCode);}
   private jakarta.servlet.http.Cookie cookie(String value){return new jakarta.servlet.http.Cookie("adaptive_session",value);}
   private int countLessonTasks(long student){return db.queryForObject("select count(*) from lesson_tasks where lesson_id=(select id from lessons where user_id=? and finished_at is null)",Integer.class,student);}
   private void prepareOnlySkill(long student,String skill){db.update("insert into student_skills(user_id,skill_code,completed_iterations,mastered) select ?,code,3,1 from skills where code<>?",student,skill);}
-  private GeneratedTask generated(String skill,boolean valid){String test="public class TestHarness { public static void main(String[] a) { Solution.answer(1); Solution.answer(2); Solution.answer(3); System.out.print(\""+(valid?PistonCodeRunner.PASS_MARKER_PLACEHOLDER:"missing")+"\"); } }";return new GeneratedTask(skill,"generated "+skill,"statement","",test,"TestHarness.java","public class Solution { static int answer(int x) { return x; } }",List.of(skill),List.of(),functionGoal(),wrongSolutions());}
+  /** A function task; invalid — without the test inputs the platform needs. */
+  private GeneratedTask generated(String skill,boolean valid){return new GeneratedTask(skill,"generated "+skill,"statement","","","TestHarness.java","public class Solution { static int answer(int x) { return x; } }",List.of(skill),List.of(),functionGoal(),wrongSolutions(),valid?functionInputs():List.of());}
+  private static List<TestCases.Input> functionInputs(){return List.of(new TestCases.Input("1",true),new TestCases.Input("2",false),new TestCases.Input("3",false),new TestCases.Input("0",false),new TestCases.Input("-4",false),new TestCases.Input("10",false));}
+  /** The recorder's report for n cases with distinct answers. */
+  static PistonCodeRunner.Raw recordedAnswers(int n){StringBuilder out=new StringBuilder();for(int i=0;i<n;i++)out.append("__CASE__").append(i).append(':').append(java.util.Base64.getEncoder().encodeToString(String.valueOf(i*7+1).getBytes(java.nio.charset.StandardCharsets.UTF_8))).append('\n');return new PistonCodeRunner.Raw(true,out.toString(),"");}
   private com.fasterxml.jackson.databind.JsonNode functionGoal(){try{return json.readTree("{\"kind\":\"FUNCTION_BEHAVIOR\",\"operation\":null,\"operands\":[],\"expectedOutput\":null,\"functionName\":\"answer\",\"requiredConstructs\":[]}");}catch(Exception e){throw new IllegalStateException(e);}}
   private static List<TaskGoal.Mutant> wrongSolutions(){return List.of(new TaskGoal.Mutant("hard-codes the first example","public class Solution { static int answer(int x) { return 1; } } // WRONG"),new TaskGoal.Mutant("off by one","public class Solution { static int answer(int x) { return x + 1; } } // WRONG"));}
   private static com.fasterxml.jackson.databind.JsonNode findSkill(com.fasterxml.jackson.databind.JsonNode progress,String code){for(var skill:progress.path("skills"))if(code.equals(skill.path("skillCode").asText()))return skill;throw new AssertionError(code);}

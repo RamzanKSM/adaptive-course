@@ -32,6 +32,7 @@ app:
     model-chat: ${CODEX_MODEL_CHAT:}
     model-task: ${CODEX_MODEL_TASK:}
     model-explanation: ${CODEX_MODEL_EXPLANATION:}
+    model-review: ${CODEX_MODEL_REVIEW:}
     # Always offered in the admin model picker, even if the App Server's model/list does not report them.
     extra-models: ${APP_LLM_EXTRA_MODELS:gpt-5.6-terra}
     # Fallback level; each purpose has its own: task generation needs careful checks, chat needs fast answers.
@@ -39,12 +40,15 @@ app:
     reasoning-effort-task: ${CODEX_REASONING_EFFORT_TASK:high}
     reasoning-effort-chat: ${CODEX_REASONING_EFFORT_CHAT:low}
     reasoning-effort-explanation: ${CODEX_REASONING_EFFORT_EXPLANATION:medium}
+    reasoning-effort-review: ${CODEX_REASONING_EFFORT_REVIEW:medium}
     # Defaults until an admin changes them in «Аналитика LLM → Настройки». 0 = no limit.
     limits:
       chat-per-hour: ${APP_LLM_CHAT_PER_HOUR:30}
       chat-per-day: ${APP_LLM_CHAT_PER_DAY:150}
       tasks-per-hour: ${APP_LLM_TASKS_PER_HOUR:100}
       explanations-per-hour: ${APP_LLM_EXPLANATIONS_PER_HOUR:30}
+      # Per student: LLM checks that a «calculate» answer was really calculated; over the limit the syntax tree decides.
+      reviews-per-hour: ${APP_LLM_REVIEWS_PER_HOUR:60}
     app-server-command: ${CODEX_APP_SERVER_COMMAND:codex --disable shell_tool app-server --listen stdio://}
     account-namespace: ${CODEX_ACCOUNT_NAMESPACE:default}
     sandbox-directory: ${CODEX_SANDBOX_DIRECTORY:./data/codex-sandbox}
@@ -56,6 +60,10 @@ app:
     # Defaults for «Настройки LLM → Логирование»: the model's answer and its reasoning summary.
     log-generation: ${APP_LLM_LOG_GENERATION:true}
     log-chat: ${APP_LLM_LOG_CHAT:false}
+    log-review: ${APP_LLM_LOG_REVIEW:false}
+  # Default for «Настройки LLM → Помощник в hard mode»; task generation is not affected.
+  hard-mode:
+    chat: ${APP_HARD_MODE_CHAT:true}
   # Background re-verification of generated tasks accepted by older, output-only validation.
   task-audit:
     enabled: ${APP_TASK_AUDIT_ENABLED:true}

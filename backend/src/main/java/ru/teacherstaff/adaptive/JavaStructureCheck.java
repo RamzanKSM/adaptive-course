@@ -16,7 +16,7 @@ import java.util.*;
 final class JavaStructureCheck {
   private JavaStructureCheck() {}
 
-  /** Null when the goal is met or the source cannot be parsed (Piston will report the syntax error); otherwise a message for the student. */
+  /** Null when the goal is met or the source cannot be parsed (Piston will report the syntax error); otherwise the full message for the student. */
   static String problem(TaskGoal goal, String source) {
     if (goal == null || !goal.structural() || source == null) return null;
     CompilationUnitTree unit = parse(source);
@@ -25,10 +25,10 @@ final class JavaStructureCheck {
     scan.scan(unit, null);
     if (goal.kind() == TaskGoal.Kind.FIXED_ARITHMETIC && !scan.calculates(goal)) {
       String numbers = String.join(", ", goal.operands().stream().map(n -> n.stripTrailingZeros().toPlainString()).toList());
-      return TaskGoal.calculationHint(goal.operation(), numbers);
+      return "Неверный подход: " + TaskGoal.calculationHint(goal.operation(), numbers) + ".";
     }
     for (String construct : goal.requiredConstructs())
-      if (!scan.uses(construct, goal.functionName())) return "в решении нужно использовать " + TaskGoal.CONSTRUCTS.getOrDefault(construct, construct);
+      if (!scan.uses(construct, goal.functionName())) return TaskGoal.constructProblem(construct, goal.functionName()).strip();
     return null;
   }
 

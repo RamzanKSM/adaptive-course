@@ -55,6 +55,7 @@ class TransactionBoundariesTest {
     db.update("update users set password_hash=? where login='admin'", new BCryptPasswordEncoder().encode("admin-pass"));
     when(runner.configured()).thenReturn(true);
     when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true, "READY", "17"));
+    when(runner.runRaw(any(Language.class), anyString(), anyString())).thenReturn(LearningFlowIntegrationTest.recordedAnswers(6));
     when(runner.run(any(Language.class), anyString(), anyString())).thenAnswer(call -> ((String) call.getArgument(1)).contains("WRONG")
         ? new PistonCodeRunner.Run(false, "Неверный вывод программы.") : new PistonCodeRunner.Run(true, "Решение прошло скрытые проверки"));
     when(tutor.status(anyLong())).thenReturn(new LlmStatus(true, true, true, "READY", "gpt-6-luna"));
@@ -167,10 +168,10 @@ class TransactionBoundariesTest {
   }
 
   private GeneratedTask functionTask(String skill) throws Exception {
-    String test = "public class TestHarness { public static void main(String[] a) { Solution.answer(1); Solution.answer(2); Solution.answer(3); System.out.print(\"" + PistonCodeRunner.PASS_MARKER_PLACEHOLDER + "\"); } }";
     var goal = json.readTree("{\"kind\":\"FUNCTION_BEHAVIOR\",\"operation\":null,\"operands\":[],\"expectedOutput\":null,\"functionName\":\"answer\",\"requiredConstructs\":[]}");
-    return new GeneratedTask(skill, "generated " + skill + " " + UUID.randomUUID(), "statement", "", test, "TestHarness.java", "public class Solution { static int answer(int x) { return x; } }",
-        List.of(skill), List.of(), goal, List.of(new TaskGoal.Mutant("constant", "class Solution { static int answer(int x) { return 1; } } // WRONG"), new TaskGoal.Mutant("off by one", "class Solution { static int answer(int x) { return x + 1; } } // WRONG")));
+    var inputs = List.of(new TestCases.Input("1", true), new TestCases.Input("2", false), new TestCases.Input("3", false), new TestCases.Input("0", false), new TestCases.Input("-4", false), new TestCases.Input("10", false));
+    return new GeneratedTask(skill, "generated " + skill + " " + UUID.randomUUID(), "statement", "", "", "TestHarness.java", "public class Solution { static int answer(int x) { return x; } }",
+        List.of(skill), List.of(), goal, List.of(new TaskGoal.Mutant("constant", "class Solution { static int answer(int x) { return 1; } } // WRONG"), new TaskGoal.Mutant("off by one", "class Solution { static int answer(int x) { return x + 1; } } // WRONG")), inputs);
   }
 
   private String studentInLesson(String login) throws Exception {

@@ -4,13 +4,14 @@ import { java } from '@codemirror/lang-java'
 import { python } from '@codemirror/lang-python'
 import ReactMarkdown from 'react-markdown'
 import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './api'
-import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, parseDate, skillPercent, skillStarted, streak, TASKS_PER_ITERATION, XP } from './game'
+import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, iterationTasks, parseDate, skillPercent, skillStarted, streak, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
+import { DangerFrame, HardModeDialog, HardModeSwitch } from './hardmode'
 import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
-import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
+import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
 
 const UNKNOWN = 'Не знаю'
 const fmt = (value?: string | null) => {
@@ -106,17 +107,39 @@ function Shell() {
     onScroll(); window.addEventListener('scroll', onScroll, { passive: true })
     return () => { observer.disconnect(); window.removeEventListener('scroll', onScroll) }
   }, [me])
+  // Hard mode: the teacher allows it, the student switches it on; the whole screen shows it.
+  const hardOn = isStudent && !!me?.hardModeOn
+  const [hardDialog, setHardDialog] = useState(false); const [hardBusy, setHardBusy] = useState(false)
+  const toast = useToast()
+  useEffect(() => {
+    const root = document.documentElement
+    if (hardOn) root.dataset.hard = 'on'; else delete root.dataset.hard
+    return () => { delete root.dataset.hard }
+  }, [hardOn])
+  async function setHardMode(enabled: boolean) {
+    setHardDialog(false); setHardBusy(true)
+    const result = await request(() => api<{ hardModeOn: boolean }>('/me/hard-mode', { method: 'PATCH', body: JSON.stringify({ enabled }) }))
+    setHardBusy(false)
+    if (!result) return
+    setMe(m => m && { ...m, hardModeOn: result.hardModeOn })
+    toast(result.hardModeOn
+      ? { tone: 'reward', icon: 'flame', title: 'Hard mode включён', text: `Следующие задачи — алгоритмические, +${XP.hardTask} XP за каждую` }
+      : { tone: 'info', icon: 'check', title: 'Hard mode выключен', text: 'Следующие задачи будут обычными' })
+  }
   const login = (user: User) => { setError(''); setMe(user) }
   const logout = async () => { await request(() => post<void>('/auth/logout')); setError(''); setMe(null) }
   if (loading) return <div className="center"><Spinner /><span>Загружаем…</span></div>
   if (!me) return <Login onLogin={login} onError={setError} error={error} />
-  return <main className="app">
+  return <main className={`app ${hardOn ? 'hard' : ''}`}>
+    {hardOn && <DangerFrame />}
+    {hardDialog && <HardModeDialog onConfirm={() => setHardMode(true)} onCancel={() => setHardDialog(false)} />}
     <header ref={header} className={`topbar ${scrolled ? 'scrolled' : ''}`}>
       <div className="brand"><span className="logo" aria-hidden="true">R</span><b>Rmzn Tutor</b></div>
       {isStudent && language && <LanguageSwitch value={language} onChange={chooseLanguage} />}
-      <div className="user-chip">
+      <div className={`user-chip ${hardOn ? 'on-fire' : ''}`}>
+        {isStudent && me.hardModeAllowed && <HardModeSwitch on={hardOn} busy={hardBusy} onToggle={() => hardOn ? setHardMode(false) : setHardDialog(true)} />}
         <span className="avatar" aria-hidden="true">{initials(me.displayName)}</span>
-        <span className="user-meta"><b>{me.displayName}</b><small>{me.role === 'STUDENT' ? 'Студент' : 'Преподаватель'}</small></span>
+        <span className="user-meta"><b>{me.displayName}</b><small>{hardOn ? 'Hard mode' : me.role === 'STUDENT' ? 'Студент' : 'Преподаватель'}</small></span>
         <button className="icon-button" onClick={logout} aria-label="Выйти" title="Выйти"><Icon name="logout" /></button>
       </div>
     </header>
@@ -469,40 +492,47 @@ function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress }
   const [code, setCode] = useState(task.starterCode || course.fallback)
   // The console on screen; the assistant sees the same text when the student asks about it.
   const [screen, setScreen] = useState<ConsoleState | null>(null)
+  // «Разобрать с помощником»: the check says why a solution was rejected, the assistant helps to understand it.
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | undefined>()
+  const askAssistant = useCallback((text: string) => setPrefill({ text, nonce: Date.now() }), [])
   return <div className="lesson-grid enter">
-    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} />
-    <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} consoleOutput={screen ? consoleText(screen.run) : undefined} />
+    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} onAskAssistant={llm?.available ? askAssistant : undefined} />
+    <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} consoleOutput={screen ? consoleText(screen.run) : undefined} prefill={prefill} />
   </div>
 }
 
 function IterationSteps({ done, iteration, pulse }: { done: number; iteration: number; pulse: boolean }) {
-  return <div className="steps" aria-label={`Итерация ${iteration} из ${ITERATIONS}, решено ${done} из ${TASKS_PER_ITERATION}`}>
+  const tasks = iterationTasks(iteration - 1)
+  return <div className="steps" aria-label={`Итерация ${iteration} из ${ITERATIONS}, решено ${done} из ${tasks}`}>
     <span className="steps-label">Итерация {iteration}/{ITERATIONS}</span>
-    <span className="steps-track">{Array.from({ length: TASKS_PER_ITERATION }, (_, i) => <i key={i} className={`${i < done ? 'on' : ''} ${pulse && i === done - 1 ? 'pop' : ''}`} />)}</span>
+    <span className="steps-track">{Array.from({ length: tasks }, (_, i) => <i key={i} className={`${i < done ? 'on' : ''} ${pulse && i === done - 1 ? 'pop' : ''}`} />)}</span>
   </div>
 }
 
-function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole }: { task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void; console: ConsoleState | null; onConsole: (console: ConsoleState) => void }) {
+function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole, onAskAssistant }: { task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void; console: ConsoleState | null; onConsole: (console: ConsoleState) => void; onAskAssistant?: (text: string) => void }) {
+  // Hard tasks read their input: the student types it here to try the program with «Запустить».
+  const [stdin, setStdin] = useState('')
   const [attempt, setAttempt] = useState<Attempt | null>(null); const [sending, setSending] = useState(false); const [tries, setTries] = useState(0)
   const [running, setRunning] = useState(false); const [runs, setRuns] = useState(0)
   const resultRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLElement>(null)
   const course = useCourse()
   // Snapshot the step on mount: after the iteration closes the server resets successes to 0, but this task still was step 3 of 3.
-  const [step] = useState(() => ({ done: Math.min(skillProgress?.iterationSuccesses ?? 0, TASKS_PER_ITERATION - 1), iteration: Math.min((skillProgress?.completedIterations ?? 0) + 1, ITERATIONS) }))
+  const [step] = useState(() => { const completed = skillProgress?.completedIterations ?? 0; return { done: Math.min(skillProgress?.iterationSuccesses ?? 0, iterationTasks(completed) - 1), iteration: Math.min(completed + 1, ITERATIONS) } })
   async function submit() {
     setSending(true)
     const result = await request(() => post<Attempt & { progress?: SkillProgress[] }>('/attempts', { taskId: task.id, sourceCode: code }))
     setSending(false)
     if (!result) return
     setAttempt(result); setTries(t => t + 1)
-    if (result.console) onConsole({ run: result.console, origin: 'attempt' })
+    // A hard task reads input: a run without it shows only an input error, so its console is not shown here.
+    if (result.console && !task.hard) onConsole({ run: result.console, origin: 'attempt' })
     if (result.progress) onProgress(result.progress)
   }
   /** «Запустить»: runs the code as is and shows the console. Not a submission: no attempt, no credit, no «Попытка N». */
   async function run() {
     setRunning(true)
-    const result = await request(() => post<{ console: ConsoleRun }>(withCourse('/run', course.id), { sourceCode: code }))
+    const result = await request(() => post<{ console: ConsoleRun }>(withCourse('/run', course.id), task.hard ? { sourceCode: code, stdin } : { sourceCode: code }))
     setRunning(false)
     if (!result) return
     onConsole({ run: result.console, origin: 'run' }); setRuns(n => n + 1)
@@ -510,15 +540,22 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
   useEffect(() => { if (runs) consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [runs])
   useEffect(() => { if (attempt) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [attempt, tries])
   const passed = !!attempt?.passed
-  return <section className={`card task ${passed ? 'is-passed' : ''}`}>
+  const ask = () => onAskAssistant?.(`Мою отправку не приняли. Вот что сказала проверка:\n\n${attempt?.output ?? ''}\n\nПомоги понять, в чём ошибка, но не пиши готовое решение.`)
+  return <section className={`card task ${passed ? 'is-passed' : ''} ${task.hard ? 'hard-task' : ''}`}>
     <div className="task-head">
-      <span className="task-tag"><Icon name="code" size={14} /> Задача {step.done + 1}</span>
+      {task.hard
+        ? <span className="task-tag hard"><Icon name="flame" size={14} /> Hard · задача {step.done + 1}</span>
+        : <span className="task-tag"><Icon name="code" size={14} /> Задача {step.done + 1}</span>}
       {skillProgress && <IterationSteps done={step.done + (passed ? 1 : 0)} iteration={step.iteration} pulse={passed} />}
     </div>
     {task.redo && <p className="redo-note"><Icon name="refresh" size={15} /> Преподаватель попросил решить эту задачу заново — прежнее решение не засчитано.</p>}
     <h2 className="title">{task.title}</h2>
     <Markdown>{task.statement}</Markdown>
     <div className="code-label"><span>Решение на {course.title}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
+    {task.hard && !passed && <label className="stdin-field">
+      <span>Входные данные для «Запустить»</span>
+      <textarea value={stdin} onChange={e => setStdin(e.target.value)} rows={3} spellCheck={false} placeholder="Например, ввод из примера в условии" />
+    </label>}
     <div className="task-actions">
       {passed
         ? <button className="reward big" onClick={onNext}>Следующая задача <Icon name="arrow" /></button>
@@ -533,19 +570,55 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
       <div className="result-head">
         <span className="result-icon"><Icon name={passed ? 'check' : 'x'} size={18} /></span>
         <b>{passed ? 'Решение принято!' : 'Пока не проходит — это нормально'}</b>
-        {passed && <span className="xp-gain">+{XP.task} XP</span>}
+        {passed && <span className={`xp-gain ${task.hard ? 'hard' : ''}`}>+{task.hard ? XP.hardTask : XP.task} XP</span>}
       </div>
-      {!passed && <p className="muted small">Посмотри на вывод проверки ниже или спроси помощника, где искать ошибку.</p>}
-      {attempt.output && <pre>{attempt.output}</pre>}
+      {attempt.grader === 'LLM' && <p className="grader-label"><Icon name="sparkle" size={13} /> Подход проверен LLM</p>}
+      {attempt.review
+        ? <ReviewVerdict review={attempt.review} />
+        : attempt.mismatch
+          ? <OutputCompare mismatch={attempt.mismatch} />
+          : <>
+            {!passed && <p className="muted small">Посмотри на вывод проверки ниже или спроси помощника, где искать ошибку.</p>}
+            {attempt.output && <pre>{attempt.output}</pre>}
+          </>}
+      {!passed && onAskAssistant && <button type="button" className="ghost small-button ask-assistant" onClick={ask}><Icon name="chat" size={15} /> Разобрать с помощником</button>}
     </div>}
     {screen && (!passed || screen.origin === 'attempt') && <ConsolePanel ref={consoleRef} key={`${screen.origin}-${runs}-${tries}`} run={screen.run} origin={screen.origin} language={course.id} />}
   </section>
 }
 
+/** A wrong output next to the expected one, line by line, with line breaks and trailing spaces made visible. */
+function OutputCompare({ mismatch }: { mismatch: OutputMismatch }) {
+  const visible = (text: string) => text.length ? text.replace(/ +$/gm, m => '·'.repeat(m.length)).replace(/\n/g, '↵\n') : '(пусто)'
+  return <div className="output-compare">
+    <p className="review-summary">Вывод программы отличается от нужного.</p>
+    <div className="compare-grid">
+      <div><small>Нужно</small><pre>{visible(mismatch.expected)}</pre></div>
+      <div><small>Твоя программа</small><pre>{visible(mismatch.actual)}</pre></div>
+    </div>
+    <p className="muted small">↵ — перевод строки, · — пробел в конце строки.</p>
+  </div>
+}
+
+/** The reviewer's verdict: why the solution was (not) accepted, each problem with its line and where to look. */
+function ReviewVerdict({ review }: { review: Review }) {
+  return <div className="review">
+    {review.summary && <p className="review-summary">{review.summary}</p>}
+    {review.issues.length > 0 && <ul className="review-issues">{review.issues.map((issue, i) => <li key={i}>
+      {issue.line != null && <span className="review-line">Строка {issue.line}</span>}
+      <span className="review-problem">{issue.problem}</span>
+      {issue.hint && <span className="review-hint"><Icon name="target" size={13} /> {issue.hint}</span>}
+    </li>)}</ul>}
+  </div>
+}
+
 type ChatState = { messages: ChatMessage[]; llm: LlmStatus; quota?: ChatQuota }
 
-function Chat({ llm, request, taskId, sourceCode, consoleOutput }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string; consoleOutput?: string }) {
+function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string; consoleOutput?: string; prefill?: { text: string; nonce: number } }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [text, setText] = useState(''); const [status, setStatus] = useState<LlmStatus | undefined>(llm); const [sending, setSending] = useState(false)
+  const composer = useRef<HTMLTextAreaElement>(null)
+  // A question prepared from a rejected check; the student can edit it before sending.
+  useEffect(() => { if (prefill) { setText(prefill.text); composer.current?.focus() } }, [prefill])
   const listRef = useRef<HTMLDivElement>(null)
   const course = useCourse()
   const [quota, setQuota] = useState<ChatQuota | undefined>()
@@ -596,7 +669,7 @@ function Chat({ llm, request, taskId, sourceCode, consoleOutput }: { llm?: LlmSt
     {unavailable ? <p className="muted small chat-off">{unavailable}</p> : <form onSubmit={send} className="composer">
       {taskId !== undefined && <p className="chat-code-note"><Icon name="code" size={13} /> Помощник видит текущий код из редактора</p>}
       <div className="composer-row">
-        <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} placeholder={limited ? 'Лимит сообщений исчерпан' : 'Опиши, где возникло затруднение…'} aria-label="Ваш вопрос учебному помощнику" rows={2} disabled={limited} />
+        <textarea ref={composer} value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} placeholder={limited ? 'Лимит сообщений исчерпан' : 'Опиши, где возникло затруднение…'} aria-label="Ваш вопрос учебному помощнику" rows={2} disabled={limited} />
         <button className="primary icon-only" disabled={sending || !text.trim() || limited} aria-label="Отправить" title="Отправить (Ctrl+Enter)">{sending ? <Spinner /> : <Icon name="send" />}</button>
       </div>
       {limited ? <p className="quota-note limited">Лимит сообщений помощнику исчерпан. Снова можно через {Math.max(1, Math.ceil(quota!.retryAfterSeconds / 60))} мин. — а пока перечитай объяснение или спроси преподавателя.</p>
@@ -655,7 +728,7 @@ function TopicRow({ skill }: { skill: SkillProgress }) {
       ? <span className="confirmed-note">Подтверждено диагностикой · практика не нужна</span>
       : <div className="bar" role="progressbar" aria-valuenow={skillPercent(skill)} aria-valuemin={0} aria-valuemax={100} aria-label={skill.title}><i style={{ width: `${skillPercent(skill)}%` }} /></div>}
     <small className="tabular topic-meta">
-      {state === 'mastered' ? 'Освоено практикой' : state === 'confirmed' ? null : `Итерации ${skill.completedIterations}/${ITERATIONS} · задачи ${skill.iterationSuccesses}/${TASKS_PER_ITERATION}`}
+      {state === 'mastered' ? 'Освоено практикой' : state === 'confirmed' ? null : `Итерации ${skill.completedIterations}/${ITERATIONS} · задачи ${skill.iterationSuccesses}/${iterationTasks(skill.completedIterations)}`}
       {diagnostic && <span className={`diag-chip ${skill.confirmedByDiagnostic ? 'ok' : 'gap'}`} title="Результат первичной диагностики по теме">диагностика {diagnostic}</span>}
     </small>
   </div>
@@ -767,6 +840,7 @@ function TeacherPage({ request }: { request: Request }) {
           <span className="avatar" aria-hidden="true">{initials(s.displayName)}</span>
           <span className="student-meta"><b>{s.displayName}</b><small>{s.login}{s.group && <span className="group-tag">{s.group}</span>}</small>
             {s.activeLessons?.map(l => <ActiveLessonBadge key={l.language} lesson={l} />)}</span>
+          {!!s.hardModeAllowed && <i className={`pill hard ${s.hardModeOn ? 'on' : ''}`} title={s.hardModeOn ? 'Hard mode включён' : 'Допуск к hard mode есть, режим выключен'}><Icon name="flame" size={12} /> HARD</i>}
           <i className={s.llmEnabled ? 'pill on' : 'pill'}>LLM</i>
         </button>)
         : <p className="muted list-note">{students.length ? 'В этой группе студентов нет.' : 'Студентов пока нет. Создай первую учётную запись выше.'}</p>}</div>
@@ -925,6 +999,13 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
     toast({ tone: 'info', icon: 'flag', title: `Урок ${lesson.number} завершён`, text: student.displayName })
     await reloadLessons(); open(result.lesson, true)
   }
+  async function toggleHard() {
+    const allowed = !student.hardModeAllowed
+    const result = await request(() => patch<{ hardModeAllowed: boolean }>(`/admin/students/${student.id}/hard-mode`, { allowed }))
+    if (!result) return
+    onUpdated({ ...student, hardModeAllowed: result.hardModeAllowed, hardModeOn: result.hardModeAllowed ? student.hardModeOn : 0 })
+    toast({ tone: 'info', icon: 'flame', title: result.hardModeAllowed ? 'Допуск к hard mode выдан' : 'Hard mode отключён', text: result.hardModeAllowed ? `${student.displayName} может включить его сам` : student.displayName })
+  }
   async function revoke(lesson: Lesson, task: { id: Id; title: string }) {
     if (!window.confirm(`Отменить зачёт задачи «${task.title}»? Студенту придётся решить её заново, прогресс по теме будет пересчитан.`)) return
     const result = await request(() => post<{ redoInOpenLesson: boolean }>(`/admin/students/${student.id}/lessons/${lesson.id}/tasks/${task.id}/revoke`))
@@ -936,8 +1017,12 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
     <div className="detail-head">
       <span className="avatar big" aria-hidden="true">{initials(student.displayName)}</span>
       <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}{student.group && <span className="group-tag">{student.group}</span>}</p></div>
-      <label className="switch-label"><span className="muted small">LLM</span><Switch checked={!!student.llmEnabled} onChange={toggle} label={`LLM для ${student.displayName}`} /></label>
+      <div className="detail-switches">
+        <label className="switch-label"><span className="muted small">LLM</span><Switch checked={!!student.llmEnabled} onChange={toggle} label={`LLM для ${student.displayName}`} /></label>
+        <label className="switch-label hard" title="Допуск к hard mode: студент сам включает алгоритмические задачи"><span className="muted small"><Icon name="flame" size={13} /> Hard</span><Switch checked={!!student.hardModeAllowed} onChange={toggleHard} label={`Допуск к hard mode для ${student.displayName}`} /></label>
+      </div>
     </div>
+    {!!student.hardModeOn && <p className="hard-note"><Icon name="flame" size={14} /> Студент сейчас в hard mode</p>}
     <div className="detail-actions"><EditStudent key={`${student.login}|${student.displayName}|${student.group ?? ''}`} student={student} groups={groups} request={request} onUpdated={onUpdated} /><PasswordReset student={student} request={request} /></div>
     {progress && <div className="lang-stats">{LANGUAGES.filter(language => progress[language]).map(language => {
       const level = experience({ skills: progress[language]! })
@@ -963,11 +1048,11 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
         </div>
         <h3 className="section-title">Задачи и попытки</h3>
         {detail.tasks.length ? detail.tasks.map(t => <article key={t.id} className="detail-task">
-          <div className="detail-task-head"><b>{t.title}</b>
+          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{t.title}</b>
             {t.submissions.some(a => a.passed && !a.revokedAt) && <button className="ghost danger small-button" onClick={() => revoke(detail.lesson, t)} title="Студенту придётся решить задачу заново"><Icon name="refresh" size={14} /> Отменить зачёт</button>}
           </div>
           <Markdown>{t.statement}</Markdown>
-          {t.submissions.length ? t.submissions.map(a => <details key={a.id}><summary className={a.revokedAt ? 'revoked' : a.passed ? 'passed' : 'not-passed'}><Icon name={a.revokedAt ? 'refresh' : a.passed ? 'check' : 'x'} size={14} /> {a.revokedAt ? `зачёт отменён ${fmt(a.revokedAt)}` : a.passed ? 'принято' : 'не принято'} · {fmt(a.createdAt)}</summary><pre>{a.sourceCode}</pre>{a.output && <pre>{a.output}</pre>}{a.console && <ConsolePanel run={a.console} origin="attempt" language={detail.lesson.language ?? 'JAVA'} />}</details>) : <p className="muted small">Попыток не было.</p>}
+          {t.submissions.length ? t.submissions.map(a => <details key={a.id}><summary className={a.revokedAt ? 'revoked' : a.passed ? 'passed' : 'not-passed'}><Icon name={a.revokedAt ? 'refresh' : a.passed ? 'check' : 'x'} size={14} /> {a.revokedAt ? `зачёт отменён ${fmt(a.revokedAt)}` : a.passed ? 'принято' : 'не принято'} · {fmt(a.createdAt)}</summary><pre>{a.sourceCode}</pre>{a.grader === 'LLM' && <p className="grader-label"><Icon name="sparkle" size={13} /> Подход проверен LLM</p>}{a.review ? <ReviewVerdict review={a.review} /> : a.output && <pre>{a.output}</pre>}{a.console && <ConsolePanel run={a.console} origin="attempt" language={detail.lesson.language ?? 'JAVA'} />}</details>) : <p className="muted small">Попыток не было.</p>}
         </article>) : <p className="muted">Задач в этом уроке не было.</p>}
         <h3 className="section-title">Чат</h3>
         {detail.chat.length ? <div className="messages static" ref={chatRef}>{detail.chat.map(m => <div key={m.id} className={`message ${m.role === 'STUDENT' ? 'student' : 'assistant'}`}><Markdown>{m.content}</Markdown><small>{m.role === 'STUDENT' ? 'Студент' : 'Помощник'} · {fmt(m.createdAt)}</small></div>)}</div> : <p className="muted">Переписки не было.</p>}

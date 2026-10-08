@@ -4,12 +4,20 @@ import { Icon, useToast } from './fx'
 import type { LlmLimits, LlmLogging, LlmModel, LlmSettings, LlmPurposeKey } from './types'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
-type Draft = { models: Record<LlmPurposeKey, string>; reasoning: Record<LlmPurposeKey, string>; limits: LlmLimits; logging: LlmLogging }
+type Draft = { models: Record<LlmPurposeKey, string>; reasoning: Record<LlmPurposeKey, string>; limits: LlmLimits; logging: LlmLogging; hardModeChat: boolean }
 
 const PURPOSES: { key: LlmPurposeKey; title: string; hint: string }[] = [
   { key: 'CHAT', title: 'Ответы помощника в чате', hint: 'Студент ждёт ответа: быстрая модель и низкий уровень дают ответ быстрее.' },
   { key: 'TASK', title: 'Генерация и перепроверка задач', hint: 'Нужны точные проверки и неверные примеры решений: сильная модель и высокий уровень дают меньше брака.' },
   { key: 'EXPLANATION', title: 'Объяснения тем', hint: 'Пишутся один раз на тему и потом переиспользуются.' },
+  { key: 'REVIEW', title: 'Проверка подхода в задачах «посчитай»', hint: 'Когда вывод верный, решает, посчитан ли ответ или напечатан готовым. Студент ждёт ответа: нужна быстрая и точная модель.' },
+]
+/** How each kind of task is checked; shown to the teacher, nothing to configure. */
+const CHECKS: [string, string][] = [
+  ['Вывод текста', 'Запуск программы: вывод сравнивается с нужным, при ошибке студент видит «нужно / получилось».'],
+  ['«Посчитай»', 'Запуск проверяет вывод, LLM — что ответ посчитан, а не напечатан готовым. Если LLM недоступна — синтаксическое дерево.'],
+  ['«Используй цикл / условие…»', 'Запуск проверяет результат, синтаксическое дерево — что нужная конструкция есть. Отказ объясняет, чего не хватает.'],
+  ['Функции и hard-задачи', 'Тест-кейсы: входы даёт модель, ответы считает эталонное решение. В каждой проверке — примеры из условия и 8 случайных скрытых кейсов.'],
 ]
 const EFFORT_TITLES: Record<string, string> = { none: 'нет', minimal: 'минимальный', low: 'низкий', medium: 'средний', high: 'высокий', xhigh: 'очень высокий', max: 'максимальный', ultra: 'ультра' }
 type LimitField = { key: keyof LlmLimits; title: string; unit: string; hint: string }
@@ -20,6 +28,9 @@ const CHAT_LIMITS: LimitField[] = [
 const GENERATION_LIMITS: LimitField[] = [
   { key: 'tasksPerHour', title: 'Генераций задач на весь курс', unit: 'в час', hint: 'Новые задачи и перепроверка старых. При исчерпании студенты получают готовые задачи из банка.' },
   { key: 'explanationsPerHour', title: 'Генераций объяснений тем на весь курс', unit: 'в час', hint: 'Объяснение пишется один раз на тему. При исчерпании урок идёт без объяснения, пока лимит не освободится.' },
+]
+const REVIEW_LIMITS: LimitField[] = [
+  { key: 'reviewsPerHour', title: 'Проверок подхода на студента', unit: 'в час', hint: 'Сверх лимита подход в задачах «посчитай» проверяет синтаксическое дерево.' },
 ]
 
 /** Levels of a model; when the App Server did not report them, the server's safe set. */
@@ -32,7 +43,7 @@ function levelFor(model: LlmModel | undefined, current: string) {
   if (!model?.efforts.length || model.efforts.includes(current)) return current
   return model.efforts.includes(model.defaultEffort) ? model.defaultEffort : model.efforts[Math.floor(model.efforts.length / 2)]
 }
-const draftOf = (s: LlmSettings): Draft => ({ models: { ...s.purposeModels }, reasoning: { ...s.reasoning }, limits: { ...s.limits }, logging: { ...s.logging } })
+const draftOf = (s: LlmSettings): Draft => ({ models: { ...s.purposeModels }, reasoning: { ...s.reasoning }, limits: { ...s.limits }, logging: { ...s.logging }, hardModeChat: s.hardModeChat })
 
 export function LlmSettingsView({ request }: { request: Request }) {
   const [settings, setSettings] = useState<LlmSettings | null>(null)
@@ -53,7 +64,7 @@ export function LlmSettingsView({ request }: { request: Request }) {
   const chooseModel = (purpose: LlmPurposeKey, id: string) => setDraft(d => d && {
     ...d, models: { ...d.models, [purpose]: id }, reasoning: { ...d.reasoning, [purpose]: levelFor(settings.models.find(m => m.id === id), d.reasoning[purpose]) },
   })
-  const resetToDefaults = () => setDraft(() => ({ models: { ...settings.purposeModelDefaults }, reasoning: { ...settings.reasoningDefaults }, limits: { ...settings.limitDefaults }, logging: { ...settings.loggingDefaults } }))
+  const resetToDefaults = () => setDraft(() => ({ models: { ...settings.purposeModelDefaults }, reasoning: { ...settings.reasoningDefaults }, limits: { ...settings.limitDefaults }, logging: { ...settings.loggingDefaults }, hardModeChat: settings.hardModeChatDefault }))
   const anyListed = settings.models.some(m => m.listed)
   const limitRow = (l: LimitField) => <label key={l.key} className="setting-row">
     <div><b>{l.title} <span className="muted">{l.unit}</span></b><small className="muted">{l.hint}</small></div>
@@ -80,6 +91,18 @@ export function LlmSettingsView({ request }: { request: Request }) {
       <div className="settings-actions">
         <button type="button" className="ghost" onClick={resetToDefaults}>Значения по умолчанию</button>
         <button className="primary" disabled={!dirty || saving}>{saving ? 'Сохраняем…' : 'Сохранить'}</button>
+      </div>
+    </div>
+
+    <div className="card enter">
+      <h2 className="card-title"><span className="chip-icon"><Icon name="check" size={16} /></span> Как проверяются решения</h2>
+      <div className="check-kinds">{CHECKS.map(([kind, how]) => <div key={kind}><b>{kind}</b><small>{how}</small></div>)}</div>
+      <div className="setting-rows">
+        <div className="setting-row">
+          <div><b>Помощник в hard mode</b><small className="muted">Выключите, чтобы студенты в hard mode решали без подсказок. Генерация задач не меняется.</small></div>
+          <button type="button" role="switch" aria-checked={draft.hardModeChat} aria-label="Помощник в hard mode" className={`switch ${draft.hardModeChat ? 'on' : ''}`}
+            onClick={() => setDraft(d => d && { ...d, hardModeChat: !d.hardModeChat })}><span /></button>
+        </div>
       </div>
     </div>
 
@@ -120,6 +143,12 @@ export function LlmSettingsView({ request }: { request: Request }) {
         <div className="setting-rows">{GENERATION_LIMITS.map(limitRow)}</div>
         <p className="muted small usage-now">За последний час: задач <b className="tabular">{usage(settings.usageLastHour.tasks, draft.limits.tasksPerHour)}</b>, объяснений <b className="tabular">{usage(settings.usageLastHour.explanations, draft.limits.explanationsPerHour)}</b></p>
       </div>
+      <div className="card enter">
+        <h2 className="card-title"><span className="chip-icon"><Icon name="check" size={16} /></span> Проверка подхода LLM</h2>
+        <p className="muted small">Задачи «посчитай» с верным выводом. 0 — без ограничения.</p>
+        <div className="setting-rows">{REVIEW_LIMITS.map(limitRow)}</div>
+        <p className="muted small usage-now">За последний час по курсу: <b className="tabular">{settings.usageLastHour.reviews}</b></p>
+      </div>
     </div>
 
     <div className="card enter">
@@ -128,6 +157,7 @@ export function LlmSettingsView({ request }: { request: Request }) {
       <div className="setting-rows">
         {logSwitch('generation', 'Генерация задач и объяснений', 'Что сгенерировала модель и как рассуждала: условия, проверки, эталонные и неверные решения, объяснения.')}
         {logSwitch('chat', 'Ответы помощника в чате', 'Вместе с ответами в лог попадут вопросы и код студентов — включайте на время разбора проблемы.')}
+        {logSwitch('review', 'Проверка подхода', 'Вердикты и рассуждения проверяющего вместе с кодом студентов.')}
       </div>
     </div>
   </form>

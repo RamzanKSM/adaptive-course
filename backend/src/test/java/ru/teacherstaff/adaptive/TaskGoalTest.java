@@ -32,9 +32,8 @@ class TaskGoalTest {
     assertTrue(assertThrows(InvalidGeneratedContentException.class, () -> inconsistent.validate(Language.PYTHON, "")).getMessage().contains("does not contain"));
     var floorInJava = new TaskGoal(TaskGoal.Kind.FIXED_ARITHMETIC, "//", List.of(new BigDecimal(7), new BigDecimal(2)), "3\n", null, List.of());
     assertThrows(InvalidGeneratedContentException.class, () -> floorInJava.validate(Language.JAVA, ""));
-    var function = new TaskGoal(TaskGoal.Kind.FUNCTION_BEHAVIOR, null, List.of(), null, "area", List.of());
-    assertTrue(assertThrows(InvalidGeneratedContentException.class, () -> function.validate(Language.PYTHON, "assert solution.area(2, 3) == 6")).getMessage().contains("at least three"));
-    function.validate(Language.PYTHON, "assert area(1, 1) == 1\nassert area(2, 3) == 6\nassert area(0, 5) == 0");
+    new TaskGoal(TaskGoal.Kind.FUNCTION_BEHAVIOR, null, List.of(), null, "area", List.of()).validate(Language.PYTHON, ""); // the platform builds the checks
+    assertThrows(InvalidGeneratedContentException.class, () -> new TaskGoal(TaskGoal.Kind.FUNCTION_BEHAVIOR, null, List.of(), null, null, List.of()).validate(Language.PYTHON, ""));
     assertThrows(InvalidGeneratedContentException.class, () -> TaskGoal.parse(json.readTree("{\"kind\":\"MAGIC\"}")));
     assertThrows(InvalidGeneratedContentException.class, () -> TaskGoal.parse(null));
   }
@@ -108,6 +107,14 @@ class TaskGoalTest {
         """ + loop.pythonCheck();
     assertTrue(passes(dir, checks, "for i in range(1, 4):\n    print(i)\n"));
     assertFalse(passes(dir, checks, "print(1)\nprint(2)\nprint(3)\n"), "same output without the loop the task asks for");
+  }
+
+  @Test void printedTextTrapAndOutputOnlyGoal() {
+    assertEquals("print(\"20\")\n", TaskGoal.printText(Language.PYTHON, "20\n"));
+    assertTrue(TaskGoal.printText(Language.JAVA, "1\n2\n").contains("System.out.println(\"1\\n2\");"), "a multi-line answer stays one valid literal");
+    var tickets = new TaskGoal(TaskGoal.Kind.FIXED_ARITHMETIC, "*", List.of(new BigDecimal(5), new BigDecimal(6)), "30\n", null, List.of("for"));
+    var outputOnly = tickets.withoutCalculationCheck();
+    assertEquals(TaskGoal.Kind.OUTPUT_TEXT, outputOnly.kind()); assertEquals("30\n", outputOnly.expectedOutput()); assertEquals(List.of("for"), outputOnly.requiredConstructs());
   }
 
   private static TaskGoal arithmetic(String op, long a, long b) {

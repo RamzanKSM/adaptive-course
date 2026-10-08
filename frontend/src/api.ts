@@ -7,6 +7,7 @@ const REASONS: Record<string, string> = {
   DISABLED_GLOBALLY: 'Учебный помощник выключен преподавателем для всего курса.',
   DISABLED_BY_CONFIGURATION: 'Учебный помощник отключён в настройках сервера.',
   DISABLED_FOR_STUDENT: 'Учебный помощник выключен для вашей учётной записи.',
+  DISABLED_IN_HARD_MODE: 'В hard mode помощник отключён — разбирайся сам.',
   STUDENT_RUNTIME_NOT_VALIDATED: 'Учебный помощник ещё не допущен к работе со студентами.',
   APP_SERVER_NOT_CONFIGURED: 'Учебный помощник не настроен на сервере.',
   APP_SERVER_UNAVAILABLE: 'Учебный помощник временно недоступен.',

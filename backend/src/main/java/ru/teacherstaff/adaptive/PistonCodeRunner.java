@@ -90,7 +90,10 @@ class PistonCodeRunner {
   }
 
   static final int CONSOLE_MAX_CHARS=10_000, CONSOLE_MAX_LINES=200;
-  /** Runs Solution.main with UTF-8 console streams; appended after the student's code so its line numbers stay unchanged. */
+  /**
+   * Runs Solution.main with UTF-8 console streams. Piston starts Java in single-file mode (java ConsoleRunner.java),
+   * which runs the first class of the file, so the launcher must come before Solution — see consoleSource.
+   */
   static final String CONSOLE_LAUNCHER="public class ConsoleRunner { public static void main(String[] args) throws Throwable { "
       +"System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, \"UTF-8\")); "
       +"System.setErr(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), true, \"UTF-8\")); "
@@ -106,16 +109,19 @@ class PistonCodeRunner {
 
   /**
    * The program run as is, without hidden checks — what the student would see in a console. Nothing here is secret:
-   * no checks, no pass marker. Keyboard input is empty.
+   * no checks, no pass marker. Keyboard input is what the student typed (empty by default).
    */
-  Console console(Language language,String source) {
-    try { return language==Language.PYTHON?consolePython(source):consoleJava(source); }
+  Console console(Language language,String source) { return console(language,source,""); }
+  /** stdin: what the student typed into «Входные данные» (hard-mode tasks read their input). */
+  Console console(Language language,String source,String stdin) {
+    String input=stdin==null?"":stdin;
+    try { return language==Language.PYTHON?consolePython(source,input):consoleJava(source,input); }
     catch(Exception e) { return Console.of("UNAVAILABLE","Запуск сейчас недоступен."); }
   }
-  private Console consoleJava(String source) throws Exception {
+  private Console consoleJava(String source,String stdin) throws Exception {
     if(source==null||!JAVA_MAIN.matcher(source).find()) return Console.of("NO_MAIN",null);
     String version=version(Language.JAVA); if(version.isBlank()) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
-    ObjectNode request=execution(Language.JAVA,version);
+    ObjectNode request=execution(Language.JAVA,version); request.put("stdin",stdin);
     request.putArray("files").addObject().put("name","ConsoleRunner").put("content",consoleSource(source));
     JsonNode root=execute(request); if(root==null) return Console.of("UNAVAILABLE","Запуск Java сейчас недоступен.");
     JsonNode compile=root.path("compile"),run=root.path("run");
@@ -127,9 +133,9 @@ class PistonCodeRunner {
     if(isCompilerFailure(run)&&run.path("stdout").asText("").isEmpty()) return Console.of("COMPILE_ERROR",javaConsoleDiagnostic(output(run)));
     return consoleResult(run,javaConsoleDiagnostic(run.path("stderr").asText("")));
   }
-  private Console consolePython(String source) throws Exception {
+  private Console consolePython(String source,String stdin) throws Exception {
     String version=version(Language.PYTHON); if(version.isBlank()) return Console.of("UNAVAILABLE","Запуск Python сейчас недоступен.");
-    ObjectNode request=execution(Language.PYTHON,version); request.put("stdin","");
+    ObjectNode request=execution(Language.PYTHON,version); request.put("stdin",stdin);
     ArrayNode files=request.putArray("files");
     files.addObject().put("name","main.py").put("content",PYTHON_CONSOLE_ENTRY.strip()+"\n");
     files.addObject().put("name","solution.py").put("content",source==null?"":source);
@@ -150,14 +156,21 @@ class PistonCodeRunner {
     Integer code=exitCode(run);
     if(code!=null&&code!=0&&!tooLong) {
       String message=error.isBlank()?"Программа завершилась с кодом "+code+".":error;
-      if(message.contains("EOFError")||message.contains("NoSuchElementException")) message+="\n\nВвод с клавиатуры в консоли пока не поддерживается: программа получает пустой ввод.";
+      if(message.contains("EOFError")||message.contains("NoSuchElementException")) message+="\n\nПрограмме не хватило входных данных: впиши их в поле «Входные данные» над консолью.";
       return new Console("RUNTIME_ERROR",clip(stdout),clip(message),false);
     }
     return new Console("OK",clip(stdout),null,tooLong);
   }
+  /**
+   * The student's code with the launcher as the first class. It is inserted on the line of the last import (or on
+   * line 1), so every line of the student's code keeps its number in compiler and exception messages.
+   */
   static String consoleSource(String student) {
     String solution=student.replaceFirst("(?m)\\bpublic\\s+(?=(?:(?:final|abstract)\\s+)*class\\s+Solution\\b)","");
-    return javaUnicodeEscapes(solution+"\n"+CONSOLE_LAUNCHER);
+    var imports=Pattern.compile("(?m)^\\s*import\\s+[\\w.*\\s]+;").matcher(solution); int end=-1;
+    while(imports.find()) end=imports.end();
+    String launched=end<0?CONSOLE_LAUNCHER+" "+solution:solution.substring(0,end)+" "+CONSOLE_LAUNCHER+solution.substring(end);
+    return javaUnicodeEscapes(launched);
   }
   /** Compiler and JVM messages in the student's terms: Solution.java, their own line numbers, readable Cyrillic. */
   static String javaConsoleDiagnostic(String output) {
@@ -185,12 +198,34 @@ class PistonCodeRunner {
     String text(){return "статус="+status+(truncated?" (вывод обрезан)":"")+"\nвывод:\n"+(stdout==null||stdout.isEmpty()?"(пусто)":stdout)+(error==null||error.isBlank()?"":"\nошибка:\n"+error);}
   }
 
+  /** A platform program's own output, for recording a reference solution's answers (see TestCases). */
+  record Raw(boolean ok,String stdout,String error) {}
+  /**
+   * Runs a platform-built program with the given solution: Java — the program first, then the solution in one file;
+   * Python — the program as main.py next to solution.py. Nothing here is shown to students.
+   */
+  Raw runRaw(Language language,String solution,String program) {
+    try {
+      String version=version(language); if(version.isBlank()) return new Raw(false,"",language.title+" runtime is not installed");
+      ObjectNode request=execution(language,version); request.put("stdin","");
+      ArrayNode files=request.putArray("files");
+      if(language==Language.PYTHON){ files.addObject().put("name","main.py").put("content",program); files.addObject().put("name","solution.py").put("content",solution==null?"":solution); }
+      else files.addObject().put("name","TestHarness").put("content",combinedSource(solution==null?"":solution,program));
+      JsonNode root=execute(request); if(root==null) return new Raw(false,"","Piston execution service is unavailable");
+      JsonNode compile=root.path("compile"),run=root.path("run");
+      if(!compile.isMissingNode()&&!compile.isNull()){ Integer code=exitCode(compile); if(code!=null&&code!=0) return new Raw(false,"",output(compile)); }
+      if(run.isMissingNode()||run.isNull()||!run.isObject()) return new Raw(false,"","Piston execution service is unavailable");
+      Integer code=exitCode(run);
+      return new Raw(code!=null&&code==0,run.path("stdout").asText(""),run.path("stderr").asText("")+run.path("message").asText(""));
+    } catch(Exception e){ return new Raw(false,"","Piston execution service is unavailable"); }
+  }
+
   private String pythonFeedback(JsonNode run) {
     String limit=limitFeedback(run); if(limit!=null)return limit;
     String stderr=run.path("stderr").asText("");
     String traceback=studentTraceback(stderr);
     String last=traceback.lines().filter(l->!l.isBlank()).reduce((a,b)->b).orElse("").strip();
-    if(last.startsWith("AssertionError")) { String message=last.substring("AssertionError".length()).replaceFirst("^:\\s*","").strip(); return message.isBlank()?"Неверный результат.":"Неверный результат: "+safeDiagnostic(message); }
+    if(last.startsWith("AssertionError")) { String message=last.substring("AssertionError".length()).replaceFirst("^:\\s*","").strip(); if(message.startsWith("Неверный подход"))return safeDiagnostic(message); return message.isBlank()?"Неверный результат.":"Неверный результат: "+safeDiagnostic(message); }
     if(last.startsWith("SyntaxError")||last.startsWith("IndentationError")||last.startsWith("TabError")) return "Синтаксическая ошибка в коде Python:\n"+safeDiagnostic(traceback);
     if(!traceback.isBlank()) return "Ошибка выполнения:\n"+safeDiagnostic(traceback);
     return "Неверный результат.";
@@ -221,11 +256,20 @@ class PistonCodeRunner {
     return response.statusCode()/100!=2?null:json.readTree(response.body());
   }
   private String randomPassMarker(){byte[] bytes=new byte[24];new SecureRandom().nextBytes(bytes);return "__ADAPTIVE_PASS_"+Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)+"__";}
+  /**
+   * Starts the checks with UTF-8 output and error streams. Piston runs Java in single-file mode, which starts the first
+   * class of the file, and its JVM defaults to a non-UTF-8 charset: without this, Russian check messages would reach
+   * the student as question marks.
+   */
+  static final String HARNESS_LAUNCHER="public class PlatformLauncher { public static void main(String[] args) throws Throwable { "
+      +"System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, \"UTF-8\")); "
+      +"System.setErr(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.err), true, \"UTF-8\")); "
+      +"TestHarness.main(args); } }";
   static String combinedSource(String studentSource,String testSource) {
     SourceWithoutImports harness=withoutImports(testSource), solution=withoutImports(studentSource);
     String solutionBody=solution.body().replaceFirst("(?m)\\bpublic\\s+(?=(?:(?:final|abstract)\\s+)*class\\s+Solution\\b)","");
     var imports=new LinkedHashSet<String>(); imports.addAll(harness.imports()); imports.addAll(solution.imports());
-    return javaUnicodeEscapes(String.join("\n",imports)+"\n"+harness.body()+"\n"+solutionBody);
+    return javaUnicodeEscapes(String.join("\n",imports)+"\n"+HARNESS_LAUNCHER+"\n"+harness.body()+"\n"+solutionBody);
   }
   /** Piston Java 15 compiles source as a non-UTF-8 locale; keep literals intact independently of that locale. */
   static String javaUnicodeEscapes(String source) {
@@ -243,13 +287,22 @@ class PistonCodeRunner {
     String limit=limitFeedback(run); if(limit!=null)return limit;
     String diagnostic=safeDiagnostic(run.path("stderr").asText(""));
     if(!diagnostic.isBlank()&&!diagnostic.toLowerCase().contains("assertionerror"))return "Ошибка выполнения:\n"+diagnostic;
-    return "Неверный вывод программы.";
+    String reason=assertionMessage(diagnostic);
+    return reason==null?"Неверный вывод программы.":"Неверный результат: "+reason;
+  }
+  /** The check's own explanation from «java.lang.AssertionError: …», so a rejection says what is wrong. */
+  static String assertionMessage(String stderr){
+    if(stderr==null)return null;
+    var m=Pattern.compile("AssertionError:\\s*(.+)").matcher(stderr);
+    if(!m.find())return null;
+    String message=m.group(1).strip();
+    return message.isEmpty()?null:message;
   }
   private String limitFeedback(JsonNode execution) { String details=(execution.path("message").asText("")+"\n"+execution.path("status").asText("")+"\n"+execution.path("signal").asText("")+"\n"+execution.path("stderr").asText("")+"\n"+execution.path("output").asText("")).toLowerCase(); if("to".equals(execution.path("status").asText("" ).toLowerCase())||details.contains("timeout")||details.contains("time limit")||details.contains("timed out"))return "Превышен лимит времени выполнения."; if(details.contains("memory limit")||details.contains("out of memory")||details.contains("memoryerror")||details.contains("oom")||Integer.valueOf(137).equals(exitCode(execution)))return "Превышен лимит памяти."; return null; }
   private boolean isCompilerFailure(JsonNode run) { String text=(run.path("stderr").asText("")+"\n"+run.path("output").asText("")).toLowerCase(); return text.contains("compilation failed")||text.contains(": error:"); }
   private Integer exitCode(JsonNode node) { return node.hasNonNull("code")?node.path("code").asInt():null; }
   private String output(JsonNode node) { String out=node.path("stdout").asText(""); if(!out.isBlank())return out; out=node.path("output").asText(""); if(!out.isBlank())return out; String stderr=node.path("stderr").asText(""); if(!stderr.isBlank())return stderr; return node.path("message").asText(""); }
-  private String safeDiagnostic(String output) { if(output==null)return "";String sanitized=output.replaceAll("(?m).*__ADAPTIVE_PASS_[A-Za-z0-9_-]+__.*(?:\\R|$)","").replace("TestHarness","Solution").trim();return sanitized.length()>3000?sanitized.substring(0,3000)+"\n…":sanitized; }
+  private String safeDiagnostic(String output) { if(output==null)return "";String sanitized=output.replaceAll("(?m).*__ADAPTIVE_PASS_[A-Za-z0-9_-]+__.*(?:\\R|$)","").replaceAll("(?m)^\\s*at PlatformLauncher\\..*(?:\\R|$)","").replace("TestHarness","Solution").trim();return sanitized.length()>3000?sanitized.substring(0,3000)+"\n…":sanitized; }
   private String version(Language language) throws Exception {
     String configured=configuredVersions.getOrDefault(language,""); if(!configured.isBlank()) return configured;
     String found=discoveredVersions.get(language); if(found!=null)return found;

@@ -33,13 +33,22 @@ class PistonCodeRunnerHttpTest {
     assertTrue(combined.contains("\\u041F\\u0440\\u0438\\u0432\\u0435\\u0442"));
   }
 
-  @Test void consoleSourceKeepsTheStudentsLineNumbersAndRunsSolutionMain() {
+  @Test void consoleSourceKeepsTheStudentsLineNumbersAndStartsWithTheLauncher() {
     String student="public class Solution {\n    public static void main(String[] args) {\n        System.out.println(\"Итого\");\n    }\n}\n";
     String source=PistonCodeRunner.consoleSource(student);
-    assertTrue(source.startsWith("class Solution {\n    public static void main"), "Solution stays first, so its line numbers are the student's");
-    assertTrue(source.contains("public class ConsoleRunner") && source.contains("Solution.main(new String[0])"));
+    assertTrue(source.startsWith("public class ConsoleRunner"), "single-file Java runs the first class: the launcher, not Solution");
+    assertTrue(source.contains("Solution.main(new String[0])"));
     var lines=source.lines().toList(); var original=student.lines().toList();
+    assertEquals(original.size(),lines.size(),"no lines are added");
     for(int i=1;i<original.size();i++) assertEquals(PistonCodeRunner.javaUnicodeEscapes(original.get(i)),lines.get(i),"line "+(i+1)+" is unchanged");
+    String withImport=PistonCodeRunner.consoleSource("import java.util.Scanner;\npublic class Solution {\n}\n");
+    assertTrue(withImport.startsWith("import java.util.Scanner; public class ConsoleRunner"), "imports stay first, the launcher follows on the same line: "+withImport);
+    assertEquals(3,withImport.lines().count());
+  }
+
+  @Test void aFailedJavaCheckExplainsItself() {
+    assertEquals("Тест 3: неверный ответ",PistonCodeRunner.assertionMessage("Exception in thread \"main\" java.lang.AssertionError: Тест 3: неверный ответ\n\tat TestHarness.main(TestHarness.java:9)"));
+    assertNull(PistonCodeRunner.assertionMessage("Exception in thread \"main\" java.lang.AssertionError\n\tat TestHarness.main(TestHarness.java:9)"),"no message — the generic text is used");
   }
 
   @Test void consoleDiagnosticsUseTheStudentsFileNameAndReadableText() {
@@ -55,17 +64,15 @@ class PistonCodeRunnerHttpTest {
     assertEquals("NO_MAIN",console.status());
   }
 
-  /** The launcher on a real JVM with a non-UTF-8 console, as in the Piston container: Cyrillic stays readable. */
+  /** The launcher on a real JVM started like Piston does, with a non-UTF-8 console: Cyrillic stays readable. */
   @Test void consoleLauncherPrintsUtf8AndReportsTheStudentsLine(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
     String javaHome=System.getProperty("java.home");
     java.nio.file.Path javac=java.nio.file.Path.of(javaHome,"bin","javac");
     Assumptions.assumeTrue(java.nio.file.Files.isExecutable(javac),"javac is not available");
     String student="public class Solution {\n    public static void main(String[] args) {\n        System.out.println(\"Привет\");\n        int x = 1 / 0;\n    }\n}\n";
     java.nio.file.Files.writeString(dir.resolve("ConsoleRunner.java"),PistonCodeRunner.consoleSource(student),StandardCharsets.US_ASCII);
-    var compile=new ProcessBuilder(javac.toString(),"ConsoleRunner.java").directory(dir.toFile()).redirectErrorStream(true);
-    compile.environment().put("LC_ALL","C");
-    assertEquals(0,compile.start().waitFor());
-    var run=new ProcessBuilder(java.nio.file.Path.of(javaHome,"bin","java").toString(),"ConsoleRunner").directory(dir.toFile());
+    // Exactly how Piston's Java runtime starts it: single-file source mode, which runs the first class in the file.
+    var run=new ProcessBuilder(java.nio.file.Path.of(javaHome,"bin","java").toString(),"ConsoleRunner.java").directory(dir.toFile());
     run.environment().put("LC_ALL","C");
     Process process=run.start();
     String out=new String(process.getInputStream().readAllBytes(),StandardCharsets.UTF_8), err=new String(process.getErrorStream().readAllBytes(),StandardCharsets.UTF_8);

@@ -8,7 +8,7 @@ import type { LlmPurpose, LlmUsage } from './types'
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 
 const PERIODS = [7, 30, 90]
-const PURPOSES: Record<LlmPurpose, string> = { CHAT: 'Ответы в чате', TASK: 'Генерация задач', EXPLANATION: 'Объяснения тем', TASK_REPAIR: 'Перепроверка старых задач' }
+const PURPOSES: Record<LlmPurpose, string> = { CHAT: 'Ответы в чате', TASK: 'Генерация задач', EXPLANATION: 'Объяснения тем', TASK_REPAIR: 'Перепроверка старых задач', REVIEW: 'Проверка решений (LLM)' }
 const EFFORTS: Record<string, string> = { minimal: 'минимальный', low: 'низкий', medium: 'средний', high: 'высокий', xhigh: 'очень высокий' }
 const LANGUAGE_TITLES: Record<string, string> = { JAVA: 'Java', PYTHON: 'Python' }
 const number = new Intl.NumberFormat('ru-RU')

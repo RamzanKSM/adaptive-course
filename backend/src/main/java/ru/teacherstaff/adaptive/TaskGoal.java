@@ -15,14 +15,15 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>FIXED_ARITHMETIC — compute a fixed result with one operation over the numbers from the statement
  *       (print(4 * 6), not print(24) and not print(12 * 2));</li>
- *   <li>FUNCTION_BEHAVIOR — a function judged by its results on different inputs; implementation is free;</li>
+ *   <li>FUNCTION_BEHAVIOR — a function judged by its results on recorded test cases (see TestCases); implementation is free;</li>
  *   <li>OUTPUT_TEXT — print exact text;</li>
- *   <li>CONSTRUCT — the statement explicitly requires a construct (loop, assignment, …).</li>
+ *   <li>CONSTRUCT — the statement explicitly requires a construct (loop, assignment, …);</li>
+ *   <li>IO_BEHAVIOR — the program reads stdin and is run on recorded test cases (see TestCases).</li>
  * </ul>
  * requiredConstructs may accompany any kind. Structure is checked only for FIXED_ARITHMETIC and required constructs.
  */
 record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String expectedOutput, String functionName, List<String> requiredConstructs) {
-  enum Kind { FIXED_ARITHMETIC, FUNCTION_BEHAVIOR, OUTPUT_TEXT, CONSTRUCT }
+  enum Kind { FIXED_ARITHMETIC, FUNCTION_BEHAVIOR, OUTPUT_TEXT, CONSTRUCT, IO_BEHAVIOR }
   record Mutant(String description, String source) {}
 
   static final Set<String> PYTHON_OPERATIONS = Set.of("+", "-", "*", "/", "//", "%", "**");
@@ -75,6 +76,30 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
     ArrayNode constructs = node.putArray("requiredConstructs"); requiredConstructs.forEach(constructs::add);
     return node.toString();
   }
+  /** Why a required construct matters, said to a beginner; used in the rejection message. */
+  private static final Map<String, String> CONSTRUCT_WHY = Map.ofEntries(
+      Map.entry("assignment", "Сохрани значение в переменную с помощью присваивания и дальше используй её."),
+      Map.entry("augmented_assignment", "Измени значение переменной составным присваиванием, например count += 1, а не записью нового числа вручную."),
+      Map.entry("if", "Выбор между вариантами нужно сделать в программе с помощью условия if, а не заранее в голове."),
+      Map.entry("for", "Повторяющееся действие нужно записать один раз внутри цикла for, а не повторять строки вручную."),
+      Map.entry("while", "Повторение, которое зависит от условия, нужно записать циклом while."),
+      Map.entry("function", "Логику нужно вынести в отдельную функцию (метод) и вызвать её."),
+      Map.entry("return", "Функция должна вернуть результат через return, а не только напечатать его."),
+      Map.entry("list", "Значения нужно сложить в список (массив) и работать с ним."),
+      Map.entry("dict", "Пары «ключ — значение» нужно хранить в словаре."),
+      Map.entry("class", "Данные и действия нужно описать в собственном классе."),
+      Map.entry("try", "Возможную ошибку нужно обработать блоком try."));
+
+  /**
+   * A clear rejection for a missing construct: what the statement requires, that it is missing, and why it matters
+   * even when the output is right. Starts with «Неверный подход» so the check is classified as a failed check.
+   */
+  static String constructProblem(String construct, String functionName) {
+    String what = "function".equals(construct) && functionName != null ? "функцию «" + functionName + "»" : CONSTRUCTS.getOrDefault(construct, construct);
+    return "Неверный подход. Условие требует использовать " + what + ", а в решении " + ("function".equals(construct) && functionName != null ? "её нет или она названа иначе" : "этого нет")
+        + ". Даже если вывод совпадает, задача тренирует именно это. " + CONSTRUCT_WHY.getOrDefault(construct, "");
+  }
+
   /** What the student hears when the printed answer is not calculated from the statement's numbers. */
   static String calculationHint(String operation, String numbers) {
     return "вычисли ответ в программе действием «" + operation + "» над числами из условия (" + numbers + ") и выведи его — сразу или через переменную; готовое число или другие числа не подойдут";
@@ -97,12 +122,12 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
           throw rejected("expected output " + quote(expectedOutput) + " does not contain " + operands + " " + operation + " = " + result);
       }
       case FUNCTION_BEHAVIOR -> {
+        // The platform builds the checks from testInputs (see TestCases); only the function itself must be named.
         if (functionName == null || !IDENTIFIER.matcher(functionName).matches()) throw rejected("function goal needs a functionName");
-        int calls = occurrences(testSource, functionName + "(");
-        if (calls < 3) throw rejected("checks call " + functionName + "() only " + calls + " time(s); at least three different inputs are required");
       }
       case OUTPUT_TEXT -> { if (expectedOutput == null || expectedOutput.isEmpty()) throw rejected("output goal needs the exact expected output"); }
       case CONSTRUCT -> { if (requiredConstructs.isEmpty()) throw rejected("construct goal needs requiredConstructs"); }
+      case IO_BEHAVIOR -> { } // the platform records the answers and builds the checks from testInputs
     }
   }
 
@@ -183,6 +208,18 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
     }
   }
 
+  /** The same goal without the «was it calculated» part: for checking a «calculate» task by its output only. */
+  TaskGoal withoutCalculationCheck() {
+    return kind == Kind.FIXED_ARITHMETIC ? new TaskGoal(Kind.OUTPUT_TEXT, null, List.of(), expectedOutput, functionName, requiredConstructs) : this;
+  }
+
+  /** A program that prints exactly this text (a trap: the right output without solving anything). */
+  static String printText(Language language, String text) {
+    boolean newline = text.endsWith("\n");
+    String body = newline ? text.substring(0, text.length() - 1) : text;
+    return print(language, literal(body).replace("\n", "\\n"), newline);
+  }
+
   private static String print(Language language, String expression, boolean newline) {
     return language == Language.PYTHON
         ? "print(" + expression + (newline ? "" : ", end=\"\"") + ")\n"
@@ -192,7 +229,6 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
   private static String number(BigDecimal value) { return value.stripTrailingZeros().scale() <= 0 ? value.toBigInteger().toString() : value.toPlainString(); }
   private static String literal(String text) { return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""; }
   private static String quote(String text) { return "\"" + text.replace("\n", "\\n") + "\""; }
-  private static int occurrences(String text, String part) { int n = 0; for (int i = text.indexOf(part); i >= 0; i = text.indexOf(part, i + 1)) n++; return n; }
   private static InvalidGeneratedContentException rejected(String reason) { return new InvalidGeneratedContentException(reason); }
 
   /**
@@ -310,7 +346,7 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
           case "try" -> "'Try' in present";
           default -> "True";
         };
-        code.append("    assert ").append(condition).append(", ").append(literal("В решении нужно использовать " + CONSTRUCTS.get(construct))).append("\n");
+        code.append("    assert ").append(condition).append(", ").append(literal(constructProblem(construct, functionName).strip())).append("\n");
       }
     }
     return code.append("    _task_checks()\n").toString();

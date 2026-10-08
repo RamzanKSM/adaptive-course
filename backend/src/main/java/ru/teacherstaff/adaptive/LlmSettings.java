@@ -10,7 +10,9 @@ import java.util.function.Function;
  * LLM settings an admin can change at runtime, stored in app_settings. Environment values are the defaults until
  * an admin overrides them.
  * <ul>
- *   <li>model and reasoning effort per purpose (chat, task generation incl. repair, explanations);</li>
+ *   <li>model and reasoning effort per purpose (chat, task generation incl. repair, explanations, and REVIEW — whether a
+ *       «calculate» task's answer was really calculated);</li>
+ *   <li>whether students in hard mode may use the assistant;</li>
  *   <li>whether answers and reasoning are written to the log: for generation and, separately, for chat (which
  *       contains students' messages and code);</li>
  *   <li>rate limits, independent of each other: assistant (chat) messages per student per hour and per day;
@@ -20,41 +22,49 @@ import java.util.function.Function;
  */
 @Component
 class LlmSettings {
-  static final List<String> EFFORT_PURPOSES = List.of("CHAT", "TASK", "EXPLANATION");
+  static final List<String> EFFORT_PURPOSES = List.of("CHAT", "TASK", "EXPLANATION", "REVIEW");
   /** Used when the model's own list cannot be read: levels every reasoning model accepts. */
   static final List<String> FALLBACK_EFFORTS = List.of("low", "medium", "high");
-  static final List<String> LIMIT_KEYS = List.of("chatPerHour", "chatPerDay", "tasksPerHour", "explanationsPerHour");
-  private static final Map<String, Integer> LIMIT_MAX = Map.of("chatPerHour", 1000, "chatPerDay", 10_000, "tasksPerHour", 10_000, "explanationsPerHour", 10_000);
+  static final List<String> LIMIT_KEYS = List.of("chatPerHour", "chatPerDay", "tasksPerHour", "explanationsPerHour", "reviewsPerHour");
+  private static final Map<String, Integer> LIMIT_MAX = Map.of("chatPerHour", 1000, "chatPerDay", 10_000, "tasksPerHour", 10_000, "explanationsPerHour", 10_000, "reviewsPerHour", 1000);
+  private static final List<String> LOGGING_KEYS = List.of("generation", "chat", "review");
 
   private final JdbcTemplate db;
   private final Map<String, String> defaultEfforts;
   private final Map<String, Integer> defaultLimits;
   private final Map<String, String> defaultModels;
   private final List<String> extraModels;
-  private final boolean defaultLogGeneration, defaultLogChat;
+  private final boolean defaultLogGeneration, defaultLogChat, defaultLogReview;
+  private final boolean defaultHardModeChat;
 
   LlmSettings(JdbcTemplate db,
               @Value("${app.llm.model}") String defaultModel,
               @Value("${app.llm.model-chat:}") String chatModel,
               @Value("${app.llm.model-task:}") String taskModel,
               @Value("${app.llm.model-explanation:}") String explanationModel,
+              @Value("${app.llm.model-review:}") String reviewModel,
               @Value("${app.llm.log-generation:true}") boolean logGeneration,
               @Value("${app.llm.log-chat:false}") boolean logChat,
+              @Value("${app.llm.log-review:false}") boolean logReview,
+              @Value("${app.hard-mode.chat:true}") boolean hardModeChat,
               @Value("${app.llm.extra-models:gpt-5.6-terra}") String extraModels,
               @Value("${app.llm.reasoning-effort:medium}") String fallback,
               @Value("${app.llm.reasoning-effort-chat:low}") String chat,
               @Value("${app.llm.reasoning-effort-task:high}") String task,
               @Value("${app.llm.reasoning-effort-explanation:medium}") String explanation,
+              @Value("${app.llm.reasoning-effort-review:medium}") String review,
               @Value("${app.llm.limits.chat-per-hour:30}") int chatPerHour,
               @Value("${app.llm.limits.chat-per-day:150}") int chatPerDay,
               @Value("${app.llm.limits.tasks-per-hour:100}") int tasksPerHour,
-              @Value("${app.llm.limits.explanations-per-hour:30}") int explanationsPerHour) {
+              @Value("${app.llm.limits.explanations-per-hour:30}") int explanationsPerHour,
+              @Value("${app.llm.limits.reviews-per-hour:60}") int reviewsPerHour) {
     this.db = db;
-    this.defaultModels = Map.of("CHAT", or(chatModel, defaultModel), "TASK", or(taskModel, defaultModel), "EXPLANATION", or(explanationModel, defaultModel));
-    this.defaultLogGeneration = logGeneration; this.defaultLogChat = logChat;
+    this.defaultModels = Map.of("CHAT", or(chatModel, defaultModel), "TASK", or(taskModel, defaultModel), "EXPLANATION", or(explanationModel, defaultModel), "REVIEW", or(reviewModel, defaultModel));
+    this.defaultLogGeneration = logGeneration; this.defaultLogChat = logChat; this.defaultLogReview = logReview;
+    this.defaultHardModeChat = hardModeChat;
     this.extraModels = Arrays.stream(extraModels.split(",")).map(String::strip).filter(m -> !m.isEmpty()).distinct().toList();
-    this.defaultEfforts = Map.of("CHAT", or(chat, fallback), "TASK", or(task, fallback), "EXPLANATION", or(explanation, fallback));
-    this.defaultLimits = Map.of("chatPerHour", chatPerHour, "chatPerDay", chatPerDay, "tasksPerHour", tasksPerHour, "explanationsPerHour", explanationsPerHour);
+    this.defaultEfforts = Map.of("CHAT", or(chat, fallback), "TASK", or(task, fallback), "EXPLANATION", or(explanation, fallback), "REVIEW", or(review, fallback));
+    this.defaultLimits = Map.of("chatPerHour", chatPerHour, "chatPerDay", chatPerDay, "tasksPerHour", tasksPerHour, "explanationsPerHour", explanationsPerHour, "reviewsPerHour", reviewsPerHour);
   }
   private static String or(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
 
@@ -68,10 +78,20 @@ class LlmSettings {
   Map<String, String> models() { var map = new LinkedHashMap<String, String>(); for (String p : EFFORT_PURPOSES) map.put(p, model(p)); return map; }
   Map<String, String> defaultModels() { var map = new LinkedHashMap<String, String>(); for (String p : EFFORT_PURPOSES) map.put(p, defaultModels.get(p)); return map; }
 
-  /** Whether this turn's answer and reasoning go to the log. Chat is separate: it contains students' messages and code. */
-  boolean logOutput(String purpose) { return "CHAT".equals(key(purpose)) ? flag("llm_log_chat", defaultLogChat) : flag("llm_log_generation", defaultLogGeneration); }
-  Map<String, Boolean> logging() { return Map.of("generation", flag("llm_log_generation", defaultLogGeneration), "chat", flag("llm_log_chat", defaultLogChat)); }
-  Map<String, Boolean> defaultLogging() { return Map.of("generation", defaultLogGeneration, "chat", defaultLogChat); }
+  /** Whether this turn's answer and reasoning go to the log. Chat and review are separate: they contain students' messages and code. */
+  boolean logOutput(String purpose) {
+    return switch (key(purpose)) {
+      case "CHAT" -> flag("llm_log_chat", defaultLogChat);
+      case "REVIEW" -> flag("llm_log_review", defaultLogReview);
+      default -> flag("llm_log_generation", defaultLogGeneration);
+    };
+  }
+  Map<String, Boolean> logging() { return Map.of("generation", flag("llm_log_generation", defaultLogGeneration), "chat", flag("llm_log_chat", defaultLogChat), "review", flag("llm_log_review", defaultLogReview)); }
+  Map<String, Boolean> defaultLogging() { return Map.of("generation", defaultLogGeneration, "chat", defaultLogChat, "review", defaultLogReview); }
+
+  /** Whether students in hard mode may ask the assistant; task generation is not affected. */
+  boolean hardModeChat() { return flag("hard_mode_chat", defaultHardModeChat); }
+  boolean defaultHardModeChat() { return defaultHardModeChat; }
   private boolean flag(String key, boolean fallback) { return stored(key).map(Boolean::parseBoolean).orElse(fallback); }
   /** Models always offered in the admin even if the App Server does not list them (APP_LLM_EXTRA_MODELS). */
   List<String> extraModels() { return extraModels; }
@@ -93,7 +113,7 @@ class LlmSettings {
    * offeredModels (empty when the list is unknown: then models cannot change). Each purpose's level is checked
    * against the levels of the model it will run on.
    */
-  void update(Map<String, String> models, Map<String, String> efforts, Map<String, Integer> limits, Map<String, Boolean> logging,
+  void update(Map<String, String> models, Map<String, String> efforts, Map<String, Integer> limits, Map<String, Boolean> logging, Boolean hardModeChat,
               Set<String> offeredModels, Function<String, List<String>> effortsOfModel) {
     for (var map : Arrays.asList(models, efforts)) if (map != null) for (String purpose : map.keySet())
       if (!EFFORT_PURPOSES.contains(purpose)) throw new ApiError("INVALID_SETTING", "Неизвестное назначение: " + purpose);
@@ -115,10 +135,11 @@ class LlmSettings {
       if (!LIMIT_KEYS.contains(l.getKey())) throw new ApiError("INVALID_SETTING", "Неизвестный лимит: " + l.getKey());
       if (l.getValue() == null || l.getValue() < 0 || l.getValue() > LIMIT_MAX.get(l.getKey())) throw new ApiError("INVALID_SETTING", "Лимит должен быть от 0 до " + LIMIT_MAX.get(l.getKey()));
     }
-    if (logging != null) for (var e : logging.entrySet()) if (!Set.of("generation", "chat").contains(e.getKey()) || e.getValue() == null) throw new ApiError("INVALID_SETTING", "Неизвестная настройка логирования: " + e.getKey());
+    if (logging != null) for (var e : logging.entrySet()) if (!LOGGING_KEYS.contains(e.getKey()) || e.getValue() == null) throw new ApiError("INVALID_SETTING", "Неизвестная настройка логирования: " + e.getKey());
     if (models != null) models.forEach((purpose, value) -> save("llm_model_" + purpose, value));
     if (efforts != null) efforts.forEach((purpose, value) -> save("llm_effort_" + purpose, value));
-    if (logging != null) logging.forEach((k, v) -> save("generation".equals(k) ? "llm_log_generation" : "llm_log_chat", String.valueOf(v)));
+    if (logging != null) logging.forEach((k, v) -> save("llm_log_" + k, String.valueOf(v)));
+    if (hardModeChat != null) save("hard_mode_chat", String.valueOf(hardModeChat));
     if (limits != null) limits.forEach((key, value) -> save("llm_limit_" + key, String.valueOf(value)));
   }
 
@@ -152,6 +173,9 @@ class LlmSettings {
   boolean taskGenerationAllowed() { int limit = limit("tasksPerHour"); return limit == 0 || tasksLastHour() < limit; }
   /** Course-wide budget for generating topic explanations (lectures) in the last hour; separate from tasks and chat. */
   boolean explanationGenerationAllowed() { int limit = limit("explanationsPerHour"); return limit == 0 || explanationsLastHour() < limit; }
+  /** Per student: LLM checks of «calculate» answers in the last hour. Over the limit the syntax tree decides instead. */
+  boolean reviewAllowed(long userId) { int limit = limit("reviewsPerHour"); return limit == 0 || reviewsLastHour(userId) < limit; }
+  int reviewsLastHour(long userId) { return count("select count(*) from llm_calls where user_id=? and purpose='REVIEW' and created_at>=datetime('now','-1 hour')", userId); }
   int tasksLastHour() { return count("select count(*) from llm_calls where purpose in ('TASK','TASK_REPAIR') and created_at>=datetime('now','-1 hour')"); }
   int explanationsLastHour() { return count("select count(*) from llm_calls where purpose='EXPLANATION' and created_at>=datetime('now','-1 hour')"); }
 

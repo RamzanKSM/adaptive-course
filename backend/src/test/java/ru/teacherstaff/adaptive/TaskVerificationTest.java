@@ -90,9 +90,11 @@ class TaskVerificationTest {
     PistonCodeRunner crashing = mock(PistonCodeRunner.class);
     when(crashing.run(any(Language.class), anyString(), anyString())).thenAnswer(call -> ((String) call.getArgument(1)).contains("WRONG")
         ? new PistonCodeRunner.Run(false, "Синтаксическая ошибка в коде Python:\n...") : new PistonCodeRunner.Run(true, "ok"));
-    var crashOnly = new GeneratedTask("PY_FUNCTION_BASIC", "t", "s", "", "def run_checks():\n    assert area(1) and area(2) and area(3)\n", "test_solution.py", "def area(x): return x",
+    when(crashing.runRaw(any(Language.class), anyString(), anyString())).thenReturn(LearningFlowIntegrationTest.recordedAnswers(6));
+    var inputs = List.of(new TestCases.Input("1", true), new TestCases.Input("2", false), new TestCases.Input("3", false), new TestCases.Input("4", false), new TestCases.Input("5", false), new TestCases.Input("6", false));
+    var crashOnly = new GeneratedTask("PY_FUNCTION_BASIC", "t", "s", "", "", "test_solution.py", "def area(x): return x",
         List.of("PY_FUNCTION_BASIC"), List.of(), json.valueToTree(java.util.Map.of("kind", "FUNCTION_BEHAVIOR", "functionName", "area")),
-        List.of(new TaskGoal.Mutant("a", "WRONG ("), new TaskGoal.Mutant("b", "WRONG )")));
+        List.of(new TaskGoal.Mutant("a", "WRONG ("), new TaskGoal.Mutant("b", "WRONG )")), inputs);
     assertTrue(assertThrows(InvalidGeneratedContentException.class, () -> new TaskVerifier(crashing, json).verify(Language.PYTHON, crashOnly)).getMessage().contains("wrong solution(s) were rejected"));
   }
 

@@ -13,7 +13,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Re-verifies generated tasks accepted by an older, output-only validation (quality_version below the current one).
+ * Re-verifies generated tasks accepted by an older, output-only validation (quality_version below the current one),
+ * and moves function and input/output tasks without recorded test cases to them (see TestCases).
  * The statement students see is kept; the generator writes a goal, a reference solution, wrong solutions and new
  * checks, and TaskVerifier must accept them. A task that cannot be repaired is retired and a new one is generated
  * on demand. Past submissions, credit and progress are not recalculated — only future submissions use the new checks.
@@ -45,8 +46,9 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
 
   /** Returns how many tasks were repaired; stops early when the LLM or Piston is unavailable. */
   int auditPending() {
-    var pending = db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.test_source,t.language,t.difficulty,ts.skill_code from tasks t join task_target_skills ts on ts.task_id=t.id "
-        + "where t.active=1 and t.source='LLM' and coalesce(t.quality_version,0)<? group by t.id order by t.id", LearningContentGenerator.TASK_QUALITY_VERSION);
+    var pending = db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.test_source,t.language,t.difficulty,t.mode,ts.skill_code from tasks t join task_target_skills ts on ts.task_id=t.id "
+        + "where t.active=1 and t.source='LLM' and (coalesce(t.quality_version,0)<? or (json_extract(t.goal_json,'$.kind') in ('FUNCTION_BEHAVIOR','IO_BEHAVIOR') "
+        + "and not exists(select 1 from task_cases c where c.task_id=t.id))) group by t.id order by t.id", LearningContentGenerator.TASK_QUALITY_VERSION);
     if (pending.isEmpty()) return 0;
     if (!generator.available()) { log.info("{} task(s) await re-verification; LLM is unavailable, will retry", pending.size()); return 0; }
     int repaired = 0;
@@ -71,7 +73,7 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
     String skill = (String) row.get("skill_code");
     int difficulty = row.get("difficulty") instanceof Number n ? n.intValue() : 1;
     var explanation = db.queryForList("select content from explanations where skill_code=?", String.class, skill);
-    ContentBrief brief = CourseBriefs.brief(db, null, skill, difficulty, explanation.isEmpty() ? null : explanation.getFirst());
+    ContentBrief brief = CourseBriefs.brief(db, null, skill, difficulty, explanation.isEmpty() ? null : explanation.getFirst(), "HARD".equals(row.get("mode")));
     ExistingTask existing = new ExistingTask(id, (String) row.get("title"), (String) row.get("statement"), (String) row.get("starter_code"), (String) row.get("test_source"));
     log.info("Re-verifying task {} '{}' (skill={}, language={})", id, existing.title(), skill, language);
     for (int attempt = 1; attempt <= REPAIR_ATTEMPTS; attempt++) {
@@ -81,6 +83,9 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
         if (!ApiController.validHarness(language, candidate.testSource())) throw new InvalidGeneratedContentException("test harness does not follow the " + language.title + " contract");
         TaskVerifier.Verified verified = verifier.verify(language, candidate);
         db.update("update tasks set test_source=?, goal_json=?, quality_version=? where id=?", verified.testSource(), verified.goalJson(), LearningContentGenerator.TASK_QUALITY_VERSION, id);
+        // Function and input/output tasks move to the platform's recorded test cases.
+        db.update("delete from task_cases where task_id=?", id);
+        for (var c : verified.cases()) db.update("insert into task_cases(task_id,ordinal,input,expected,is_public) values(?,?,?,?,?)", id, c.ordinal(), c.input(), c.expected(), c.isPublic() ? 1 : 0);
         markOutcome(skill, "ACCEPTED");
         log.info("Task {} '{}' now has verified checks; earlier submissions and credit are unchanged", id, existing.title());
         return true;
