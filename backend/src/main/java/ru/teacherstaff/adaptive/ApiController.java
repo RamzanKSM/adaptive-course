@@ -219,13 +219,28 @@ public class ApiController {
   }
 
   /** Not @Transactional: the Piston run (up to ~20 s) happens between a read-only validation and one short write transaction. */
-  @PostMapping("/attempts") public ResponseEntity<?> attempt(@RequestBody Map<String,Object> body,HttpServletRequest r){long u=student(r);long task=((Number)body.get("taskId")).longValue();var taskRows=db.queryForList("select test_source,active,language,goal_json from tasks where id=?",task);Language lang=taskRows.isEmpty()?Language.JAVA:Language.of(taskRows.getFirst().get("language"));var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");if(count("select count(*) from lesson_tasks where lesson_id=? and task_id=?",l.get("id"),task)==0)throw bad("TASK_NOT_IN_LESSON","Задача не назначена этому уроку");if(taskRows.isEmpty()||((Number)taskRows.getFirst().get("active")).intValue()!=1)throw bad("TASK_UPDATED","Задача обновлена. Откройте следующую задачу."); String source=(String)body.get("sourceCode"); if(!codeRunner.status(lang).available()) return ResponseEntity.status(503).body(Map.of("error","RUNNER_UNAVAILABLE","message","Проверка "+lang.title+" сейчас недоступна","runner",runner(lang)));long runStarted=System.nanoTime();var console=consoleAsync(lang,source);var result=verifier.run(lang,source,(String)taskRows.getFirst().get("test_source"),(String)taskRows.getFirst().get("goal_json"));var consoleRun=console.join();log.info("Attempt on task {} ({}): passed={} in {} ms",task,lang,result.passed(),(System.nanoTime()-runStarted)/1_000_000);long submissionId=tx.execute(status->{
+  @PostMapping("/attempts") public ResponseEntity<?> attempt(@RequestBody Map<String,Object> body,HttpServletRequest r){long received=System.nanoTime();long u=student(r);long task=((Number)body.get("taskId")).longValue();var taskRows=db.queryForList("select test_source,active,language,goal_json from tasks where id=?",task);Language lang=taskRows.isEmpty()?Language.JAVA:Language.of(taskRows.getFirst().get("language"));var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");if(count("select count(*) from lesson_tasks where lesson_id=? and task_id=?",l.get("id"),task)==0)throw bad("TASK_NOT_IN_LESSON","Задача не назначена этому уроку");if(taskRows.isEmpty()||((Number)taskRows.getFirst().get("active")).intValue()!=1)throw bad("TASK_UPDATED","Задача обновлена. Откройте следующую задачу."); String source=(String)body.get("sourceCode"); if(!codeRunner.status(lang).available()) return ResponseEntity.status(503).body(Map.of("error","RUNNER_UNAVAILABLE","message","Проверка "+lang.title+" сейчас недоступна","runner",runner(lang)));var console=consoleAsync(lang,source);long testsStarted=System.nanoTime();var result=verifier.run(lang,source,(String)taskRows.getFirst().get("test_source"),(String)taskRows.getFirst().get("goal_json"));long testsNs=System.nanoTime()-testsStarted;long waitStarted=System.nanoTime();var timedConsole=console.join();long consoleWaitNs=System.nanoTime()-waitStarted;var consoleRun=timedConsole.console();log.info("Attempt on task {} ({}): passed={} in {} ms",task,lang,result.passed(),testsNs/1_000_000);long submissionId=tx.execute(status->{
       // Submission, task credit and skill progress change together, so a crash can never leave credit without its submission.
       long id=db.queryForObject("insert into submissions(lesson_id,task_id,source_code,passed,runner_output,console_json) values(?,?,?,?,?,?) returning id",Long.class,l.get("id"),task,source,result.passed()?1:0,result.output(),consoleJson(consoleRun));
       if(result.passed()&&db.update("insert or ignore into successful_task_credit(user_id,task_id) values(?,?)",u,task)>0)for(var target:db.queryForList("select skill_code from task_target_skills where task_id=?",task))credit(u,(String)target.get("skill_code"),((Number)l.get("id")).longValue(),((Number)l.get("number")).intValue());
       return id;
     });
-    return ResponseEntity.ok(obj("id",submissionId,"passed",result.passed(),"output",result.output(),"console",consoleRun==null?null:consoleRun.view(),"progress",progress(u,lang))); }
+    var response=ResponseEntity.ok(obj("id",submissionId,"passed",result.passed(),"output",result.output(),"console",consoleRun==null?null:consoleRun.view(),"progress",progress(u,lang)));
+    logCheckTiming(u,task,lang,testsNs,timedConsole,consoleWaitNs,System.nanoTime()-received);
+    return response; }
+  /**
+   * One line per check in the backend log, with the request id that is already on every line of the request:
+   * tests_ms — hidden checks from start to Piston's result; console_queue_ms — from scheduling the background console
+   * run to its actual start; console_piston_ms — its Piston request; console_wait_ms — time the request spent in
+   * join() waiting for the console; total_ms — from receiving the solution to sending the answer.
+   */
+  private void logCheckTiming(long student,long task,Language lang,long testsNs,TimedConsole console,long consoleWaitNs,long totalNs){
+    log.info("CHECK_TIMING request={} student={} task={} language={} tests_ms={} console_queue_ms={} console_piston_ms={} console_wait_ms={} total_ms={}",
+        org.slf4j.MDC.get("requestId"),student,task,lang,ms(testsNs),ms(console.queueNs()),ms(console.pistonNs()),ms(consoleWaitNs),ms(totalNs));
+  }
+  private static long ms(long nanos){ return nanos/1_000_000; }
+  /** The console run with its timing: queueNs — scheduled to started; pistonNs — the Piston request itself. */
+  record TimedConsole(PistonCodeRunner.Console console,long queueNs,long pistonNs) {}
   /**
    * «Запустить»: runs the student's code as is and returns the console. It is not a submission — no attempt, no
    * credit, no progress — and is limited per student so the shared runner cannot be flooded.
@@ -254,10 +269,17 @@ public class ApiController {
     }
   }
   /** The console run goes alongside the check (two Piston jobs at once), so the student does not wait twice. */
-  private java.util.concurrent.CompletableFuture<PistonCodeRunner.Console> consoleAsync(Language lang,String source){
+  private java.util.concurrent.CompletableFuture<TimedConsole> consoleAsync(Language lang,String source){
     var context=LogContext.capture();
-    return java.util.concurrent.CompletableFuture.supplyAsync(()->{ var own=org.slf4j.MDC.getCopyOfContextMap(); org.slf4j.MDC.setContextMap(context); try { return codeRunner.console(lang,source); } catch(RuntimeException e){ log.warn("Console run failed: {}",e.toString()); return null; } finally { if(own==null)org.slf4j.MDC.clear(); else org.slf4j.MDC.setContextMap(own); } },
-        command->Thread.ofVirtual().name("console-run").start(command));
+    long queued=System.nanoTime();
+    return java.util.concurrent.CompletableFuture.supplyAsync(()->{
+      long started=System.nanoTime();
+      var own=org.slf4j.MDC.getCopyOfContextMap(); org.slf4j.MDC.setContextMap(context);
+      PistonCodeRunner.Console console=null;
+      try { console=codeRunner.console(lang,source); } catch(RuntimeException e){ log.warn("Console run failed: {}",e.toString()); }
+      finally { if(own==null)org.slf4j.MDC.clear(); else org.slf4j.MDC.setContextMap(own); }
+      return new TimedConsole(console,started-queued,System.nanoTime()-started);
+    }, command->Thread.ofVirtual().name("console-run").start(command));
   }
   private String consoleJson(PistonCodeRunner.Console console){ try { return console==null?null:new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(console.view()); } catch(Exception e){ return null; } }
   private Object consoleView(Object stored){ try { return stored==null?null:new com.fasterxml.jackson.databind.ObjectMapper().readValue((String)stored,Map.class); } catch(Exception e){ return null; } }
@@ -265,11 +287,81 @@ public class ApiController {
   @GetMapping("/chat") public Map<String,Object> chat(@RequestParam(name="language",required=false) String language,HttpServletRequest r){var l=active(uid(r),Language.parse(language));return Map.of("messages",l==null?List.of():db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",l.get("id")),"llm",llm(uid(r)),"quota",llmSettings.chatQuota(uid(r)).view());}
   @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");String consoleOutput=body.get("consoleOutput") instanceof String text&&!text.isBlank()?text:null;Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}var quota=llmSettings.chatQuota(u);if(!quota.allowed()){log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})",u,quota.hourUsed(),quota.hourLimit(),quota.dayUsed(),quota.dayLimit());return ResponseEntity.status(429).header("Retry-After",String.valueOf(quota.retryAfterSeconds())).body(Map.of("error","LLM_RATE_LIMITED","message",rateLimitMessage(quota),"quota",quota.view()));}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource,consoleOutput),question);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u),"quota",llmSettings.chatQuota(u).view()));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
 
-  @PostMapping("/admin/students") public Map<String,Object> createStudent(@RequestBody Map<String,Object>b,HttpServletRequest r){admin(r);String login=(String)b.get("login"),password=(String)b.get("password"),name=(String)b.get("displayName");if(login==null||password==null||name==null)throw bad("INVALID_STUDENT","Нужны login, password, displayName");boolean enabled=!Boolean.FALSE.equals(b.get("llmEnabled"));if(count("select count(*) from users where login=?",login.trim())>0)throw bad("LOGIN_TAKEN","Логин «"+login.trim()+"» уже занят");validatePassword(password);db.update("insert into users(login,password_hash,role,display_name,llm_enabled) values(?,?,?,?,?)",login.trim(),passwords.encode(password),"STUDENT",name.trim(),enabled?1:0);login=login.trim();var created=db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled from users where login=?",login);LogContext.student(created.get("id"),login);log.info("Created student account login={}",login);return created;}
+  @PostMapping("/admin/students") public Map<String,Object> createStudent(@RequestBody Map<String,Object>b,HttpServletRequest r){
+    admin(r);
+    if(!(b.get("login") instanceof String)||!(b.get("password") instanceof String password)||!(b.get("displayName") instanceof String))throw bad("INVALID_STUDENT","Нужны login, password, displayName");
+    String login=validLogin((String)b.get("login"),null), name=validName((String)b.get("displayName")), group=group(b.get("group"));
+    boolean enabled=!Boolean.FALSE.equals(b.get("llmEnabled"));
+    validatePassword(password);
+    db.update("insert into users(login,password_hash,role,display_name,llm_enabled,group_name) values(?,?,?,?,?,?)",login,passwords.encode(password),"STUDENT",name,enabled?1:0,group);
+    var created=db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\" from users where login=?",login);
+    LogContext.student(created.get("id"),login);
+    log.info("Created student account login={} group={}",login,group==null?"—":group);
+    return created;
+  }
+  /**
+   * Changes a student's login, name and group; only the fields present in the body. A new login works from the next
+   * sign-in, open sessions stay valid (they belong to the account, not to the login). An empty group removes it.
+   */
+  @PatchMapping("/admin/students/{id}") public Map<String,Object> updateStudent(@PathVariable long id,@RequestBody Map<String,Object> b,HttpServletRequest r){
+    admin(r);
+    var rows=db.queryForList("select login,display_name,group_name from users where id=? and role='STUDENT'",id);
+    if(rows.isEmpty())throw bad("STUDENT_NOT_FOUND","Студент не найден");
+    var before=rows.getFirst();
+    String login=(String)before.get("login"), name=(String)before.get("display_name"), group=(String)before.get("group_name");
+    if(b.containsKey("login")) login=validLogin(b.get("login") instanceof String v?v:null,id);
+    if(b.containsKey("displayName")) name=validName(b.get("displayName") instanceof String v?v:null);
+    if(b.containsKey("group")) group=group(b.get("group"));
+    db.update("update users set login=?,display_name=?,group_name=? where id=?",login,name,group,id);
+    var changes=new ArrayList<String>();
+    if(!login.equals(before.get("login"))) changes.add("login "+before.get("login")+" → "+login);
+    if(!name.equals(before.get("display_name"))) changes.add("name «"+before.get("display_name")+"» → «"+name+"»");
+    if(!Objects.equals(group,before.get("group_name"))) changes.add("group "+(before.get("group_name")==null?"—":before.get("group_name"))+" → "+(group==null?"—":group));
+    if(!changes.isEmpty()) log.info("Student {} updated by admin {}: {}",id,uid(r),String.join(", ",changes));
+    return db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\" from users where id=?",id);
+  }
+  /** Renames a group for all its students; renaming into an existing group merges them, an empty name removes the group. */
+  @PostMapping("/admin/groups/rename") public Map<String,Object> renameGroup(@RequestBody Map<String,Object> b,HttpServletRequest r){
+    admin(r);
+    if(!(b.get("from") instanceof String from)||count("select count(*) from users where role='STUDENT' and group_name=?",from)==0)throw bad("GROUP_NOT_FOUND","Группа не найдена");
+    String to=group(b.get("to"),from);
+    int moved=db.update("update users set group_name=? where role='STUDENT' and group_name=?",to,from);
+    log.info("Group «{}» renamed to «{}» by admin {}: {} student(s)",from,to==null?"—":to,uid(r),moved);
+    return obj("group",to,"students",moved);
+  }
+  static final int LOGIN_MAX=64, NAME_MAX=100, GROUP_MAX=60;
+  private String validLogin(String value,Long self){
+    String login=value==null?"":value.strip();
+    if(login.isEmpty())throw bad("INVALID_LOGIN","Логин не может быть пустым");
+    if(login.length()>LOGIN_MAX)throw bad("INVALID_LOGIN","Логин длиннее "+LOGIN_MAX+" символов");
+    if(count("select count(*) from users where login=? and id<>?",login,self==null?-1:self)>0)throw bad("LOGIN_TAKEN","Логин «"+login+"» уже занят");
+    return login;
+  }
+  private String validName(String value){
+    String name=value==null?"":value.strip();
+    if(name.isEmpty())throw bad("INVALID_NAME","Имя не может быть пустым");
+    if(name.length()>NAME_MAX)throw bad("INVALID_NAME","Имя длиннее "+NAME_MAX+" символов");
+    return name;
+  }
+  private String group(Object value){ return group(value,null); }
+  /**
+   * A group name as stored: trimmed, inner spaces collapsed, empty means no group. A name that differs from an
+   * existing group only in letter case or spacing becomes that group, so «ивт-1» and «ИВТ-1» do not split a group.
+   */
+  private String group(Object value,String ignoring){
+    if(value!=null&&!(value instanceof String))throw bad("INVALID_GROUP","Группа должна быть строкой");
+    String name=value==null?"":((String)value).strip().replaceAll("\\s+"," ");
+    if(name.isEmpty())return null;
+    if(name.length()>GROUP_MAX)throw bad("INVALID_GROUP","Название группы длиннее "+GROUP_MAX+" символов");
+    String key=name.toLowerCase(Locale.ROOT);
+    for(String existing:db.queryForList("select distinct group_name from users where role='STUDENT' and group_name is not null",String.class))
+      if(!existing.equals(ignoring)&&existing.toLowerCase(Locale.ROOT).equals(key))return existing;
+    return name;
+  }
   /** Students with their open lessons, so the teacher sees at a glance who is studying right now. */
   @GetMapping("/admin/students") public Map<String,Object> students(HttpServletRequest r){
     admin(r);
-    var students=db.queryForList("select id,login,display_name as displayName,llm_enabled as llmEnabled,created_at as createdAt from users where role='STUDENT' order by id");
+    var students=db.queryForList("select id,login,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\",created_at as createdAt from users where role='STUDENT' order by id");
     var open=db.queryForList("select user_id,language,coalesce(language_lesson_number,lesson_number) as number,started_at as startedAt from lessons where finished_at is null order by started_at");
     for(var student:students){ var mine=new ArrayList<Map<String,Object>>(); for(var lesson:open) if(lesson.get("user_id").equals(student.get("id"))) mine.add(Map.of("language",lesson.get("language"),"number",lesson.get("number"),"startedAt",lesson.get("startedAt"))); student.put("activeLessons",mine); }
     return Map.of("students",students);
@@ -372,11 +464,11 @@ public class ApiController {
     var byDay=db.queryForList("select date(c.created_at) as day,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by date(c.created_at) order by day",since);
     var byPurpose=db.queryForList("select c.purpose,max(c.reasoning_effort) as effort,(select x.model from llm_calls x where x.purpose=c.purpose and x.created_at>=datetime('now',?) order by x.id desc limit 1) as model,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(round(avg(case when c.status='OK' then c.duration_ms end)),0) as avgMs,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by c.purpose order by calls desc",since,since);
     var byLanguage=db.queryForList("select c.language,count(*) as calls,coalesce(sum(c.total_tokens),0) as tokens"+where+" group by c.language order by calls desc",since);
-    var byStudent=db.queryForList("select c.user_id as userId,coalesce(u.display_name,'—') as displayName,u.login,count(*) as calls,coalesce(sum(c.purpose='CHAT'),0) as chatTurns,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens,max(c.created_at) as lastAt from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) group by c.user_id order by calls desc limit 100",since);
+    var byStudent=db.queryForList("select c.user_id as userId,coalesce(u.display_name,'—') as displayName,u.login,u.group_name as groupName,count(*) as calls,coalesce(sum(c.purpose='CHAT'),0) as chatTurns,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens,max(c.created_at) as lastAt from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) group by c.user_id order by calls desc limit 100",since);
     var errors=db.queryForList("select c.created_at as createdAt,c.purpose,c.language,c.status,c.error,c.duration_ms as durationMs,u.display_name as displayName from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.status<>'OK' order by c.created_at desc,c.id desc limit 20",since);
     return obj("days",period,"totals",totals,"byDay",byDay,"byPurpose",byPurpose,"byLanguage",byLanguage,"byStudent",byStudent,"recentErrors",errors,"llm",llm(uid(r)));
   }
-  @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled from users where id=? and role='STUDENT'",id);var byLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values())byLanguage.put(lang.name(),progress(id,lang));return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"llm",llm(id));}
+  @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\" from users where id=? and role='STUDENT'",id);var byLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values())byLanguage.put(lang.name(),progress(id,lang));return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"llm",llm(id));}
   @GetMapping("/admin/students/{id}/lessons") public Map<String,Object> lessons(@PathVariable long id,HttpServletRequest r){admin(r);return Map.of("lessons",db.queryForList("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt from lessons where user_id=? order by lesson_number",id));}
   /** The same as the student's own «Завершить урок», for any student's open lesson. */
   @PostMapping("/admin/students/{id}/lessons/{lessonId}/finish") public Map<String,Object> finishStudentLesson(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){

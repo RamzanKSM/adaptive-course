@@ -9,6 +9,7 @@ import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from
 import { LlmAnalytics } from './analytics'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
+import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
 import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User } from './types'
 
 const UNKNOWN = 'Не знаю'
@@ -676,10 +677,17 @@ function Stat({ icon, label, value, suffix }: { icon: Parameters<typeof Icon>[0]
 function TeacherPage({ request }: { request: Request }) {
   const [students, setStudents] = useState<Student[] | null>(null); const [selected, setSelected] = useState<Student | null>(null)
   const [globalLlm, setGlobalLlm] = useState<LlmStatus | null>(null)
-  const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [creating, setCreating] = useState(false)
+  const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [group, setGroup] = useState(''); const [creating, setCreating] = useState(false)
   const [view, setView] = useState<'students' | 'llm' | 'settings'>('students')
   const toast = useToast()
-  const load = useCallback(() => request(() => api<{ students: Student[] }>('/admin/students')).then(s => { if (s) setStudents(s.students) }), [request])
+  const [groupFilter, setGroupFilter] = useGroupFilter('rmzn-admin-group', students ? [...new Set(students.map(s => s.group).filter((g): g is string => !!g))] : null)
+  /** Picking a group also fills it in for the next new account, the usual way to add students to a group. */
+  const chooseGroup = (value: string) => { setGroupFilter(value); setGroup(value === NO_GROUP ? '' : value) }
+  // The open card follows the list: a renamed group or changed login shows there too.
+  const load = useCallback(() => request(() => api<{ students: Student[] }>('/admin/students')).then(s => {
+    if (!s) return
+    setStudents(s.students); setSelected(current => current && (s.students.find(x => x.id === current.id) ?? current))
+  }), [request])
   useEffect(() => {
     load()
     request(() => api<MeResponse>('/auth/me')).then(value => { if (value) setGlobalLlm(value.llm) })
@@ -692,10 +700,14 @@ function TeacherPage({ request }: { request: Request }) {
   }, [view])
   async function create(e: FormEvent) {
     e.preventDefault(); setCreating(true)
-    const student = await request(() => post<Student>('/admin/students', { displayName: name.trim(), login: login.trim(), password }))
+    const student = await request(() => post<Student>('/admin/students', { displayName: name.trim(), login: login.trim(), password, group: group.trim() || null }))
     setCreating(false)
-    if (student) { setName(''); setLogin(''); setPassword(''); load(); toast({ tone: 'info', icon: 'user', title: 'Учётная запись создана', text: `${student.displayName} · ${student.login}` }) }
+    if (student) { setName(''); setLogin(''); setPassword(''); load(); toast({ tone: 'info', icon: 'user', title: 'Учётная запись создана', text: [student.displayName, student.login, student.group].filter(Boolean).join(' · ') }) }
   }
+  const onUpdated = useCallback((updated: Student) => {
+    setStudents(xs => xs && xs.map(x => x.id === updated.id ? { ...x, ...updated } : x))
+    setSelected(s => s && s.id === updated.id ? { ...s, ...updated } : s)
+  }, [])
   async function toggle(student: Student) {
     const updated = await request(() => patch<{ id: Id; enabled: boolean }>(`/admin/students/${student.id}/llm`, { enabled: !student.llmEnabled }))
     if (!updated) return
@@ -717,12 +729,16 @@ function TeacherPage({ request }: { request: Request }) {
   </nav>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
   if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
-  const studying = students?.filter(s => s.activeLessons?.length).length ?? 0
+  const counts = groupCounts(students ?? [], s => s.group)
+  const groupNames = counts.groups.map(g => g.name)
+  const visible = students?.filter(s => inGroup(groupFilter, s.group)) ?? null
+  const studying = visible?.filter(s => s.activeLessons?.length).length ?? 0
+  const filtered = !!students && !!visible && visible.length !== students.length
   return <>{tabs}<section className="admin">
     <div className="admin-main">
       <div className="enter">
         <p className="eyebrow">Преподаватель</p>
-        <h1 className="display small">Студенты{students && <span className="count-badge">{students.length}</span>}</h1>
+        <h1 className="display small">Студенты{students && <span className="count-badge" title={filtered ? `показано ${visible!.length} из ${students.length}` : undefined}>{filtered ? `${visible!.length}/${students.length}` : students.length}</span>}</h1>
         {studying > 0 && <p className="studying-now"><span className="live-dot" aria-hidden="true" />Сейчас занимаются: {studying}</p>}
       </div>
       <div className="card setting enter">
@@ -737,19 +753,25 @@ function TeacherPage({ request }: { request: Request }) {
           <input placeholder="Имя" aria-label="Имя" required value={name} onChange={e => setName(e.target.value)} />
           <input placeholder="Логин" aria-label="Логин" required value={login} onChange={e => setLogin(e.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} />
           <input placeholder="Пароль" aria-label="Пароль" required value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" />
+          <input placeholder="Группа" title="Группа — необязательно" aria-label="Группа, необязательно" list="known-groups" maxLength={60} value={group} onChange={e => setGroup(e.target.value)} autoComplete="off" />
+          <GroupOptions id="known-groups" groups={groupNames} />
           <button className="primary" disabled={creating}>{creating ? <><Spinner /> Создаём…</> : 'Создать'}</button>
         </form>
       </div>
-      <div className="student-list enter">{!students ? <p className="muted list-note">Загружаем…</p> : students.length
-        ? students.map((s, i) => <button key={s.id} className={selected?.id === s.id ? 'student selected' : 'student'} aria-pressed={selected?.id === s.id} onClick={() => setSelected(s)} style={{ animationDelay: `${i * 30}ms` }}>
+      {students && <div className="group-bar enter">
+        <GroupFilter total={students.length} groups={counts.groups} ungrouped={counts.ungrouped} value={groupFilter} onChange={chooseGroup} />
+        {groupFilter && groupFilter !== NO_GROUP && <RenameGroup group={groupFilter} groups={groupNames} request={request} onRenamed={to => { chooseGroup(to ?? ''); load() }} />}
+      </div>}
+      <div className="student-list enter">{!students || !visible ? <p className="muted list-note">Загружаем…</p> : visible.length
+        ? visible.map((s, i) => <button key={s.id} className={selected?.id === s.id ? 'student selected' : 'student'} aria-pressed={selected?.id === s.id} onClick={() => setSelected(s)} style={{ animationDelay: `${i * 30}ms` }}>
           <span className="avatar" aria-hidden="true">{initials(s.displayName)}</span>
-          <span className="student-meta"><b>{s.displayName}</b><small>{s.login}</small>
+          <span className="student-meta"><b>{s.displayName}</b><small>{s.login}{s.group && <span className="group-tag">{s.group}</span>}</small>
             {s.activeLessons?.map(l => <ActiveLessonBadge key={l.language} lesson={l} />)}</span>
           <i className={s.llmEnabled ? 'pill on' : 'pill'}>LLM</i>
         </button>)
-        : <p className="muted list-note">Студентов пока нет. Создай первую учётную запись выше.</p>}</div>
+        : <p className="muted list-note">{students.length ? 'В этой группе студентов нет.' : 'Студентов пока нет. Создай первую учётную запись выше.'}</p>}</div>
     </div>
-    {selected ? <StudentDetail key={selected.id} student={selected} request={request} toggle={() => toggle(selected)} onLlmStatus={onLlmStatus} onDeleted={() => { setStudents(xs => xs && xs.filter(x => x.id !== selected.id)); setSelected(null) }} />
+    {selected ? <StudentDetail key={selected.id} student={selected} groups={groupNames} request={request} toggle={() => toggle(selected)} onLlmStatus={onLlmStatus} onUpdated={onUpdated} onDeleted={() => { setStudents(xs => xs && xs.filter(x => x.id !== selected.id)); setSelected(null) }} />
       : <aside className="card student-detail placeholder"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">Выбери студента, чтобы увидеть его уроки, решения и переписку с помощником.</p></aside>}
   </section></>
 }
@@ -814,7 +836,60 @@ function Switch({ checked, disabled, onChange, label }: { checked: boolean; disa
   return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`switch ${checked ? 'on' : ''}`} disabled={disabled} onClick={onChange}><span /></button>
 }
 
-function StudentDetail({ student, request, toggle, onLlmStatus, onDeleted }: { student: Student; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void; onDeleted: () => void }) {
+/** Renames the selected group for all its students; an existing name merges the groups, an empty one removes the group. */
+function RenameGroup({ group, groups, request, onRenamed }: { group: string; groups: string[]; request: Request; onRenamed: (to: string | null) => void }) {
+  const [open, setOpen] = useState(false); const [name, setName] = useState(group); const [saving, setSaving] = useState(false)
+  const toast = useToast()
+  useEffect(() => { setOpen(false); setName(group) }, [group])
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    const to = name.trim()
+    if (!to && !window.confirm(`Убрать группу «${group}» у всех её студентов? Сами студенты останутся.`)) return
+    const merging = to && groups.some(g => g !== group && g.toLocaleLowerCase('ru') === to.toLocaleLowerCase('ru'))
+    if (merging && !window.confirm(`Группа «${to}» уже есть. Объединить с ней «${group}»?`)) return
+    setSaving(true)
+    const result = await request(() => post<{ group: string | null; students: number }>('/admin/groups/rename', { from: group, to }))
+    setSaving(false)
+    if (!result) return
+    toast({ tone: 'info', icon: 'user', title: result.group ? `Группа теперь «${result.group}»` : `Группа «${group}» убрана`, text: `Студентов: ${result.students}` })
+    onRenamed(result.group)
+  }
+  if (!open) return <button type="button" className="ghost small-button" onClick={() => setOpen(true)}>Переименовать группу</button>
+  return <form className="rename-group enter" onSubmit={save} autoComplete="off">
+    <input aria-label={`Новое название группы «${group}»`} value={name} onChange={e => setName(e.target.value)} maxLength={60} autoFocus list="known-groups" />
+    <button className="primary" disabled={saving || name.trim() === group}>{saving ? <><Spinner /> Сохраняем…</> : 'Сохранить'}</button>
+    <button type="button" className="ghost" onClick={() => setOpen(false)}>Отмена</button>
+    <small className="muted">Пустое название убирает группу. Название существующей группы объединяет их.</small>
+  </form>
+}
+
+/** Name, login and group of a student. A new login works from the next sign-in; open sessions stay. */
+function EditStudent({ student, groups, request, onUpdated }: { student: Student; groups: string[]; request: Request; onUpdated: (student: Student) => void }) {
+  const [open, setOpen] = useState(false); const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState({ displayName: student.displayName, login: student.login, group: student.group ?? '' })
+  const toast = useToast()
+  const reset = () => setDraft({ displayName: student.displayName, login: student.login, group: student.group ?? '' })
+  const changed = draft.displayName.trim() !== student.displayName || draft.login.trim() !== student.login || draft.group.trim() !== (student.group ?? '')
+  async function save(e: FormEvent) {
+    e.preventDefault(); setSaving(true)
+    const updated = await request(() => patch<Student>(`/admin/students/${student.id}`, { displayName: draft.displayName.trim(), login: draft.login.trim(), group: draft.group.trim() || null }))
+    setSaving(false)
+    if (!updated) return
+    onUpdated(updated); setOpen(false)
+    toast({ tone: 'info', icon: 'user', title: 'Данные студента сохранены', text: updated.login !== student.login ? `Новый логин «${updated.login}» — со следующего входа` : [updated.displayName, updated.group].filter(Boolean).join(' · ') })
+  }
+  if (!open) return <button className="ghost small-button" onClick={() => { reset(); setOpen(true) }}><Icon name="user" size={15} /> Изменить данные</button>
+  return <form className="password-reset edit-student enter" onSubmit={save} autoComplete="off">
+    <label className="small">Имя<input value={draft.displayName} onChange={e => setDraft(d => ({ ...d, displayName: e.target.value }))} required maxLength={100} /></label>
+    <label className="small">Логин<input value={draft.login} onChange={e => setDraft(d => ({ ...d, login: e.target.value }))} required maxLength={64} autoCapitalize="none" spellCheck={false} /></label>
+    <label className="small"><span>Группа <span className="muted">— необязательно</span></span><input value={draft.group} onChange={e => setDraft(d => ({ ...d, group: e.target.value }))} maxLength={60} list="student-groups" placeholder="Без группы" /></label>
+    <GroupOptions id="student-groups" groups={groups} />
+    {draft.login.trim() !== student.login && <p className="muted small">Студент войдёт с новым логином в следующий раз; открытые сессии сохранятся, пароль не меняется.</p>}
+    <div className="password-row"><button className="primary" disabled={saving || !changed || !draft.displayName.trim() || !draft.login.trim()}>{saving ? <><Spinner /> Сохраняем…</> : 'Сохранить'}</button><button type="button" className="ghost" onClick={() => setOpen(false)}>Отмена</button></div>
+  </form>
+}
+
+function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdated, onDeleted }: { student: Student; groups: string[]; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void; onUpdated: (student: Student) => void; onDeleted: () => void }) {
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
   const [openLesson, setOpenLesson] = useState<Id | null>(null)
@@ -860,10 +935,10 @@ function StudentDetail({ student, request, toggle, onLlmStatus, onDeleted }: { s
   return <aside className="card student-detail enter-side">
     <div className="detail-head">
       <span className="avatar big" aria-hidden="true">{initials(student.displayName)}</span>
-      <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}</p></div>
+      <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}{student.group && <span className="group-tag">{student.group}</span>}</p></div>
       <label className="switch-label"><span className="muted small">LLM</span><Switch checked={!!student.llmEnabled} onChange={toggle} label={`LLM для ${student.displayName}`} /></label>
     </div>
-    <PasswordReset student={student} request={request} />
+    <div className="detail-actions"><EditStudent key={`${student.login}|${student.displayName}|${student.group ?? ''}`} student={student} groups={groups} request={request} onUpdated={onUpdated} /><PasswordReset student={student} request={request} /></div>
     {progress && <div className="lang-stats">{LANGUAGES.filter(language => progress[language]).map(language => {
       const level = experience({ skills: progress[language]! })
       return <div key={language}>

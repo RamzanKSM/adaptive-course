@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { Icon } from './fx'
 import { parseDate } from './game'
+import { GroupFilter, groupCounts, inGroup, useGroupFilter } from './groups'
 import type { LlmPurpose, LlmUsage } from './types'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
@@ -30,6 +31,7 @@ export function LlmAnalytics({ request }: { request: Request }) {
   const [days, setDays] = useState(30)
   const [usage, setUsage] = useState<LlmUsage | null>(null)
   const [loading, setLoading] = useState(true)
+  const [group, setGroup] = useGroupFilter('rmzn-analytics-group', usage ? [...new Set(usage.byStudent.map(s => s.groupName).filter((g): g is string => !!g))] : null)
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -79,9 +81,11 @@ export function LlmAnalytics({ request }: { request: Request }) {
           </div>
           <div className="card">
             <h2 className="card-title">Студенты</h2>
+            {(() => { const counts = groupCounts(usage.byStudent.filter(s => s.userId !== null), s => s.groupName)
+              return <GroupFilter total={usage.byStudent.filter(s => s.userId !== null).length} groups={counts.groups} ungrouped={counts.ungrouped} value={group} onChange={setGroup} /> })()}
             <div className="table-scroll"><table className="data-table">
               <thead><tr><th>Студент</th><th>Обращений</th><th>Из них в чате</th><th>Токены</th><th>Ошибки</th><th>Последнее</th></tr></thead>
-              <tbody>{usage.byStudent.map(s => <tr key={String(s.userId)}><td><b>{s.displayName}</b>{s.login && <small className="muted"> {s.login}</small>}</td><td>{number.format(s.calls)}</td><td>{number.format(s.chatTurns)}</td><td>{s.tokens ? compact.format(s.tokens) : '—'}</td><td>{s.errors || '—'}</td><td>{when(s.lastAt)}</td></tr>)}</tbody>
+              <tbody>{usage.byStudent.filter(s => group === '' || (s.userId !== null && inGroup(group, s.groupName))).map(s => <tr key={String(s.userId)}><td><b>{s.displayName}</b>{s.login && <small className="muted"> {s.login}</small>}{s.groupName && <span className="group-tag">{s.groupName}</span>}</td><td>{number.format(s.calls)}</td><td>{number.format(s.chatTurns)}</td><td>{s.tokens ? compact.format(s.tokens) : '—'}</td><td>{s.errors || '—'}</td><td>{when(s.lastAt)}</td></tr>)}</tbody>
             </table></div>
             <p className="muted small table-note">Генерация задач и объяснений записывается на студента, который её запустил, хотя результат потом достаётся всем.</p>
           </div>

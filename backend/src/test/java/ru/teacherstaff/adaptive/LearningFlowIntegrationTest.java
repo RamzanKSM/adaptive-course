@@ -237,13 +237,63 @@ class LearningFlowIntegrationTest {
     addTask("console task"); prepareOnlySkill(student,"BASIC_CODE_READING"); start(token);
     when(runner.console(any(Language.class),anyString())).thenReturn(new PistonCodeRunner.Console("OK","Итого: 24\n",null,false));
     long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
-    var attempt=json.readTree(mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","WRONG"))))
-        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>(); appender.start();
+    var controllerLog=(ch.qos.logback.classic.Logger)org.slf4j.LoggerFactory.getLogger(ApiController.class); controllerLog.addAppender(appender);
+    com.fasterxml.jackson.databind.JsonNode attempt; String requestId;
+    try {
+      var result=mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","WRONG"))))
+          .andExpect(status().isOk()).andReturn();
+      attempt=json.readTree(result.getResponse().getContentAsString()); requestId=result.getResponse().getHeader("X-Request-Id");
+    } finally { controllerLog.detachAppender(appender); }
     assertFalse(attempt.path("passed").asBoolean()); assertEquals("Итого: 24\n",attempt.path("console").path("stdout").asText());
+    // One timing line per check, with the request id of the request's other log lines.
+    var timing=appender.list.stream().map(e->e.getFormattedMessage()).filter(m->m.startsWith("CHECK_TIMING")).toList();
+    assertEquals(1,timing.size(),timing.toString());
+    assertTrue(timing.getFirst().matches("CHECK_TIMING request="+requestId+" student="+student+" task="+task+" language=JAVA tests_ms=\\d+ console_queue_ms=\\d+ console_piston_ms=\\d+ console_wait_ms=\\d+ total_ms=\\d+"),timing.getFirst());
     long lesson=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);
     var detail=json.readTree(mvc.perform(get("/api/admin/students/{id}/lessons/{lesson}",student,lesson).cookie(cookie(login("admin","admin-pass")))).andReturn().getResponse().getContentAsString());
     assertEquals("Итого: 24\n",detail.path("tasks").path(0).path("submissions").path(0).path("console").path("stdout").asText(),"the teacher sees it in the lesson history");
   }
+
+  @Test void studentsHaveOptionalGroupsAndEditableLoginNameAndGroup() throws Exception {
+    String admin=login("admin","admin-pass");
+    java.util.function.Function<Map<String,Object>,com.fasterxml.jackson.databind.JsonNode> create=body->{ try { return json.readTree(mvc.perform(post("/api/admin/students").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()); } catch(Exception e){ throw new RuntimeException(e); } };
+    var first=create.apply(Map.of("login","group-a1","password","student-pass","displayName","Аня","group","  ИВТ-1  "));
+    assertEquals("ИВТ-1",first.path("group").asText(),"trimmed");
+    var second=create.apply(Map.of("login","group-a2","password","student-pass","displayName","Боря","group","ивт-1"));
+    assertEquals("ИВТ-1",second.path("group").asText(),"letter case does not split a group");
+    var third=create.apply(Map.of("login","group-none","password","student-pass","displayName","Вера"));
+    assertTrue(third.path("group").isNull(),"the group is optional");
+    var list=json.readTree(mvc.perform(get("/api/admin/students").cookie(cookie(admin))).andReturn().getResponse().getContentAsString());
+    assertEquals("ИВТ-1",findStudent(list,"group-a1").path("group").asText());
+
+    // Login, name and group change; only the fields sent.
+    String studentToken=login("group-none","student-pass");
+    long vera=third.path("id").asLong();
+    var updated=json.readTree(mvc.perform(patch("/api/admin/students/{id}",vera).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON)
+        .content("{\"login\":\"vera.k\",\"displayName\":\"Вера К.\",\"group\":\"ИВТ-2\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("vera.k",updated.path("login").asText()); assertEquals("Вера К.",updated.path("displayName").asText()); assertEquals("ИВТ-2",updated.path("group").asText());
+    mvc.perform(get("/api/progress").cookie(cookie(studentToken))).andExpect(status().isOk()); // the open session survives a login change
+    login("vera.k","student-pass");
+    mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{\"login\":\"group-none\",\"password\":\"student-pass\"}")).andExpect(status().isBadRequest());
+    mvc.perform(patch("/api/admin/students/{id}",vera).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"login\":\"group-a1\"}")).andExpect(status().isBadRequest());
+    mvc.perform(patch("/api/admin/students/{id}",vera).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"login\":\"  \"}")).andExpect(status().isBadRequest());
+    var ungrouped=json.readTree(mvc.perform(patch("/api/admin/students/{id}",vera).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"group\":\"\"}")).andReturn().getResponse().getContentAsString());
+    assertTrue(ungrouped.path("group").isNull()); assertEquals("vera.k",ungrouped.path("login").asText(),"fields not sent stay as they were");
+    mvc.perform(patch("/api/admin/students/{id}",vera).cookie(cookie(studentToken)).contentType(MediaType.APPLICATION_JSON).content("{\"group\":\"X\"}")).andExpect(status().isBadRequest());
+
+    // Renaming a group moves all its students; renaming into an existing group merges; an empty name removes it.
+    mvc.perform(patch("/api/admin/students/{id}",vera).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"group\":\"Вечерняя\"}")).andExpect(status().isOk());
+    var renamed=json.readTree(mvc.perform(post("/api/admin/groups/rename").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"from\":\"ИВТ-1\",\"to\":\"ИВТ-1 (2026)\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(2,renamed.path("students").asInt());
+    assertEquals(2,db.queryForObject("select count(*) from users where group_name='ИВТ-1 (2026)'",Integer.class));
+    mvc.perform(post("/api/admin/groups/rename").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"from\":\"Вечерняя\",\"to\":\"ивт-1 (2026)\"}")).andExpect(status().isOk());
+    assertEquals(3,db.queryForObject("select count(*) from users where group_name='ИВТ-1 (2026)'",Integer.class),"merged into the existing spelling");
+    mvc.perform(post("/api/admin/groups/rename").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"from\":\"ИВТ-1 (2026)\",\"to\":\"\"}")).andExpect(status().isOk());
+    assertEquals(0,db.queryForObject("select count(*) from users where group_name is not null and login in ('group-a1','group-a2','vera.k')",Integer.class));
+    mvc.perform(post("/api/admin/groups/rename").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"from\":\"нет такой\",\"to\":\"x\"}")).andExpect(status().isBadRequest());
+  }
+  private static com.fasterxml.jackson.databind.JsonNode findStudent(com.fasterxml.jackson.databind.JsonNode list,String login){for(var s:list.path("students"))if(login.equals(s.path("login").asText()))return s;throw new AssertionError("no student "+login);}
 
   @Test void unavailableRunnerDoesNotCallGenerator() throws Exception {
     String token=createStudentAndLogin("runner-unavailable-student"); long student=studentId("runner-unavailable-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"SWITCH_BASIC");

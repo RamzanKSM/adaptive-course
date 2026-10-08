@@ -738,3 +738,15 @@ summary.revoked { color: #a1440f; }
 .console-foot { padding: 7px 14px 9px; font-size: 12px; color: #9d9ab0; border-top: 1px solid rgb(255 255 255 / .06); }
 .console-foot b { color: #c9c6d8; }
 .lesson-detail .console, details .console { margin-top: 8px; }
+
+/* ───────── Student groups ───────── */
+.group-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.group-bar .group-filters { margin: 0; }
+.group-bar .small-button { margin-top: 0; }
+.group-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--brand-ink); font-size: 11.5px; font-weight: 750; vertical-align: 1px; }
+.rename-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-basis: 100%; }
+.rename-group input { flex: 1; min-width: 160px; }
+.rename-group small { flex-basis: 100%; }
+.detail-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 10px; }
+.detail-actions > form { flex-basis: 100%; }
+.edit-student label { display: grid; gap: 4px; }

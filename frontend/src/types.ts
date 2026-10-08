@@ -20,7 +20,7 @@ export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; c
 export interface SkillProgress { skillCode: string; title: string; blockNo?: number; completedIterations: number; iterationSuccesses: number; mastered: Flag; diagnosticCorrect?: number | null; diagnosticTotal?: number | null; confirmedByDiagnostic?: Flag }
 export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; activity?: string[] }
 export interface ActiveLesson { language: CourseLanguage; number: number; startedAt: string }
-export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; activeLessons?: ActiveLesson[] }
+export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; group?: string | null; activeLessons?: ActiveLesson[] }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string; revokedAt?: string | null }
 export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; submissions: Submission[] }[] }
 export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
@@ -30,7 +30,7 @@ export interface LlmUsage {
   byDay: { day: string; calls: number; errors: number; tokens: number }[]
   byPurpose: { purpose: LlmPurpose; effort?: string | null; model?: string | null; calls: number; errors: number; avgMs: number; tokens: number }[]
   byLanguage: { language: CourseLanguage; calls: number; tokens: number }[]
-  byStudent: { userId: Id | null; displayName: string; login?: string; calls: number; chatTurns: number; errors: number; tokens: number; lastAt: string }[]
+  byStudent: { userId: Id | null; displayName: string; login?: string; groupName?: string | null; calls: number; chatTurns: number; errors: number; tokens: number; lastAt: string }[]
   recentErrors: { createdAt: string; purpose: LlmPurpose; language: CourseLanguage; status: 'ERROR' | 'TIMEOUT'; error?: string; durationMs: number; displayName?: string }[]
 }
 export interface ChatQuota { hourUsed: number; hourLimit: number; dayUsed: number; dayLimit: number; retryAfterSeconds: number }
