@@ -33,20 +33,21 @@ public class Verify {
     int failed = 0;
     for (JsonNode t : bank.path("tasks")) {
       String key = t.path("key").asText(), skill = t.path("skill").asText();
+      Language language = Language.valueOf(t.path("language").asText("PYTHON"));
       try {
         String leak = ApiController.internalTerm(t.path("statement").asText());
         if (leak != null) throw new IllegalStateException("statement mentions platform internals: " + leak);
-        var late = CourseConstructs.beyondTopic(db, Language.PYTHON, skill, t.path("goal"), t.path("testSource").asText(), t.path("starter").asText(), t.path("reference").asText());
-        if (!late.isEmpty()) throw new IllegalStateException("needs what the topic has not taught: " + CourseConstructs.describe(Language.PYTHON, late));
+        var late = CourseConstructs.beyondTopic(db, language, skill, t.path("goal"), t.path("testSource").asText(), t.path("starter").asText(), t.path("reference").asText());
+        if (!late.isEmpty()) throw new IllegalStateException("needs what the topic has not taught: " + CourseConstructs.describe(language, late));
         List<TaskGoal.Mutant> wrong = new ArrayList<>();
         for (JsonNode w : t.path("wrong")) wrong.add(new TaskGoal.Mutant(w.path("description").asText(), w.path("source").asText()));
         List<TestCases.Input> inputs = new ArrayList<>();
         for (JsonNode i : t.path("testInputs")) inputs.add(new TestCases.Input(i.path("input").asText(), i.path("public").asBoolean()));
         var task = new GeneratedTask(skill, t.path("title").asText(), t.path("statement").asText(), t.path("starter").asText(), t.path("testSource").asText(),
             t.path("testFileName").asText(), t.path("reference").asText(), List.of(skill), List.of(), t.path("goal"), wrong, inputs);
-        TaskVerifier.Verified verified = verifier.verify(Language.PYTHON, task);
+        TaskVerifier.Verified verified = verifier.verify(language, task);
         ObjectNode row = out.addObject();
-        row.put("key", key); row.put("skill", skill); row.put("difficulty", t.path("difficulty").asInt());
+        row.put("key", key); row.put("language", language.name()); row.put("skill", skill); row.put("difficulty", t.path("difficulty").asInt());
         row.put("title", t.path("title").asText()); row.put("statement", t.path("statement").asText()); row.put("starter", t.path("starter").asText());
         row.put("testSource", verified.testSource()); row.put("testFileName", t.path("testFileName").asText()); row.put("goalJson", verified.goalJson());
         ArrayNode cases = row.putArray("cases");

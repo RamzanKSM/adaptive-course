@@ -35,6 +35,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 # Topic modules import the dataclasses from «build»; make that the running module, not a second copy of it.
 sys.modules.setdefault("build", sys.modules[__name__])
+sys.path.insert(0, str(HERE))
+import java_tasks  # noqa: E402  (Java families: topics_java/)
 TOPICS = HERE / "topics"
 
 # The platform's fixed Python entry point (PistonCodeRunner.PYTHON_ENTRY): reads the pass marker from stdin, runs the
@@ -178,7 +180,7 @@ def run_checks():
         except Exception as error:
             raise AssertionError("Проверка %d из %d: с другими значениями переменных программа завершилась с ошибкой %s" % (number, len(CASES) - 1, type(error).__name__))
         if actual != expected:
-            raise AssertionError("Проверка %d из %d: с другими значениями переменных ответ неверный. Программа должна вычислять ответ из переменных, а не выводить готовый результат" % (number, len(CASES) - 1))
+            raise AssertionError("Проверка %d из %d: с другими значениями переменных ответ неверный. Проверь, что программа вычисляет ответ из переменных и правильно обрабатывает все случаи из условия, включая граничные значения" % (number, len(CASES) - 1))
 '''
 
 STRUCTURE_CHECK = '''    if not any(isinstance(node, ast.{node}) for node in ast.walk(tree)):
@@ -237,7 +239,7 @@ def build_output(task: OutputTask) -> list[dict]:
         statement = render_output_statement(task, code_values, starter, expected)
         wrong = [{"description": d, "source": starter + body.rstrip() + "\n"} for d, body in task.wrong]
         built.append({
-            "key": f"curated:{task.slug}:{number}", "skill": task.skill, "difficulty": task.difficulty,
+            "key": f"curated:{task.slug}:{number}", "language": "PYTHON", "skill": task.skill, "difficulty": task.difficulty,
             "title": fmt(task.title, code_values), "statement": statement,
             "starter": starter + STARTER_NOTE, "reference": reference, "testSource": checker, "testFileName": "test_solution.py",
             "goal": {"kind": "OUTPUT_TEXT", "operation": None, "operands": [], "expectedOutput": expected, "functionName": None, "requiredConstructs": task.constructs},
@@ -295,7 +297,7 @@ def build_function(task: FunctionTask) -> list[dict]:
             assert got != [repr(a) for a in answers], f"{task.slug}: wrong solution «{description}» gives the right answers"
             wrong.append({"description": description, "source": source})
         built.append({
-            "key": f"curated:{task.slug}:{number}", "skill": task.skill, "difficulty": task.difficulty,
+            "key": f"curated:{task.slug}:{number}", "language": "PYTHON", "skill": task.skill, "difficulty": task.difficulty,
             "title": fmt(task.title, values), "statement": statement,
             "starter": fmt(task.starter, values).rstrip() + "\n", "reference": reference, "testSource": "", "testFileName": "test_solution.py",
             "goal": {"kind": "FUNCTION_BEHAVIOR", "operation": None, "operands": [], "expectedOutput": None, "functionName": task.function, "requiredConstructs": ["function", "return"]},
@@ -308,10 +310,14 @@ def build_function(task: FunctionTask) -> list[dict]:
 # ───────── Main ─────────
 
 def load_tasks() -> list:
+    """Python topics from topics/, Java topics from topics_java/."""
     sys.path.insert(0, str(HERE))
     found = []
-    for module in sorted(pkgutil.iter_modules([str(TOPICS)]), key=lambda m: m.name):
-        found.extend(importlib.import_module(f"topics.{module.name}").TASKS)
+    for package, folder in (("topics", TOPICS), ("topics_java", HERE / "topics_java")):
+        if not folder.is_dir():
+            continue
+        for module in sorted(pkgutil.iter_modules([str(folder)]), key=lambda m: m.name):
+            found.extend(importlib.import_module(f"{package}.{module.name}").TASKS)
     return found
 
 
@@ -319,6 +325,8 @@ def self_check(task: dict) -> list[str]:
     """Reference passes the checks, each wrong solution fails them (output tasks; function tasks are checked above)."""
     if task["goal"]["kind"] != "OUTPUT_TEXT":
         return []
+    if task.get("language") == "JAVA":
+        return java_tasks.self_check(task)
     problems = []
     ok, why = checks_pass(task["testSource"], task["reference"])
     if not ok:
@@ -343,7 +351,12 @@ def main():
     for template in load_tasks():
         if only and template.skill not in only:
             continue
-        tasks.extend(build_output(template) if isinstance(template, OutputTask) else build_function(template))
+        if isinstance(template, java_tasks.JavaOutputTask):
+            tasks.extend(java_tasks.build_output(template, newline_note))
+        elif isinstance(template, java_tasks.JavaFunctionTask):
+            tasks.extend(java_tasks.build_function(template))
+        else:
+            tasks.extend(build_output(template) if isinstance(template, OutputTask) else build_function(template))
     keys = [t["key"] for t in tasks]
     assert len(keys) == len(set(keys)), "duplicate keys"
     failed = 0
