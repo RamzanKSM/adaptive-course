@@ -66,6 +66,24 @@ class TaskVerificationTest {
     assertNull(JavaStructureCheck.problem(assignment, main("int x = 5; System.out.println(x);")));
   }
 
+  @Test void javaTreeCheckDoesNotCountMainArgsAsTheArray() {
+    var array = new TaskGoal(TaskGoal.Kind.CONSTRUCT, null, List.of(), null, null, List.of("list"));
+    assertTrue(JavaStructureCheck.problem(array, main("System.out.println(5 + 3);")).contains("список (массив)"), "every program has String[] args");
+    assertNotNull(JavaStructureCheck.problem(array, "public class Solution {\n    public static void main(String... args) {\n        System.out.println(8);\n    }\n}\n"));
+    assertNull(JavaStructureCheck.problem(array, main("int[] prices = {5, 3}; System.out.println(prices[0] + prices[1]);")));
+    assertNull(JavaStructureCheck.problem(array, main("String[] names = new String[2]; System.out.println(names.length);")));
+    assertNull(JavaStructureCheck.problem(array, "public class Solution {\n    static int[] scores = {5, 3};\n    public static void main(String[] args) {\n        System.out.println(scores[0]);\n    }\n}\n"), "the array of the task's own field");
+    assertNull(JavaStructureCheck.problem(array, main("java.util.List<Integer> xs = new java.util.ArrayList<>(); xs.add(5); System.out.println(xs);")), "a java.util list in the List topics");
+  }
+
+  @Test void javaTreeCheckFindsFinallyBlock() {
+    var always = new TaskGoal(TaskGoal.Kind.CONSTRUCT, null, List.of(), null, null, List.of("try", "finally"));
+    String withoutFinally = main("try { System.out.println(Integer.parseInt(\"4\") * 60); } catch (NumberFormatException e) { System.out.println(\"Ошибка\"); }\n        System.out.println(\"Заберите карту\");");
+    assertTrue(JavaStructureCheck.problem(always, withoutFinally).contains("блок finally"), "the same output from a line after try/catch");
+    assertNull(JavaStructureCheck.problem(always, main("try { System.out.println(Integer.parseInt(\"4\") * 60); } catch (NumberFormatException e) { System.out.println(\"Ошибка\"); } finally { System.out.println(\"Заберите карту\"); }")));
+    assertNull(JavaStructureCheck.problem(always, main("try { System.out.println(1); } finally { System.out.println(2); }")), "try with finally and no catch");
+  }
+
   /** The bug from the field: checks that compare only the printed number let print(12 * 2) through. */
   @Test void rejectsTaskWhoseChecksOnlyCompareOutput() {
     PistonCodeRunner runner = mock(PistonCodeRunner.class);

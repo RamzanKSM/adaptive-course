@@ -69,7 +69,7 @@ final class CourseConstructs {
       case "while" -> found.add(Construct.WHILE);
       case "list" -> found.add(Construct.ARRAY);
       case "dict" -> found.add(Construct.MAP);
-      case "try" -> found.add(Construct.TRY);
+      case "try", "finally" -> found.add(Construct.TRY);
       default -> { }
     }
     return found;

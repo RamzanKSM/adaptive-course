@@ -63,15 +63,25 @@ final class JavaStructureCheck {
     /** Parameters are bound per call (Scope), so they neither define nor change a variable of the same name. */
     private final Set<Tree> parameterTrees = Collections.newSetFromMap(new IdentityHashMap<>());
 
-    @Override public Void scan(Tree tree, Void unused) { if (tree != null) kinds.add(tree.getKind()); return super.scan(tree, unused); }
+    /** The String[] of main(String[] args) is in every program, so it is not the array a task asks for. */
+    private final Set<Tree> mainArgs = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** java.util lists count as the «list» construct too (the course's List topics), next to arrays. */
+    private static final Set<String> LIST_TYPES = Set.of("List", "ArrayList", "LinkedList");
+    boolean listType, finallyBlock;
+
+    @Override public Void scan(Tree tree, Void unused) { if (tree != null && !mainArgs.contains(tree)) kinds.add(tree.getKind()); return super.scan(tree, unused); }
     @Override public Void visitMethod(MethodTree node, Void unused) {
       String name = node.getName().toString();
       if (!"main".equals(name) && !"<init>".equals(name)) methods.add(name);
+      if ("main".equals(name) && node.getParameters().size() == 1) mainArgs.add(node.getParameters().getFirst().getType());
       parameters.putIfAbsent(name, node.getParameters().stream().map(p -> p.getName().toString()).toList());
       parameterTrees.addAll(node.getParameters());
       String outer = method; method = name;
       try { return super.visitMethod(node, unused); } finally { method = outer; }
     }
+    @Override public Void visitTry(TryTree node, Void unused) { if (node.getFinallyBlock() != null) finallyBlock = true; return super.visitTry(node, unused); }
+    @Override public Void visitIdentifier(IdentifierTree node, Void unused) { if (LIST_TYPES.contains(node.getName().toString())) listType = true; return super.visitIdentifier(node, unused); }
+    @Override public Void visitMemberSelect(MemberSelectTree node, Void unused) { if (LIST_TYPES.contains(node.getIdentifier().toString())) listType = true; return super.visitMemberSelect(node, unused); }
     @Override public Void visitReturn(ReturnTree node, Void unused) {
       if (method != null && node.getExpression() != null) returns.computeIfAbsent(method, k -> new ArrayList<>()).add(node.getExpression());
       return super.visitReturn(node, unused);
@@ -219,10 +229,11 @@ final class JavaStructureCheck {
         case "while" -> kinds.contains(Tree.Kind.WHILE_LOOP) || kinds.contains(Tree.Kind.DO_WHILE_LOOP);
         case "function" -> functionName == null ? !methods.isEmpty() : methods.contains(functionName);
         case "return" -> kinds.contains(Tree.Kind.RETURN);
-        case "list" -> kinds.contains(Tree.Kind.NEW_ARRAY) || kinds.contains(Tree.Kind.ARRAY_TYPE);
+        case "list" -> kinds.contains(Tree.Kind.NEW_ARRAY) || kinds.contains(Tree.Kind.ARRAY_TYPE) || listType;
         case "dict" -> true; // no direct Java equivalent in this course; Map usage is checked by the task's own tests
         case "class" -> classCount > 1;
         case "try" -> kinds.contains(Tree.Kind.TRY);
+        case "finally" -> finallyBlock;
         default -> true;
       };
     }

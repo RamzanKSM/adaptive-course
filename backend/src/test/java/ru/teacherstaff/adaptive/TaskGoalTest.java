@@ -138,6 +138,10 @@ class TaskGoalTest {
         """ + loop.pythonCheck();
     assertTrue(passes(dir, checks, "for i in range(1, 4):\n    print(i)\n"));
     assertFalse(passes(dir, checks, "print(1)\nprint(2)\nprint(3)\n"), "same output without the loop the task asks for");
+    var always = new TaskGoal(TaskGoal.Kind.CONSTRUCT, null, List.of(), null, null, List.of("try", "finally"));
+    String finallyChecks = checks.replace(loop.pythonCheck(), always.pythonCheck());
+    assertTrue(passes(dir, finallyChecks, "try:\n    print(1)\nexcept ValueError:\n    print(0)\nfinally:\n    print(2)\nprint(3)\n"));
+    assertFalse(passes(dir, finallyChecks, "try:\n    print(1)\nexcept ValueError:\n    print(0)\nprint(2)\nprint(3)\n"), "the line after try/except is not a finally block");
   }
 
   @Test void printedTextTrapAndOutputOnlyGoal() {

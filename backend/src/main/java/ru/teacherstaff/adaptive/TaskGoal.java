@@ -41,6 +41,7 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
     CONSTRUCTS.put("dict", "словарь");
     CONSTRUCTS.put("class", "собственный класс");
     CONSTRUCTS.put("try", "обработку исключения try");
+    CONSTRUCTS.put("finally", "блок finally");
   }
   private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
@@ -88,7 +89,8 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
       Map.entry("list", "Значения нужно сложить в список (массив) и работать с ним."),
       Map.entry("dict", "Пары «ключ — значение» нужно хранить в словаре."),
       Map.entry("class", "Данные и действия нужно описать в собственном классе."),
-      Map.entry("try", "Возможную ошибку нужно обработать блоком try."));
+      Map.entry("try", "Возможную ошибку нужно обработать блоком try."),
+      Map.entry("finally", "То, что должно выполниться в любом случае — и после ошибки, и без неё, — нужно написать в блоке finally."));
 
   /**
    * A clear rejection for a missing construct: what the statement requires, that it is missing, and why it matters
@@ -357,6 +359,7 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
           case "dict" -> "{'Dict', 'DictComp'} & present";
           case "class" -> "'ClassDef' in present";
           case "try" -> "'Try' in present";
+          case "finally" -> "any(isinstance(n, ast.Try) and n.finalbody for n in ast.walk(tree))";
           default -> "True";
         };
         code.append("    assert ").append(condition).append(", ").append(literal(constructProblem(construct, functionName).strip())).append("\n");

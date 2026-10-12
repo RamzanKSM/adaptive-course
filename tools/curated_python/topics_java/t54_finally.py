@@ -1,8 +1,8 @@
 """FINALLY_BASIC — «Блок finally» (Java). Taught before: everything up to try/catch (ArithmeticException,
 NumberFormatException from Integer.parseInt), methods with return, arrays, classes. Here: finally runs always — after
-success, after a caught error and even after return. The syntax tree checks cannot see finally, so the tasks lean on
-behaviour: a line that must appear on every path, including a return out of try/catch, where code placed after the
-try statement would not run. Not yet: throw, throws."""
+success, after a caught error and even after return. The platform requires the finally block itself (construct
+«finally»); the tasks also lean on behaviour: a line that must appear on every path, including a return out of
+try/catch, where code placed after the try statement would not run. Not yet: throw, throws."""
 from java_tasks import JavaOutputTask
 
 SKILL = "FINALLY_BASIC"
@@ -70,7 +70,7 @@ TASKS = [
                 'try {\n    System.out.println("К оплате: " + Integer.parseInt(hours) * rate + " руб.");\n'
                 '} catch (NumberFormatException e) {\n    System.out.println("Введите число часов цифрами");\n'
                 '    System.out.println("Заберите карту");\n}')],
-        constructs=["try"],
+        constructs=["try", "finally"],
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-finally-fuel-pump", title="Колонка на заправке",
@@ -106,7 +106,7 @@ TASKS = [
                 '    System.out.println("Залито " + amount + " л, к оплате " + amount * 60 + " руб.");\n'
                 '    System.out.println("Повесьте пистолет на место");\n'
                 '} catch (NumberFormatException e) {\n    System.out.println("Введите количество литров цифрами");\n}')],
-        constructs=["try", "if"],
+        constructs=["try", "finally", "if"],
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-finally-coin-acceptor", title="Монетоприёмник",
@@ -136,7 +136,7 @@ TASKS = [
                 with_methods(COIN_MAIN, COIN_ACCEPT.replace(
                     '        System.out.println("Лоток свободен");\n    }',
                     '        System.out.println("Лоток свободен");\n        return 0;\n    }')))],
-        constructs=["try", "function"],
+        constructs=["try", "finally", "function"],
         checks=COIN_CHECKS,
     ),
 ]

@@ -1,11 +1,43 @@
 """COLLECTION_SELECTION — «Выбор коллекции» (Java). Taught before: List and its operations, Set (HashSet, TreeSet,
 LinkedHashSet), Map (HashMap, TreeMap, LinkedHashMap). Here: the statement says what the data must do (no repeats but
 keep the order → LinkedHashSet; find a value by a key → Map; keep order and repeats → List; unique and sorted → TreeSet;
-pairs sorted by key → TreeMap), and the student picks the collection. The syntax tree cannot tell which one was
-picked, so the output is built so that the wrong choice prints something else."""
+pairs sorted by key → TreeMap), and the student picks the collection. The output is built so that a wrong collection
+prints something else; a list with repeats removed by hand (or a lookup with indexOf) prints the same, so `checks` also
+looks for the chosen collection in the compiled class, like the switch check: it reads Solution.class through
+getResourceAsStream and collects the names in its constant pool — every class the code creates or calls a method of is
+there (java/util/LinkedHashSet …). If the class bytes cannot be read, the check passes rather than reject a correct
+solution."""
 from java_tasks import JavaOutputTask
 
 SKILL = "COLLECTION_SELECTION"
+
+
+def uses_collections(*requirements: tuple[tuple[str, ...], str]) -> str:
+    """Checks that need, for each (names, message), at least one of the names in Solution's constant pool."""
+    reads = """Set<String> pool = new HashSet<>();
+boolean readable = false;
+try (InputStream in = Solution.class.getResourceAsStream("Solution.class")) {
+    if (in != null) {
+        DataInputStream d = new DataInputStream(new ByteArrayInputStream(in.readAllBytes()));
+        d.skipBytes(8);
+        int poolSize = d.readUnsignedShort();
+        for (int i = 1; i < poolSize; i++) {
+            int tag = d.readUnsignedByte();
+            if (tag == 1) pool.add(d.readUTF());
+            else if (tag == 5 || tag == 6) { d.skipBytes(8); i++; }
+            else if (tag == 7 || tag == 8 || tag == 16 || tag == 19 || tag == 20) d.skipBytes(2);
+            else if (tag == 15) d.skipBytes(3);
+            else d.skipBytes(4);
+        }
+        readable = true;
+    }
+} catch (IOException e) { readable = false; }
+final boolean known = readable;
+java.util.function.Predicate<String> uses = name -> !known || pool.stream().anyMatch(entry -> entry.contains(name));
+"""
+    needs = "".join("need(" + " || ".join(f'uses.test("{name}")' for name in names) + f', "{message}");\n'
+                    for names, message in requirements)
+    return reads + needs
 
 TASKS = [
     JavaOutputTask(
@@ -35,7 +67,14 @@ TASKS = [
                 'System.out.println(cities);\nSystem.out.println("Разных городов: " + cities.size());'),
                ("оставил города в списке — повторы никуда не делись",
                 'System.out.println("Поездок: " + trips.size());\nList<String> cities = new ArrayList<>(trips);\n'
+                'System.out.println(cities);\nSystem.out.println("Разных городов: " + cities.size());'),
+               ("убирает повторы вручную в списке через contains — вывод тот же, но коллекция не выбрана",
+                'System.out.println("Поездок: " + trips.size());\nList<String> cities = new ArrayList<>();\n'
+                "for (String city : trips) {\n    if (!cities.contains(city)) {\n        cities.add(city);\n    }\n}\n"
                 'System.out.println(cities);\nSystem.out.println("Разных городов: " + cities.size());')],
+        checks=uses_collections((("java/util/LinkedHashSet",),
+                                 "Сложи города в коллекцию, которая сама не хранит повторов и помнит порядок добавления, — "
+                                 "тогда убирать повторы вручную не придётся")),
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-select-cloakroom", title="Гардероб в театре",
@@ -77,8 +116,15 @@ TASKS = [
                ("не проверяет, есть ли номерок в словаре, — для чужого номерка печатает null",
                 "Map<Integer, String> cloakroom = new HashMap<>();\nfor (int i = 0; i < tags.size(); i++) {\n"
                 "    cloakroom.put(tags.get(i), coats.get(i));\n}\nfor (int tag : returned) {\n"
-                '    System.out.println("Номерок " + tag + ": " + cloakroom.get(tag));\n}')],
+                '    System.out.println("Номерок " + tag + ": " + cloakroom.get(tag));\n}'),
+               ("ищет номерок в списке через indexOf — вывод тот же, но без коллекции «ключ — значение»",
+                "for (int tag : returned) {\n    int i = tags.indexOf(tag);\n    if (i >= 0) {\n"
+                '        System.out.println("Номерок " + tag + ": " + coats.get(i));\n    } else {\n'
+                '        System.out.println("Номерок " + tag + ": не найден");\n    }\n}')],
         constructs=["for"],
+        checks=uses_collections((("java/util/Map", "java/util/HashMap", "java/util/TreeMap", "java/util/LinkedHashMap"),
+                                 "Сложи вещи в коллекцию пар «ключ — значение», где ключ — номерок: тогда вещь находится "
+                                 "сразу, без перебора списков")),
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-select-library-log", title="Журнал библиотеки",
@@ -95,9 +141,10 @@ TASKS = [
               "подходящую коллекцию.",
         steps=["Выведи `Последние: ` и сразу за этим три последних посещения в том же порядке, например "
                "`Последние: [Лиза, Гоша, Лиза]`. Если посещений меньше трёх, выведи все.",
-               "Выведи `Читатели: ` и всех читателей без повторов по алфавиту, например `Читатели: [Гоша, Лиза, Миша]`.",
-               "Выведи `Посещения: ` и коллекцию, в которой для каждого читателя по алфавиту записано, сколько раз он "
-               "приходил, например `Посещения: {{Гоша=1, Лиза=2, Миша=1}}`."],
+               "Выведи `Читатели: ` и коллекцию, которая сама убирает повторы и хранит читателей по алфавиту, например "
+               "`Читатели: [Гоша, Лиза, Миша]`.",
+               "Выведи `Посещения: ` и словарь, который сам хранит ключи по алфавиту: для каждого читателя — сколько раз "
+               "он приходил, например `Посещения: {{Гоша=1, Лиза=2, Миша=1}}`."],
         hint="Квадратные скобки при выводе дают списки и множества, а фигурные скобки со знаком `=` — словари. "
              "Подумай, какая коллекция сама убирает повторы и сортирует, а какая хранит пары и сортирует их по ключу.",
         solution="int from = Math.max(0, visits.size() - 3);\nList<String> last = visits.subList(from, visits.size());\n"
@@ -116,7 +163,19 @@ TASKS = [
                 'System.out.println("Последние: " + last);\nSet<String> readers = new LinkedHashSet<>(visits);\n'
                 'System.out.println("Читатели: " + readers);\nMap<String, Integer> counts = new LinkedHashMap<>();\n'
                 "for (String name : visits) {\n    counts.put(name, counts.getOrDefault(name, 0) + 1);\n}\n"
+                'System.out.println("Посещения: " + counts);'),
+               ("сортирует список без повторов вручную — вывод тот же, но коллекция не выбрана",
+                "int from = Math.max(0, visits.size() - 3);\nList<String> last = visits.subList(from, visits.size());\n"
+                'System.out.println("Последние: " + last);\nList<String> readers = new ArrayList<>(new HashSet<>(visits));\n'
+                'Collections.sort(readers);\nSystem.out.println("Читатели: " + readers);\n'
+                "Map<String, Integer> counts = new TreeMap<>();\n"
+                "for (String name : visits) {\n    counts.put(name, counts.getOrDefault(name, 0) + 1);\n}\n"
                 'System.out.println("Посещения: " + counts);')],
         constructs=["for"],
+        checks=uses_collections((("java/util/TreeSet", "keySet"),
+                                 "Для читателей выбери коллекцию, которая сама убирает повторы и хранит элементы по алфавиту"),
+                                (("java/util/TreeMap",),
+                                 "Для посещений выбери словарь, который сам хранит ключи по алфавиту, — тогда ничего не "
+                                 "придётся сортировать вручную")),
     ),
 ]
