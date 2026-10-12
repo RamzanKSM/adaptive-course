@@ -44,6 +44,19 @@ class TaskVerificationTest {
     assertTrue(JavaStructureCheck.problem(TICKETS, main("System.out.println(24);")).contains("через переменную"));
   }
 
+  /** Integer.parseInt / Double.parseDouble of the statement's text is using its numbers; concatenating the text is not. */
+  @Test void javaTreeCheckAcceptsNumbersParsedFromStrings() {
+    assertNull(JavaStructureCheck.problem(TICKETS, main("String count = \"4\"; int price = 6; System.out.println(Integer.parseInt(count) * price);")));
+    assertNull(JavaStructureCheck.problem(TICKETS, main("int count = Integer.parseInt(\"4\"); System.out.println(count * 6);")));
+    assertNull(JavaStructureCheck.problem(TICKETS, main("String a = \"4\"; String b = \"6\"; int x = Integer.parseInt(a); int y = Integer.parseInt(b); System.out.println(x * y);")));
+    assertNull(JavaStructureCheck.problem(TICKETS, main("double total = Double.parseDouble(\"4\") * 6; System.out.println(total);")));
+    assertNotNull(JavaStructureCheck.problem(TICKETS, main("System.out.println(Integer.parseInt(\"12\") * 2);")), "other numbers");
+    assertNotNull(JavaStructureCheck.problem(TICKETS, main("String count = \"4\"; count = \"12\"; System.out.println(Integer.parseInt(count) * 2);")), "a reassigned text is not the statement's");
+    var sum = new TaskGoal(TaskGoal.Kind.FIXED_ARITHMETIC, "+", List.of(new BigDecimal(14), new BigDecimal(6)), "20\n", null, List.of());
+    assertNotNull(JavaStructureCheck.problem(sum, main("String a = \"14\"; String b = \"6\"; System.out.println(a + b);")), "gluing the texts is not adding the numbers");
+    assertNull(JavaStructureCheck.problem(sum, main("String a = \"14\"; String b = \"6\"; System.out.println(Integer.parseInt(a) + Integer.parseInt(b));")));
+  }
+
   @Test void javaTreeCheckFindsRequiredConstructs() {
     var loop = new TaskGoal(TaskGoal.Kind.CONSTRUCT, null, List.of(), null, null, List.of("for"));
     assertNull(JavaStructureCheck.problem(loop, main("for (int i = 1; i <= 3; i++) System.out.println(i);")));

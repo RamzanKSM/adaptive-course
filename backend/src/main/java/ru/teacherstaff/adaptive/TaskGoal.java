@@ -258,22 +258,35 @@ record TaskGoal(Kind kind, String operation, List<BigDecimal> operands, String e
                 expected = [%s]
                 known = {}
                 definitions, returns, parameters, scopes = {}, {}, {}, []
-                def value(node, scope=None, depth=0):
+                # A number or a string known without running the code; int("14") and float(price) give the number
+                # in the string, so converting the statement's strings counts as using its numbers.
+                def literal(node, scope=None, depth=0):
                     if depth > 16:
                         return None
-                    if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+                    if isinstance(node, ast.Constant) and type(node.value) in (int, float, str):
                         return node.value
                     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-                        inner = value(node.operand, scope, depth + 1)
-                        return None if inner is None else -inner
+                        inner = literal(node.operand, scope, depth + 1)
+                        return -inner if type(inner) in (int, float) else None
                     if isinstance(node, ast.Name):
                         if scope is not None and node.id in scope[0]:
-                            return value(scope[0][node.id], scope[1], depth + 1)
+                            return literal(scope[0][node.id], scope[1], depth + 1)
                         return known.get(node.id)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("int", "float") and len(node.args) == 1 and not node.keywords:
+                        inner = literal(node.args[0], scope, depth + 1)
+                        if type(inner) not in (int, float, str):
+                            return None
+                        try:
+                            return int(inner) if node.func.id == "int" else float(inner)
+                        except ValueError:
+                            return None
                     return None
+                def value(node, scope=None, depth=0):
+                    found = literal(node, scope, depth)
+                    return found if type(found) in (int, float) else None
                 for statement in tree.body:
                     if isinstance(statement, ast.Assign) and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
-                        assigned = value(statement.value)
+                        assigned = literal(statement.value)
                         if assigned is None:
                             known.pop(statement.targets[0].id, None)
                         else:

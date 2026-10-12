@@ -51,6 +51,9 @@ final class JavaStructureCheck {
     final Set<Tree.Kind> kinds = EnumSet.noneOf(Tree.Kind.class);
     final Set<String> methods = new HashSet<>();
     final Map<String, BigDecimal> constants = new HashMap<>();
+    /** String variables set to a literal: Integer.parseInt(text) reads the number in them. */
+    final Map<String, String> strings = new HashMap<>();
+    private final Set<String> declared = new HashSet<>();
     final Set<String> reassigned = new HashSet<>();
     final List<ExpressionTree> printed = new ArrayList<>();
     /** What is assigned to each variable, returned by each method and the method's parameters: a printed value may come from them. */
@@ -79,8 +82,11 @@ final class JavaStructureCheck {
       String name = node.getName().toString();
       if (node.getInitializer() != null) initialized++;
       define(name, node.getInitializer());
+      // Declared once and never assigned again: its value is what its initializer gives (a literal, a parsed string …).
+      if (!declared.add(name)) reassigned.add(name);
       BigDecimal value = node.getInitializer() == null ? null : literal(node.getInitializer());
-      if (value == null || constants.containsKey(name)) reassigned.add(name); else constants.put(name, value);
+      if (value != null) constants.put(name, value);
+      if (node.getInitializer() != null && unwrap(node.getInitializer()) instanceof LiteralTree text && text.getValue() instanceof String s) strings.put(name, s);
       return super.visitVariable(node, unused);
     }
     @Override public Void visitAssignment(AssignmentTree node, Void unused) { if (node.getVariable() instanceof IdentifierTree id) { reassigned.add(id.getName().toString()); define(id.getName().toString(), node.getExpression()); } return super.visitAssignment(node, unused); }
@@ -155,10 +161,39 @@ final class JavaStructureCheck {
     private BigDecimal value(ExpressionTree node, Scope scope, int depth) {
       ExpressionTree bare = unwrap(node);
       BigDecimal literal = literal(bare);
-      if (literal != null || !(bare instanceof IdentifierTree id) || depth > MAX_DEPTH) return literal;
+      if (literal != null || depth > MAX_DEPTH) return literal;
+      if (bare instanceof MethodInvocationTree call) return parsed(call, scope, depth);
+      if (!(bare instanceof IdentifierTree id)) return null;
       String name = id.getName().toString();
       if (scope != null && scope.arguments().containsKey(name)) return value(scope.arguments().get(name), scope.caller(), depth + 1);
-      return reassigned.contains(name) ? null : constants.get(name);
+      if (reassigned.contains(name)) return null;
+      if (constants.containsKey(name)) return constants.get(name);
+      List<ExpressionTree> defined = definitions.getOrDefault(name, List.of());
+      return defined.size() == 1 ? value(defined.getFirst(), scope, depth + 1) : null;
+    }
+    /** Integer.parseInt("14"), Double.parseDouble(price): the number in a string the statement gives. */
+    private BigDecimal parsed(MethodInvocationTree call, Scope scope, int depth) {
+      if (!(call.getMethodSelect() instanceof MemberSelectTree select) || call.getArguments().size() != 1) return null;
+      String text = text(call.getArguments().getFirst(), scope, depth + 1);
+      if (text == null) return null;
+      try {
+        return switch (select.getExpression() + "." + select.getIdentifier()) {
+          case "Integer.parseInt", "Integer.valueOf", "Long.parseLong", "Long.valueOf" -> BigDecimal.valueOf(Long.parseLong(text));
+          case "Double.parseDouble", "Double.valueOf", "Float.parseFloat", "Float.valueOf" -> new BigDecimal(Double.toString(Double.parseDouble(text)));
+          default -> null;
+        };
+      } catch (NumberFormatException e) { return null; }
+    }
+    private String text(ExpressionTree node, Scope scope, int depth) {
+      ExpressionTree bare = unwrap(node);
+      if (bare instanceof LiteralTree literal && literal.getValue() instanceof String s) return s;
+      if (depth > MAX_DEPTH || !(bare instanceof IdentifierTree id)) return null;
+      String name = id.getName().toString();
+      if (scope != null && scope.arguments().containsKey(name)) return text(scope.arguments().get(name), scope.caller(), depth + 1);
+      if (reassigned.contains(name)) return null;
+      if (strings.containsKey(name)) return strings.get(name);
+      List<ExpressionTree> defined = definitions.getOrDefault(name, List.of());
+      return defined.size() == 1 ? text(defined.getFirst(), scope, depth + 1) : null;
     }
     private static BigDecimal literal(ExpressionTree node) {
       ExpressionTree bare = unwrap(node);

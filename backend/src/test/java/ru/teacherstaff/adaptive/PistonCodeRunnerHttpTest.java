@@ -83,6 +83,18 @@ class PistonCodeRunnerHttpTest {
     assertTrue(PistonCodeRunner.javaConsoleDiagnostic(err).endsWith("at Solution.main(Solution.java:4)"),err);
   }
 
+  /** A failed check whose text mentions «Room» or «zoom» is a failed check, not «out of memory». */
+  @Test void memoryLimitIsNotGuessedFromWordsContainingOom() throws Exception {
+    ObjectMapper json = new ObjectMapper();
+    var room = json.readTree("{\"code\":1,\"stderr\":\"AssertionError: получилось «<bound method Room.area of <__main__.Room object>>»\",\"status\":null}");
+    assertNull(PistonCodeRunner.limitFeedback(room));
+    assertNull(PistonCodeRunner.limitFeedback(json.readTree("{\"code\":1,\"stderr\":\"Zoom meeting, bloom filter\"}")));
+    assertEquals("Превышен лимит памяти.", PistonCodeRunner.limitFeedback(json.readTree("{\"code\":1,\"stderr\":\"Exception in thread main java.lang.OutOfMemoryError: Java heap space\"}")));
+    assertEquals("Превышен лимит памяти.", PistonCodeRunner.limitFeedback(json.readTree("{\"code\":1,\"stderr\":\"MemoryError\"}")));
+    assertEquals("Превышен лимит памяти.", PistonCodeRunner.limitFeedback(json.readTree("{\"code\":null,\"message\":\"OOM killed\"}")));
+    assertEquals("Превышен лимит памяти.", PistonCodeRunner.limitFeedback(json.readTree("{\"code\":137,\"stderr\":\"\"}")));
+  }
+
   @Test void statusUsesPlainHttp11WithoutH2cUpgrade() throws Exception {
     AtomicBoolean h2cUpgrade = new AtomicBoolean();
     AtomicBoolean http11 = new AtomicBoolean(true);

@@ -91,6 +91,37 @@ class TaskGoalTest {
     assertFalse(passes(dir, checks, "x = 0\nx = x + 1\nprint(24)\n"));
   }
 
+  /**
+   * The statement gives numbers as text («the form returned "14" and "6"»): converting them with int() or float()
+   * is using the statement's numbers. Before, the reference int(a) + int(b) failed its own check and the topic
+   * «type conversion» stayed without tasks.
+   */
+  @Test void pythonCheckAcceptsNumbersConvertedFromStrings(@TempDir Path dir) throws Exception {
+    Assumptions.assumeTrue(pythonAvailable(), "python3 is not installed");
+    var sum = new TaskGoal(TaskGoal.Kind.FIXED_ARITHMETIC, "+", List.of(BigDecimal.valueOf(14), BigDecimal.valueOf(6)), "20\n", null, List.of());
+    String checks = """
+        import contextlib
+        import io
+
+
+        def run_checks():
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                import solution  # noqa: F401
+            assert buffer.getvalue() == "20\\n", "Неверный вывод"
+        """ + sum.pythonCheck();
+    assertTrue(passes(dir, checks, "a = \"14\"\nb = \"6\"\nprint(int(a) + int(b))\n"));
+    assertTrue(passes(dir, checks, "a = \"14\"\nb = \"6\"\nx = int(a)\ny = int(b)\nprint(x + y)\n"));
+    assertTrue(passes(dir, checks, "a = \"14\"\nb = \"6\"\na = int(a)\nb = int(b)\nprint(a + b)\n"), "a variable converted in place");
+    assertTrue(passes(dir, checks, "print(int(\"14\") + int(\"6\"))\n"));
+    assertFalse(passes(dir, checks, "a = \"14\"\nb = \"6\"\nprint(20)\n"), "the ready answer is still not a calculation");
+    assertFalse(passes(dir, checks, "print(int(\"12\") + int(\"8\"))\n"), "other numbers giving the same answer");
+    var price = new TaskGoal(TaskGoal.Kind.FIXED_ARITHMETIC, "*", List.of(new BigDecimal("2.5"), BigDecimal.valueOf(4)), "10.0\n", null, List.of());
+    String priceChecks = checks.replace("20\\n", "10.0\\n").replace(sum.pythonCheck(), price.pythonCheck());
+    assertTrue(passes(dir, priceChecks, "price = \"2.5\"\ncount = 4\nprint(float(price) * count)\n"));
+    assertFalse(passes(dir, priceChecks, "price = \"2.5\"\ncount = 4\nprint(float(\"5\") * 2)\n"));
+  }
+
   @Test void pythonCheckEnforcesRequiredConstructs(@TempDir Path dir) throws Exception {
     Assumptions.assumeTrue(pythonAvailable(), "python3 is not installed");
     var loop = new TaskGoal(TaskGoal.Kind.CONSTRUCT, null, List.of(), null, null, List.of("for"));

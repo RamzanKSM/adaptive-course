@@ -326,6 +326,15 @@ class LearningFlowIntegrationTest {
     } finally { for(Thread hog:hogs) hog.interrupt(); }
   }
 
+  /** The LLM check of «calculate» solutions is recorded like every other LLM call (V22; it was rejected before). */
+  @Test void reviewCallsAreRecordedInLlmStatistics() throws Exception {
+    db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms) values(null,'REVIEW','PYTHON','OK',1200)");
+    var usage=json.readTree(mvc.perform(get("/api/admin/llm/usage?days=1").cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    boolean listed=false; for(var p:usage.path("byPurpose")) listed|="REVIEW".equals(p.path("purpose").asText());
+    assertTrue(listed,"REVIEW appears in the analytics by purpose");
+    assertThrows(Exception.class,()->db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms) values(null,'UNKNOWN','PYTHON','OK',1)"),"other purposes are still rejected");
+  }
+
   /** Background work of the application never uses virtual threads (see BackgroundThreads). */
   @Test void applicationCodeCreatesNoVirtualThreads() throws Exception {
     try(var sources=java.nio.file.Files.walk(Path.of("src","main","java"))){
