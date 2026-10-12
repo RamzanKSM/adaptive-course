@@ -394,7 +394,7 @@ public class ApiController {
     try {
       String numbers=String.join(", ",goal.operands().stream().map(n->n.stripTrailingZeros().toPlainString()).toList());
       var verdict=contentGenerator.checkCalculation(u,new ReviewRequest(lang,(String)task.get("skill_code"),(String)task.get("title"),(String)task.get("statement"),source,goal.operation(),numbers));
-      db.update("update llm_calls set outcome=? where id=(select max(id) from llm_calls where user_id=? and purpose='REVIEW' and status='OK' and outcome is null)",verdict.accepted()?"PASS":"FAIL",u);
+      db.update("update llm_calls set outcome=? where id=(select max(id) from llm_calls where user_id=? and purpose='REVIEW' and status='OK' and outcome is null)",verdict.accepted()?"ACCEPTED":"REJECTED",u);
       return verdict;
     } catch(LlmUnavailableException e){ log.warn("Calculation check by the LLM failed, the syntax tree decides: {}",e.getMessage()); return null; }
   }
