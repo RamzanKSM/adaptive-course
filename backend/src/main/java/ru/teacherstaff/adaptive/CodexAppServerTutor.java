@@ -696,7 +696,9 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
       try { created = builder.start(); }
       catch (IOException e) { markProcessFailure(e); log.error("Codex App Server could not be started", e); throw e; }
       process = created; loadedThreads.clear(); stdin = new BufferedWriter(new OutputStreamWriter(created.getOutputStream(), StandardCharsets.UTF_8));
-      Thread reader = Thread.ofVirtual().name("codex-app-server-reader").start(() -> readLoop(created));
+      // A platform thread: it spends its life blocked reading the App Server's output (see BackgroundThreads).
+      Thread reader = BackgroundThreads.named("codex-app-server-reader").newThread(() -> readLoop(created));
+      reader.start();
       try {
         request("initialize", Map.of("clientInfo", Map.of("name", "adaptive_java_tutor", "title", "Adaptive Java Tutor", "version", "0.1.0"), "capabilities", Map.of("experimentalApi", true)), Duration.ofSeconds(15));
         notifyServer("initialized", Map.of());

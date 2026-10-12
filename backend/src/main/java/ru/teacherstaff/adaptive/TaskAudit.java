@@ -34,7 +34,8 @@ class TaskAudit implements ApplicationRunner, DisposableBean {
   private final PistonCodeRunner runner;
   private final LlmSettings limits;
   private final boolean enabled;
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("task-audit").factory());
+  // A platform thread, not a virtual one: see BackgroundThreads.
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(BackgroundThreads.named("task-audit"));
 
   TaskAudit(JdbcTemplate db, LearningContentGenerator generator, TaskVerifier verifier, PistonCodeRunner runner, LlmSettings limits,
             @Value("${app.task-audit.enabled:true}") boolean enabled) {

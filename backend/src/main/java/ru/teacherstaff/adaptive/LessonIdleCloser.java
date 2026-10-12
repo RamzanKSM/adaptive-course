@@ -18,7 +18,8 @@ class LessonIdleCloser implements ApplicationRunner, DisposableBean {
   private static final Logger log = LoggerFactory.getLogger(LessonIdleCloser.class);
   private final ApiController api;
   private final boolean enabled;
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("lesson-idle").factory());
+  // A platform thread, not a virtual one: see BackgroundThreads.
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(BackgroundThreads.named("lesson-idle"));
 
   LessonIdleCloser(ApiController api, @Value("${app.lesson.idle-close.enabled:true}") boolean enabled) { this.api = api; this.enabled = enabled; }
 

@@ -300,6 +300,40 @@ class LearningFlowIntegrationTest {
     mvc.perform(post("/api/run").cookie(cookie(other)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"print(1)\"}")).andExpect(status().isOk());
   }
 
+  /**
+   * The production hang: with one CPU the JVM had a single carrier for virtual threads, the Codex reader blocked on it,
+   * and the console run of a submission (a virtual thread) waited minutes for it. Here every carrier is held by a pinned
+   * virtual thread (sleeping inside synchronized); the submission's console must still start at once.
+   */
+  @Test void submissionConsoleDoesNotWaitForBusyVirtualThreads() throws Exception {
+    String token=createStudentAndLogin("console-starved"); long student=studentId("console-starved"); submitDiagnostic(token,student,false);
+    addTask("starved console task"); prepareOnlySkill(student,"BASIC_CODE_READING"); start(token);
+    var consoleThreadVirtual=new java.util.concurrent.atomic.AtomicReference<Boolean>();
+    when(runner.console(any(Language.class),anyString())).thenAnswer(call->{ consoleThreadVirtual.set(Thread.currentThread().isVirtual()); return new PistonCodeRunner.Console("OK","24\n",null,false); });
+    long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();
+    int carriers=Integer.getInteger("jdk.virtualThreadScheduler.parallelism",Runtime.getRuntime().availableProcessors());
+    var hogs=new ArrayList<Thread>(); var pinned=new java.util.concurrent.CountDownLatch(carriers);
+    for(int i=0;i<carriers;i++){ Object monitor=new Object(); hogs.add(Thread.ofVirtual().start(()->{ synchronized(monitor){ pinned.countDown(); try{Thread.sleep(4000);}catch(InterruptedException ignored){} } })); }
+    try {
+      assertTrue(pinned.await(5,java.util.concurrent.TimeUnit.SECONDS),"every carrier is held");
+      long started=System.nanoTime();
+      var attempt=json.readTree(mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","WRONG"))))
+          .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      long ms=(System.nanoTime()-started)/1_000_000;
+      assertEquals("24\n",attempt.path("console").path("stdout").asText());
+      assertTrue(ms<2000,"the check took "+ms+" ms while virtual threads were busy");
+      assertEquals(Boolean.FALSE,consoleThreadVirtual.get(),"the console runs on a platform thread");
+    } finally { for(Thread hog:hogs) hog.interrupt(); }
+  }
+
+  /** Background work of the application never uses virtual threads (see BackgroundThreads). */
+  @Test void applicationCodeCreatesNoVirtualThreads() throws Exception {
+    try(var sources=java.nio.file.Files.walk(Path.of("src","main","java"))){
+      var offenders=sources.filter(f->f.toString().endsWith(".java")).filter(f->{ try { String code=java.nio.file.Files.readString(f); return code.contains("Thread.ofVirtual(")||code.contains("newVirtualThreadPerTaskExecutor"); } catch(Exception e){ throw new RuntimeException(e); } }).toList();
+      assertTrue(offenders.isEmpty(),"virtual threads in "+offenders);
+    }
+  }
+
   @Test void submissionShowsAndKeepsWhatTheProgramPrinted() throws Exception {
     String token=createStudentAndLogin("console-attempt"); long student=studentId("console-attempt"); submitDiagnostic(token,student,false);
     addTask("console task"); prepareOnlySkill(student,"BASIC_CODE_READING"); start(token);

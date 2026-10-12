@@ -379,8 +379,10 @@ public class ApiController {
       try { console=codeRunner.console(lang,source); } catch(RuntimeException e){ log.warn("Console run failed: {}",e.toString()); }
       finally { if(own==null)org.slf4j.MDC.clear(); else org.slf4j.MDC.setContextMap(own); }
       return new TimedConsole(console,started-queued,System.nanoTime()-started);
-    }, command->Thread.ofVirtual().name("console-run").start(command));
+    }, consoleRuns);
   }
+  /** Console runs of submissions: platform threads (see BackgroundThreads), created on demand and reused while busy. */
+  private final java.util.concurrent.ExecutorService consoleRuns=java.util.concurrent.Executors.newCachedThreadPool(BackgroundThreads.named("console-run-",0));
   private static final com.fasterxml.jackson.databind.ObjectMapper JSON=new com.fasterxml.jackson.databind.ObjectMapper();
   private final java.util.Random random=new java.security.SecureRandom();
   private List<TestCases.Case> taskCases(long task){
