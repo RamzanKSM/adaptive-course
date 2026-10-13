@@ -118,7 +118,18 @@ public class ApiController {
       return learningResponse(userId,lesson,redo);
     }
     var skill=nextSkill(userId,lang,((Number)lesson.get("number")).intValue(),((Number)lesson.get("id")).longValue());
-    if(skill==null) return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason",remainingTopics(userId,lang)==0?"COURSE_COMPLETE":"NO_DUE_SKILL","llm",llm(userId,lang));
+    if(skill==null){
+      boolean hard=hardModeActive(userId,lang);
+      if(hard){
+        var practice=hardPractice(userId,lesson,lang);
+        if(practice!=null){
+          if(!assign(lesson,((Number)practice.get("id")).longValue())) return lessonFinished(lesson);
+          log.info("Assigned hard practice task {} (skill={}) to lesson {} of student {}: no topic is due",practice.get("id"),practice.get("skill_code"),lesson.get("id"),userId);
+          return learningResponse(userId,lesson,practice);
+        }
+      }
+      return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason",remainingTopics(userId,lang)==0?"COURSE_COMPLETE":"NO_DUE_SKILL","hardPracticeExhausted",hard,"llm",llm(userId,lang));
+    }
     String skillCode=(String)skill.get("code");
     long lessonId=((Number)lesson.get("id")).longValue();
     Object explanation=explanation(userId, skillCode);
@@ -157,6 +168,19 @@ public class ApiController {
     var task=tasks.getFirst();
     if(!assign(lesson,((Number)task.get("id")).longValue())) return lessonFinished(lesson, userId, generatedTaskId);
     return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(userId,task));
+  }
+  /**
+   * Hard mode with no topic due (the course is complete, or no repetition falls on this lesson): the next unsolved hard
+   * task of a topic the student has closed — mastered or confirmed by the diagnostic — so the schedule of the other
+   * topics is not touched. Course order, easier first. Null when the bank has nothing left for this student.
+   */
+  private Map<String,Object> hardPractice(long userId,Map<String,Object> lesson,Language lang){
+    String closed="(exists(select 1 from student_skills p where p.user_id=? and p.skill_code=%1$s and p.mastered=1) or exists(select 1 from diagnostic_skill_results d where d.user_id=? and d.skill_code=%1$s and d.confirmed=1))";
+    var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.mode,ts.skill_code,s.title as skill_title,s.block_no from tasks t join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code "
+        +"where t.active=1 and t.mode='HARD' and t.language=? and "+closed.formatted("ts.skill_code")+" and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) "
+        +"and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not "+closed.formatted("req.skill_code")+") "
+        +"order by s.block_no,s.sort_order,t.difficulty is null,t.difficulty,t.id limit 1",lang.name(),userId,userId,userId,lesson.get("id"),userId,userId);
+    return rows.isEmpty()?null:rows.getFirst();
   }
   private boolean stillActive(long lessonId){ return count("select count(*) from lessons where id=? and finished_at is null",lessonId)>0; }
   /** Assigns a task only to a lesson that is still open: a finish can land at any moment while content is prepared. A task replaced earlier in the lesson comes back. */

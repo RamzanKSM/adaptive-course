@@ -906,6 +906,55 @@ class LearningFlowIntegrationTest {
     assertEquals(51,db.queryForObject("select count(*) from tasks where source='EXERCISM'",Integer.class));
   }
 
+  @Test void hardModeKeepsGivingBankTasksAfterTheCourseIsComplete() throws Exception {
+    String token=createStudentAndLogin("hard-done-student"); long student=studentId("hard-done-student"); submitDiagnostic(token,student,false);
+    prepareOnlySkill(student,"-"); // every topic mastered: nothing is due ever again
+    db.update("update users set hard_mode_allowed=1, hard_mode_on=1 where id=?",student);
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    int first=start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertTrue(next.path("task").path("hard").asBoolean(),"hard practice instead of «course complete»: "+next);
+    assertTrue(next.path("reason").isMissingNode()||next.path("reason").isNull(),next.toString());
+    String expected=db.queryForObject("select t.title from tasks t join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where t.mode='HARD' and t.active=1 and t.language='JAVA' order by s.block_no,s.sort_order,t.difficulty,t.id limit 1",String.class);
+    assertEquals(expected,next.path("task").path("title").asText(),"course order, easier first");
+    assertEquals(db.queryForObject("select skill_code from task_target_skills where task_id=?",String.class,next.path("task").path("id").asLong()),next.path("skill").path("code").asText());
+    // The same task stays until it is solved.
+    var again=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(next.path("task").path("id").asLong(),again.path("task").path("id").asLong());
+    verify(generator,never()).generateTask(eq(student),any());
+    // Only when the whole hard bank of the course is solved does the course say it is complete.
+    finish(token,first);
+    db.update("insert or ignore into successful_task_credit(user_id,task_id) select ?,id from tasks where mode='HARD' and language='JAVA'",student);
+    start(token);
+    var done=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("COURSE_COMPLETE",done.path("reason").asText(),done.toString());
+    assertTrue(done.path("hardPracticeExhausted").asBoolean());
+  }
+
+  @Test void hardPracticeOnADayWithoutRepetitionsLeavesTheScheduleAlone() throws Exception {
+    String token=createStudentAndLogin("hard-idle-student"); long student=studentId("hard-idle-student"); submitDiagnostic(token,student,false);
+    prepareOnlySkill(student,"WHILE_LOOP_BASIC");
+    // Its second iteration falls on lesson 6, so lesson 1 has nothing due.
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,first_iteration_lesson_number,mastered) values(?,?,1,5,0)",student,"WHILE_LOOP_BASIC");
+    db.update("update users set hard_mode_allowed=1, hard_mode_on=1 where id=?",student);
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    start(token);
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertTrue(next.path("task").path("hard").asBoolean(),"extra hard practice instead of «nothing more today»: "+next);
+    assertNotEquals("WHILE_LOOP_BASIC",next.path("skill").path("code").asText(),"only topics already closed");
+    assertEquals(1,db.queryForObject("select mastered from student_skills where user_id=? and skill_code=?",Integer.class,student,next.path("skill").path("code").asText()));
+    // Without hard mode the same lesson has nothing to do.
+    String plain=createStudentAndLogin("plain-idle-student"); long plainId=studentId("plain-idle-student"); submitDiagnostic(plain,plainId,false);
+    prepareOnlySkill(plainId,"WHILE_LOOP_BASIC");
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,first_iteration_lesson_number,mastered) values(?,?,1,5,0)",plainId,"WHILE_LOOP_BASIC");
+    start(plain);
+    var idle=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(plain))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("NO_DUE_SKILL",idle.path("reason").asText(),idle.toString());
+    assertFalse(idle.path("hardPracticeExhausted").asBoolean());
+  }
+
   @Test void switchingHardModeReplacesTheCurrentTaskOfTheOtherMode() throws Exception {
     String token=createStudentAndLogin("hard-switch-student"); long student=studentId("hard-switch-student"); submitDiagnostic(token,student,false); passedCourseOnceExcept(student,"WHILE_LOOP_BASIC");
     db.update("update users set hard_mode_allowed=1, hard_mode_on=0 where id=?",student);

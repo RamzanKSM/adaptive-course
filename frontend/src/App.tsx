@@ -549,13 +549,14 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
   </section>
   const finished = lesson.reason === 'NO_DUE_SKILL' || lesson.reason === 'COURSE_COMPLETE'
   const title = lesson.skill?.title ?? (lesson.reason === 'COURSE_COMPLETE' ? 'Все темы курса закрыты' : lesson.reason === 'NO_DUE_SKILL' ? 'На сегодня задач больше нет' : 'Текущий урок')
+  const hardDone = lesson.hardPracticeExhausted ? ' Все задачи hard-режима по пройденным темам уже решены.' : ''
   const retryable = lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' || lesson.reason === 'RUNNER_UNAVAILABLE' || lesson.reason === 'LLM_RATE_LIMITED'
   const emptyMessage = lesson.reason === 'NO_TASK_AVAILABLE' ? 'Подходящей задачи в банке пока нет. Преподаватель увидит это состояние.'
     : lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' ? 'Новая задача не прошла проверку. Попробуй запросить её ещё раз.'
       : lesson.reason === 'RUNNER_UNAVAILABLE' ? `Проверка ${course.title} сейчас недоступна. Попробуй ещё раз позже.`
         : lesson.reason === 'LLM_RATE_LIMITED' ? 'Новые задачи сейчас создаются слишком часто — сработал лимит курса. Попробуй через несколько минут или спроси преподавателя.'
-        : lesson.reason === 'COURSE_COMPLETE' ? 'Каждая тема освоена практикой или подтверждена диагностикой — задач для обязательной практики не осталось.'
-          : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены — отличная работа! Повторения запланированы на следующие уроки.' : 'Контент урока загружается.'
+        : lesson.reason === 'COURSE_COMPLETE' ? 'Каждая тема освоена практикой или подтверждена диагностикой — задач для обязательной практики не осталось.' + hardDone
+          : lesson.reason === 'NO_DUE_SKILL' ? 'Все задачи этого урока выполнены — отличная работа! Повторения запланированы на следующие уроки.' + hardDone : 'Контент урока загружается.'
   return <section className="lesson">
     <div className="lesson-heading enter">
       <div>
