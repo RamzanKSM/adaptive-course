@@ -18,7 +18,7 @@ public class ApiController {
   private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(ApiController.class);
   /** Verification is strict (reference must pass, wrong solutions must fail), so the generator gets three tries. */
   static final int GENERATION_ATTEMPTS=3;
-  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings;
+  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics;
   /**
    * Serializes /learning/next per student and course. It replaces what the long transaction never really gave:
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
@@ -26,7 +26,7 @@ public class ApiController {
    */
   private final ConcurrentHashMap<String,Object> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled,hard_mode_allowed,hard_mode_on from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
@@ -412,7 +412,8 @@ public class ApiController {
   private static String jsonText(Object value){ try { return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(value); } catch(Exception e){ return null; } }
   private String consoleJson(PistonCodeRunner.Console console){ try { return console==null?null:new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(console.view()); } catch(Exception e){ return null; } }
   private Object consoleView(Object stored){ try { return stored==null?null:new com.fasterxml.jackson.databind.ObjectMapper().readValue((String)stored,Map.class); } catch(Exception e){ return null; } }
-  @GetMapping("/progress") public Map<String,Object> progress(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=uid(r);Language lang=Language.parse(language);return Map.of("language",lang.name(),"skills",progress(u,lang),"solvedTasks",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=?",u,lang.name()),"hardSolved",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=? and t.mode='HARD'",u,lang.name()),"activity",db.queryForList("select s.created_at from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and l.language=? and s.passed=1 and s.created_at>=datetime('now','-90 days') order by s.id",String.class,u,lang.name()));}
+  /** session: the student's own pace to the session in their session course (ProgressAnalytics), otherwise null. */
+  @GetMapping("/progress") public Map<String,Object> progress(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=uid(r);Language lang=Language.parse(language);return obj("language",lang.name(),"skills",progress(u,lang),"solvedTasks",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=?",u,lang.name()),"hardSolved",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=? and t.mode='HARD'",u,lang.name()),"activity",db.queryForList("select s.created_at from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and l.language=? and s.passed=1 and s.created_at>=datetime('now','-90 days') order by s.id",String.class,u,lang.name()),"session","STUDENT".equals(user(r).get("role"))?analytics.studentSession(u,lang,analytics.now()):null);}
   @GetMapping("/chat") public Map<String,Object> chat(@RequestParam(name="language",required=false) String language,HttpServletRequest r){var l=active(uid(r),Language.parse(language));return Map.of("messages",l==null?List.of():db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",l.get("id")),"llm",llm(uid(r),Language.parse(language)),"quota",llmSettings.chatQuota(uid(r)).view());}
   @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=student(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");touch(u,lang);String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");String consoleOutput=body.get("consoleOutput") instanceof String text&&!text.isBlank()?text:null;Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}var chatState=chatStatus(u,lang);if("DISABLED_IN_HARD_MODE".equals(chatState.reason()))return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message","В hard mode помощник отключён — разбирайся сам","llm",chatState.asMap()));var quota=llmSettings.chatQuota(u);if(!quota.allowed()){log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})",u,quota.hourUsed(),quota.hourLimit(),quota.dayUsed(),quota.dayLimit());return ResponseEntity.status(429).header("Retry-After",String.valueOf(quota.retryAfterSeconds())).body(Map.of("error","LLM_RATE_LIMITED","message",rateLimitMessage(quota),"quota",quota.view()));}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource,consoleOutput),question);touch(u,lang);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u),"quota",llmSettings.chatQuota(u).view()));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
 
@@ -423,32 +424,38 @@ public class ApiController {
     boolean enabled=!Boolean.FALSE.equals(b.get("llmEnabled"));
     validatePassword(password);
     db.update("insert into users(login,password_hash,role,display_name,llm_enabled,group_name) values(?,?,?,?,?,?)",login,passwords.encode(password),"STUDENT",name,enabled?1:0,group);
-    var created=db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\" from users where login=?",login);
+    var created=participantFlag(db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\",session_participant as sessionParticipant from users where login=?",login));
     LogContext.student(created.get("id"),login);
     log.info("Created student account login={} group={}",login,group==null?"—":group);
     return created;
   }
   /**
-   * Changes a student's login, name and group; only the fields present in the body. A new login works from the next
-   * sign-in, open sessions stay valid (they belong to the account, not to the login). An empty group removes it.
+   * Changes a student's login, name, group and session participation; only the fields present in the body. A new login
+   * works from the next sign-in, open sessions stay valid (they belong to the account, not to the login). An empty group
+   * removes it. sessionParticipant=false leaves the student out of the progress analytics' group statistics and forecasts.
    */
   @PatchMapping("/admin/students/{id}") public Map<String,Object> updateStudent(@PathVariable long id,@RequestBody Map<String,Object> b,HttpServletRequest r){
     admin(r);
-    var rows=db.queryForList("select login,display_name,group_name from users where id=? and role='STUDENT'",id);
+    var rows=db.queryForList("select login,display_name,group_name,session_participant from users where id=? and role='STUDENT'",id);
     if(rows.isEmpty())throw bad("STUDENT_NOT_FOUND","Студент не найден");
     var before=rows.getFirst();
     String login=(String)before.get("login"), name=(String)before.get("display_name"), group=(String)before.get("group_name");
+    boolean wasParticipant=((Number)before.get("session_participant")).intValue()==1, participant=wasParticipant;
     if(b.containsKey("login")) login=validLogin(b.get("login") instanceof String v?v:null,id);
     if(b.containsKey("displayName")) name=validName(b.get("displayName") instanceof String v?v:null);
     if(b.containsKey("group")) group=group(b.get("group"));
-    db.update("update users set login=?,display_name=?,group_name=? where id=?",login,name,group,id);
+    if(b.containsKey("sessionParticipant")){ if(!(b.get("sessionParticipant") instanceof Boolean v))throw bad("INVALID_SESSION_PARTICIPANT","sessionParticipant должен быть true или false"); participant=v; }
+    db.update("update users set login=?,display_name=?,group_name=?,session_participant=? where id=?",login,name,group,participant?1:0,id);
     var changes=new ArrayList<String>();
     if(!login.equals(before.get("login"))) changes.add("login "+before.get("login")+" → "+login);
     if(!name.equals(before.get("display_name"))) changes.add("name «"+before.get("display_name")+"» → «"+name+"»");
     if(!Objects.equals(group,before.get("group_name"))) changes.add("group "+(before.get("group_name")==null?"—":before.get("group_name"))+" → "+(group==null?"—":group));
+    if(participant!=wasParticipant) changes.add("session participant "+(wasParticipant?"yes":"no")+" → "+(participant?"yes":"no"));
     if(!changes.isEmpty()) log.info("Student {} updated by admin {}: {}",id,uid(r),String.join(", ",changes));
-    return db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\" from users where id=?",id);
+    return participantFlag(db.queryForMap("select id,login,role,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\",session_participant as sessionParticipant from users where id=?",id));
   }
+  /** session_participant as the boolean the API speaks. */
+  private static Map<String,Object> participantFlag(Map<String,Object> student){ student.put("sessionParticipant",((Number)student.get("sessionParticipant")).intValue()==1); return student; }
   /** Renames a group for all its students; renaming into an existing group merges them, an empty name removes the group. */
   @PostMapping("/admin/groups/rename") public Map<String,Object> renameGroup(@RequestBody Map<String,Object> b,HttpServletRequest r){
     admin(r);
@@ -490,10 +497,43 @@ public class ApiController {
   /** Students with their open lessons, so the teacher sees at a glance who is studying right now. */
   @GetMapping("/admin/students") public Map<String,Object> students(HttpServletRequest r){
     admin(r);
-    var students=db.queryForList("select id,login,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\",created_at as createdAt,hard_mode_allowed as hardModeAllowed,hard_mode_on as hardModeOn from users where role='STUDENT' order by id");
+    var students=db.queryForList("select id,login,display_name as displayName,llm_enabled as llmEnabled,group_name as \"group\",created_at as createdAt,hard_mode_allowed as hardModeAllowed,hard_mode_on as hardModeOn,session_participant as sessionParticipant from users where role='STUDENT' order by id");
     var open=db.queryForList("select user_id,language,coalesce(language_lesson_number,lesson_number) as number,started_at as startedAt from lessons where finished_at is null order by started_at");
-    for(var student:students){ var mine=new ArrayList<Map<String,Object>>(); for(var lesson:open) if(lesson.get("user_id").equals(student.get("id"))) mine.add(Map.of("language",lesson.get("language"),"number",lesson.get("number"),"startedAt",lesson.get("startedAt"))); student.put("activeLessons",mine); }
+    for(var student:students){ var mine=new ArrayList<Map<String,Object>>(); for(var lesson:open) if(lesson.get("user_id").equals(student.get("id"))) mine.add(Map.of("language",lesson.get("language"),"number",lesson.get("number"),"startedAt",lesson.get("startedAt"))); student.put("activeLessons",mine); participantFlag(student); }
     return Map.of("students",students);
+  }
+
+  /**
+   * The teacher's «Прогресс» of a course: a line per day for every student (skills, skills with the diagnostic, solved
+   * tasks, XP), the period's numbers, the forecast to the session and flags. Defaults: the last 30 days up to today (UTC).
+   */
+  @GetMapping("/admin/progress") public Map<String,Object> courseProgress(@RequestParam(name="language",required=false) String language,@RequestParam(name="from",required=false) String from,@RequestParam(name="to",required=false) String to,HttpServletRequest r){
+    admin(r); Language lang=Language.parse(language); Instant now=analytics.now();
+    LocalDate end=to==null||to.isBlank()?ProgressAnalytics.day(now):periodDay(to), start=from==null||from.isBlank()?end.minusDays(29):periodDay(from);
+    if(start.isAfter(end))throw bad("INVALID_PERIOD","Начало периода позже его конца");
+    return analytics.course(lang,start,end,now);
+  }
+  private LocalDate periodDay(String text){ try { return LocalDate.parse(text.strip()); } catch(java.time.format.DateTimeParseException e){ throw bad("INVALID_PERIOD","Дата периода — в виде ГГГГ-ММ-ДД"); } }
+  /** The date of the session the forecasts aim at; one for the whole course platform. */
+  @GetMapping("/admin/session") public Map<String,Object> sessionDate(HttpServletRequest r){ admin(r); var date=analytics.sessionDate(); return obj("date",date==null?null:date.toString()); }
+  /** Sets the session date ({"date":"YYYY-MM-DD"}) or removes it ({"date":null}). */
+  @PutMapping("/admin/session") public Map<String,Object> updateSessionDate(@RequestBody Map<String,Object> b,HttpServletRequest r){
+    admin(r);
+    LocalDate date=null;
+    if(!b.containsKey("date")||b.get("date")!=null&&!(b.get("date") instanceof String))throw bad("INVALID_SESSION_DATE","Дата сессии — строка ГГГГ-ММ-ДД или null");
+    if(b.get("date") instanceof String text) try { date=LocalDate.parse(text.strip()); } catch(java.time.format.DateTimeParseException e){ throw bad("INVALID_SESSION_DATE","Дата сессии — строка ГГГГ-ММ-ДД или null"); }
+    var before=analytics.sessionDate();
+    analytics.setSessionDate(date);
+    if(!Objects.equals(before,date)) log.info("Session date changed by admin {}: {} → {}",uid(r),before==null?"—":before,date==null?"—":date);
+    return obj("date",date==null?null:date.toString());
+  }
+  /**
+   * The screen projected to a whole group: anonymous aggregates over the group's members in the course — no ids, logins
+   * or names, no per-student lines, and no totals at all for fewer than five members. 404 when there are no members.
+   */
+  @GetMapping("/admin/classroom") public ResponseEntity<?> classroom(@RequestParam(name="language",required=false) String language,@RequestParam(name="group",required=false) String group,HttpServletRequest r){
+    admin(r); var view=analytics.classroom(Language.parse(language),group,analytics.now());
+    return view==null?ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error","GROUP_NOT_FOUND","message","В группе нет участников сессии этого курса")):ResponseEntity.ok(view);
   }
 
   /** Reasoning levels per purpose and LLM rate limits; options come from the model when the App Server can tell. */
@@ -633,7 +673,7 @@ public class ApiController {
     var errors=db.queryForList("select c.created_at as createdAt,c.purpose,c.language,c.status,c.error,c.duration_ms as durationMs,u.display_name as displayName from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.status<>'OK' order by c.created_at desc,c.id desc limit 20",since);
     return obj("days",period,"totals",totals,"byDay",byDay,"byPurpose",byPurpose,"byLanguage",byLanguage,"byStudent",byStudent,"recentErrors",errors,"llm",llm(uid(r)));
   }
-  @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled,hard_mode_allowed as hardModeAllowed,hard_mode_on as hardModeOn,group_name as \"group\" from users where id=? and role='STUDENT'",id);s.put("hardModeCourses",hardModeCourses(id));var byLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values())byLanguage.put(lang.name(),progress(id,lang));return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"llm",llm(id));}
+  @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=participantFlag(db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled,hard_mode_allowed as hardModeAllowed,hard_mode_on as hardModeOn,group_name as \"group\",session_participant as sessionParticipant from users where id=? and role='STUDENT'",id));s.put("hardModeCourses",hardModeCourses(id));var byLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values())byLanguage.put(lang.name(),progress(id,lang));return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"llm",llm(id));}
   @GetMapping("/admin/students/{id}/lessons") public Map<String,Object> lessons(@PathVariable long id,HttpServletRequest r){admin(r);return Map.of("lessons",db.queryForList("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt,finish_reason as finishReason from lessons where user_id=? order by lesson_number",id));}
   /** The same as the student's own «Завершить урок», for any student's open lesson. */
   @PostMapping("/admin/students/{id}/lessons/{lessonId}/finish") public Map<String,Object> finishStudentLesson(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){
@@ -699,7 +739,8 @@ public class ApiController {
   /** Difficulty steps of each iteration: 1→2→3 at first, then 2→3, then a single step-3 task. */
   static final int[][] ITERATION_STEPS={{1,2,3},{2,3},{3}};
   static int iterationTasks(int completedIterations){ return ITERATION_TASKS[Math.max(0,Math.min(completedIterations,ITERATION_TASKS.length-1))]; }
-  private void credit(long user,String skill,long lessonId,int lessonNumber){db.update("insert or ignore into student_skills(user_id,skill_code) values(?,?)",user,skill);int successes=count("select count(distinct c.task_id) from successful_task_credit c join task_target_skills ts on ts.task_id=c.task_id join submissions s on s.task_id=c.task_id and s.lesson_id=? and s.passed=1 where c.user_id=? and ts.skill_code=?",lessonId,user,skill);var x=db.queryForMap("select completed_iterations,first_iteration_lesson_number from student_skills where user_id=? and skill_code=?",user,skill);int completed=((Number)x.get("completed_iterations")).intValue();if(successes<iterationTasks(completed)){db.update("update student_skills set iteration_successes=? where user_id=? and skill_code=?",successes,user,skill);return;}Integer first=x.get("first_iteration_lesson_number")==null?null:((Number)x.get("first_iteration_lesson_number")).intValue();boolean due=completed==0||(completed==1&&lessonNumber==first+1)||(completed==2&&lessonNumber==first+3);if(!due||count("select count(*) from skill_iterations where user_id=? and skill_code=? and lesson_id=?",user,skill,lessonId)>0)return;int done=completed+1;db.update("insert into skill_iterations(user_id,skill_code,iteration_number,lesson_id) values(?,?,?,?)",user,skill,done,lessonId);db.update("update student_skills set completed_iterations=?,iteration_successes=0,first_iteration_lesson_number=case when first_iteration_lesson_number is null then ? else first_iteration_lesson_number end,mastered=? where user_id=? and skill_code=?",done,lessonNumber,done>=3?1:0,user,skill);}
+  /** Applies IterationRule to a newly credited task's topic; the progress analytics replays history with the same rule. */
+  private void credit(long user,String skill,long lessonId,int lessonNumber){db.update("insert or ignore into student_skills(user_id,skill_code) values(?,?)",user,skill);int successes=count("select count(distinct c.task_id) from successful_task_credit c join task_target_skills ts on ts.task_id=c.task_id join submissions s on s.task_id=c.task_id and s.lesson_id=? and s.passed=1 where c.user_id=? and ts.skill_code=?",lessonId,user,skill);var x=db.queryForMap("select completed_iterations,iteration_successes,first_iteration_lesson_number from student_skills where user_id=? and skill_code=?",user,skill);var before=new IterationRule.Topic(((Number)x.get("completed_iterations")).intValue(),((Number)x.get("iteration_successes")).intValue(),x.get("first_iteration_lesson_number")==null?null:((Number)x.get("first_iteration_lesson_number")).intValue());boolean iterationInLesson=successes>=iterationTasks(before.completed())&&count("select count(*) from skill_iterations where user_id=? and skill_code=? and lesson_id=?",user,skill,lessonId)>0;var after=IterationRule.credit(before,successes,lessonNumber,iterationInLesson);if(after.completed()==before.completed()){if(after.successes()!=before.successes())db.update("update student_skills set iteration_successes=? where user_id=? and skill_code=?",after.successes(),user,skill);return;}db.update("insert into skill_iterations(user_id,skill_code,iteration_number,lesson_id) values(?,?,?,?)",user,skill,after.completed(),lessonId);db.update("update student_skills set completed_iterations=?,iteration_successes=0,first_iteration_lesson_number=?,mastered=? where user_id=? and skill_code=?",after.completed(),after.firstLesson(),after.mastered()?1:0,user,skill);}
   /**
    * Picks one skill and keeps the student on it: an iteration already started in this lesson is finished first,
    * then scheduled repetitions (iterations 2 and 3 are only valid on their lesson), then new topics in course order.

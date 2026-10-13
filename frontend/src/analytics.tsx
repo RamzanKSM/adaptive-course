@@ -128,8 +128,8 @@ function plural(n: number, one: string, few: string, many: string) {
   return mod10 === 1 && mod100 !== 11 ? one : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? few : many
 }
 
-function Tile({ icon, label, value, note, tone }: { icon: Parameters<typeof Icon>[0]['name']; label: string; value: string; note: string; tone?: 'warn' }) {
-  return <div className={`card stat ${tone === 'warn' ? 'warn' : ''}`}>
+export function Tile({ icon, label, value, note, tone, title }: { icon: Parameters<typeof Icon>[0]['name']; label: string; value: string; note: string; tone?: 'warn'; title?: string }) {
+  return <div className={`card stat ${tone === 'warn' ? 'warn' : ''}`} title={title}>
     <span className="chip-icon"><Icon name={icon} size={18} /></span>
     <b className="tabular">{value}</b>
     <span className="muted small">{label}</span>
