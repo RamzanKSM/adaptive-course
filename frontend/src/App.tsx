@@ -629,12 +629,16 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     if (result.console && !task.hard) onConsole({ run: result.console, origin: 'attempt' })
     if (result.progress) onProgress(result.progress)
   }
-  /** «Запустить»: runs the code as is and shows the console. Not a submission: no attempt, no credit, no «Попытка N». */
+  /**
+   * «Запустить»: runs the code as is and shows the console. Not a submission: no attempt, no credit, no «Попытка N».
+   * The failed check's verdict belongs to the code as it was then; after a run of the edited code it would only confuse.
+   */
   async function run() {
     setRunning(true)
     const result = await request(() => post<{ console: ConsoleRun }>(withCourse('/run', course.id), task.hard ? { sourceCode: code, stdin } : { sourceCode: code }))
     setRunning(false); activity(!!result)
     if (!result) return
+    setAttempt(null)
     onConsole({ run: result.console, origin: 'run' }); setRuns(n => n + 1)
   }
   useEffect(() => { if (runs) consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [runs])
