@@ -135,6 +135,8 @@ public class ApiController {
     var tasks=availableTasks(userId, lesson, skillCode, difficulty);
     Long generatedTaskId=null;
     if(!hasDifficulty(tasks, difficulty)) {
+      // A variant of a story the student solved is the same task with other numbers: a new task is wanted instead.
+      if(tasks.stream().anyMatch(t->t.get("difficulty") instanceof Number d&&d.intValue()==difficulty)) log.info("New task wanted for skill={} difficulty={}: only variants of solved stories remain at this difficulty",skillCode,difficulty);
       // Generate the missing step of the easy→hard ladder; fall back to the nearest bank task when generation is impossible.
       String reason=null;
       if(!tutor.status(userId).available()) reason="NO_TASK_AVAILABLE";
@@ -163,6 +165,7 @@ public class ApiController {
     if(hardModeActive(userId,lang)) { queueGenerated(userId,generatedTaskId); return hardTrack(userId,lesson,lang); }
     var task=tasks.getFirst();
     if(!assign(lesson,((Number)task.get("id")).longValue())) return lessonFinished(lesson, userId, generatedTaskId);
+    if(storySolved(task)) log.info("Assigned task {} (another variant of the solved story {}) to lesson {} of student {}: no task of an unsolved story is left",task.get("id"),((String)task.get("story")).split(":")[1],lessonId,userId);
     return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(userId,task));
   }
   /**
@@ -205,11 +208,31 @@ public class ApiController {
   /** redo: the teacher cancelled this student's accepted solution, so the task is being solved again. */
   private boolean redo(long userId,Object taskId) { return count("select count(*) from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and s.task_id=? and s.revoked_at is not null",userId,taskId)>0; }
   private Map<String,Object> taskView(long userId,Map<String,Object> task) { boolean redo=redo(userId,task.get("id")); return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code"),"redo",redo,"hard","HARD".equals(task.get("mode"))); }
-  /** Unsolved bank tasks for the skill, the requested difficulty first, then the nearest one, legacy tasks without difficulty last. */
+  /**
+   * Unsolved bank tasks for the skill. A curated task («curated:<slug>:<n>») is one of the variants of the story <slug>
+   * (same wording, other values); any other task is a story of its own. Tasks of stories the student has not solved yet
+   * come first; then the requested difficulty, the nearest one, legacy tasks without difficulty last; stories in bank
+   * order; the variants of one story in an order of their own for each student (see variantOrder).
+   */
   private List<Map<String,Object>> availableTasks(long userId,Map<String,Object> lesson,String skillCode,int difficulty) {
-    return db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.difficulty,t.mode from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and t.mode='NORMAL' and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1)) order by t.difficulty is null, abs(t.difficulty-?), t.difficulty, t.id",skillCode,userId,lesson.get("id"),userId,difficulty);
+    long[] variants=variantOrder(userId);
+    return db.queryForList("with candidates as (select t.id,t.title,t.statement,t.starter_code,t.difficulty,t.mode,"
+        +"case when t.source='CURATED' and t.external_key like 'curated:%:%' then substr(t.external_key,1,8+instr(substr(t.external_key,9),':')) end as story "
+        +"from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and t.mode='NORMAL' and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1))) "
+        +"select c.*,c.story is not null and exists(select 1 from successful_task_credit x join tasks s on s.id=x.task_id where x.user_id=? and s.source='CURATED' and substr(s.external_key,1,length(c.story))=c.story) as story_solved,"
+        +"coalesce((select min(s.id) from tasks s where s.source='CURATED' and substr(s.external_key,1,length(c.story))=c.story),c.id) as story_first "
+        +"from candidates c order by story_solved, c.difficulty is null, abs(c.difficulty-?), c.difficulty, story_first, (c.id%?*?+?)%?, c.id",
+        skillCode,userId,lesson.get("id"),userId,userId,difficulty,VARIANT_PRIME,variants[0],variants[1],VARIANT_PRIME);
   }
-  private static boolean hasDifficulty(List<Map<String,Object>> tasks,int difficulty) { return !tasks.isEmpty() && tasks.getFirst().get("difficulty") instanceof Number d && d.intValue()==difficulty; }
+  /**
+   * The variants of one story in an order of the student's own: an affine permutation of task ids modulo a prime, seeded
+   * by the student id. Classmates sitting side by side get different first variants; one student always the same.
+   */
+  private static long[] variantOrder(long userId) { var random=new SplittableRandom(userId); return new long[]{1+random.nextLong(VARIANT_PRIME-1),random.nextLong(VARIANT_PRIME)}; }
+  private static final long VARIANT_PRIME=2_147_483_647L;
+  private static boolean storySolved(Map<String,Object> task) { return task.get("story_solved") instanceof Number n && n.intValue()!=0; }
+  /** The best candidate has the requested difficulty and belongs to a story the student has not solved. */
+  private static boolean hasDifficulty(List<Map<String,Object>> tasks,int difficulty) { return !tasks.isEmpty() && !storySolved(tasks.getFirst()) && tasks.getFirst().get("difficulty") instanceof Number d && d.intValue()==difficulty; }
   /** Step inside the current iteration: the next one of ITERATION_STEPS for this iteration (repetitions start harder). */
   private int targetDifficulty(long userId,long lessonId,String skillCode) {
     var done=db.queryForList("select completed_iterations from student_skills where user_id=? and skill_code=?",Integer.class,userId,skillCode);

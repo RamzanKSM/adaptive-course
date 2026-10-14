@@ -30,7 +30,9 @@ class PairGrades {
   /** Thresholds, in percent of the median: 5 from FIVE, 4 from FOUR, 3 from THREE, 2 below. */
   static final int FIVE = 135, FOUR = 100, THREE = 60;
   static final String ABSENT = "н";
-  static final List<String> GRADES = List.of(ABSENT, "2", "3", "4", "5");
+  /** «Без оценки»: the teacher leaves the student ungraded for this pair — no grade, no absence, not in any median. */
+  static final String NONE = "-";
+  static final List<String> GRADES = List.of(ABSENT, "2", "3", "4", "5", NONE);
   static final int COMMENT_MAX = 500;
 
   private final JdbcTemplate db; private final Clock clock; private final ObjectMapper json;
@@ -82,7 +84,7 @@ class PairGrades {
    * Points, attendance, the hard flag and the auto grade of the given students in a window: five queries for the whole
    * group. Grades are the auto ones; the caller applies the teacher's.
    */
-  private Computed compute(Language lang, Window w, Collection<Long> users, Long pairId) {
+  private Computed compute(Language lang, Window w, Collection<Long> users, Long pairId, Set<Long> ungraded) {
     var rows = new ArrayList<Row>();
     if (users.isEmpty()) return new Computed(rows, median(lang, w, List.of(), pairId));
     String in = in(users.size()), language = lang.name();
@@ -122,7 +124,8 @@ class PairGrades {
       rows.add(new Row(user, e.getValue()[0], e.getValue()[1], came, p, came ? tasks.getOrDefault(user, emptyTasks()) : emptyTasks(),
           hardMode.contains(user) || came && hardTask.contains(user), null, null, null));
     }
-    var median = median(lang, w, rows, pairId);
+    // A student the teacher left without a grade is not part of the norm either.
+    var median = median(lang, w, rows.stream().filter(r -> !ungraded.contains(r.userId())).toList(), pairId);
     rows.replaceAll(r -> r.withAuto(grade(r.attended(), r.points(), median.value())));
     return new Computed(rows, median);
   }
@@ -136,7 +139,7 @@ class PairGrades {
   private Median median(Language lang, Window w, List<Row> rows, Long pairId) {
     LocalDate monday = week(w.start());
     Map<LocalDate, List<Integer>> weeks = new HashMap<>();
-    db.query("select p.starts_at,g.points from pair_grades g join pairs p on p.id=g.pair_id where p.language=? and g.attended=1 and g.hard=0 and p.starts_at>=? and p.starts_at<? and p.id<>?",
+    db.query("select p.starts_at,g.points from pair_grades g join pairs p on p.id=g.pair_id where p.language=? and g.attended=1 and g.hard=0 and g.grade<>'-' and p.starts_at>=? and p.starts_at<? and p.id<>?",
         (RowCallbackHandler) rs -> weeks.computeIfAbsent(week(Instant.parse(rs.getString(1))), k -> new ArrayList<>()).add(rs.getInt(2)),
         lang.name(), iso(startOf(monday.minusWeeks(WEEK_LOOKBACK))), iso(startOf(monday)), pairId == null ? -1 : pairId);
     for (int k = 1; k <= WEEK_LOOKBACK; k++) {
@@ -181,7 +184,7 @@ class PairGrades {
   /** POST /api/admin/pairs/preview: computed, nothing saved. */
   Map<String, Object> preview(Map<String, Object> body) {
     var request = request(body);
-    var computed = compute(request.language(), request.window(), members(request.group()), null);
+    var computed = compute(request.language(), request.window(), members(request.group()), null, Set.of());
     return view(new Head(null, request.group(), request.language(), request.window(), computed.median(), null, null), computed.rows(), true);
   }
 
@@ -196,7 +199,9 @@ class PairGrades {
         manual.put(user.longValue(), new String[]{gradeValue(m.get("grade")), comment(m.get("comment"))});
       }
     }
-    var computed = compute(request.language(), request.window(), members(request.group()), null);
+    Set<Long> ungraded = new HashSet<>();
+    manual.forEach((user, grade) -> { if (NONE.equals(grade[0])) ungraded.add(user); });
+    var computed = compute(request.language(), request.window(), members(request.group()), null, ungraded);
     var median = computed.median();
     long id = db.queryForObject("insert into pairs(group_name,language,starts_at,ends_at,median,median_source,median_week,created_by,created_at) values(?,?,?,?,?,?,?,?,?) returning id", Long.class,
         request.group(), request.language().name(), iso(request.window().start()), iso(request.window().end()), median.value(), median.source(),
@@ -230,7 +235,7 @@ class PairGrades {
   /** PATCH /api/admin/pairs/{id}/grades/{userId}: the teacher's grade; back to auto when it equals the auto grade without a comment. */
   Map<String, Object> setGrade(long id, long userId, Map<String, Object> body) {
     head(id);
-    if (body == null) throw new ApiError("INVALID_GRADE", "Нужна оценка: н, 2, 3, 4 или 5");
+    if (body == null) throw new ApiError("INVALID_GRADE", "Нужна оценка: н, 2, 3, 4, 5 или «-» (без оценки)");
     String grade = gradeValue(body.get("grade")), comment = comment(body.get("comment"));
     if (db.update("update pair_grades set grade=?,comment=? where pair_id=? and user_id=?", grade, comment, id, userId) == 0)
       throw new NotFoundError("STUDENT_NOT_FOUND", "Этого студента нет в паре");
@@ -242,7 +247,9 @@ class PairGrades {
     var head = head(id);
     Map<Long, Row> old = new HashMap<>();
     for (var row : rows(id)) old.put(row.userId(), row);
-    var computed = compute(head.language(), head.window(), old.keySet(), id);
+    Set<Long> ungraded = new HashSet<>();
+    old.values().forEach(row -> { if (NONE.equals(row.grade())) ungraded.add(row.userId()); });
+    var computed = compute(head.language(), head.window(), old.keySet(), id, ungraded);
     var median = computed.median();
     db.update("update pairs set median=?,median_source=?,median_week=? where id=?", median.value(), median.source(), median.week() == null ? null : median.week().toString(), id);
     for (var row : computed.rows()) {
@@ -296,7 +303,7 @@ class PairGrades {
       int sum = 0, numeric = 0, absences = 0; var flags = new ArrayList<Boolean>();
       for (int i = 0; i < g.length; i++) {
         flags.add(m[i]);
-        if (ABSENT.equals(g[i])) absences++; else if (g[i] != null) { sum += Integer.parseInt(g[i]); numeric++; }
+        if (ABSENT.equals(g[i])) absences++; else if (g[i] != null && !NONE.equals(g[i])) { sum += Integer.parseInt(g[i]); numeric++; }
       }
       students.add(obj("userId", e.getKey(), "login", e.getValue()[0], "displayName", e.getValue()[1], "grades", Arrays.asList(g), "manual", flags,
           "average", numeric == 0 ? null : ProgressAnalytics.round(sum / (double) numeric, 2), "absences", absences));
@@ -306,7 +313,7 @@ class PairGrades {
 
   /** GET /api/grades: the student's own grades of published pairs — the date and the grade, nothing else. */
   Map<String, Object> studentGrades(long userId, Language lang) {
-    var grades = db.query("select p.starts_at,g.grade from pair_grades g join pairs p on p.id=g.pair_id where g.user_id=? and p.language=? and p.published_at is not null order by p.starts_at desc,p.id desc",
+    var grades = db.query("select p.starts_at,g.grade from pair_grades g join pairs p on p.id=g.pair_id where g.user_id=? and p.language=? and p.published_at is not null and g.grade<>'-' order by p.starts_at desc,p.id desc",
         (rs, i) -> obj("date", Instant.parse(rs.getString(1)).atZone(MOSCOW).toLocalDate().toString(), "grade", rs.getString(2)), userId, lang.name());
     return obj("grades", grades);
   }
@@ -378,7 +385,7 @@ class PairGrades {
   }
   private static NotFoundError groupNotFound() { return new NotFoundError("GROUP_NOT_FOUND", "Группа не найдена"); }
   private static String gradeValue(Object value) {
-    if (!(value instanceof String g) || !GRADES.contains(g.strip())) throw new ApiError("INVALID_GRADE", "Оценка — н, 2, 3, 4 или 5");
+    if (!(value instanceof String g) || !GRADES.contains(g.strip())) throw new ApiError("INVALID_GRADE", "Оценка — н, 2, 3, 4, 5 или «-» (без оценки)");
     return g.strip();
   }
   private static String comment(Object value) {

@@ -11,9 +11,10 @@ type Edit = { grade: PairGrade; comment: string }
 
 const COURSES: [CourseLanguage, string][] = [['JAVA', 'Java'], ['PYTHON', 'Python']]
 const courseTitle = (language: CourseLanguage) => COURSES.find(c => c[0] === language)?.[1] ?? language
-const GRADES: PairGrade[] = ['н', '2', '3', '4', '5']
+const GRADES: PairGrade[] = ['н', '2', '3', '4', '5', '-']
+const GRADE_LABEL = (g: PairGrade) => g === '-' ? 'без оценки' : g
 /** Best first, the way the counts read in the header. */
-const COUNT_ORDER: PairGrade[] = ['5', '4', '3', '2', 'н']
+const COUNT_ORDER: PairGrade[] = ['5', '4', '3', '2', 'н', '-']
 const TEACHER_ONLY = 'только для преподавателя — студенты этого не видят'
 const points = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
 const average = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -57,6 +58,7 @@ const sameEdit = (row: PairResult, edit?: Edit) => !edit || (edit.grade === row.
 
 function GradeChip({ grade, manual, small }: { grade: PairGrade | null; manual?: boolean; small?: boolean }) {
   if (!grade) return <span className="muted">—</span>
+  if (grade === '-') return <span className="muted" title={`Без оценки${manual ? ' — выставлено вручную' : ''}`}>б/о</span>
   return <span className={`grade-chip g${grade === 'н' ? 'n' : grade} ${small ? 'small' : ''}`} title={manual ? 'Выставлено вручную' : undefined}>{grade}{manual && <i aria-label="вручную">*</i>}</span>
 }
 
@@ -335,7 +337,7 @@ function ResultRow({ row, edit, saved, busy, onEdit }: { row: PairResult; edit?:
       <div className="grade-line">
         <select aria-label={`Оценка: ${row.displayName}`} className={`grade-select g${grade === 'н' ? 'n' : grade}`} value={grade} disabled={busy}
           onChange={e => { const g = e.target.value as PairGrade; const c = g === row.autoGrade && !saved ? '' : draft; setDraft(c); onEdit(row, g, c) }}>
-          {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+          {GRADES.map(g => <option key={g} value={g}>{GRADE_LABEL(g)}</option>)}
         </select>
         {busy && <span className="spinner" aria-hidden="true" />}
         {manual && <span className="manual-tag" title={`Рассчитано: ${row.autoGrade}`}>вручную · было {row.autoGrade}</span>}

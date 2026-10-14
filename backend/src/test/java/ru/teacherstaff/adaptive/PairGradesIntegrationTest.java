@@ -118,7 +118,7 @@ class PairGradesIntegrationTest {
     assertEquals("PAIR", pair.path("medianSource").asText()); assertEquals(0.0, pair.path("median").asDouble()); assertTrue(pair.path("thresholds").isNull());
     assertEquals("4", rowA.path("grade").asText()); assertEquals("2", row(pair, "pts-b").path("grade").asText());
     assertTrue(rowA.path("percent").isNull()); assertFalse(rowA.path("manual").asBoolean());
-    assertEquals(Map.of("н", 1, "2", 2, "3", 0, "4", 1, "5", 0), json.convertValue(pair.path("counts"), Map.class));
+    assertEquals(Map.of("н", 1, "2", 2, "3", 0, "4", 1, "5", 0, "-", 0), json.convertValue(pair.path("counts"), Map.class));
   }
 
   @Test void hardStudentsAreGradedButLeftOutOfTheMedian() throws Exception {
@@ -190,7 +190,7 @@ class PairGradesIntegrationTest {
     // Nobody came: no norm at all.
     var none = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("F-2", "JAVA", "2032-09-01T08:00:00Z", "2032-09-01T09:30:00Z")));
     assertEquals("NONE", none.path("medianSource").asText()); assertTrue(none.path("median").isNull()); assertTrue(none.path("thresholds").isNull());
-    assertEquals(Map.of("н", 2, "2", 0, "3", 0, "4", 0, "5", 0), json.convertValue(none.path("counts"), Map.class));
+    assertEquals(Map.of("н", 2, "2", 0, "3", 0, "4", 0, "5", 0, "-", 0), json.convertValue(none.path("counts"), Map.class));
   }
 
   @Test void theTeachersGradesSurviveRecalculation() throws Exception {
@@ -298,7 +298,7 @@ class PairGradesIntegrationTest {
     var list = read(admin, get("/api/admin/pairs").param("group", "J-1").param("language", "JAVA")).path("pairs");
     assertEquals(List.of(four, three, two, one), list.findValues("id").stream().map(JsonNode::asLong).toList(), "newest first");
     for (var p : list) assertTrue(p.path("rows").isMissingNode(), "a list has no rows");
-    assertEquals(Map.of("н", 0, "2", 0, "3", 1, "4", 1, "5", 1), json.convertValue(list.get(1).path("counts"), Map.class));
+    assertEquals(Map.of("н", 0, "2", 0, "3", 1, "4", 1, "5", 1, "-", 0), json.convertValue(list.get(1).path("counts"), Map.class));
     assertEquals(0, read(admin, get("/api/admin/pairs").param("group", "J-1").param("language", "PYTHON")).path("pairs").size());
 
     assertTrue(read(admin, delete("/api/admin/pairs/{id}", four)).path("deleted").asBoolean());
@@ -310,6 +310,33 @@ class PairGradesIntegrationTest {
     mvc.perform(delete("/api/admin/students/{id}", moved).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"confirmLogin\":\"jr-d\"}")).andExpect(status().isOk());
     assertEquals(0, count("select count(*) from pair_grades where user_id=?", moved));
     assertEquals(2, read(admin, get("/api/admin/pairs/{id}", three)).path("rows").size());
+  }
+
+  @Test void theTeacherCanLeaveAStudentWithoutAGrade() throws Exception {
+    String admin = login("admin", "admin-pass");
+    long a = studentRow("ng-a", "Альфа", "N-1"), b = studentRow("ng-b", "Бета", "N-1");
+    String token = createStudent("ng-c", "Гамма", "N-1"); long c = studentId("ng-c");
+    Instant start = Instant.parse("2037-04-07T08:00:00Z");
+    earn(a, "JAVA", start, 10); earn(b, "JAVA", start, 5); earn(c, "JAVA", start, 2);
+    String saveBody = json.writeValueAsString(Map.of("group", "N-1", "language", "JAVA", "startsAt", start.toString(), "endsAt", start.plusSeconds(5400).toString(),
+        "grades", List.of(Map.of("userId", c, "grade", "-", "comment", "болел"))));
+    var pair = read(admin, post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(saveBody));
+    long id = pair.path("id").asLong();
+    assertEquals(7.5, pair.path("median").asDouble(), "the ungraded student is not part of the pair's own norm");
+    assertEquals("4", row(pair, "ng-a").path("grade").asText()); assertEquals("3", row(pair, "ng-b").path("grade").asText());
+    assertEquals("-", row(pair, "ng-c").path("grade").asText()); assertTrue(row(pair, "ng-c").path("manual").asBoolean());
+    assertEquals(1, pair.path("counts").path("-").asInt());
+
+    var recalculated = read(admin, post("/api/admin/pairs/{id}/recalculate", id));
+    assertEquals("-", row(recalculated, "ng-c").path("grade").asText()); assertEquals(7.5, recalculated.path("median").asDouble());
+
+    var journal = read(admin, get("/api/admin/pairs/journal").param("group", "N-1").param("language", "JAVA")).path("students");
+    var rowC = journal.get(2);
+    assertEquals("ng-c", rowC.path("login").asText()); assertEquals(List.of("-"), strings(rowC.path("grades")));
+    assertTrue(rowC.path("average").isNull(), "no grade, no average"); assertEquals(0, rowC.path("absences").asInt(), "not an absence");
+
+    read(admin, post("/api/admin/pairs/{id}/publish", id).contentType(MediaType.APPLICATION_JSON).content("{\"published\":true}"));
+    assertEquals(0, read(token, get("/api/grades").param("language", "JAVA")).path("grades").size(), "the student sees nothing for this pair");
   }
 
   @Test void theGroupsCourseAndValidation() throws Exception {

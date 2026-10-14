@@ -114,7 +114,8 @@ export interface StudentSession {
 
 // ───────── Pair grades (GET/POST /admin/pairs…, GET /grades) ─────────
 /** «н» — absent; numeric grades as strings, the way the backend stores them. */
-export type PairGrade = 'н' | '2' | '3' | '4' | '5'
+/** '-' — the teacher left the student without a grade for this pair. */
+export type PairGrade = 'н' | '2' | '3' | '4' | '5' | '-'
 /** WEEK — median of a previous week's saved results (medianWeek is that Monday); PAIR — of this pair itself; NONE — no median. */
 export type MedianSource = 'WEEK' | 'PAIR' | 'NONE'
 /** Teacher-only: points, tasks by difficulty, percent of the median. manual — grade differs from autoGrade or a comment is set. */

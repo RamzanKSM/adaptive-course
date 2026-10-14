@@ -1049,6 +1049,70 @@ class LearningFlowIntegrationTest {
     assertEquals(0,db.queryForObject("select count(*) from tasks where title='hard LIST_OPERATIONS'",Integer.class));
   }
 
+  @Test void aRepetitionGivesANewTaskInsteadOfAnotherVariantOfASolvedStory() throws Exception {
+    for(int d=1;d<=3;d++) addVariants("INHERITANCE_BASIC","inh-"+d,d);
+    // Without the LLM the other variant of the solved difficulty-2 story is the last resort.
+    String offline=createStudentAndLogin("story-offline-student"); long offlineId=studentId("story-offline-student"); submitDiagnostic(offline,offlineId,false); prepareOnlySkill(offlineId,"INHERITANCE_BASIC");
+    int lesson1=start(offline); var solved=List.of(solveNext(offline),solveNext(offline),solveNext(offline)); finish(offline,lesson1);
+    assertEquals(List.of("inh-1","inh-2","inh-3"),solved.stream().map(this::story).toList());
+    start(offline);
+    long variant=nextTaskId(offline);
+    assertEquals("inh-2",story(variant)); assertNotEquals(solved.get(1),variant);
+    verify(generator,never()).generateTask(eq(offlineId),any());
+    // With the LLM a new task of difficulty 2 is generated instead of the variant.
+    String online=createStudentAndLogin("story-online-student"); long onlineId=studentId("story-online-student"); submitDiagnostic(online,onlineId,false); prepareOnlySkill(onlineId,"INHERITANCE_BASIC");
+    when(tutor.status(onlineId)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(onlineId),any())).thenReturn(Optional.empty());
+    when(generator.generateTask(eq(onlineId),brief("INHERITANCE_BASIC"))).thenReturn(generated("INHERITANCE_BASIC",true));
+    int lesson=start(online); solve(online,3); finish(online,lesson);
+    verify(generator,never()).generateTask(eq(onlineId),any()); // every step of the first iteration had a story of its own
+    start(online);
+    long fresh=nextTaskId(online);
+    assertEquals("generated INHERITANCE_BASIC",db.queryForObject("select title from tasks where id=?",String.class,fresh));
+    assertEquals(2,db.queryForObject("select difficulty from tasks where id=?",Integer.class,fresh));
+    verify(generator,times(1)).generateTask(eq(onlineId),brief("INHERITANCE_BASIC"));
+  }
+
+  @Test void anUnsolvedStoryComesBeforeAVariantOfASolvedOneWhateverTheDifficulty() throws Exception {
+    for(int d=1;d<=3;d++) addVariants("LOGICAL_OR","or-"+d,d);
+    addVariants("LOGICAL_OR","or-3b",3);
+    String token=createStudentAndLogin("story-order-student"); long student=studentId("story-order-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"LOGICAL_OR");
+    int lesson1=start(token);
+    assertEquals(List.of("or-1","or-2","or-3"),List.of(solveNext(token),solveNext(token),solveNext(token)).stream().map(this::story).toList(),"stories of one difficulty go in bank order");
+    finish(token,lesson1);
+    // The repetition asks for difficulty 2 and the LLM is off: the rule puts tasks of unsolved stories first, so the
+    // unsolved difficulty-3 story wins over the same-difficulty variant of the solved story or-2 (difficulty is compared second).
+    start(token);
+    assertEquals("or-3b",story(nextTaskId(token)));
+  }
+
+  @Test void classmatesGetDifferentVariantsOfAStoryAndEachKeepsTheirs() throws Exception {
+    addVariants("TRY_CATCH_BASIC","try-1",1);
+    var first=new LinkedHashSet<Long>();
+    for(int i=1;i<=8;i++) {
+      String token=createStudentAndLogin("variant-student-"+i); long student=studentId("variant-student-"+i); submitDiagnostic(token,student,false); prepareOnlySkill(student,"TRY_CATCH_BASIC");
+      int lesson=start(token); long task=nextTaskId(token); finish(token,lesson);
+      start(token);
+      assertEquals(task,nextTaskId(token),"the same student is offered the same variant again");
+      first.add(task);
+    }
+    assertTrue(first.size()>1,"eight students do not all start with the same variant: "+first);
+  }
+
+  @Test void llmTasksAreStoriesOfTheirOwn() throws Exception {
+    addTask("ARRAY_INDEXING","index 1"); addTask("ARRAY_INDEXING","index 2"); addTask("ARRAY_INDEXING","index 3"); addTask("ARRAY_INDEXING","index 2b");
+    db.update("update tasks set difficulty=cast(substr(title,7,1) as integer) where title like 'index %'");
+    String token=createStudentAndLogin("llm-story-student"); long student=studentId("llm-story-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"ARRAY_INDEXING");
+    when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
+    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
+    int lesson1=start(token);
+    assertEquals(List.of("index 1","index 2","index 3"),List.of(solveNext(token),solveNext(token),solveNext(token)).stream().map(id->db.queryForObject("select title from tasks where id=?",String.class,id)).toList());
+    finish(token,lesson1);
+    start(token);
+    assertEquals("index 2b",db.queryForObject("select title from tasks where id=?",String.class,nextTaskId(token)),"another task of the same difficulty is a new story, nothing is generated");
+    verify(generator,never()).generateTask(eq(student),any());
+  }
+
   private com.fasterxml.jackson.databind.JsonNode attempt(String token,long task,String source) throws Exception {
     return json.readTree(mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode",source))))
         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
@@ -1078,6 +1142,11 @@ class LearningFlowIntegrationTest {
   private void solve(String token,int tasks) throws Exception { for(int i=0;i<tasks;i++){var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());long task=next.path("task").path("id").asLong();assertTrue(task>0);mvc.perform(post("/api/attempts").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("taskId",task,"sourceCode","public class Solution {}")))).andExpect(status().isOk());} }
   private void assertProgress(long user,int iterations,int mastered,int current){var row=db.queryForMap("select completed_iterations,mastered,iteration_successes from student_skills where user_id=? and skill_code='BASIC_CODE_READING'",user);assertEquals(iterations,((Number)row.get("completed_iterations")).intValue());assertEquals(mastered,((Number)row.get("mastered")).intValue());assertEquals(current,((Number)row.get("iteration_successes")).intValue());}
   private void addTask(String title){addTask("BASIC_CODE_READING", title);}
+  /** A curated story: three variants «curated:<slug>:<n>» of one wording. */
+  private void addVariants(String skillCode,String slug,int difficulty){for(int n=1;n<=3;n++){db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,source,external_key) values(?,?,?,'','class TestHarness {}','TestHarness.java',?,'CURATED',?)",skillCode,slug+" #"+n,slug,difficulty,"curated:"+slug+":"+n);long id=db.queryForObject("select last_insert_rowid()",Long.class);db.update("insert into task_target_skills(task_id,skill_code) values(?, ?)",id,skillCode);}}
+  private String story(long task){return db.queryForObject("select external_key from tasks where id=?",String.class,task).split(":")[1];}
+  private long nextTaskId(String token) throws Exception {long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();assertTrue(task>0);return task;}
+  private long solveNext(String token) throws Exception {long task=nextTaskId(token);assertTrue(attempt(token,task,"public class Solution {}").path("passed").asBoolean());return task;}
   private void addTask(String skillCode,String title){db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?, '', 'class TestHarness {}','TestHarness.java')",skillCode,title,title);long id=db.queryForObject("select last_insert_rowid()",Long.class);db.update("insert into task_target_skills(task_id,skill_code) values(?, ?)",id,skillCode);}
   private jakarta.servlet.http.Cookie cookie(String value){return new jakarta.servlet.http.Cookie("adaptive_session",value);}
   private int countLessonTasks(long student){return db.queryForObject("select count(*) from lesson_tasks where lesson_id=(select id from lessons where user_id=? and finished_at is null)",Integer.class,student);}
