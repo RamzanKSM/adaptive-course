@@ -24,7 +24,7 @@ public class ApiController {
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
    * assigned, instead of generating and assigning another. Other students are not affected.
    */
-  private final ConcurrentHashMap<String,Object> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
+  private final ConcurrentHashMap<String,java.util.concurrent.locks.ReentrantLock> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
   ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairGrades pairGrades) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairGrades=pairGrades; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
@@ -100,45 +100,39 @@ public class ApiController {
   @GetMapping("/learning/next") public Map<String,Object> next(@RequestParam(name="language",required=false) String language,HttpServletRequest r) {
     long userId=student(r); Language lang=Language.parse(language);
     String key=userId+":"+lang.name();
-    synchronized(lessonLocks.computeIfAbsent(key,k->new Object())) {
+    var lock=lessonLock(key); lock.lock();
+    try {
       touch(userId,lang); preparing.add(key);
       try { return nextLocked(userId,lang); } finally { preparing.remove(key); touch(userId,lang); }
-    }
+    } finally { lock.unlock(); }
   }
   private Map<String,Object> nextLocked(long userId,Language lang) {
     var lesson=active(userId,lang);
     if(lesson==null) throw bad("NO_ACTIVE_LESSON","Сначала начните урок");
     var assigned=unsolvedTask(lesson);
     if(assigned!=null) return learningResponse(userId,lesson,assigned);
-    var redo=pendingRedo(userId,lang);
+    boolean hard=hardModeActive(userId,lang);
+    var redo=pendingRedo(userId,lang,hard);
     if(redo!=null){
       if(!assign(lesson,((Number)redo.get("id")).longValue())) return lessonFinished(lesson);
       db.update("delete from pending_redos where user_id=? and task_id=?",userId,redo.get("id"));
       log.info("Assigned queued task {} ({}) to lesson {} of student {}",redo.get("id"),"GENERATED".equals(redo.get("reason"))?"generated for a lesson finished during generation":"credit revoked by the teacher",lesson.get("id"),userId);
       return learningResponse(userId,lesson,redo);
     }
+    // Hard mode is a track of its own: the bank's algorithmic tasks one after another, apart from topics and repetitions.
+    if(hard) return hardTrack(userId,lesson,lang);
     var skill=nextSkill(userId,lang,((Number)lesson.get("number")).intValue(),((Number)lesson.get("id")).longValue());
-    if(skill==null){
-      boolean hard=hardModeActive(userId,lang);
-      if(hard){
-        var practice=hardPractice(userId,lesson,lang);
-        if(practice!=null){
-          if(!assign(lesson,((Number)practice.get("id")).longValue())) return lessonFinished(lesson);
-          log.info("Assigned hard practice task {} (skill={}) to lesson {} of student {}: no topic is due",practice.get("id"),practice.get("skill_code"),lesson.get("id"),userId);
-          return learningResponse(userId,lesson,practice);
-        }
-      }
-      return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason",remainingTopics(userId,lang)==0?"COURSE_COMPLETE":"NO_DUE_SKILL","hardPracticeExhausted",hard,"llm",llm(userId,lang));
-    }
+    if(skill==null) return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason",remainingTopics(userId,lang)==0?"COURSE_COMPLETE":"NO_DUE_SKILL","llm",llm(userId,lang));
     String skillCode=(String)skill.get("code");
     long lessonId=((Number)lesson.get("id")).longValue();
     Object explanation=explanation(userId, skillCode);
     // The lesson may have been finished (by the student, an admin or a logout) while the explanation was generated;
     // the explanation is saved for the topic, a task is chosen in the next lesson.
     if(!stillActive(lessonId)) return lessonFinished(lesson);
+    // Switching the mode does not wait for this request (see myHardMode): it may have switched while the explanation was prepared.
+    if(hardModeActive(userId,lang)) return hardTrack(userId,lesson,lang);
     int difficulty=targetDifficulty(userId, lessonId, skillCode);
-    boolean hard=hardModeActive(userId,lang);
-    var tasks=availableTasks(userId, lesson, skillCode, difficulty, hard);
+    var tasks=availableTasks(userId, lesson, skillCode, difficulty);
     Long generatedTaskId=null;
     if(!hasDifficulty(tasks, difficulty)) {
       // Generate the missing step of the easy→hard ladder; fall back to the nearest bank task when generation is impossible.
@@ -147,40 +141,44 @@ public class ApiController {
       else if(!llmSettings.taskGenerationAllowed()) { reason="LLM_RATE_LIMITED"; log.info("Task generation skipped for skill={}: course-wide task generation limit reached",skillCode); }
       else if(!codeRunner.status(lang).available()) reason="RUNNER_UNAVAILABLE";
       else {
-        var brief=CourseBriefs.brief(db, userId, skillCode, difficulty, explanation instanceof Map<?,?> m ? (String)m.get("content") : null, hard);
+        var brief=CourseBriefs.brief(db, userId, skillCode, difficulty, explanation instanceof Map<?,?> m ? (String)m.get("content") : null, false);
         for(int attempt=1;attempt<=GENERATION_ATTEMPTS&&generatedTaskId==null;attempt++) try {
           if(attempt>1&&!stillActive(lessonId)) break; // no new attempts for a finished lesson
-          log.info("Generating {}task: skill={} language={} difficulty={} attempt={}/{}",hard?"hard ":"",skillCode,lang,difficulty,attempt,GENERATION_ATTEMPTS);
-          generatedTaskId=storeGeneratedTask(contentGenerator.generateTask(userId, brief), difficulty, lang, hard);
+          log.info("Generating task: skill={} language={} difficulty={} attempt={}/{}",skillCode,lang,difficulty,attempt,GENERATION_ATTEMPTS);
+          generatedTaskId=storeGeneratedTask(contentGenerator.generateTask(userId, brief), difficulty, lang, false);
           markTaskOutcome(userId,skillCode,"ACCEPTED");
           log.info("Generated task {} accepted for skill={} difficulty={}",generatedTaskId,skillCode,difficulty);
         }
         catch (InvalidGeneratedContentException e) { markTaskOutcome(userId,skillCode,"REJECTED"); log.warn("Generated task rejected (skill={}, attempt {}/{}): {}",skillCode,attempt,GENERATION_ATTEMPTS,e.getMessage()); }
         catch (LlmUnavailableException e) { log.warn("Task generation unavailable for skill={}: {}",skillCode,e.getMessage()); reason="NO_TASK_AVAILABLE"; break; }
         if(generatedTaskId==null&&reason==null) reason="LLM_GENERATION_FAILED_VALIDATION";
-        tasks=availableTasks(userId, lesson, skillCode, difficulty, hard);
+        tasks=availableTasks(userId, lesson, skillCode, difficulty);
       }
       if(!stillActive(lessonId)) return lessonFinished(lesson, userId, generatedTaskId);
       if(tasks.isEmpty()) return "RUNNER_UNAVAILABLE".equals(reason)
           ? obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason,"llm",llm(userId,lang),"runner",runner(lang))
           : obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",null,"reason",reason==null?"NO_TASK_AVAILABLE":reason,"llm",llm(userId,lang));
     }
+    // Switched to hard mode while the task was prepared: a freshly generated task waits in the queue for regular mode.
+    if(hardModeActive(userId,lang)) { queueGenerated(userId,generatedTaskId); return hardTrack(userId,lesson,lang); }
     var task=tasks.getFirst();
     if(!assign(lesson,((Number)task.get("id")).longValue())) return lessonFinished(lesson, userId, generatedTaskId);
     return obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(userId,task));
   }
   /**
-   * Hard mode with no topic due (the course is complete, or no repetition falls on this lesson): the next unsolved hard
-   * task of a topic the student has closed — mastered or confirmed by the diagnostic — so the schedule of the other
-   * topics is not touched. Course order, easier first. Null when the bank has nothing left for this student.
+   * Hard mode: the next unsolved task of the hard bank (Exercism; generated hard tasks are not trusted and not used), in
+   * course order, easier first — whatever topics are due. A task replaced earlier in the lesson comes back. Nothing is
+   * generated; when the bank is solved, the lesson says so.
    */
-  private Map<String,Object> hardPractice(long userId,Map<String,Object> lesson,Language lang){
-    String closed="(exists(select 1 from student_skills p where p.user_id=? and p.skill_code=%1$s and p.mastered=1) or exists(select 1 from diagnostic_skill_results d where d.user_id=? and d.skill_code=%1$s and d.confirmed=1))";
+  private Map<String,Object> hardTrack(long userId,Map<String,Object> lesson,Language lang){
     var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.mode,ts.skill_code,s.title as skill_title,s.block_no from tasks t join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code "
-        +"where t.active=1 and t.mode='HARD' and t.language=? and "+closed.formatted("ts.skill_code")+" and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) "
-        +"and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not "+closed.formatted("req.skill_code")+") "
-        +"order by s.block_no,s.sort_order,t.difficulty is null,t.difficulty,t.id limit 1",lang.name(),userId,userId,userId,lesson.get("id"),userId,userId);
-    return rows.isEmpty()?null:rows.getFirst();
+        +"where t.active=1 and t.mode='HARD' and coalesce(t.source,'')<>'LLM' and t.language=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) "
+        +"order by s.block_no,s.sort_order,t.difficulty is null,t.difficulty,t.id limit 1",lang.name(),userId);
+    if(rows.isEmpty()) return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason","HARD_BANK_COMPLETE","llm",llm(userId,lang));
+    var task=rows.getFirst();
+    if(!assign(lesson,((Number)task.get("id")).longValue())) return lessonFinished(lesson);
+    log.info("Assigned hard task {} (skill={}) to lesson {} of student {}",task.get("id"),task.get("skill_code"),lesson.get("id"),userId);
+    return learningResponse(userId,lesson,task);
   }
   private boolean stillActive(long lessonId){ return count("select count(*) from lessons where id=? and finished_at is null",lessonId)>0; }
   /** Assigns a task only to a lesson that is still open: a finish can land at any moment while content is prepared. A task replaced earlier in the lesson comes back. */
@@ -191,26 +189,25 @@ public class ApiController {
   private Map<String,Object> lessonFinished(Map<String,Object> lesson){ return obj("lesson",lesson(((Number)lesson.get("id")).longValue()),"skill",null,"explanation",null,"task",null,"reason","LESSON_FINISHED"); }
   /** A task generated for a lesson that ended meanwhile is reserved: the student gets it first in the next lesson of the course. */
   private Map<String,Object> lessonFinished(Map<String,Object> lesson,long userId,Long generatedTaskId){
-    if(generatedTaskId!=null){
-      db.update("insert or ignore into pending_redos(user_id,task_id,reason) values(?,?,'GENERATED')",userId,generatedTaskId);
-      log.info("Lesson {} was finished during generation; task {} is kept for the student's next lesson",lesson.get("id"),generatedTaskId);
-    }
+    if(generatedTaskId!=null) log.info("Lesson {} was finished during generation; task {} is kept for the student's next lesson",lesson.get("id"),generatedTaskId);
+    queueGenerated(userId,generatedTaskId);
     return lessonFinished(lesson);
   }
+  private void queueGenerated(long userId,Long generatedTaskId){ if(generatedTaskId!=null) db.update("insert or ignore into pending_redos(user_id,task_id,reason) values(?,?,'GENERATED')",userId,generatedTaskId); }
   private Map<String,Object> unsolvedTask(Map<String,Object> lesson) { var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.mode,ts.skill_code, s.title as skill_title,s.block_no from lesson_tasks lt join tasks t on t.id=lt.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where lt.lesson_id=? and lt.replaced_at is null and t.active=1 and not exists(select 1 from submissions x where x.lesson_id=lt.lesson_id and x.task_id=lt.task_id and x.passed=1) order by lt.rowid desc limit 1",lesson.get("id"));return rows.isEmpty()?null:rows.getFirst(); }
-  /** The oldest task the teacher sent back that is still active; retired ones are dropped from the queue. */
-  private Map<String,Object> pendingRedo(long userId,Language lang){
+  /** The oldest task the teacher sent back that is still active; retired ones are dropped from the queue. A task generated for a finished lesson waits for its own mode. */
+  private Map<String,Object> pendingRedo(long userId,Language lang,boolean hard){
     db.update("delete from pending_redos where user_id=? and task_id in (select id from tasks where active=0)",userId);
-    var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.mode,ts.skill_code,s.title as skill_title,s.block_no,p.reason from pending_redos p join tasks t on t.id=p.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where p.user_id=? and t.language=? order by p.created_at,p.task_id limit 1",userId,lang.name());
+    var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.mode,ts.skill_code,s.title as skill_title,s.block_no,p.reason from pending_redos p join tasks t on t.id=p.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where p.user_id=? and t.language=? and (coalesce(p.reason,'')<>'GENERATED' or t.mode=?) order by p.created_at,p.task_id limit 1",userId,lang.name(),hard?"HARD":"NORMAL");
     return rows.isEmpty()?null:rows.getFirst();
   }
-  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation=explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(userId,task)); }
+  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation="HARD".equals(task.get("mode"))?cachedExplanation(skillCode):explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(userId,task)); }
   /** redo: the teacher cancelled this student's accepted solution, so the task is being solved again. */
   private boolean redo(long userId,Object taskId) { return count("select count(*) from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and s.task_id=? and s.revoked_at is not null",userId,taskId)>0; }
   private Map<String,Object> taskView(long userId,Map<String,Object> task) { boolean redo=redo(userId,task.get("id")); return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code"),"redo",redo,"hard","HARD".equals(task.get("mode"))); }
   /** Unsolved bank tasks for the skill, the requested difficulty first, then the nearest one, legacy tasks without difficulty last. */
-  private List<Map<String,Object>> availableTasks(long userId,Map<String,Object> lesson,String skillCode,int difficulty,boolean hard) {
-    return db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.difficulty,t.mode from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and t.mode='"+(hard?"HARD":"NORMAL")+"' and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1)) order by t.difficulty is null, abs(t.difficulty-?), t.difficulty, t.id",skillCode,userId,lesson.get("id"),userId,difficulty);
+  private List<Map<String,Object>> availableTasks(long userId,Map<String,Object> lesson,String skillCode,int difficulty) {
+    return db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.difficulty,t.mode from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and t.mode='NORMAL' and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id) and not exists(select 1 from task_prerequisite_skills req where req.task_id=t.id and not exists(select 1 from student_skills p where p.user_id=? and p.skill_code=req.skill_code and p.mastered=1)) order by t.difficulty is null, abs(t.difficulty-?), t.difficulty, t.id",skillCode,userId,lesson.get("id"),userId,difficulty);
   }
   private static boolean hasDifficulty(List<Map<String,Object>> tasks,int difficulty) { return !tasks.isEmpty() && tasks.getFirst().get("difficulty") instanceof Number d && d.intValue()==difficulty; }
   /** Step inside the current iteration: the next one of ITERATION_STEPS for this iteration (repetitions start harder). */
@@ -243,6 +240,11 @@ public class ApiController {
   }
   private static String abbreviate(String value,int max) { String flat=value.replaceAll("\\s+"," ").strip(); return flat.length()<=max?flat:flat.substring(0,max)+"…"; }
   /** Cached explanation; LLM explanations from an older prompt version are regenerated when possible and kept otherwise. */
+  /** A hard task never waits for the LLM: the topic's explanation if there is one, otherwise none. */
+  private Object cachedExplanation(String skillCode) {
+    var rows=db.queryForList("select content,source from explanations where skill_code=?",skillCode);
+    return rows.isEmpty()?null:Map.of("content",rows.getFirst().get("content"),"source",rows.getFirst().get("source"));
+  }
   private Object explanation(long studentId, String skillCode) {
     var rows=db.queryForList("select content,source,prompt_version from explanations where skill_code=?",skillCode);
     var cached=rows.isEmpty()?null:rows.getFirst();
@@ -645,15 +647,16 @@ public class ApiController {
     Language lang=Language.parse(b.get("language") instanceof String l?l:null);
     int remaining=hardModeRemaining(u,lang);
     if(on&&remaining>0) throw bad("HARD_MODE_NOT_READY","Hard mode откроется, когда по каждой теме курса "+lang.title+" будет пройдена хотя бы одна итерация. Осталось тем: "+remaining+".");
-    boolean replaced;
-    // Under the lesson lock: a task being prepared for the old mode is assigned first and then replaced here.
-    synchronized(lessonLocks.computeIfAbsent(u+":"+lang.name(),k->new Object())) {
-      if(db.update("update users set hard_mode_on=? where id=? and hard_mode_allowed=1",on?1:0,u)==0) throw bad("HARD_MODE_NOT_ALLOWED","Hard mode включает преподаватель");
-      log.info("Hard mode switched {} ({})",on?"on":"off",lang);
-      replaced=replaceTaskOfOtherMode(u,lang);
-    }
+    if(db.update("update users set hard_mode_on=? where id=? and hard_mode_allowed=1",on?1:0,u)==0) throw bad("HARD_MODE_NOT_ALLOWED","Hard mode включает преподаватель");
+    log.info("Hard mode switched {} ({})",on?"on":"off",lang);
+    // The switch never waits for a task being prepared (an LLM call takes minutes): that request checks the mode before
+    // it assigns anything. Otherwise the current task of the other mode is taken out here, under the lesson lock.
+    boolean replaced=false;
+    var lock=lessonLock(u+":"+lang.name());
+    if(lock.tryLock()) { try { replaced=replaceTaskOfOtherMode(u,lang); } finally { lock.unlock(); } }
     return Map.of("hardModeOn",on,"hardModeCourses",hardModeCourses(u),"replacedTask",replaced);
   }
+  private java.util.concurrent.locks.ReentrantLock lessonLock(String key){ return lessonLocks.computeIfAbsent(key,k->new java.util.concurrent.locks.ReentrantLock()); }
   /** Takes the current task out of the open lesson when its mode differs from the effective one; nextLocked then picks a task of the new mode. */
   private boolean replaceTaskOfOtherMode(long u,Language lang){
     var lesson=active(u,lang); var task=lesson==null?null:unsolvedTask(lesson);
@@ -795,7 +798,7 @@ public class ApiController {
   private Map<String,Object> nextSkill(long userId,Language lang,int lessonNumber,long lessonId) {
     var rows=db.queryForList("select s.code,s.title,s.block_no,coalesce(x.completed_iterations,0) completed,coalesce(x.first_iteration_lesson_number,0) first from skills s cross join (select ? as uid) x2 left join student_skills x on x.skill_code=s.code and x.user_id=x2.uid where s.language=? and "+NEEDS_PRACTICE+" and (s.prerequisite_code is null or exists(select 1 from student_skills p where p.user_id=x2.uid and p.skill_code=s.prerequisite_code and p.mastered=1)) order by s.block_no,s.sort_order",userId,lang.name());
     var due=new ArrayList<Map<String,Object>>();
-    for(var row:rows) { int completed=((Number)row.get("completed")).intValue(), first=((Number)row.get("first")).intValue(); if(completed==0||(completed==1&&lessonNumber==first+1)||(completed==2&&lessonNumber==first+3)) due.add(row); }
+    for(var row:rows) { int completed=((Number)row.get("completed")).intValue(), first=((Number)row.get("first")).intValue(); if(IterationRule.due(new IterationRule.Topic(completed,0,completed==0?null:first),lessonNumber)) due.add(row); }
     if(due.isEmpty()) return null;
     for(var row:due) if(solvedInLesson(userId,lessonId,(String)row.get("code"))>0) return skillView(row);
     for(var row:due) if(((Number)row.get("completed")).intValue()>0) return skillView(row);

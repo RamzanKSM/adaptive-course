@@ -865,18 +865,14 @@ class LearningFlowIntegrationTest {
     addTask("MAP_BASIC","regular map task"); // the regular pool is not used in hard mode
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
     when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
-    when(generator.generateTask(eq(student),argThat(b->b!=null&&b.hard()&&"MAP_BASIC".equals(b.skillCode())))).thenReturn(hardTask("MAP_BASIC"));
-    when(runner.runRaw(any(Language.class),anyString(),anyString())).thenReturn(recordedProducts());
-    // The platform's own trap — the first example's answer printed for any input — must fail the test cases.
-    when(runner.run(any(Language.class),contains("println(\"20\")"),anyString())).thenReturn(new PistonCodeRunner.Run(false,"Неверный результат: Тест 2 из 6 не пройден"));
     start(token);
     var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     long hardTaskId=next.path("task").path("id").asLong();
     assertTrue(next.path("task").path("hard").asBoolean(),next.toString());
     assertEquals("HARD",db.queryForObject("select mode from tasks where id=?",String.class,hardTaskId));
-    assertEquals(6,db.queryForObject("select count(*) from task_cases where task_id=?",Integer.class,hardTaskId),"answers recorded from the reference");
-    assertEquals("20\n",db.queryForObject("select expected from task_cases where task_id=? and is_public=1",String.class,hardTaskId));
-    attempt(token,hardTaskId,"import java.util.Scanner; public class Solution { public static void main(String[] a) { } }");
+    assertEquals("EXERCISM",db.queryForObject("select source from tasks where id=?",String.class,hardTaskId),"only the curated hard bank");
+    verify(generator,never()).generateTask(eq(student),any());
+    db.update("insert into successful_task_credit(user_id,task_id) values(?,?)",student,hardTaskId);
     var progress=json.readTree(mvc.perform(get("/api/progress").cookie(cookie(token))).andReturn().getResponse().getContentAsString());
     assertEquals(1,progress.path("hardSolved").asInt()); assertEquals(1,progress.path("solvedTasks").asInt());
     // Taking the permission away switches the mode off.
@@ -897,7 +893,8 @@ class LearningFlowIntegrationTest {
     start(token);
     var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertTrue(next.path("task").path("hard").asBoolean());
-    assertEquals("Квадратный корень без функций",next.path("task").path("title").asText(),"a repetition starts at step 2: the step-2 bank task of the topic");
+    String first=db.queryForObject("select t.title from tasks t join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where t.mode='HARD' and t.active=1 and t.language='JAVA' and t.source='EXERCISM' order by s.block_no,s.sort_order,t.difficulty,t.id limit 1",String.class);
+    assertEquals(first,next.path("task").path("title").asText(),"hard mode is a track of its own: the bank in course order, whatever topic is due");
     assertTrue(next.path("task").path("starterCode").asText().contains("Scanner in = new Scanner(System.in)"));
     assertTrue(next.path("task").path("statement").asText().contains("Exercism"),"the source is credited");
     verify(generator,never()).generateTask(eq(student),any());
@@ -916,7 +913,7 @@ class LearningFlowIntegrationTest {
     var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertTrue(next.path("task").path("hard").asBoolean(),"hard practice instead of «course complete»: "+next);
     assertTrue(next.path("reason").isMissingNode()||next.path("reason").isNull(),next.toString());
-    String expected=db.queryForObject("select t.title from tasks t join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where t.mode='HARD' and t.active=1 and t.language='JAVA' order by s.block_no,s.sort_order,t.difficulty,t.id limit 1",String.class);
+    String expected=db.queryForObject("select t.title from tasks t join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where t.mode='HARD' and t.active=1 and t.language='JAVA' and t.source='EXERCISM' order by s.block_no,s.sort_order,t.difficulty,t.id limit 1",String.class);
     assertEquals(expected,next.path("task").path("title").asText(),"course order, easier first");
     assertEquals(db.queryForObject("select skill_code from task_target_skills where task_id=?",String.class,next.path("task").path("id").asLong()),next.path("skill").path("code").asText());
     // The same task stays until it is solved.
@@ -928,32 +925,59 @@ class LearningFlowIntegrationTest {
     db.update("insert or ignore into successful_task_credit(user_id,task_id) select ?,id from tasks where mode='HARD' and language='JAVA'",student);
     start(token);
     var done=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-    assertEquals("COURSE_COMPLETE",done.path("reason").asText(),done.toString());
-    assertTrue(done.path("hardPracticeExhausted").asBoolean());
+    assertEquals("HARD_BANK_COMPLETE",done.path("reason").asText(),done.toString());
   }
 
-  @Test void hardPracticeOnADayWithoutRepetitionsLeavesTheScheduleAlone() throws Exception {
-    String token=createStudentAndLogin("hard-idle-student"); long student=studentId("hard-idle-student"); submitDiagnostic(token,student,false);
-    prepareOnlySkill(student,"WHILE_LOOP_BASIC");
-    // Its second iteration falls on lesson 6, so lesson 1 has nothing due.
-    db.update("insert into student_skills(user_id,skill_code,completed_iterations,first_iteration_lesson_number,mastered) values(?,?,1,5,0)",student,"WHILE_LOOP_BASIC");
+  @Test void hardModeIgnoresDueTopicsAndNeverUsesGeneratedHardTasks() throws Exception {
+    String token=createStudentAndLogin("hard-track-student"); long student=studentId("hard-track-student"); submitDiagnostic(token,student,false);
+    passedCourseOnceExcept(student,"WHILE_LOOP_BASIC"); // its repetition is due in lesson 1
     db.update("update users set hard_mode_allowed=1, hard_mode_on=1 where id=?",student);
+    // A generated hard task that would come first in course order is not trusted and never assigned.
+    long generated=db.queryForObject("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,language,source,mode) values('BASIC_CODE_READING','generated hard','s','','x','TestHarness.java',1,'JAVA','LLM','HARD') returning id",Long.class);
+    db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",generated,"BASIC_CODE_READING");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
-    when(generator.generateExplanation(eq(student),any())).thenReturn(Optional.empty());
     start(token);
     var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-    assertTrue(next.path("task").path("hard").asBoolean(),"extra hard practice instead of «nothing more today»: "+next);
-    assertNotEquals("WHILE_LOOP_BASIC",next.path("skill").path("code").asText(),"only topics already closed");
-    assertEquals(1,db.queryForObject("select mastered from student_skills where user_id=? and skill_code=?",Integer.class,student,next.path("skill").path("code").asText()));
-    // Without hard mode the same lesson has nothing to do.
-    String plain=createStudentAndLogin("plain-idle-student"); long plainId=studentId("plain-idle-student"); submitDiagnostic(plain,plainId,false);
-    prepareOnlySkill(plainId,"WHILE_LOOP_BASIC");
-    db.update("insert into student_skills(user_id,skill_code,completed_iterations,first_iteration_lesson_number,mastered) values(?,?,1,5,0)",plainId,"WHILE_LOOP_BASIC");
-    start(plain);
-    var idle=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(plain))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-    assertEquals("NO_DUE_SKILL",idle.path("reason").asText(),idle.toString());
-    assertFalse(idle.path("hardPracticeExhausted").asBoolean());
+    assertTrue(next.path("task").path("hard").asBoolean(),next.toString());
+    assertNotEquals(generated,next.path("task").path("id").asLong());
+    assertEquals("EXERCISM",db.queryForObject("select source from tasks where id=?",String.class,next.path("task").path("id").asLong()));
+    verify(generator,never()).generateTask(eq(student),any());
+    verify(generator,never()).generateExplanation(eq(student),any());
+    // Switched off, the due repetition comes back.
+    mvc.perform(patch("/api/me/hard-mode").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false,\"language\":\"JAVA\"}")).andExpect(status().isOk());
+    addTask("WHILE_LOOP_BASIC","regular while track"); db.update("update tasks set difficulty=2 where title='regular while track'");
+    var regular=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("WHILE_LOOP_BASIC",regular.path("skill").path("code").asText(),regular.toString());
+    db.update("update tasks set active=0 where title in ('generated hard','regular while track')"); // the database is shared by the tests
   }
+
+  @Test void aMissedRepetitionStaysDue() throws Exception {
+    String token=createStudentAndLogin("missed-student"); long student=studentId("missed-student"); submitDiagnostic(token,student,false);
+    db.update("update student_languages set starting_block=0 where user_id=?",student);
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,iteration_successes,mastered) select ?,code,3,0,1 from skills where code<>'BASIC_CODE_READING'",student);
+    for(int i=4;i<=9;i++) addTask("extra "+i);
+    int lesson1=start(token); solve(token,3); assertProgress(student,1,0,0); finish(token,lesson1);
+    int lesson2=start(token); finish(token,lesson2); // left lesson N+1 without the repetition
+    start(token); solve(token,2); assertProgress(student,2,0,0);
+  }
+
+  @Test void switchingHardModeDoesNotWaitForATaskBeingPrepared() throws Exception {
+    String token=createStudentAndLogin("hard-wait-student"); long student=studentId("hard-wait-student"); submitDiagnostic(token,student,false); passedCourseOnceExcept(student,"WHILE_LOOP_BASIC");
+    db.update("update users set hard_mode_allowed=1, hard_mode_on=0 where id=?",student);
+    var field=ApiController.class.getDeclaredField("lessonLocks"); field.setAccessible(true);
+    @SuppressWarnings("unchecked") var locks=(java.util.Map<String,java.util.concurrent.locks.ReentrantLock>)field.get(org.springframework.test.util.AopTestUtils.getTargetObject(api));
+    var lock=locks.computeIfAbsent(student+":JAVA",k->new java.util.concurrent.locks.ReentrantLock());
+    var held=new java.util.concurrent.CountDownLatch(1); var release=new java.util.concurrent.CountDownLatch(1);
+    var preparing=new Thread(()->{ lock.lock(); try { held.countDown(); release.await(); } catch(InterruptedException ignored) {} finally { lock.unlock(); } });
+    preparing.start(); held.await();
+    try {
+      long started=System.nanoTime();
+      mvc.perform(patch("/api/me/hard-mode").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true,\"language\":\"JAVA\"}")).andExpect(status().isOk());
+      assertTrue((System.nanoTime()-started)/1_000_000<2000,"the switch answers at once while a task is prepared");
+      assertEquals(1,db.queryForObject("select hard_mode_on from users where id=?",Integer.class,student));
+    } finally { release.countDown(); preparing.join(); }
+  }
+
 
   @Test void switchingHardModeReplacesTheCurrentTaskOfTheOtherMode() throws Exception {
     String token=createStudentAndLogin("hard-switch-student"); long student=studentId("hard-switch-student"); submitDiagnostic(token,student,false); passedCourseOnceExcept(student,"WHILE_LOOP_BASIC");

@@ -18,9 +18,7 @@ export interface Task { id: Id; title: string; statement: string; starterCode?: 
 export type LessonFinishReason = 'STUDENT' | 'LOGOUT' | 'IDLE' | 'TEACHER'
 /** lastActivityAt + idleMinutes: the server finishes the lesson (finishReason 'IDLE') once that moment has passed. */
 export interface Lesson { id: Id; number: number; language?: CourseLanguage; startedAt: string; finishedAt?: string | null; finishReason?: LessonFinishReason | null; lastActivityAt?: string | null; idleMinutes?: number }
-export interface LearningNext { lesson: Lesson; skill: { code: string; title: string; blockNo: number } | null; explanation: { content: string; source: string } | null; task: Task | null; reason?: string; llm?: LlmStatus
-  /** Hard mode is on, but every hard task of the closed topics is already solved. */
-  hardPracticeExhausted?: boolean }
+export interface LearningNext { lesson: Lesson; skill: { code: string; title: string; blockNo: number } | null; explanation: { content: string; source: string } | null; task: Task | null; reason?: string; llm?: LlmStatus }
 /** The program run as is, without hidden checks (POST /run, or alongside a check). */
 export interface ConsoleRun { status: 'OK' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'LIMIT' | 'NO_MAIN' | 'UNAVAILABLE'; stdout: string; error?: string | null; truncated: boolean }
 /** The LLM reviewer's verdict (experimental grading). A rejection always says why: summary plus issues. */

@@ -18,9 +18,11 @@ class ProgressAnalyticsTest {
     topic = IterationRule.credit(topic, 3, 4, false); assertEquals(new IterationRule.Topic(1, 0, 4), topic, "three tasks in one lesson: the first iteration, in any lesson");
     assertEquals(topic, IterationRule.credit(topic, 2, 5, true), "one iteration per lesson, even a due one");
     assertEquals(new IterationRule.Topic(1, 1, 4), IterationRule.credit(topic, 1, 6, false), "short of the iteration's tasks: progress inside it");
-    assertEquals(topic, IterationRule.credit(topic, 2, 6, false), "the second iteration is due only in lesson N+1");
+    assertEquals(new IterationRule.Topic(1, 0, 4), IterationRule.credit(topic, 2, 4, false), "the second iteration not before lesson N+1");
+    assertEquals(new IterationRule.Topic(2, 0, 4), IterationRule.credit(topic, 2, 6, false), "a repetition missed in lesson N+1 is still due later");
     topic = IterationRule.credit(topic, 2, 5, false); assertEquals(new IterationRule.Topic(2, 0, 4), topic);
-    assertEquals(topic, IterationRule.credit(topic, 1, 6, false), "the third only in lesson N+3");
+    assertEquals(topic, IterationRule.credit(topic, 1, 6, false), "the third not before lesson N+3");
+    assertEquals(new IterationRule.Topic(3, 0, 4), IterationRule.credit(topic, 1, 12, false), "and also any lesson after it");
     topic = IterationRule.credit(topic, 1, 7, false); assertEquals(new IterationRule.Topic(3, 0, 4), topic); assertTrue(topic.mastered());
     assertEquals(topic, IterationRule.credit(topic, 5, 8, false), "a mastered topic stays as it is");
     assertFalse(IterationRule.due(new IterationRule.Topic(1, 0, null), 2), "a schedule without its first lesson is never due");
