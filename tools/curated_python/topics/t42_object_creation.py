@@ -122,4 +122,125 @@ TASKS = [
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_INIT],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-obj-two-mugs", title="Две кружки чая",
+        given=["owner1", "owner2", "volume", "drunk"],
+        variants=[{"owner1": '"Anya"', "owner2": '"Boris"', "volume": "250", "drunk": "100"},
+                  {"owner1": '"Vika"', "owner2": '"Gleb"', "volume": "300", "drunk": "180"},
+                  {"owner1": '"Dima"', "owner2": '"Eva"', "volume": "200", "drunk": "50"}],
+        hidden=[{"owner1": '"Zoya"', "owner2": '"Igor"', "volume": "350", "drunk": "0"},
+                {"owner1": '"Katya"', "owner2": '"Lev"', "volume": "220", "drunk": "220"},
+                {"owner1": '"Masha"', "owner2": '"Nikita"', "volume": "400", "drunk": "125"}],
+        intro="Двое друзей налили себе чай в одинаковые кружки — по `volume` миллилитров в каждую. "
+              "Потом первый из них, `owner1`, отпил `drunk` миллилитров. Чай во второй кружке от этого не убавился: "
+              "кружки разные, хоть и одинаковые на вид. Так же ведут себя и объекты одного класса.",
+        steps=["Создай класс `Mug`. В `__init__(self, owner, volume)` сохрани владельца и объём чая в атрибуты "
+               "`self.owner` и `self.volume`.",
+               "Создай две отдельные кружки двумя вызовами класса: `mug1 = Mug(owner1, volume)` и "
+               "`mug2 = Mug(owner2, volume)`.",
+               "Уменьши чай только в первой кружке: `mug1.volume -= drunk`.",
+               "Выведи для каждой кружки строку вида `Anya: 150 ml` — имя владельца и сколько чая осталось, "
+               "сначала для первой кружки, потом для второй."],
+        hint="Каждый вызов `Mug(...)` создаёт новый объект со своими атрибутами. Если вместо второго вызова написать "
+             "`mug2 = mug1`, новой кружки не появится: обе переменные будут указывать на одну и ту же кружку, "
+             "и глоток из «первой» убавит чай и во «второй».",
+        solution='class Mug:\n    def __init__(self, owner, volume):\n        self.owner = owner\n        self.volume = volume\n\n\n'
+                 'mug1 = Mug(owner1, volume)\nmug2 = Mug(owner2, volume)\nmug1.volume -= drunk\n'
+                 'print(f"{mug1.owner}: {mug1.volume} ml")\nprint(f"{mug2.owner}: {mug2.volume} ml")',
+        wrong=[("не создаёт вторую кружку, а пишет mug2 = mug1 — глоток убавляет чай в обеих",
+                'class Mug:\n    def __init__(self, owner, volume):\n        self.owner = owner\n        self.volume = volume\n\n\n'
+                'mug1 = Mug(owner1, volume)\nmug2 = mug1\nmug2.owner = owner2\nmug1.volume -= drunk\n'
+                'print(f"{owner1}: {mug1.volume} ml")\nprint(f"{mug2.owner}: {mug2.volume} ml")'),
+               ("отпивает не из той кружки — уменьшает чай у второго владельца",
+                'class Mug:\n    def __init__(self, owner, volume):\n        self.owner = owner\n        self.volume = volume\n\n\n'
+                'mug1 = Mug(owner1, volume)\nmug2 = Mug(owner2, volume)\nmug2.volume -= drunk\n'
+                'print(f"{mug1.owner}: {mug1.volume} ml")\nprint(f"{mug2.owner}: {mug2.volume} ml")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_INIT],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-obj-frosty-days", title="Морозные дни",
+        given=["temps"],
+        variants=[{"temps": "[2, -3, 0, -7, 4]"},
+                  {"temps": "[-1, -5, 3]"},
+                  {"temps": "[5, 8, -2, 1, -4, -6]"}],
+        hidden=[{"temps": "[0, 1, 2]"},
+                {"temps": "[-10]"},
+                {"temps": "[3, -1, 0, 0, -1, 7, -15]"}],
+        intro="Школьная метеостанция записала температуру за несколько дней подряд — список `temps`, "
+              "по одному числу на день, начиная с первого дня. Нужно отметить морозные дни — те, "
+              "когда температура была ниже нуля.",
+        steps=["Создай класс `Day`. В `__init__(self, number, temp)` сохрани номер дня и температуру в атрибуты "
+               "`self.number` и `self.temp`.",
+               "Создай пустой список `days`. Пройди циклом по `temps` и для каждой температуры создай объект `Day` "
+               "и добавь его в `days`. Первый день имеет номер 1, каждый следующий — на 1 больше.",
+               "Вторым циклом пройди по списку `days` и для каждого дня с температурой ниже нуля выведи строку вида "
+               "`Day 2: -3 C`. Попутно посчитай, сколько таких дней.",
+               "В конце выведи строку вида `Frosty days: 2`. Ноль градусов морозом не считается."],
+        hint="Номер дня удобно держать в отдельной переменной: перед циклом она равна 1, а после создания каждого "
+             "объекта увеличивается на 1. Во втором цикле переменная цикла — уже объект `Day`, поэтому температура "
+             "у него берётся через точку: `day.temp`.",
+        solution='class Day:\n    def __init__(self, number, temp):\n        self.number = number\n        self.temp = temp\n\n\n'
+                 'days = []\nnumber = 1\nfor temp in temps:\n    days.append(Day(number, temp))\n    number += 1\n\n'
+                 'frosty = 0\nfor day in days:\n    if day.temp < 0:\n        print(f"Day {day.number}: {day.temp} C")\n'
+                 '        frosty += 1\nprint(f"Frosty days: {frosty}")',
+        wrong=[("считает ноль градусов морозом",
+                'class Day:\n    def __init__(self, number, temp):\n        self.number = number\n        self.temp = temp\n\n\n'
+                'days = []\nnumber = 1\nfor temp in temps:\n    days.append(Day(number, temp))\n    number += 1\n\n'
+                'frosty = 0\nfor day in days:\n    if day.temp <= 0:\n        print(f"Day {day.number}: {day.temp} C")\n'
+                '        frosty += 1\nprint(f"Frosty days: {frosty}")'),
+               ("нумерует дни с нуля",
+                'class Day:\n    def __init__(self, number, temp):\n        self.number = number\n        self.temp = temp\n\n\n'
+                'days = []\nnumber = 0\nfor temp in temps:\n    days.append(Day(number, temp))\n    number += 1\n\n'
+                'frosty = 0\nfor day in days:\n    if day.temp < 0:\n        print(f"Day {day.number}: {day.temp} C")\n'
+                '        frosty += 1\nprint(f"Frosty days: {frosty}")')],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, NEED_INIT],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-obj-above-average", title="Выше среднего",
+        given=["names", "scores"],
+        variants=[{"names": '["Anya", "Boris", "Vika", "Gleb"]', "scores": "[80, 65, 90, 61]"},
+                  {"names": '["Dasha", "Egor", "Zhenya"]', "scores": "[70, 85, 55]"},
+                  {"names": '["Ira", "Kostya", "Lena", "Misha", "Nina"]', "scores": "[45, 92, 78, 60, 75]"}],
+        hidden=[{"names": '["Oleg", "Polina"]', "scores": "[50, 50]"},
+                {"names": '["Rita"]', "scores": "[99]"},
+                {"names": '["Sasha", "Tanya", "Uma"]', "scores": "[70, 71, 72]"},
+                {"names": '["Fedya", "Khristina", "Yasha", "Kira"]', "scores": "[100, 0, 40, 41]"}],
+        intro="После контрольной учитель хочет похвалить тех, кто написал её лучше среднего по классу. "
+              "В списке `names` — имена учеников, а в списке `scores` на тех же местах — их баллы.",
+        steps=["Создай класс `Student`. В `__init__(self, name, score)` сохрани имя и баллы в атрибуты "
+               "`self.name` и `self.score`.",
+               "Создай список `students`: пройди циклом по позициям `range(len(names))` и для каждой позиции добавь "
+               "объект `Student` с именем и баллами с этой позиции.",
+               "Пройди по списку `students`, сложи баллы всех учеников и найди средний балл как целую часть от деления "
+               "суммы на число учеников (`//`). Выведи строку вида `Average: 74`.",
+               "Ещё одним циклом по `students` собери в список имена тех, у кого баллов строго больше среднего. "
+               "Выведи строку вида `Above average: Anya, Vika` — имена через запятую и пробел в порядке списка. "
+               "Если таких нет, выведи `Above average: none`."],
+        hint="Средний балл можно найти, только когда пройдены все ученики, поэтому понадобятся два прохода по списку "
+             "объектов: первый — для суммы, второй — для отбора. Имена из списка склеивает `\", \".join(...)`. "
+             "Ученик, у которого баллов ровно столько, сколько среднее, выше среднего не считается.",
+        solution='class Student:\n    def __init__(self, name, score):\n        self.name = name\n        self.score = score\n\n\n'
+                 'students = []\nfor i in range(len(names)):\n    students.append(Student(names[i], scores[i]))\n\n'
+                 'total = 0\nfor student in students:\n    total += student.score\naverage = total // len(students)\n'
+                 'print(f"Average: {average}")\n\nbest = []\nfor student in students:\n    if student.score > average:\n'
+                 '        best.append(student.name)\nif best:\n    print(f"Above average: {\', \'.join(best)}")\nelse:\n'
+                 '    print("Above average: none")',
+        wrong=[("отбирает тех, у кого баллов не меньше среднего — ученик ровно со средним баллом тоже попадает в список",
+                'class Student:\n    def __init__(self, name, score):\n        self.name = name\n        self.score = score\n\n\n'
+                'students = []\nfor i in range(len(names)):\n    students.append(Student(names[i], scores[i]))\n\n'
+                'total = 0\nfor student in students:\n    total += student.score\naverage = total // len(students)\n'
+                'print(f"Average: {average}")\n\nbest = []\nfor student in students:\n    if student.score >= average:\n'
+                '        best.append(student.name)\nif best:\n    print(f"Above average: {\', \'.join(best)}")\nelse:\n'
+                '    print("Above average: none")'),
+               ("забыл случай, когда никто не выше среднего — печатает пустую строку после двоеточия",
+                'class Student:\n    def __init__(self, name, score):\n        self.name = name\n        self.score = score\n\n\n'
+                'students = []\nfor i in range(len(names)):\n    students.append(Student(names[i], scores[i]))\n\n'
+                'total = 0\nfor student in students:\n    total += student.score\naverage = total // len(students)\n'
+                'print(f"Average: {average}")\n\nbest = []\nfor student in students:\n    if student.score > average:\n'
+                '        best.append(student.name)\nprint(f"Above average: {\', \'.join(best)}")')],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, NEED_INIT],
+    ),
 ]

@@ -73,4 +73,78 @@ TASKS = [
                 'elif age >= 65:\n    price = 100\nelse:\n    price = 300\nprint(f"Ticket price: {price}")')],
         constructs=["if"],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-elif-greeting", title="Приветствие по времени суток",
+        given=["hour"],
+        variants=[{"hour": "9"}, {"hour": "15"}, {"hour": "21"}],
+        hidden=[{"hour": "5"}, {"hour": "6"}, {"hour": "12"}, {"hour": "18"}, {"hour": "0"}],
+        intro="Умная колонка здоровается по-разному в зависимости от времени суток. Сейчас `hour = {hour}` часов (от 0 до 23).",
+        steps=["Если `hour` меньше `6`, выведи `Good night`.",
+               "Иначе, если меньше `12`, выведи `Good morning`.",
+               "Иначе, если меньше `18`, выведи `Good afternoon`.",
+               "Во всех остальных случаях выведи `Good evening`."],
+        hint="Проверяй пороги по порядку, от раннего к позднему. Ровно в 12 часов уже не «меньше 12», "
+             "поэтому сработает следующая ветка — `Good afternoon`.",
+        solution='if hour < 6:\n    print("Good night")\nelif hour < 12:\n    print("Good morning")\n'
+                 'elif hour < 18:\n    print("Good afternoon")\nelse:\n    print("Good evening")',
+        wrong=[("нестрогие сравнения: в 12 часов всё ещё «утро»",
+                'if hour <= 6:\n    print("Good night")\nelif hour <= 12:\n    print("Good morning")\n'
+                'elif hour <= 18:\n    print("Good afternoon")\nelse:\n    print("Good evening")'),
+               ("отдельные if вместо цепочки: печатает несколько приветствий",
+                'if hour < 6:\n    print("Good night")\nif hour < 12:\n    print("Good morning")\n'
+                'if hour < 18:\n    print("Good afternoon")\nelse:\n    print("Good evening")')],
+        constructs=["if"],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-elif-luggage", title="Багаж в самолёте",
+        given=["weight"],
+        variants=[{"weight": "14"}, {"weight": "8"}, {"weight": "26"}],
+        hidden=[{"weight": "10"}, {"weight": "11"}, {"weight": "20"}, {"weight": "30"}, {"weight": "31"}],
+        intro="Авиакомпания берёт плату за чемодан в зависимости от его веса. Чемодан пассажира весит `weight = {weight}` кг.",
+        steps=["Если вес больше `30` кг, выведи `Too heavy` — такой чемодан не примут.",
+               "Иначе, если больше `20` кг, выведи `Fee: 1500 rub`.",
+               "Иначе, если больше `10` кг, выведи `Fee: 500 rub`.",
+               "Иначе выведи `Free`."],
+        hint="Здесь пороги идут сверху вниз: сначала самый тяжёлый случай. Чемодан ровно 20 кг не «больше 20», "
+             "поэтому он попадает в ветку с платой 500 руб.",
+        solution='if weight > 30:\n    print("Too heavy")\nelif weight > 20:\n    print("Fee: 1500 rub")\n'
+                 'elif weight > 10:\n    print("Fee: 500 rub")\nelse:\n    print("Free")',
+        wrong=[("пороги снизу вверх: всё тяжелее 10 кг стоит 500 руб.",
+                'if weight > 10:\n    print("Fee: 500 rub")\nelif weight > 20:\n    print("Fee: 1500 rub")\n'
+                'elif weight > 30:\n    print("Too heavy")\nelse:\n    print("Free")'),
+               ("нестрогие сравнения: чемодан ровно 10 кг платный",
+                'if weight >= 30:\n    print("Too heavy")\nelif weight >= 20:\n    print("Fee: 1500 rub")\n'
+                'elif weight >= 10:\n    print("Fee: 500 rub")\nelse:\n    print("Free")')],
+        constructs=["if"],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-elif-shop-discount", title="Скидка в магазине",
+        given=["total", "has_card"],
+        variants=[{"total": "2400", "has_card": "True"}, {"total": "6000", "has_card": "False"},
+                  {"total": "1500", "has_card": "True"}],
+        hidden=[{"total": "5000", "has_card": "True"}, {"total": "2000", "has_card": "True"},
+                {"total": "3000", "has_card": "False"}, {"total": "800", "has_card": "False"},
+                {"total": "1999", "has_card": "True"}],
+        intro="Магазин даёт скидку в процентах. Покупка стоит `total = {total}` руб., а есть ли у покупателя "
+              "карта магазина, записано в `has_card = {has_card}`.",
+        steps=["Если `total` не меньше `5000`, скидка `15` процентов — с картой или без.",
+               "Иначе, если `total` не меньше `2000` **и** есть карта, скидка `10` процентов.",
+               "Иначе, если есть карта, скидка `5` процентов. Во всех остальных случаях скидки нет — `0` процентов.",
+               "Посчитай сумму скидки в рублях: `total * percent // 100`, где `percent` — процент скидки. Выведи две строки: процент в формате "
+               "`Discount: 10%` и сумму к оплате (покупка минус скидка) в формате `To pay: 900 rub`"],
+        hint="Сохрани процент в переменную `percent` в каждой ветке, а считай и печатай уже после цепочки. "
+             "Условия проверяются по порядку, поэтому покупатель с картой на 6000 руб. получит 15%, а не 10%.",
+        solution='if total >= 5000:\n    percent = 15\nelif total >= 2000 and has_card:\n    percent = 10\n'
+                 'elif has_card:\n    percent = 5\nelse:\n    percent = 0\n'
+                 'discount = total * percent // 100\nprint(f"Discount: {percent}%")\nprint(f"To pay: {total - discount} rub")',
+        wrong=[("or вместо and: 10% получает любой, кто купил на 2000 руб.",
+                'if total >= 5000:\n    percent = 15\nelif total >= 2000 or has_card:\n    percent = 10\n'
+                'elif has_card:\n    percent = 5\nelse:\n    percent = 0\n'
+                'discount = total * percent // 100\nprint(f"Discount: {percent}%")\nprint(f"To pay: {total - discount} rub")'),
+               ("печатает скидку вместо суммы к оплате",
+                'if total >= 5000:\n    percent = 15\nelif total >= 2000 and has_card:\n    percent = 10\n'
+                'elif has_card:\n    percent = 5\nelse:\n    percent = 0\n'
+                'discount = total * percent // 100\nprint(f"Discount: {percent}%")\nprint(f"To pay: {discount} rub")')],
+        constructs=["if"],
+    ),
 ]

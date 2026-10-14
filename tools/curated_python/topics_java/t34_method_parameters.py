@@ -93,4 +93,86 @@ TASKS = [
                 "        int fare = {base} + km * {perKm};\n        fare += (waiting - {free}) * {perMin};\n"
                 "        return fare;\n    }}\n}}\n")],
     ),
+    JavaFunctionTask(
+        skill=SKILL, difficulty=1, slug="java-mp-fruit-sticker", title="Ценник на весах",
+        function="sticker",
+        variants=[{"price": 120}, {"price": 95}, {"price": 160}],
+        intro="На рынке весы печатают наклейку для пакета с фруктами: название, вес и цену. Килограмм любых фруктов "
+              "у этого продавца стоит {price} руб.",
+        steps=["Допиши метод `sticker(String fruit, int kg)`: `fruit` — название фруктов, `kg` — сколько килограммов "
+               "в пакете.",
+               "Верни строку вида `Apples, 3 kg: 360 rub` — название, вес и стоимость пакета ({price} руб. за килограмм).",
+               "Сначала идёт название, потом вес: в вызове `sticker(\"Pears\", 2)` строка — это фрукты, число — килограммы."],
+        hint="Строку можно собрать из частей через `+`: и текст, и значения параметров, и результат умножения. "
+             "Умножение возьми в скобки, чтобы оно посчиталось до склейки.",
+        starter="public class Solution {{\n    static String sticker(String fruit, int kg) {{\n"
+                "        // Напиши решение здесь\n        return \"\";\n    }}\n}}\n",
+        solution="public class Solution {{\n    static String sticker(String fruit, int kg) {{\n"
+                 "        return fruit + \", \" + kg + \" kg: \" + (kg * {price}) + \" rub\";\n    }}\n}}\n",
+        inputs=['"Apples", 3', '"Pears", 2', '"Plums", 1', '"Cherries", 5', '"Grapes", 4', '"Peaches", 7'],
+        wrong=[("пишет цену за килограмм вместо стоимости всего пакета",
+                "public class Solution {{\n    static String sticker(String fruit, int kg) {{\n"
+                "        return fruit + \", \" + kg + \" kg: \" + {price} + \" rub\";\n    }}\n}}\n"),
+               ("пропустил запятую после названия",
+                "public class Solution {{\n    static String sticker(String fruit, int kg) {{\n"
+                "        return fruit + \" \" + kg + \" kg: \" + (kg * {price}) + \" rub\";\n    }}\n}}\n")],
+    ),
+    JavaFunctionTask(
+        skill=SKILL, difficulty=2, slug="java-mp-parcel-delivery", title="Доставка посылки",
+        function="deliveryCost",
+        variants=[{"base": 200, "perKg": 50}, {"base": 150, "perKg": 40}, {"base": 300, "perKg": 60}],
+        intro="Служба доставки считает цену посылки так: {base} руб. за оформление плюс {perKg} руб. за каждый килограмм. "
+              "Если клиент выбрал срочную доставку, вся сумма удваивается.",
+        steps=["Допиши метод `deliveryCost(int kg, boolean express)`: `kg` — вес посылки в килограммах, `express` — "
+               "`true`, если доставка срочная, и `false`, если обычная.",
+               "Посчитай обычную цену: {base} руб. плюс {perKg} руб. за каждый килограмм.",
+               "Если `express` равно `true`, верни эту цену, умноженную на 2, иначе верни её как есть."],
+        hint="Параметр типа `boolean` можно сразу поставить в условие: `if (express)` выполнится, когда в вызове "
+             "передали `true`. Удваивать нужно всю сумму, вместе с оформлением.",
+        starter="public class Solution {{\n    static int deliveryCost(int kg, boolean express) {{\n"
+                "        // Напиши решение здесь\n        return 0;\n    }}\n}}\n",
+        solution="public class Solution {{\n    static int deliveryCost(int kg, boolean express) {{\n"
+                 "        int cost = {base} + kg * {perKg};\n        if (express) {{\n            return cost * 2;\n"
+                 "        }}\n        return cost;\n    }}\n}}\n",
+        inputs=["3, false", "3, true", "1, false", "10, true", "0, true", "7, false", "5, true"],
+        wrong=[("удваивает только плату за вес, а оформление — нет",
+                "public class Solution {{\n    static int deliveryCost(int kg, boolean express) {{\n"
+                "        if (express) {{\n            return {base} + kg * {perKg} * 2;\n        }}\n"
+                "        return {base} + kg * {perKg};\n    }}\n}}\n"),
+               ("не обращает внимания на параметр express",
+                "public class Solution {{\n    static int deliveryCost(int kg, boolean express) {{\n"
+                "        return {base} + kg * {perKg};\n    }}\n}}\n")],
+    ),
+    JavaFunctionTask(
+        skill=SKILL, difficulty=3, slug="java-mp-lessons-end", title="Когда закончатся уроки",
+        function="endTime",
+        variants=[{"len": 45, "brk": 10}, {"len": 40, "brk": 5}, {"len": 45, "brk": 15}],
+        intro="Урок длится {len} минут, а между уроками перемена {brk} минут. Школьный бот по времени начала "
+              "и числу уроков говорит, во сколько закончится последний урок.",
+        steps=["Допиши метод `endTime(int hour, int minute, int lessons)`: первый урок начинается в `hour` часов "
+               "`minute` минут, всего уроков `lessons` (от 1 до 8). Все уроки заканчиваются в тот же день.",
+               "Перемены бывают только между уроками: после последнего урока перемены нет.",
+               "Верни время конца последнего урока строкой вида `HH:MM` — часы и минуты всегда двумя цифрами: "
+               "`09:05`, `13:40`."],
+        hint="Переведи время начала в минуты от полуночи, прибавь длительность всех уроков и перемен, а потом "
+             "получи часы делением на 60 и минуты остатком. Если число меньше 10, добавь перед ним `\"0\"`.",
+        starter="public class Solution {{\n    static String endTime(int hour, int minute, int lessons) {{\n"
+                "        // Напиши решение здесь\n        return \"\";\n    }}\n}}\n",
+        solution="public class Solution {{\n    static String endTime(int hour, int minute, int lessons) {{\n"
+                 "        int total = hour * 60 + minute + lessons * {len} + (lessons - 1) * {brk};\n"
+                 "        int h = total / 60;\n        int m = total % 60;\n"
+                 "        String hh = h < 10 ? \"0\" + h : \"\" + h;\n        String mm = m < 10 ? \"0\" + m : \"\" + m;\n"
+                 "        return hh + \":\" + mm;\n    }}\n}}\n",
+        inputs=["8, 30, 1", "8, 0, 4", "9, 5, 2", "13, 0, 3", "7, 50, 1", "8, 15, 6", "12, 40, 5", "10, 20, 1", "10, 25, 1"],
+        wrong=[("считает перемену и после последнего урока",
+                "public class Solution {{\n    static String endTime(int hour, int minute, int lessons) {{\n"
+                "        int total = hour * 60 + minute + lessons * ({len} + {brk});\n"
+                "        int h = total / 60;\n        int m = total % 60;\n"
+                "        String hh = h < 10 ? \"0\" + h : \"\" + h;\n        String mm = m < 10 ? \"0\" + m : \"\" + m;\n"
+                "        return hh + \":\" + mm;\n    }}\n}}\n"),
+               ("не дописывает ведущий ноль: 9:5 вместо 09:05",
+                "public class Solution {{\n    static String endTime(int hour, int minute, int lessons) {{\n"
+                "        int total = hour * 60 + minute + lessons * {len} + (lessons - 1) * {brk};\n"
+                "        return total / 60 + \":\" + total % 60;\n    }}\n}}\n")],
+    ),
 ]

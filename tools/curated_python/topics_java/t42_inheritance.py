@@ -132,6 +132,116 @@ for (int w : fragile) {
 }
 System.out.println("Total: " + total + " rub");"""
 
+DEVICES = """\
+class Device {
+    String name;
+    int watts;
+
+    int energy(int hours) {
+        return watts * hours;
+    }
+}
+
+class Lamp extends Device {
+}
+
+class Heater extends Device {
+    int turboWatts() {
+        return watts * 2;
+    }
+}"""
+
+DEVICES_MAIN = """\
+Lamp lamp = new Lamp();
+lamp.name = lampName;
+lamp.watts = lampWatts;
+Heater heater = new Heater();
+heater.name = heaterName;
+heater.watts = heaterWatts;
+System.out.println(lamp.name + ": " + lamp.energy(hours) + " Wh");
+System.out.println(heater.name + ": " + heater.energy(hours) + " Wh");
+System.out.println(heater.name + " turbo: " + heater.turboWatts() + " W");"""
+
+CART = """\
+class Cart {
+    private int total;
+
+    void add(int price) {
+        total += price;
+    }
+
+    int getTotal() {
+        return total;
+    }
+}
+
+class ClubCart extends Cart {
+    int withCard(int percent) {
+        return getTotal() - getTotal() * percent / 100;
+    }
+}"""
+
+CART_MAIN = """\
+ClubCart cart = new ClubCart();
+for (int price : prices) {
+    cart.add(price);
+}
+System.out.println("Items: " + prices.length);
+System.out.println("Total: " + cart.getTotal() + " rub");
+System.out.println("With club card: " + cart.withCard(percent) + " rub");"""
+
+CART_COPIED = CART.replace("""class ClubCart extends Cart {
+""", """class ClubCart {
+    private int total;
+
+    void add(int price) {
+        total += price;
+    }
+
+    int getTotal() {
+        return total;
+    }
+
+""")
+
+STAFF = """\
+class Employee {
+    String name;
+    int hours;
+
+    int pay() {
+        return hours * 300;
+    }
+}
+
+class Courier extends Employee {
+    int deliveries;
+
+    int fullPay() {
+        return pay() + deliveries * 50;
+    }
+}"""
+
+STAFF_MAIN = """\
+int payroll = 0;
+for (int i = 0; i < names.length; i++) {
+    if (deliveries[i] > 0) {
+        Courier courier = new Courier();
+        courier.name = names[i];
+        courier.hours = hours[i];
+        courier.deliveries = deliveries[i];
+        System.out.println(courier.name + " (courier): " + courier.fullPay() + " rub");
+        payroll += courier.fullPay();
+    } else {
+        Employee employee = new Employee();
+        employee.name = names[i];
+        employee.hours = hours[i];
+        System.out.println(employee.name + ": " + employee.pay() + " rub");
+        payroll += employee.pay();
+    }
+}
+System.out.println("Payroll: " + payroll + " rub");"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-inh-pet-food", title="Корм для питомцев",
@@ -253,5 +363,120 @@ TASKS = [
         + extends("FragileParcel", "Parcel", "хрупкая посылка тоже посылка и получит поле weight и метод price")
         + f'need({declares("FragileParcel", "safePrice")}, "Добавь метод safePrice в класс FragileParcel: упаковка нужна только хрупким посылкам");\n'
         + f'need(!{declares("FragileParcel", "price")}, "Не пиши price в FragileParcel заново: этот метод хрупкая посылка получает от Parcel");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-inh-home-devices", title="Лампа и обогреватель",
+        given=[("String", "lampName"), ("int", "lampWatts"), ("String", "heaterName"), ("int", "heaterWatts"), ("int", "hours")],
+        variants=[{"lampName": '"Lumi"', "lampWatts": "60", "heaterName": '"Warmy"', "heaterWatts": "1000", "hours": "5"},
+                  {"lampName": '"Spark"', "lampWatts": "40", "heaterName": '"Sunny"', "heaterWatts": "1500", "hours": "3"},
+                  {"lampName": '"Glow"', "lampWatts": "100", "heaterName": '"Breeze"', "heaterWatts": "800", "hours": "8"}],
+        hidden=[{"lampName": '"Star"', "lampWatts": "25", "heaterName": '"Fire"', "heaterWatts": "2000", "hours": "1"},
+                {"lampName": '"Moon"', "lampWatts": "75", "heaterName": '"Heat"', "heaterWatts": "75", "hours": "4"},
+                {"lampName": '"Ray"', "lampWatts": "9", "heaterName": '"Ember"', "heaterWatts": "1200", "hours": "12"}],
+        intro="Ты считаешь, сколько электричества тратят лампа и обогреватель. Оба — электроприборы: у каждого есть "
+              "название и мощность в ваттах, и расход считают одинаково. А вот режим «турбо» есть только у обогревателя. "
+              "Приборы работают одинаковое время — `hours` часов.",
+        steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Device` без слова `public`, с полями "
+               "`String name` и `int watts`. Добавь метод `int energy(int hours)`, который возвращает расход в ватт-часах: "
+               "мощность, умноженную на часы.",
+               "Опиши класс `Lamp`, который наследует `Device`: `class Lamp extends Device {{ }}` — внутри ничего не пиши.",
+               "Опиши класс `Heater` — тоже наследник `Device` — и добавь в него только метод `int turboWatts()`: в режиме "
+               "«турбо» мощность вдвое больше обычной.",
+               "В `main` создай `Lamp lamp = new Lamp();` и `Heater heater = new Heater();` и заполни их поля из `lampName`, "
+               "`lampWatts`, `heaterName` и `heaterWatts`.",
+               "Выведи три строки вида `Lumi: 300 Wh`, `Warmy: 5000 Wh` (расход лампы и обогревателя за `hours` часов) "
+               "и `Warmy turbo: 2000 W`."],
+        hint="Наследник получает от родителя всё: у объекта `Lamp` есть и поля `name` и `watts`, и метод `energy`, хотя "
+             "в классе `Lamp` пусто. Метод `turboWatts` тоже может читать унаследованное поле `watts`.",
+        solution=DEVICES_MAIN, classes=DEVICES,
+        wrong=[("записал обогревателю мощность лампы — скопировал строку и не поправил",
+                DEVICES_MAIN.replace("heater.watts = heaterWatts;", "heater.watts = lampWatts;")),
+               ("скопировал метод energy в Heater вместо того, чтобы получить его по наследству",
+                DEVICES_MAIN, DEVICES.replace("class Heater extends Device {\n",
+                                              "class Heater extends Device {\n    int energy(int hours) {\n        return watts * hours;\n    }\n\n"))],
+        constructs=["class"],
+        checks=exist("Device", "Lamp", "Heater")
+        + extends("Lamp", "Device", "тогда лампа получит поля и методы прибора без копирования")
+        + extends("Heater", "Device", "тогда обогреватель получит поля и методы прибора без копирования")
+        + f'need({declares("Device", "energy")}, "Напиши метод energy в классе Device: расход считают одинаково для всех приборов");\n'
+        + f'need(!{declares("Lamp", "energy")} && !{declares("Heater", "energy")}, '
+          '"Напиши метод energy один раз — только в Device: Lamp и Heater получат его по наследству");\n'
+        + f'need({declares("Heater", "turboWatts")} && !{declares("Device", "turboWatts")}, '
+          '"Метод turboWatts добавь только в класс Heater: режим турбо есть только у обогревателя");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-inh-club-cart", title="Клубная карта магазина",
+        given=[("int[]", "prices"), ("int", "percent")],
+        variants=[{"prices": "{300, 450, 250}", "percent": "10"},
+                  {"prices": "{1250, 800}", "percent": "5"},
+                  {"prices": "{99, 150, 56, 700}", "percent": "20"}],
+        hidden=[{"prices": "{}", "percent": "10"},
+                {"prices": "{1000}", "percent": "0"},
+                {"prices": "{333, 333, 334}", "percent": "15"},
+                {"prices": "{50, 60}", "percent": "50"}],
+        intro="В магазине есть обычная корзина покупок и корзина для владельцев клубной карты. Клубная корзина умеет всё "
+              "то же самое, что и обычная, и ещё считает цену со скидкой по карте. Цены выбранных товаров записаны "
+              "в массиве `prices`, скидка по карте в процентах — в `percent`.",
+        steps=["Ниже класса `Solution` опиши класс `Cart` (без `public`) с закрытым полем `private int total` и двумя "
+               "методами: `void add(int price)` прибавляет цену к сумме, а `int getTotal()` возвращает сумму.",
+               "Опиши класс `ClubCart` — наследник `Cart` — и добавь в него только метод `int withCard(int percent)`: "
+               "сумма минус скидка, где скидка — сумма, умноженная на `percent` и делённая на 100. Сумму узнавай "
+               "через унаследованный `getTotal()`.",
+               "В `main` создай `ClubCart cart = new ClubCart();` и положи в него методом `add` все цены из `prices`.",
+               "Выведи три строки вида `Items: 3`, `Total: 1000 rub` и `With club card: 900 rub`."],
+        hint="Поле `total` закрыто, поэтому в `ClubCart` к нему не обратиться напрямую. Но метод `getTotal()` наследник "
+             "получил от `Cart` и может вызывать его, как свой.",
+        solution=CART_MAIN, classes=CART,
+        wrong=[("делит сумму на 100 раньше, чем умножает на процент, — скидка теряет рубли",
+                CART_MAIN, CART.replace("getTotal() * percent / 100", "getTotal() / 100 * percent")),
+               ("сделал ClubCart отдельным классом и скопировал в него поле и методы Cart",
+                CART_MAIN, CART_COPIED)],
+        constructs=["class"],
+        checks=exist("Cart", "ClubCart")
+        + extends("ClubCart", "Cart", "тогда клубная корзина получит add и getTotal без копирования")
+        + f'need({declares("ClubCart", "withCard")}, "Добавь метод withCard в класс ClubCart: скидку по карте считает только клубная корзина");\n'
+        + f'need(!{declares("ClubCart", "add")} && !{declares("ClubCart", "getTotal")}, '
+          '"Методы add и getTotal напиши только в Cart: ClubCart получит их по наследству");\n'
+        + 'boolean totalPrivate;\n'
+          'try { totalPrivate = Modifier.isPrivate(cls("Cart").getDeclaredField("total").getModifiers()); }\n'
+          'catch (NoSuchFieldException e) { totalPrivate = false; }\n'
+          'need(totalPrivate, "Объяви в Cart закрытое поле private int total: наследник работает с ним через add и getTotal");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-inh-courier-pay", title="Зарплата курьеров",
+        given=[("String[]", "names"), ("int[]", "hours"), ("int[]", "deliveries")],
+        variants=[{"names": '{"Anya", "Boris", "Vika"}', "hours": "{8, 6, 10}", "deliveries": "{0, 12, 0}"},
+                  {"names": '{"Gleb", "Dina"}', "hours": "{5, 7}", "deliveries": "{20, 4}"},
+                  {"names": '{"Egor", "Zhanna", "Ira", "Kira"}', "hours": "{4, 9, 8, 3}", "deliveries": "{0, 0, 15, 1}"}],
+        hidden=[{"names": '{"Lena"}', "hours": "{8}", "deliveries": "{0}"},
+                {"names": '{"Mark"}', "hours": "{0}", "deliveries": "{30}"},
+                {"names": "{}", "hours": "{}", "deliveries": "{}"},
+                {"names": '{"Nina", "Oleg", "Polya"}', "hours": "{2, 11, 6}", "deliveries": "{3, 0, 9}"}],
+        intro="В пекарне работают сотрудники в зале и курьеры. Всем платят 300 руб. за час работы, а курьерам ещё и 50 руб. "
+              "за каждую доставку. Имена записаны в массиве `names`, отработанные часы — в `hours`, число доставок — "
+              "в `deliveries` (у сотрудников зала там 0).",
+        steps=["Ниже класса `Solution` опиши класс `Employee` (без `public`) с полями `String name` и `int hours` и методом "
+               "`int pay()` — оплата за часы.",
+               "Опиши класс `Courier` — наследник `Employee`. Добавь в него своё поле `int deliveries` и метод "
+               "`int fullPay()`: оплата за часы из унаследованного `pay()` плюс 50 руб. за каждую доставку.",
+               "В `main` пройди по сотрудникам. Если доставок больше 0, создай объект `Courier`, заполни его поля и выведи "
+               "строку вида `Boris (courier): 2400 rub` с `fullPay()`. Иначе создай `Employee` и выведи строку вида "
+               "`Anya: 2400 rub` с `pay()`.",
+               "Последней строкой выведи `Payroll: … rub` — сколько всего пекарня платит всем (курьерам — вместе с доставками)."],
+        hint="Наследник может добавлять не только методы, но и поля: у курьера есть `name` и `hours` от родителя и своё "
+             "поле `deliveries`. В `fullPay` не пересчитывай часы заново — вызови `pay()`.",
+        solution=STAFF_MAIN, classes=STAFF,
+        wrong=[("в fullPay считает только доставки и забывает оплату за часы",
+                STAFF_MAIN, STAFF.replace("return pay() + deliveries * 50;", "return deliveries * 50;")),
+               ("добавляет в итог оплату курьера без доставок",
+                STAFF_MAIN.replace("payroll += courier.fullPay();", "payroll += courier.pay();"))],
+        constructs=["class", "for"],
+        checks=exist("Employee", "Courier")
+        + extends("Courier", "Employee", "курьер тоже сотрудник и получит поля name, hours и метод pay")
+        + f'need({declares("Courier", "fullPay")}, "Добавь метод fullPay в класс Courier: оплату за доставки получают только курьеры");\n'
+        + f'need(!{declares("Courier", "pay")}, "Не пиши pay в Courier заново: этот метод курьер получает от Employee");\n'
+        + 'boolean ownField;\n'
+          'try { cls("Courier").getDeclaredField("deliveries"); ownField = true; } catch (NoSuchFieldException e) { ownField = false; }\n'
+          'need(ownField, "Объяви поле int deliveries в классе Courier: доставки есть только у курьеров");\n',
     ),
 ]

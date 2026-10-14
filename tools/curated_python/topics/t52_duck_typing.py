@@ -135,6 +135,123 @@ for price in prices:
 print(f"Left on card: {card.balance} rub")
 """
 
+PAINT = """\
+class Square:
+    def __init__(self, side):
+        self.side = side
+
+    def area(self):
+        return self.side * self.side
+
+
+class Rectangle:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def area(self):
+        return self.width * self.height
+
+
+def paint(shape, price):
+    print(f"Area {shape.area()} m2, cost {shape.area() * price} rub")
+
+
+floor = Square(side)
+wall = Rectangle(width, height)
+paint(floor, price)
+paint(wall, price)
+"""
+
+COMMUTE = """\
+class Walk:
+    name = "Walk"
+
+    def minutes(self, km):
+        return km * 12
+
+
+class Bike:
+    name = "Bike"
+
+    def __init__(self, speed):
+        self.speed = speed
+
+    def minutes(self, km):
+        return km * 60 // self.speed
+
+
+class Bus:
+    name = "Bus"
+
+    def __init__(self, wait):
+        self.wait = wait
+
+    def minutes(self, km):
+        return self.wait + km * 2
+
+
+def choose(options, km):
+    best = options[0]
+    for option in options:
+        time = option.minutes(km)
+        print(f"{option.name}: {time} min")
+        if time < best.minutes(km):
+            best = option
+    print(f"Best: {best.name}")
+
+
+choose([Walk(), Bike(speed), Bus(wait)], km)
+"""
+
+BATTLE = """\
+class Knight:
+    name = "Knight"
+
+    def __init__(self, hp, armor):
+        self.hp = hp
+        self.armor = armor
+
+    def take_hit(self, damage):
+        if damage > self.armor:
+            self.hp -= damage - self.armor
+        if self.hp < 0:
+            self.hp = 0
+
+    def is_alive(self):
+        return self.hp > 0
+
+
+class Ghost:
+    name = "Ghost"
+
+    def __init__(self, hp):
+        self.hp = hp
+
+    def take_hit(self, damage):
+        self.hp -= damage // 2
+        if self.hp < 0:
+            self.hp = 0
+
+    def is_alive(self):
+        return self.hp > 0
+
+
+def attack(targets, damage):
+    for target in targets:
+        if target.is_alive():
+            target.take_hit(damage)
+            print(f"{target.name}: {target.hp} hp")
+        else:
+            print(f"{target.name} is out")
+
+
+knight = Knight(knight_hp, armor)
+ghost = Ghost(ghost_hp)
+for damage in hits:
+    attack([knight, ghost], damage)
+"""
+
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-duck-backpack", title="Что лежит в рюкзаке",
@@ -239,5 +356,109 @@ TASKS = [
                                  '            print(f"{price} rub: paid {payer.way}")\n'))],
         constructs=["class", "function", "for"],
         must_use=[NEED_CLASS, NO_PARENT, need_function("pay_for", "price, payers")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-duck-paint-cost", title="Сколько стоит покраска",
+        given=["side", "width", "height", "price"],
+        variants=[{"side": "4", "width": "5", "height": "3", "price": "30"},
+                  {"side": "6", "width": "8", "height": "2", "price": "25"},
+                  {"side": "3", "width": "4", "height": "7", "price": "50"}],
+        hidden=[{"side": "1", "width": "1", "height": "1", "price": "10"},
+                {"side": "10", "width": "12", "height": "3", "price": "15"},
+                {"side": "5", "width": "2", "height": "9", "price": "40"}],
+        intro="На даче нужно покрасить квадратный пол веранды со стороной `side` метров и прямоугольную стену "
+              "шириной `width` и высотой `height` метров. Краска на один квадратный метр стоит `price` рублей. "
+              "Квадрат и прямоугольник — разные классы без общего родителя, но оба умеют считать свою площадь "
+              "методом `area()`.",
+        steps=["Создай класс `Square`. В `__init__(self, side)` сохрани длину стороны. Метод `area(self)` возвращает "
+               "площадь квадрата — сторону, умноженную на саму себя.",
+               "Создай отдельный класс `Rectangle`, без родителя. В `__init__(self, width, height)` сохрани ширину "
+               "и высоту. Метод `area(self)` возвращает ширину, умноженную на высоту.",
+               "Напиши функцию `paint(shape, price)`, которая печатает строку вида `Area 16 m2, cost 480 rub`: "
+               "площадь фигуры из `shape.area()` и стоимость краски — площадь, умноженную на `price`. "
+               "Проверять, квадрат это или прямоугольник, не нужно.",
+               "Создай `floor = Square(side)` и `wall = Rectangle(width, height)` и вызови `paint` сначала для пола, "
+               "потом для стены."],
+        hint="Функция `paint` просто вызывает `area()` у того, что ей передали, — у квадрата и у прямоугольника этот метод "
+             "считает по-разному, но называется одинаково. Метод должен **возвращать** площадь через `return`.",
+        solution=PAINT,
+        wrong=[("площадь квадрата считается как периметр — сторона умножается на 4",
+                PAINT.replace("        return self.side * self.side", "        return self.side * 4")),
+               ("функция paint берёт глобальную переменную floor вместо параметра shape — дважды выводится пол",
+                PAINT.replace("    print(f\"Area {shape.area()} m2, cost {shape.area() * price} rub\")",
+                              "    print(f\"Area {floor.area()} m2, cost {floor.area() * price} rub\")"))],
+        constructs=["class", "function"],
+        must_use=[NEED_CLASS, NO_PARENT, need_function("paint", "shape, price")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-duck-commute", title="Как быстрее добраться",
+        given=["km", "speed", "wait"],
+        variants=[{"km": "3", "speed": "15", "wait": "10"},
+                  {"km": "2", "speed": "10", "wait": "1"},
+                  {"km": "1", "speed": "4", "wait": "20"}],
+        hidden=[{"km": "2", "speed": "12", "wait": "6"},
+                {"km": "1", "speed": "5", "wait": "15"},
+                {"km": "5", "speed": "12", "wait": "3"},
+                {"km": "4", "speed": "20", "wait": "30"}],
+        intro="До школы `km` километров. Добраться можно пешком, на велосипеде со скоростью `speed` км/ч или на автобусе, "
+              "которого приходится ждать `wait` минут. Это три разных класса, и время в пути каждый считает по-своему, "
+              "но у всех есть метод `minutes(km)`.",
+        steps=["Создай три отдельных класса без общего родителя. У каждого — атрибут класса `name` и метод "
+               "`minutes(self, km)`, который возвращает время в пути в минутах.",
+               "`Walk`: `name = \"Walk\"`, `__init__` не нужен, `minutes` возвращает по 12 минут на километр. "
+               "`Bike`: `name = \"Bike\"`, в `__init__(self, speed)` сохраняет скорость, `minutes` возвращает "
+               "`km * 60 // self.speed`.",
+               "`Bus`: `name = \"Bus\"`, в `__init__(self, wait)` сохраняет время ожидания, `minutes` возвращает "
+               "ожидание плюс по 2 минуты на километр.",
+               "Напиши функцию `choose(options, km)`. Сначала лучшим считай первый способ из списка `options`. "
+               "Для каждого способа печатай строку вида `Bike: 12 min`; если его время строго меньше времени лучшего, "
+               "он становится лучшим. После цикла выведи строку вида `Best: Bike`.",
+               "Вызови `choose([Walk(), Bike(speed), Bus(wait)], km)`."],
+        hint="Функции `choose` не важно, что перед ней — велосипед или автобус: она вызывает `minutes(km)` у любого способа. "
+             "Лучший способ можно хранить как сам объект и потом взять у него `name`. Если времена равны, "
+             "лучшим остаётся тот, что стоит в списке раньше.",
+        solution=COMMUTE,
+        wrong=[("при равном времени выбирает способ, который стоит в списке позже",
+                COMMUTE.replace("        if time < best.minutes(km):", "        if time <= best.minutes(km):")),
+               ("выбирает самый долгий способ вместо самого быстрого",
+                COMMUTE.replace("        if time < best.minutes(km):", "        if time > best.minutes(km):"))],
+        constructs=["class", "function", "for"],
+        must_use=[NEED_CLASS, NO_PARENT, need_function("choose", "options, km")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-duck-knight-ghost", title="Рыцарь и призрак",
+        given=["knight_hp", "armor", "ghost_hp", "hits"],
+        variants=[{"knight_hp": "30", "armor": "5", "ghost_hp": "20", "hits": "[12, 3, 25, 10, 8]"},
+                  {"knight_hp": "50", "armor": "10", "ghost_hp": "8", "hits": "[9, 20, 16, 40]"},
+                  {"knight_hp": "12", "armor": "2", "ghost_hp": "30", "hits": "[15, 1, 6, 30]"}],
+        hidden=[{"knight_hp": "10", "armor": "0", "ghost_hp": "10", "hits": "[10, 4]"},
+                {"knight_hp": "100", "armor": "20", "ghost_hp": "5", "hits": "[20, 21, 9, 3]"},
+                {"knight_hp": "5", "armor": "3", "ghost_hp": "3", "hits": "[2, 8, 7, 6]"}],
+        intro="В игре по очереди наносятся удары с силой из списка `hits`, и каждый удар задевает и рыцаря, и призрака. "
+              "У рыцаря `knight_hp` единиц здоровья и броня `armor`, у призрака — `ghost_hp` единиц здоровья. "
+              "Урон они получают по-разному, но у обоих есть методы `take_hit(damage)` и `is_alive()`.",
+        steps=["Создай класс `Knight` с атрибутом класса `name = \"Knight\"`. В `__init__(self, hp, armor)` сохрани здоровье "
+               "и броню. Метод `take_hit(self, damage)`: если удар сильнее брони, здоровье уменьшается на разницу "
+               "`damage - armor`, иначе не меняется; если здоровье стало меньше 0, оно становится 0. "
+               "Метод `is_alive(self)` возвращает `True`, если здоровье больше 0.",
+               "Создай отдельный класс `Ghost` (не наследник `Knight`) с атрибутом класса `name = \"Ghost\"`. "
+               "В `__init__(self, hp)` сохрани здоровье. Метод `take_hit(self, damage)` уменьшает здоровье на "
+               "`damage // 2` (призрак получает только половину урона), и здоровье тоже не опускается ниже 0. "
+               "Метод `is_alive(self)` — такой же, как у рыцаря.",
+               "Напиши функцию `attack(targets, damage)`. Для каждой цели из списка: если она жива, нанеси ей удар "
+               "и выведи строку вида `Knight: 23 hp`, иначе выведи строку вида `Knight is out` и удар не наноси.",
+               "Создай `knight = Knight(knight_hp, armor)` и `ghost = Ghost(ghost_hp)`. Для каждой силы удара из `hits` "
+               "вызови `attack([knight, ghost], damage)`."],
+        hint="Функция `attack` не выясняет, рыцарь перед ней или призрак: она спрашивает `is_alive()` и вызывает "
+             "`take_hit(damage)`, а каждый класс сам решает, сколько здоровья потерять. Проверь удар, который слабее брони: "
+             "здоровье рыцаря от него не должно расти.",
+        solution=BATTLE,
+        wrong=[("рыцарь вычитает броню из любого удара — слабый удар его лечит",
+                BATTLE.replace("        if damage > self.armor:\n            self.hp -= damage - self.armor\n",
+                               "        self.hp -= damage - self.armor\n")),
+               ("бьёт и уже выбывшие цели — вместо «is out» печатается 0 hp",
+                BATTLE.replace("        if target.is_alive():\n", "        if True:\n"))],
+        constructs=["class", "function", "for"],
+        must_use=[NEED_CLASS, NO_PARENT, need_function("attack", "targets, damage")],
     ),
 ]

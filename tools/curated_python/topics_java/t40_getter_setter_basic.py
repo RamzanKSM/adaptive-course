@@ -178,6 +178,116 @@ for (int i = 0; i < tracks.length; i++) {
 }
 System.out.println("Total: " + total / 60 + " min " + total % 60 + " sec");'''
 
+# ───────── Alarm ─────────
+
+ALARM = '''class Alarm {
+    private int hour;
+    private int minute;
+
+    int getHour() {
+        return hour;
+    }
+
+    void setHour(int hour) {
+        if (hour >= 0 && hour <= 23) {
+            this.hour = hour;
+        }
+    }
+
+    int getMinute() {
+        return minute;
+    }
+
+    void setMinute(int minute) {
+        if (minute >= 0 && minute <= 59) {
+            this.minute = minute;
+        }
+    }
+}'''
+
+ALARM_MAIN = '''Alarm alarm = new Alarm();
+alarm.setHour(hour);
+alarm.setMinute(minute);
+System.out.println("Alarm: " + alarm.getHour() + " h " + alarm.getMinute() + " min");
+alarm.setHour(newHour);
+alarm.setMinute(newMinute);
+System.out.println("New alarm: " + alarm.getHour() + " h " + alarm.getMinute() + " min");'''
+
+# ───────── Thermometer ─────────
+
+THERMOMETER = '''class Thermometer {
+    private int celsius;
+
+    int getCelsius() {
+        return celsius;
+    }
+
+    void setCelsius(int celsius) {
+        if (celsius >= -273) {
+            this.celsius = celsius;
+        }
+    }
+
+    int getFahrenheit() {
+        return celsius * 9 / 5 + 32;
+    }
+}'''
+
+THERMOMETER_MAIN = '''Thermometer thermometer = new Thermometer();
+for (int i = 0; i < values.length; i++) {
+    thermometer.setCelsius(values[i]);
+    System.out.println(city + ": " + thermometer.getCelsius() + " C = " + thermometer.getFahrenheit() + " F");
+}'''
+
+# ───────── Cart ─────────
+
+ITEM = '''class Item {
+    private String name;
+    private int price;
+    private int quantity;
+
+    Item(String name, int price) {
+        this.name = name;
+        this.price = price;
+        this.quantity = 1;
+    }
+
+    String getName() {
+        return name;
+    }
+
+    int getQuantity() {
+        return quantity;
+    }
+
+    void setQuantity(int quantity) {
+        if (quantity >= 1 && quantity <= 10) {
+            this.quantity = quantity;
+        }
+    }
+
+    int getTotal() {
+        return price * quantity;
+    }
+}'''
+
+CART_MAIN = '''Item[] items = new Item[names.length];
+for (int i = 0; i < names.length; i++) {
+    items[i] = new Item(names[i], prices[i]);
+    items[i].setQuantity(quantities[i]);
+}
+int sum = 0;
+Item top = items[0];
+for (int i = 0; i < items.length; i++) {
+    System.out.println(items[i].getName() + " x" + items[i].getQuantity() + ": " + items[i].getTotal() + " rub");
+    sum += items[i].getTotal();
+    if (items[i].getTotal() > top.getTotal()) {
+        top = items[i];
+    }
+}
+System.out.println("Cart: " + sum + " rub");
+System.out.println("Most expensive: " + top.getName());'''
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-getset-user-age", title="Профиль пользователя",
@@ -312,5 +422,127 @@ TASKS = [
                                   "Сеттер setSeconds должен записывать длину больше 0 в поле объекта: this.seconds = seconds;")
                + need_after_calls("", "", [("setSeconds", "int", "100"), ("setSeconds", "int", "-5"), ("setSeconds", "int", "0")], "seconds", "100",
                                   "Проверка длины должна быть внутри setSeconds: 0 и отрицательные числа сеттер не записывает, и остаётся прежняя длина"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-getset-alarm-clock", title="Будильник",
+        given=[("int", "hour"), ("int", "minute"), ("int", "newHour"), ("int", "newMinute")],
+        variants=[{"hour": "7", "minute": "30", "newHour": "6", "newMinute": "45"},
+                  {"hour": "8", "minute": "15", "newHour": "25", "newMinute": "0"},
+                  {"hour": "6", "minute": "0", "newHour": "9", "newMinute": "60"}],
+        hidden=[{"hour": "23", "minute": "59", "newHour": "24", "newMinute": "-1"},
+                {"hour": "0", "minute": "5", "newHour": "-3", "newMinute": "59"},
+                {"hour": "12", "minute": "40", "newHour": "0", "newMinute": "0"},
+                {"hour": "5", "minute": "70", "newHour": "10", "newMinute": "10"}],
+        intro="В телефоне будильник ставят часами и минутами. Часы бывают от 0 до 23, минуты — от 0 до 59; если ввести "
+              "что-то другое, будильник оставляет прежнее значение. Сначала будильник ставят на `hour` ч `minute` мин, "
+              "потом пробуют перевести на `newHour` ч `newMinute` мин.",
+        steps=["Ниже класса `Solution` создай класс `Alarm` (без `public`) с закрытыми полями `private int hour` и `private int minute`.",
+               "Добавь геттеры `int getHour()` и `int getMinute()` и сеттеры `void setHour(int hour)` и `void setMinute(int minute)`.",
+               "Сеттер часов записывает значение, только если оно от 0 до 23 включительно, сеттер минут — от 0 до 59 включительно.",
+               "В `main` создай `new Alarm()`, поставь время сеттерами из `hour` и `minute` и выведи строку вида "
+               "`Alarm: 7 h 30 min`. Потом вызови сеттеры с `newHour` и `newMinute` и выведи строку вида `New alarm: 6 h 45 min`. "
+               "Числа бери через геттеры."],
+        hint="Каждый сеттер проверяет только своё поле: если час неправильный, а минуты правильные, поменяются только минуты.",
+        solution=ALARM_MAIN,
+        classes=ALARM,
+        wrong=[("setMinute без проверки — 60 минут тоже записываются",
+                ALARM_MAIN, ALARM.replace("        if (minute >= 0 && minute <= 59) {\n            this.minute = minute;\n        }",
+                                          "        this.minute = minute;")),
+               ("в setHour граница на единицу больше — 24 часа тоже принимаются",
+                ALARM_MAIN, ALARM.replace("hour <= 23", "hour <= 24"))],
+        constructs=["class"],
+        checks=find_class("Alarm")
+               + need_private_field("Alarm", "hour", "int", "часы читают и меняют через getHour и setHour")
+               + need_private_field("Alarm", "minute", "int", "минуты читают и меняют через getMinute и setMinute")
+               + need_getter("Alarm", "int", "hour")
+               + need_setter("Alarm", "int", "hour", ", и в нём живёт проверка от 0 до 23")
+               + need_getter("Alarm", "int", "minute")
+               + need_setter("Alarm", "int", "minute", ", и в нём живёт проверка от 0 до 59")
+               + need_after_calls("", "", [("setHour", "int", "7"), ("setHour", "int", "24"), ("setHour", "int", "-1")], "hour", "7",
+                                  "Проверка часов должна быть внутри setHour: число меньше 0 или больше 23 сеттер не записывает")
+               + need_after_calls("", "", [("setMinute", "int", "30"), ("setMinute", "int", "60"), ("setMinute", "int", "-1")], "minute", "30",
+                                  "Проверка минут должна быть внутри setMinute: число меньше 0 или больше 59 сеттер не записывает"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-getset-thermometer", title="Градусы Цельсия и Фаренгейта",
+        given=[("String", "city"), ("int[]", "values")],
+        variants=[{"city": '"Kazan"', "values": "{20, -300, 35}"},
+                  {"city": '"Sochi"', "values": "{25, 10, -5}"},
+                  {"city": '"Murmansk"', "values": "{-500, -20, 0}"}],
+        hidden=[{"city": '"Omsk"', "values": "{}"},
+                {"city": '"Tula"', "values": "{-273, -274}"},
+                {"city": '"Perm"', "values": "{100}"},
+                {"city": '"Ufa"', "values": "{-1000, 15, -40}"}],
+        intro="Приложение погоды для туристов показывает температуру в городе `city` сразу в градусах Цельсия и Фаренгейта. "
+              "Новые значения в градусах Цельсия приходят по очереди из массива `values`. Ниже -273 градусов температуры "
+              "не бывает — такое значение термометр не принимает и показывает прежнее.",
+        steps=["Ниже класса `Solution` создай класс `Thermometer` (без `public`) с закрытым полем `private int celsius`.",
+               "Добавь геттер `int getCelsius()` и сеттер `void setCelsius(int celsius)`, который записывает значение, "
+               "только если оно не меньше -273.",
+               "Добавь метод `int getFahrenheit()`: он не хранит значение в поле, а вычисляет его — `celsius * 9 / 5 + 32`.",
+               "В `main` создай термометр и для каждого числа из `values` вызови `setCelsius`, а потом выведи строку вида "
+               "`Kazan: 20 C = 68 F` — с названием города и значениями из геттеров."],
+        hint="Геттеру не обязательно иметь своё поле: `getFahrenheit()` каждый раз считает ответ по текущему `celsius`. "
+             "Порядок действий важен: если сначала разделить 9 на 5, получится 1.",
+        solution=THERMOMETER_MAIN,
+        classes=THERMOMETER,
+        wrong=[("сеттер принимает любое число — -300 градусов тоже записывается",
+                THERMOMETER_MAIN, THERMOMETER.replace("        if (celsius >= -273) {\n            this.celsius = celsius;\n        }",
+                                                      "        this.celsius = celsius;")),
+               ("в формуле сначала делит 9 на 5 — целочисленное деление даёт 1",
+                THERMOMETER_MAIN, THERMOMETER.replace("celsius * 9 / 5 + 32", "celsius * (9 / 5) + 32"))],
+        constructs=["class"],
+        checks=find_class("Thermometer")
+               + need_private_field("Thermometer", "celsius", "int", "температуру читают и меняют через getCelsius и setCelsius")
+               + need_getter("Thermometer", "int", "celsius")
+               + need_setter("Thermometer", "int", "celsius", ", и в нём живёт проверка на -273")
+               + need_method("Thermometer", "int", "getFahrenheit", [], "он вычисляет температуру по Фаренгейту")
+               + need_after_calls("", "", [("setCelsius", "int", "12"), ("setCelsius", "int", "-280")], "celsius", "12",
+                                  "Проверка должна быть внутри setCelsius: значение ниже -273 сеттер не записывает, и остаётся прежнее"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-getset-shop-cart", title="Корзина покупок",
+        given=[("String[]", "names"), ("int[]", "prices"), ("int[]", "quantities")],
+        variants=[{"names": '{"Tea", "Honey", "Jam"}', "prices": "{200, 450, 300}", "quantities": "{2, 1, 3}"},
+                  {"names": '{"Bread", "Cheese"}', "prices": "{60, 500}", "quantities": "{12, 0}"},
+                  {"names": '{"Milk", "Eggs", "Rice", "Salt"}', "prices": "{90, 120, 110, 30}", "quantities": "{4, 3, -2, 10}"}],
+        hidden=[{"names": '{"Juice"}', "prices": "{150}", "quantities": "{11}"},
+                {"names": '{"Apples", "Pears"}', "prices": "{100, 50}", "quantities": "{1, 2}"},
+                {"names": '{"Cake", "Candy", "Cocoa"}', "prices": "{700, 40, 250}", "quantities": "{1, 10, 3}"},
+                {"names": '{"Soap", "Towel"}', "prices": "{80, 400}", "quantities": "{5, 0}"}],
+        intro="В интернет-магазине в корзину можно положить от 1 до 10 штук одного товара. Если покупатель вводит другое "
+              "количество, в корзине остаётся прежнее — у нового товара это 1 штука. Названия товаров записаны в массиве "
+              "`names`, цены — в `prices`, введённые количества — в `quantities`, всё под одними номерами.",
+        steps=["Ниже класса `Solution` создай класс `Item` (без `public`) с закрытыми полями `private String name`, "
+               "`private int price` и `private int quantity` и конструктором `Item(String name, int price)`, который "
+               "сохраняет название и цену и ставит количество 1.",
+               "Добавь геттеры `getName()` и `getQuantity()` и сеттер `void setQuantity(int quantity)`, который записывает "
+               "значение, только если оно от 1 до 10 включительно. Добавь метод `int getTotal()` — цена, умноженная на количество.",
+               "В `main` создай массив товаров: для каждого названия — `new Item(names[i], prices[i])`, потом `setQuantity(quantities[i])`.",
+               "Для каждого товара выведи строку вида `Tea x2: 400 rub`. Затем выведи строку вида `Cart: 1750 rub` — сумму "
+               "`getTotal()` всех товаров, и `Most expensive: Jam` — товар с самой большой суммой (при равенстве — тот, что раньше)."],
+        hint="Количество по умолчанию задай в конструкторе: тогда, если сеттер отклонит неправильное число, у товара останется 1. "
+             "Для самого дорогого товара заведи переменную `Item top = items[0];` и сравнивай с ним остальные.",
+        solution=CART_MAIN,
+        classes=ITEM,
+        wrong=[("сеттер принимает любое количество — 12 и 0 тоже записываются",
+                CART_MAIN, ITEM.replace("        if (quantity >= 1 && quantity <= 10) {\n            this.quantity = quantity;\n        }",
+                                        "        this.quantity = quantity;")),
+               ("конструктор не ставит количество 1 — после отклонённого числа в корзине 0 штук",
+                CART_MAIN, ITEM.replace("        this.quantity = 1;\n", ""))],
+        constructs=["class"],
+        checks=find_class("Item")
+               + need_private_field("Item", "name", "String", "название читают через getName")
+               + need_private_field("Item", "price", "int", "цену нельзя менять снаружи класса")
+               + need_private_field("Item", "quantity", "int", "количество меняют только через setQuantity с проверкой")
+               + need_constructor("Item", ["String name", "int price"], "он задаёт название и цену и ставит количество 1")
+               + need_getter("Item", "String", "name")
+               + need_getter("Item", "int", "quantity")
+               + need_setter("Item", "int", "quantity", ", и в нём живёт проверка от 1 до 10")
+               + need_method("Item", "int", "getTotal", [], "он вычисляет стоимость товара в корзине")
+               + need_after_calls("String.class, int.class", '"Test", 100', [("setQuantity", "int", "0")], "quantity", "1",
+                                  "У нового товара количество 1, и неправильное число сеттер не записывает — задай 1 в конструкторе")
+               + need_after_calls("String.class, int.class", '"Test", 100', [("setQuantity", "int", "4"), ("setQuantity", "int", "11")], "quantity", "4",
+                                  "Проверка количества должна быть внутри setQuantity: число меньше 1 или больше 10 сеттер не записывает"),
     ),
 ]

@@ -85,4 +85,90 @@ TASKS = [
         constructs=["list"],
         must_use=[NEED_LISTCOMP],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-comp-city-lengths", title="Длины названий городов",
+        given=["cities"],
+        variants=[{"cities": '["Kazan", "Sochi", "Moscow", "Omsk"]'},
+                  {"cities": '["Vladivostok", "Tver", "Murmansk"]'},
+                  {"cities": '["Ufa", "Perm", "Samara", "Saint Petersburg", "Kaluga"]'}],
+        hidden=[{"cities": '["Orel"]'},
+                {"cities": '["Tula", "Yekaterinburg", "Pskov", "Kirov", "Chita", "Tomsk"]'},
+                {"cities": '["Ivanovo", "Ivanovo"]'}],
+        intro="Для табло на вокзале нужно знать, сколько места займёт каждое название города. Названия лежат "
+              "в списке `cities`.",
+        steps=["Генератором списка собери новый список, в котором вместо каждого названия стоит его длина — "
+               "число символов, которое возвращает `len()`. Порядок сохрани.",
+               "Выведи этот список через `print`.",
+               "Следующей строкой выведи строку вида `Longest: 11` — самую большую длину из нового списка. "
+               "Её вернёт функция `max()`."],
+        hint="В генераторе списка слева от `for` может стоять любое выражение с элементом: `[len(w) for w in words]` "
+             "кладёт в новый список длину каждого слова. Пробел внутри названия — тоже символ.",
+        solution='lengths = [len(city) for city in cities]\nprint(lengths)\nprint(f"Longest: {max(lengths)}")',
+        wrong=[("печатает длину самого списка вместо длин названий",
+                'lengths = [len(cities) for city in cities]\nprint(lengths)\nprint(f"Longest: {max(lengths)}")'),
+               ("берёт длину первого названия вместо самой большой",
+                'lengths = [len(city) for city in cities]\nprint(lengths)\nprint(f"Longest: {lengths[0]}")')],
+        constructs=["list"],
+        must_use=[NEED_LISTCOMP],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-comp-names-by-letter", title="Гости на одну букву",
+        given=["guests", "letter"],
+        variants=[{"guests": '["Anya", "Boris", "Alla", "Vika", "Artem"]', "letter": '"A"'},
+                  {"guests": '["Mila", "Oleg", "Masha", "Max", "Nina", "Mark"]', "letter": '"M"'},
+                  {"guests": '["Sonya", "Timur", "Semyon", "Liza"]', "letter": '"T"'}],
+        hidden=[{"guests": '["Kira"]', "letter": '"K"'},
+                {"guests": '["Dima", "Egor", "Fedya"]', "letter": '"Z"'},
+                {"guests": '["Gleb", "Galya", "Gosha", "Ilya", "Gena"]', "letter": '"G"'}],
+        intro="На празднике гостей рассаживают по столам по первой букве имени. Имена гостей записаны в список `guests`, "
+              "за этот стол садятся гости, чьё имя начинается с буквы `letter`. Таблички для стола печатают большими буквами.",
+        steps=["Генератором списка с условием `if` собери список табличек: имена гостей, которые начинаются с `letter`, "
+               "написанные целиком большими буквами (метод `.upper()`). Порядок гостей сохрани.",
+               "Выведи этот список через `print`.",
+               "Следующей строкой выведи строку вида `At this table: 3` — сколько гостей сядет за стол."],
+        hint="Проверить первую букву можно методом `.startswith(letter)` или сравнением `name[0] == letter`. "
+             "Слева от `for` пишут, что положить в список (имя большими буквами), справа после `if` — кого брать.",
+        solution='signs = [name.upper() for name in guests if name.startswith(letter)]\nprint(signs)\n'
+                 'print(f"At this table: {len(signs)}")',
+        wrong=[("забыл условие — таблички печатаются для всех гостей",
+                'signs = [name.upper() for name in guests]\nprint(signs)\nprint(f"At this table: {len(signs)}")'),
+               ("не переводит имена в большие буквы",
+                'signs = [name for name in guests if name.startswith(letter)]\nprint(signs)\n'
+                'print(f"At this table: {len(signs)}")')],
+        constructs=["list"],
+        must_use=[NEED_LISTCOMP],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-comp-exam-results", title="Кто сдал экзамен",
+        given=["results", "pass_mark"],
+        variants=[{"results": '["Anya:72", "Boris:45", "Vika:100", "Gleb:60"]', "pass_mark": "60"},
+                  {"results": '["Oleg:9", "Mila:85", "Timur:50", "Sonya:51"]', "pass_mark": "51"},
+                  {"results": '["Kira:30", "Lev:100", "Nina:99", "Petr:7", "Rita:64"]', "pass_mark": "65"}],
+        hidden=[{"results": '["Ada:5"]', "pass_mark": "10"},
+                {"results": '["Ben:100", "Cid:20", "Dan:3"]', "pass_mark": "4"},
+                {"results": '["Eva:70", "Fil:70", "Gosha:69"]', "pass_mark": "70"},
+                {"results": '["Ira:8", "Yan:80", "Zoya:100"]', "pass_mark": "9"}],
+        intro="Результаты экзамена пришли из системы строками вида `\"Anya:72\"`: имя, двоеточие и баллы. Все строки "
+              "лежат в списке `results`. Экзамен сдан, если баллов не меньше `pass_mark`.",
+        steps=["Первым генератором списка собери список баллов всех учеников — целыми числами. Строку можно разрезать "
+               "по двоеточию методом `.split(\":\")`: вторая часть — баллы, преврати её в число через `int()`.",
+               "Вторым генератором списка с условием собери имена тех, у кого баллов не меньше `pass_mark`. Порядок сохрани.",
+               "Выведи список имён сдавших через `print`.",
+               "Следующей строкой выведи строку вида `Best score: 95` — самый большой балл из первого списка (функция `max()`)."],
+        hint="`\"Anya:72\".split(\":\")` даёт список `[\"Anya\", \"72\"]`: имя — элемент с индексом 0, баллы — с индексом 1. "
+             "Баллы обязательно переводи в числа: строки сравниваются по буквам, и `\"100\"` для них меньше, чем `\"45\"`.",
+        solution='scores = [int(line.split(":")[1]) for line in results]\n'
+                 'passed = [line.split(":")[0] for line in results if int(line.split(":")[1]) >= pass_mark]\n'
+                 'print(passed)\nprint(f"Best score: {max(scores)}")',
+        wrong=[("сравнивает баллы строками — «100» оказывается меньше «45», а «9» больше «51»",
+                'scores = [line.split(":")[1] for line in results]\n'
+                'passed = [line.split(":")[0] for line in results if line.split(":")[1] >= str(pass_mark)]\n'
+                'print(passed)\nprint(f"Best score: {max(scores)}")'),
+               ("строгое сравнение — ровно pass_mark баллов не считается сдачей",
+                'scores = [int(line.split(":")[1]) for line in results]\n'
+                'passed = [line.split(":")[0] for line in results if int(line.split(":")[1]) > pass_mark]\n'
+                'print(passed)\nprint(f"Best score: {max(scores)}")')],
+        constructs=["list"],
+        must_use=[NEED_LISTCOMP],
+    ),
 ]

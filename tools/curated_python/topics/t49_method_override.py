@@ -88,6 +88,76 @@ for hit in hits:
     print(f"{archer.name}: {archer.health}, {knight.name}: {knight.health}")
 """
 
+
+DELIVERY = """\
+class Delivery:
+    def days(self, km):
+        return km // 300 + 2
+
+
+class ExpressDelivery(Delivery):
+    def days(self, km):
+        return km // 1000 + 1
+
+
+usual = Delivery()
+express = ExpressDelivery()
+print(f"Regular delivery for {km} km, days: {usual.days(km)}")
+print(f"Express delivery for {km} km, days: {express.days(km)}")
+"""
+
+SENSORS = """\
+class Sensor:
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def unit(self):
+        return "C"
+
+    def report(self):
+        return f"{self.name}: {self.value} {self.unit()}"
+
+
+class HumiditySensor(Sensor):
+    def unit(self):
+        return "%"
+
+
+class WindSensor(Sensor):
+    def unit(self):
+        return "m/s"
+
+
+print(Sensor("Temperature", temp).report())
+print(HumiditySensor("Humidity", humidity).report())
+print(WindSensor("Wind", wind).report())
+"""
+
+CREDIT = """\
+class Account:
+    def __init__(self, balance):
+        self.balance = balance
+
+    def withdraw(self, amount):
+        if amount <= self.balance:
+            self.balance -= amount
+
+
+class CreditAccount(Account):
+    def withdraw(self, amount):
+        if self.balance - amount >= -1000:
+            self.balance -= amount
+
+
+debit = Account(start)
+credit = CreditAccount(start)
+for amount in amounts:
+    debit.withdraw(amount)
+    credit.withdraw(amount)
+    print(f"Debit: {debit.balance}, credit: {credit.balance}")
+"""
+
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-ovr-music-subscription", title="Студенческая подписка",
@@ -181,5 +251,102 @@ TASKS = [
                                "        self.health -= amount // 2\n"))],
         constructs=["class", "for"],
         must_use=[NEED_CLASS, child_of("Knight", "Character"), overridden("take_damage", "Knight")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-ovr-express-delivery", title="Экспресс-доставка",
+        given=["km"],
+        variants=[{"km": "900"}, {"km": "2500"}, {"km": "450"}],
+        hidden=[{"km": "100"}, {"km": "1000"}, {"km": "6100"}],
+        intro="Интернет-магазин отправляет заказы обычной и экспресс-доставкой. Обычная доставка идёт "
+              "`km // 300 + 2` дней, экспресс-доставка — `km // 1000 + 1` дней. Экспресс — это та же доставка, "
+              "только срок считается по-другому. Покупатель живёт в `km` километрах от склада.",
+        steps=["Создай класс `Delivery` с методом `days(self, km)`, который возвращает срок обычной доставки: "
+               "`km // 300 + 2` дней.",
+               "Создай класс `ExpressDelivery` — наследник `Delivery`. Переопредели в нём метод `days(self, km)`: "
+               "срок экспресс-доставки — `km // 1000 + 1` дней.",
+               "Создай объекты `usual = Delivery()` и `express = ExpressDelivery()`.",
+               "Выведи две строки вида `Regular delivery for 900 km, days: 5` и "
+               "`Express delivery for 900 km, days: 1` — сроки возьми из методов `days` этих объектов."],
+        hint="Переопределить метод — значит написать в наследнике метод с точно таким же именем. "
+             "Вызов `express.days(km)` найдёт `days` в классе `ExpressDelivery` и до версии родителя не дойдёт.",
+        solution=DELIVERY,
+        wrong=[("опечатка в имени метода наследника — экспресс считается как обычная доставка",
+                DELIVERY.replace("class ExpressDelivery(Delivery):\n    def days(",
+                                 "class ExpressDelivery(Delivery):\n    def day(")),
+               ("создаёт экспресс-доставку из класса-родителя — новый срок не работает",
+                DELIVERY.replace("express = ExpressDelivery()", "express = Delivery()"))],
+        constructs=["class"],
+        must_use=[NEED_CLASS, child_of("ExpressDelivery", "Delivery"), overridden("days", "ExpressDelivery")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-ovr-weather-sensors", title="Датчики метеостанции",
+        given=["temp", "humidity", "wind"],
+        variants=[{"temp": "18", "humidity": "65", "wind": "4"},
+                  {"temp": "-7", "humidity": "80", "wind": "12"},
+                  {"temp": "25", "humidity": "40", "wind": "1"}],
+        hidden=[{"temp": "0", "humidity": "100", "wind": "0"},
+                {"temp": "31", "humidity": "22", "wind": "9"},
+                {"temp": "-25", "humidity": "55", "wind": "17"}],
+        intro="На метеостанции три датчика: температуры, влажности и ветра. Каждый датчик выдаёт отчёт одинакового "
+              "вида — название, значение и единица измерения. Отличается только единица: градусы `C`, проценты `%` "
+              "или метры в секунду `m/s`. Показания датчиков — `temp`, `humidity` и `wind`.",
+        steps=["Создай класс `Sensor`. В `__init__(self, name, value)` сохрани название и значение "
+               "в атрибуты `self.name` и `self.value`.",
+               "Добавь в `Sensor` метод `unit(self)`, который возвращает строку `C`, и метод `report(self)`, который "
+               "возвращает строку вида `Temperature: 18 C`. Единицу измерения в `report` получай вызовом `self.unit()`.",
+               "Создай наследников `Sensor`: `HumiditySensor`, где `unit` переопределён и возвращает `%`, и `WindSensor`, "
+               "где `unit` возвращает `m/s`. Метод `report` в наследниках не пиши.",
+               "Выведи три строки — результат `report()` для `Sensor(\"Temperature\", temp)`, "
+               "`HumiditySensor(\"Humidity\", humidity)` и `WindSensor(\"Wind\", wind)`, например "
+               "`Temperature: 18 C`, `Humidity: 65 %` и `Wind: 4 m/s`."],
+        hint="Метод `report` написан один раз в `Sensor`, но вызывает `self.unit()`. Когда `report` работает для "
+             "датчика ветра, `self` — это `WindSensor`, и Python возьмёт его версию `unit`. Если вписать `C` "
+             "в `report` прямо в строку, переопределение не сработает.",
+        solution=SENSORS,
+        wrong=[("в report единица вписана прямо в строку, а не через self.unit() — у всех датчиков градусы",
+                SENSORS.replace('{self.value} {self.unit()}', '{self.value} C')),
+               ("опечатка в имени метода датчика ветра — ветер измеряется в градусах",
+                SENSORS.replace("class WindSensor(Sensor):\n    def unit(", "class WindSensor(Sensor):\n    def units("))],
+        constructs=["class"],
+        must_use=[NEED_CLASS, child_of("HumiditySensor", "Sensor"), child_of("WindSensor", "Sensor"),
+                  overridden("unit", "HumiditySensor"),
+                  ("re:self\\.unit\\(\\)",
+                   "В методе `report` получай единицу вызовом `self.unit()`: тогда у каждого датчика сработает "
+                   "его собственная версия.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-ovr-credit-account", title="Дебетовая и кредитная карта",
+        given=["start", "amounts"],
+        variants=[{"start": "1000", "amounts": "[400, 900, 500]"},
+                  {"start": "300", "amounts": "[300, 1000, 1]"},
+                  {"start": "2000", "amounts": "[1500, 700, 800, 100]"}],
+        hidden=[{"start": "0", "amounts": "[1000, 1]"},
+                {"start": "500", "amounts": "[1501, 1500]"},
+                {"start": "100", "amounts": "[50, 50, 50]"},
+                {"start": "5000", "amounts": "[10]"}],
+        intro="У клиента банка две карты, и на каждой лежит по `start` рублей. С дебетовой карты нельзя снять больше, "
+              "чем на ней есть. Кредитная карта — та же карта, но банк разрешает уходить в минус до 1000 руб. "
+              "Клиент по очереди пытается снять с обеих карт суммы из списка `amounts`; если снять нельзя, "
+              "операция не проходит и баланс не меняется.",
+        steps=["Создай класс `Account`. В `__init__(self, balance)` сохрани баланс в `self.balance`. Добавь метод "
+               "`withdraw(self, amount)`: если `amount` не больше баланса, он уменьшает баланс на `amount`, "
+               "иначе ничего не делает.",
+               "Создай класс `CreditAccount` — наследник `Account` — и переопредели в нём `withdraw(self, amount)`: "
+               "снятие проходит, если после него баланс будет не меньше -1000.",
+               "Создай `debit = Account(start)` и `credit = CreditAccount(start)`.",
+               "Пройди циклом по списку `amounts`: каждую сумму пытайся снять и с дебетовой, и с кредитной карты. "
+               "После каждой суммы выведи строку вида `Debit: 600, credit: 600`."],
+        hint="Переопределённый метод полностью заменяет метод родителя, поэтому проверку в `CreditAccount` пиши "
+             "свою: `self.balance - amount >= -1000`. Уйти ровно в -1000 можно, а дальше — уже нет. "
+             "Снять с дебетовой карты ровно весь баланс тоже можно.",
+        solution=CREDIT,
+        wrong=[("опечатка в имени метода кредитной карты — она ведёт себя как дебетовая",
+                CREDIT.replace("class CreditAccount(Account):\n    def withdraw(", "class CreditAccount(Account):\n    def withdrow(")),
+               ("строгое сравнение у кредитной карты — уйти ровно в -1000 нельзя",
+                CREDIT.replace("self.balance - amount >= -1000", "self.balance - amount > -1000")),
+               ("у дебетовой карты строгое сравнение — снять ровно весь баланс нельзя",
+                CREDIT.replace("if amount <= self.balance:", "if amount < self.balance:"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, child_of("CreditAccount", "Account"), overridden("withdraw", "CreditAccount")],
     ),
 ]

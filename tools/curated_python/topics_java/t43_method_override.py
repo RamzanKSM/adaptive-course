@@ -117,6 +117,96 @@ for (int hit : hits) {
     System.out.println("Archer: " + archer.health + ", Knight: " + knight.health);
 }"""
 
+GREETERS = """\
+class Greeter {
+    String greet(String name) {
+        return "Hello, " + name + "!";
+    }
+}
+
+class PirateGreeter extends Greeter {
+    @Override
+    String greet(String name) {
+        return "Ahoy, " + name + "!";
+    }
+}"""
+
+GREETERS_MAIN = """\
+Greeter usual = new Greeter();
+PirateGreeter pirate = new PirateGreeter();
+System.out.println("Bot: " + usual.greet(guest));
+System.out.println("Pirate bot: " + pirate.greet(guest));"""
+
+BELLS = """\
+class Bell {
+    String ring() {
+        return "Ding";
+    }
+
+    String alarm(int times) {
+        String result = ring();
+        for (int i = 1; i < times; i++) {
+            result += "-" + ring();
+        }
+        return result;
+    }
+}
+
+class SchoolBell extends Bell {
+    @Override
+    String ring() {
+        return "Brrr";
+    }
+}"""
+
+BELLS_MAIN = """\
+Bell door = new Bell();
+SchoolBell school = new SchoolBell();
+System.out.println("Door bell: " + door.alarm(doorTimes));
+System.out.println("School bell: " + school.alarm(schoolTimes));"""
+
+ACCOUNTS = """\
+class Account {
+    int balance;
+
+    boolean withdraw(int amount) {
+        if (amount > balance) {
+            return false;
+        }
+        balance -= amount;
+        return true;
+    }
+}
+
+class CreditAccount extends Account {
+    @Override
+    boolean withdraw(int amount) {
+        if (balance - amount < -1000) {
+            return false;
+        }
+        balance -= amount;
+        return true;
+    }
+}"""
+
+ACCOUNTS_MAIN = """\
+Account debit = new Account();
+debit.balance = start;
+CreditAccount credit = new CreditAccount();
+credit.balance = start;
+int debitDeclined = 0;
+int creditDeclined = 0;
+for (int amount : purchases) {
+    if (!debit.withdraw(amount)) {
+        debitDeclined++;
+    }
+    if (!credit.withdraw(amount)) {
+        creditDeclined++;
+    }
+    System.out.println("Debit: " + debit.balance + ", Credit: " + credit.balance);
+}
+System.out.println("Declined: debit " + debitDeclined + ", credit " + creditDeclined);"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-ovr-music-subscription", title="Студенческая подписка",
@@ -217,5 +307,101 @@ TASKS = [
         checks=exist("Fighter", "Knight")
         + extends("Knight", "Fighter")
         + overridden("Knight", "void takeDamage(int amount)", "takeDamage", "int"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-ovr-pirate-greeter", title="Пиратский чат-бот",
+        given=[("String", "guest")],
+        variants=[{"guest": '"Anya"'}, {"guest": '"Boris"'}, {"guest": '"Captain Vera"'}],
+        hidden=[{"guest": '"Timur"'}, {"guest": '"Jack"'}, {"guest": '"Zoya"'}],
+        intro="В игре про море есть обычный чат-бот, который здоровается словом Hello, и пиратский бот — он здоровается "
+              "по-пиратски, словом Ahoy. Пиратский бот — это тот же бот, только приветствие у него другое. Имя гостя "
+              "записано в поле `guest`.",
+        steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Greeter` без слова `public`, с методом "
+               "`String greet(String name)`, который возвращает строку вида `Hello, Anya!`.",
+               "Опиши класс `PirateGreeter` — наследник `Greeter` — и переопредели в нём метод `String greet(String name)` "
+               "(с `@Override` над ним): он возвращает строку вида `Ahoy, Anya!`.",
+               "В `main` создай `Greeter usual = new Greeter();` и `PirateGreeter pirate = new PirateGreeter();`.",
+               "Выведи две строки вида `Bot: Hello, Anya!` и `Pirate bot: Ahoy, Anya!` — приветствия возьми из методов "
+               "`greet` этих объектов, передав им `guest`."],
+        hint="У переопределённого метода те же имя, параметры и тип результата, что у метода родителя, — меняется только "
+             "то, что внутри. `@Override` попросит Java проверить, что ты не ошибся в имени или параметрах.",
+        solution=GREETERS_MAIN, classes=GREETERS,
+        wrong=[("в наследнике метод greet без параметра — это новый метод, а не переопределение, и срабатывает приветствие родителя",
+                GREETERS_MAIN, GREETERS.replace('    @Override\n    String greet(String name) {\n        return "Ahoy, " + name + "!";',
+                                                '    String greet() {\n        return "Ahoy!";')),
+               ("создаёт пиратского бота из класса-родителя — новое приветствие не работает",
+                GREETERS_MAIN.replace("PirateGreeter pirate = new PirateGreeter();", "Greeter pirate = new Greeter();"))],
+        constructs=["class"],
+        checks=exist("Greeter", "PirateGreeter")
+        + extends("PirateGreeter", "Greeter")
+        + overridden("PirateGreeter", "String greet(String name)", "greet", "String"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-ovr-school-bell", title="Дверной и школьный звонки",
+        given=[("int", "doorTimes"), ("int", "schoolTimes")],
+        variants=[{"doorTimes": "3", "schoolTimes": "2"}, {"doorTimes": "1", "schoolTimes": "4"},
+                  {"doorTimes": "2", "schoolTimes": "3"}],
+        hidden=[{"doorTimes": "1", "schoolTimes": "1"}, {"doorTimes": "5", "schoolTimes": "2"},
+                {"doorTimes": "4", "schoolTimes": "6"}],
+        intro="Дверной звонок звенит Ding, а школьный — Brrr. Когда звонок срабатывает несколько раз подряд, звуки "
+              "пишутся через дефис: `Ding-Ding-Ding`. Это правило одно для всех звонков, отличается только сам звук. "
+              "Дверной звонок нажали `doorTimes` раз, школьный прозвенел `schoolTimes` раз.",
+        steps=["Ниже класса `Solution` опиши класс `Bell` (без `public`) с методом `String ring()`, который возвращает `Ding`.",
+               "Добавь в `Bell` метод `String alarm(int times)`: он возвращает звук, повторённый `times` раз через дефис "
+               "(`times` всегда не меньше 1). Звук в нём получай вызовом `ring()`.",
+               "Опиши класс `SchoolBell` — наследник `Bell` — и переопредели в нём только метод `String ring()` "
+               "(с `@Override`): он возвращает `Brrr`. Метод `alarm` в `SchoolBell` не пиши.",
+               "В `main` создай `Bell door = new Bell();` и `SchoolBell school = new SchoolBell();` и выведи две строки "
+               "вида `Door bell: Ding-Ding-Ding` и `School bell: Brrr-Brrr` — с результатами `alarm(doorTimes)` "
+               "и `alarm(schoolTimes)`."],
+        hint="Метод `alarm` написан один раз в `Bell`, но вызывает `ring()`. Для объекта `SchoolBell` Java возьмёт "
+             "версию `ring` из наследника, поэтому `alarm` сам начнёт звенеть Brrr. Начни строку с одного звука, "
+             "а в цикле добавляй дефис и ещё один звук.",
+        solution=BELLS_MAIN, classes=BELLS,
+        wrong=[("в alarm звук записан прямо строкой, а не через ring() — школьный звонок тоже звенит Ding",
+                BELLS_MAIN, BELLS.replace('        String result = ring();\n        for (int i = 1; i < times; i++) {\n            result += "-" + ring();',
+                                          '        String result = "Ding";\n        for (int i = 1; i < times; i++) {\n            result += "-Ding";')),
+               ("опечатка в имени метода школьного звонка и нет @Override — он звенит как дверной",
+                BELLS_MAIN, BELLS.replace('    @Override\n    String ring() {\n        return "Brrr";',
+                                          '    String rings() {\n        return "Brrr";'))],
+        constructs=["class"],
+        checks=exist("Bell", "SchoolBell")
+        + extends("SchoolBell", "Bell")
+        + overridden("SchoolBell", "String ring()", "ring")
+        + f'need(!{declares("SchoolBell", "alarm", "int")}, "Не пиши метод alarm в SchoolBell: он есть в Bell и сам вызовет новую версию ring()");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-ovr-credit-card", title="Дебетовая и кредитная карты",
+        given=[("int", "start"), ("int[]", "purchases")],
+        variants=[{"start": "500", "purchases": "{300, 400, 700}"},
+                  {"start": "1000", "purchases": "{1200, 500, 300}"},
+                  {"start": "200", "purchases": "{100, 100, 900, 300}"}],
+        hidden=[{"start": "0", "purchases": "{1000, 1}"},
+                {"start": "800", "purchases": "{800}"},
+                {"start": "100", "purchases": "{2000, 600, 500}"},
+                {"start": "300", "purchases": "{}"}],
+        intro="У Ани две карты, и на каждой лежит `start` руб. С дебетовой карты нельзя потратить больше, чем на ней есть. "
+              "Кредитная карта разрешает уйти в минус, но не ниже -1000 руб. Аня по очереди пробует оплатить обе картами "
+              "одни и те же покупки из массива `purchases`.",
+        steps=["Ниже класса `Solution` опиши класс `Account` (без `public`) с полем `int balance` и методом "
+               "`boolean withdraw(int amount)`: если `amount` больше баланса, метод ничего не меняет и возвращает `false`, "
+               "иначе уменьшает баланс и возвращает `true`.",
+               "Опиши класс `CreditAccount` — наследник `Account` — и переопредели в нём `boolean withdraw(int amount)` "
+               "(с `@Override`): покупка отклоняется, только если после неё баланс стал бы меньше -1000.",
+               "В `main` создай `Account debit` и `CreditAccount credit` и запиши каждому баланс `start`. Для каждой "
+               "покупки вызови `withdraw` у обеих карт и выведи строку вида `Debit: 200, Credit: 200`.",
+               "Считай, сколько покупок отклонила каждая карта, и в конце выведи строку вида `Declined: debit 2, credit 0`."],
+        hint="Переопределённый метод полностью заменяет метод родителя, поэтому в `CreditAccount` проверку и списание "
+             "нужно написать целиком. Ровно -1000 руб. на кредитной карте — ещё можно.",
+        solution=ACCOUNTS_MAIN, classes=ACCOUNTS,
+        wrong=[("кредитная карта не проверяет лимит — уходит в минус без ограничений",
+                ACCOUNTS_MAIN, ACCOUNTS.replace("        if (balance - amount < -1000) {\n            return false;\n        }\n", "")),
+               ("опечатка в имени метода кредитной карты и нет @Override — она работает как дебетовая",
+                ACCOUNTS_MAIN, ACCOUNTS.replace("    @Override\n    boolean withdraw(int amount) {\n        if (balance - amount < -1000)",
+                                                "    boolean withdrow(int amount) {\n        if (balance - amount < -1000)"))],
+        constructs=["class", "for"],
+        checks=exist("Account", "CreditAccount")
+        + extends("CreditAccount", "Account")
+        + overridden("CreditAccount", "boolean withdraw(int amount)", "withdraw", "int"),
     ),
 ]

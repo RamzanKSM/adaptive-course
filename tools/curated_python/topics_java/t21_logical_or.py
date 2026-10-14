@@ -77,4 +77,75 @@ TASKS = [
                 '    System.out.println("Year " + year + " is a common year: 365 days");\n}')],
         constructs=["if"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-or-museum-free", title="Бесплатный вход в музей",
+        given=[("int", "age")],
+        variants=[{"age": "5"}, {"age": "34"}, {"age": "70"}],
+        hidden=[{"age": "6"}, {"age": "7"}, {"age": "64"}, {"age": "65"}, {"age": "18"}, {"age": "90"}],
+        intro="В краеведческий музей бесплатно пускают детей младше 7 лет и пенсионеров от 65 лет. Остальные покупают "
+              "билет за 300 руб. Возраст посетителя записан в поле `age`.",
+        steps=["Если `age` меньше 7 **или** не меньше 65, выведи `Free entry`.",
+               "Иначе выведи `Ticket: 300 rub`.",
+               "Запиши обе проверки в одном условии через `||`."],
+        hint="Условие с `||` истинно, если верна хотя бы одна его часть. Семилетний уже платит, а 65-летний проходит бесплатно.",
+        solution='if (age < 7 || age >= 65) {\n    System.out.println("Free entry");\n} else {\n'
+                 '    System.out.println("Ticket: 300 rub");\n}',
+        wrong=[("&& вместо ||: возраст не бывает сразу меньше 7 и больше 64, бесплатно не проходит никто",
+                'if (age < 7 && age >= 65) {\n    System.out.println("Free entry");\n} else {\n'
+                '    System.out.println("Ticket: 300 rub");\n}'),
+               ("> 65 вместо >= 65: 65-летнему приходится платить",
+                'if (age < 7 || age > 65) {\n    System.out.println("Free entry");\n} else {\n'
+                '    System.out.println("Ticket: 300 rub");\n}')],
+        constructs=["if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-or-not-phone-ring", title="Беззвучный режим",
+        given=[("boolean", "silent"), ("boolean", "favorite")],
+        variants=[{"silent": "true", "favorite": "false"}, {"silent": "false", "favorite": "false"},
+                  {"silent": "true", "favorite": "true"}],
+        hidden=[{"silent": "false", "favorite": "true"}, {"silent": "true", "favorite": "false"},
+                {"silent": "false", "favorite": "false"}, {"silent": "true", "favorite": "true"}],
+        intro="Телефон Бориса звонит громко, если беззвучный режим выключен или звонит кто-то из избранных контактов. "
+              "Включён ли беззвучный режим, записано в поле `silent`, звонит ли избранный контакт — в поле `favorite` "
+              "(оба поля — `true` или `false`).",
+        steps=["Если беззвучный режим **не** включён **или** звонит избранный контакт, выведи `Ring! Ring!`.",
+               "Иначе выведи `Quiet call`.",
+               "Запиши обе проверки в одном условии с помощью `!` и `||`."],
+        hint="`!` переворачивает логическое значение: `!silent` читается как «беззвучный режим не включён».",
+        solution='if (!silent || favorite) {\n    System.out.println("Ring! Ring!");\n} else {\n'
+                 '    System.out.println("Quiet call");\n}',
+        wrong=[("забыт !: звонит громко как раз в беззвучном режиме",
+                'if (silent || favorite) {\n    System.out.println("Ring! Ring!");\n} else {\n'
+                '    System.out.println("Quiet call");\n}'),
+               ("&& вместо ||: громко звонят только избранные и только без беззвучного режима",
+                'if (!silent && favorite) {\n    System.out.println("Ring! Ring!");\n} else {\n'
+                '    System.out.println("Quiet call");\n}')],
+        constructs=["if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-or-weekend-gift", title="Подарок в выходные",
+        given=[("int", "day"), ("int", "total")],
+        variants=[{"day": "6", "total": "1500"}, {"day": "3", "total": "2000"}, {"day": "7", "total": "800"}],
+        hidden=[{"day": "6", "total": "1000"}, {"day": "7", "total": "999"}, {"day": "6", "total": "200"},
+                {"day": "5", "total": "5000"}, {"day": "7", "total": "3000"}, {"day": "1", "total": "100"}],
+        intro="Магазин игрушек дарит подарок за покупку от 1000 руб., но только в выходные. День недели записан в поле `day` "
+              "(1 — понедельник, …, 6 — суббота, 7 — воскресенье), сумма покупки в рублях — в поле `total`.",
+        steps=["Выведи строку `Day …, total … rub`, подставив `day` и `total`.",
+               "Составь одно условие: день — суббота **или** воскресенье, **и** при этом `total` не меньше 1000.",
+               "Если условие верно, выведи следующей строкой `Gift: yes`, иначе — `Gift: no`."],
+        hint="`&&` выполняется раньше, чем `||`, как умножение раньше сложения. Поэтому проверку дня "
+             "(`day == 6 || day == 7`) нужно взять в скобки, иначе в субботу подарок получит любая покупка.",
+        solution='System.out.println("Day " + day + ", total " + total + " rub");\n'
+                 'if ((day == 6 || day == 7) && total >= 1000) {\n    System.out.println("Gift: yes");\n} else {\n'
+                 '    System.out.println("Gift: no");\n}',
+        wrong=[("без скобок: в субботу подарок получает даже маленькая покупка",
+                'System.out.println("Day " + day + ", total " + total + " rub");\n'
+                'if (day == 6 || day == 7 && total >= 1000) {\n    System.out.println("Gift: yes");\n} else {\n'
+                '    System.out.println("Gift: no");\n}'),
+               ("> 1000 вместо >= 1000: покупка ровно на 1000 руб. без подарка",
+                'System.out.println("Day " + day + ", total " + total + " rub");\n'
+                'if ((day == 6 || day == 7) && total > 1000) {\n    System.out.println("Gift: yes");\n} else {\n'
+                '    System.out.println("Gift: no");\n}')],
+        constructs=["if"],
+    ),
 ]

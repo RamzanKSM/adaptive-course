@@ -137,4 +137,186 @@ TASKS = [
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PRIVATE],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-enc-locker-code", title="Код камеры хранения",
+        given=["codes"],
+        variants=[{"codes": '["12a4", "2580", "123"]'}, {"codes": '["7777", "99999", "4x21"]'},
+                  {"codes": '["abcd", "0451", "31", "8642"]'}],
+        hidden=[{"codes": "[]"}, {"codes": '["1234"]'}, {"codes": '["12345", "12 4", "one"]'},
+                {"codes": '["1111", "2222", "33a3"]'}],
+        intro="В камере хранения на вокзале каждая ячейка закрывается кодом. Новая ячейка открывается кодом `0000`, "
+              "а пассажир может поставить свой код — ровно из четырёх цифр. Пассажиры часто ошибаются при вводе, "
+              "поэтому ячейка сама проверяет новый код. В списке `codes` — коды, которые по очереди вводил пассажир.",
+        steps=["Создай класс `Locker`. В `__init__(self)` заведи внутренний атрибут `self._code = \"0000\"`. "
+               "Подчёркивание в начале имени означает, что снаружи класса этот атрибут напрямую не меняют.",
+               "Добавь метод `set_code(self, code)`: он сохраняет `code` в `self._code`, только если в строке ровно "
+               "4 символа и все они — цифры. Неподходящий код метод пропускает, и старый код остаётся.",
+               "Добавь метод `get_code(self)`, который возвращает текущий код.",
+               "Создай ячейку, передай в `set_code` по очереди все коды из `codes` и выведи строку вида "
+               "`Locker code: 2580` — с кодом, который вернул `get_code()`."],
+        hint="Проверить, что строка состоит только из цифр, можно методом `code.isdigit()`, а длину строки даёт `len(code)`. "
+             "Нужны оба условия сразу — соедини их через `and`. Код меняй только через `set_code`, иначе проверка не сработает.",
+        solution='class Locker:\n    def __init__(self):\n        self._code = "0000"\n\n'
+                 '    def set_code(self, code):\n        if len(code) == 4 and code.isdigit():\n'
+                 '            self._code = code\n\n    def get_code(self):\n        return self._code\n\n\n'
+                 'locker = Locker()\nfor code in codes:\n    locker.set_code(code)\n'
+                 'print(f"Locker code: {locker.get_code()}")',
+        wrong=[("проверяет только длину кода — код с буквами тоже принимается",
+                'class Locker:\n    def __init__(self):\n        self._code = "0000"\n\n'
+                '    def set_code(self, code):\n        if len(code) == 4:\n            self._code = code\n\n'
+                '    def get_code(self):\n        return self._code\n\n\nlocker = Locker()\nfor code in codes:\n'
+                '    locker.set_code(code)\nprint(f"Locker code: {locker.get_code()}")'),
+               ("ставит код в обход метода, меняя locker._code напрямую, — проверка не срабатывает",
+                'class Locker:\n    def __init__(self):\n        self._code = "0000"\n\n'
+                '    def set_code(self, code):\n        if len(code) == 4 and code.isdigit():\n'
+                '            self._code = code\n\n    def get_code(self):\n        return self._code\n\n\n'
+                'locker = Locker()\nfor code in codes:\n    locker._code = code\n'
+                'print(f"Locker code: {locker.get_code()}")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_PRIVATE],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-enc-library-book", title="Книга в школьной библиотеке",
+        given=["title", "actions"],
+        variants=[{"title": '"Dubrovsky"', "actions": '["Anya", "Boris", "back", "Boris"]'},
+                  {"title": '"Mumu"', "actions": '["back", "Vika", "back", "Gleb", "back"]'},
+                  {"title": '"The Hobbit"', "actions": '["Dasha", "back", "back", "Egor", "Zoya"]'}],
+        hidden=[{"title": '"Kashtanka"', "actions": "[]"},
+                {"title": '"Treasure Island"', "actions": '["Igor"]'},
+                {"title": '"Robinson Crusoe"', "actions": '["Katya", "Lev", "Masha", "back", "back"]'}],
+        intro="В школьной библиотеке есть один экземпляр книги `title`. Пока книга у читателя, взять её другому нельзя, "
+              "а вернуть можно только книгу, которую кто-то брал. В списке `actions` по порядку записано, что происходило: "
+              "имя ученика означает, что он пришёл взять книгу, а слово `back` — что книгу принесли обратно.",
+        steps=["Создай класс `LibraryBook`. В `__init__(self, title)` сохрани название во внутренний атрибут `self._title`, "
+               "а во внутренний атрибут `self._reader` — пустую строку: книга на полке, ни у кого её нет.",
+               "Добавь метод `take(self, reader)`. Если книга на полке, он записывает читателя в `self._reader` и выводит "
+               "строку вида `Anya took Dubrovsky`. Иначе выводит строку вида `Boris has to wait, the book is with Anya` "
+               "и ничего не меняет.",
+               "Добавь метод `give_back(self)`. Если книга у читателя, он выводит строку вида `Returned by Anya` и снова "
+               "делает `self._reader` пустой строкой. Если книга и так на полке, он выводит `Nothing to return`.",
+               "Добавь метод `is_on_shelf(self)`, который возвращает `True`, если книга на полке.",
+               "Создай книгу и пройди циклом по `actions`: для `back` вызывай `give_back()`, для имени — `take(...)`. "
+               "Последней строкой выведи `On the shelf: yes` или `On the shelf: no` по результату `is_on_shelf()`."],
+        hint="Пустая строка в `self._reader` и означает «книга на полке», поэтому проверка — `self._reader == \"\"`. "
+             "В `give_back` сначала выведи имя читателя и только потом очищай атрибут, иначе имя уже потеряется.",
+        solution='class LibraryBook:\n    def __init__(self, title):\n        self._title = title\n'
+                 '        self._reader = ""\n\n    def take(self, reader):\n        if self._reader == "":\n'
+                 '            self._reader = reader\n            print(f"{reader} took {self._title}")\n'
+                 '        else:\n            print(f"{reader} has to wait, the book is with {self._reader}")\n\n'
+                 '    def give_back(self):\n        if self._reader != "":\n'
+                 '            print(f"Returned by {self._reader}")\n            self._reader = ""\n        else:\n'
+                 '            print("Nothing to return")\n\n    def is_on_shelf(self):\n'
+                 '        return self._reader == ""\n\n\nbook = LibraryBook(title)\nfor action in actions:\n'
+                 '    if action == "back":\n        book.give_back()\n    else:\n        book.take(action)\n\n'
+                 'if book.is_on_shelf():\n    print("On the shelf: yes")\nelse:\n    print("On the shelf: no")',
+        wrong=[("не проверяет, свободна ли книга, — её забирают прямо у другого читателя",
+                'class LibraryBook:\n    def __init__(self, title):\n        self._title = title\n'
+                '        self._reader = ""\n\n    def take(self, reader):\n        if True:\n'
+                '            self._reader = reader\n            print(f"{reader} took {self._title}")\n'
+                '        else:\n            print(f"{reader} has to wait, the book is with {self._reader}")\n\n'
+                '    def give_back(self):\n        if self._reader != "":\n'
+                '            print(f"Returned by {self._reader}")\n            self._reader = ""\n        else:\n'
+                '            print("Nothing to return")\n\n    def is_on_shelf(self):\n'
+                '        return self._reader == ""\n\n\nbook = LibraryBook(title)\nfor action in actions:\n'
+                '    if action == "back":\n        book.give_back()\n    else:\n        book.take(action)\n\n'
+                'if book.is_on_shelf():\n    print("On the shelf: yes")\nelse:\n    print("On the shelf: no")'),
+               ("при возврате не очищает читателя — книга так и числится выданной",
+                'class LibraryBook:\n    def __init__(self, title):\n        self._title = title\n'
+                '        self._reader = ""\n\n    def take(self, reader):\n        if self._reader == "":\n'
+                '            self._reader = reader\n            print(f"{reader} took {self._title}")\n'
+                '        else:\n            print(f"{reader} has to wait, the book is with {self._reader}")\n\n'
+                '    def give_back(self):\n        if self._reader != "":\n'
+                '            print(f"Returned by {self._reader}")\n            pass\n        else:\n'
+                '            print("Nothing to return")\n\n    def is_on_shelf(self):\n'
+                '        return self._reader == ""\n\n\nbook = LibraryBook(title)\nfor action in actions:\n'
+                '    if action == "back":\n        book.give_back()\n    else:\n        book.take(action)\n\n'
+                'if book.is_on_shelf():\n    print("On the shelf: yes")\nelse:\n    print("On the shelf: no")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_PRIVATE],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-enc-bank-card", title="Банковская карта и PIN-код",
+        given=["pin", "balance", "pins", "amounts"],
+        variants=[{"pin": '"1234"', "balance": "2000", "pins": '["1234", "1111", "1234", "1234"]',
+                   "amounts": "[500, 300, 2000, 1500]"},
+                  {"pin": '"0707"', "balance": "5000", "pins": '["7070", "0000", "7777", "0707"]',
+                   "amounts": "[100, 100, 100, 100]"},
+                  {"pin": '"4321"', "balance": "800", "pins": '["1111", "2222", "4321", "3333", "4321"]',
+                   "amounts": "[50, 50, 300, 50, 500]"}],
+        hidden=[{"pin": '"9999"', "balance": "1000", "pins": '["9999"]', "amounts": "[1000]"},
+                {"pin": '"5555"', "balance": "300", "pins": '["1", "2", "5555", "3", "4", "5555"]',
+                 "amounts": "[10, 10, 10, 10, 10, 10]"},
+                {"pin": '"2468"', "balance": "700", "pins": '["0000", "1111", "2222", "2468"]',
+                 "amounts": "[100, 100, 100, 100]"},
+                {"pin": '"1357"', "balance": "400", "pins": '["1357", "1357", "1357"]', "amounts": "[401, 150, 250]"}],
+        intro="Ты пишешь программу банкомата. У карты есть PIN-код `pin` и баланс `balance` рублей. Владелец по очереди "
+              "пытается снять деньги: в списке `pins` — введённые PIN-коды, а в списке `amounts` на тех же местах — "
+              "суммы. Если ввести неверный PIN три раза подряд, карта блокируется навсегда.",
+        steps=["Создай класс `Card`. В `__init__(self, pin, balance)` сохрани PIN-код и баланс во внутренние атрибуты "
+               "`self.__pin` и `self.__balance` (с двумя подчёркиваниями), а ещё заведи `self.__wrong = 0` — "
+               "сколько неверных PIN-кодов введено подряд — и `self.__blocked = False`.",
+               "Добавь метод `withdraw(self, pin, amount)`. Если карта заблокирована, он выводит `Card blocked` и больше "
+               "ничего не делает.",
+               "Если PIN неверный, метод увеличивает `self.__wrong` на 1. Если это третья ошибка подряд, он блокирует "
+               "карту и выводит `Wrong PIN, card blocked`, иначе выводит `Wrong PIN`. Деньги при этом не снимаются.",
+               "Если PIN верный, метод обнуляет `self.__wrong`. Если `amount` больше баланса, выводит `Not enough money`, "
+               "иначе уменьшает баланс и выводит строку вида `Withdrawn: 500, left: 1500`.",
+               "Добавь метод `get_balance(self)`. Создай карту, вызови `withdraw` для каждой пары из `pins` и `amounts` "
+               "(цикл по `range(len(pins))`) и в конце выведи строку вида `Balance: 1500 rub`."],
+        hint="Внутри метода удобно проверять случаи по очереди и выходить из метода через `return`, как только случай "
+             "обработан: сначала блокировка, потом PIN, потом деньги. Снять ровно весь баланс можно — "
+             "не хватает денег, только если сумма больше баланса.",
+        solution='class Card:\n    def __init__(self, pin, balance):\n        self.__pin = pin\n'
+                 '        self.__balance = balance\n        self.__wrong = 0\n        self.__blocked = False\n\n'
+                 '    def withdraw(self, pin, amount):\n        if self.__blocked:\n'
+                 '            print("Card blocked")\n            return\n        if pin != self.__pin:\n'
+                 '            self.__wrong += 1\n            if self.__wrong == 3:\n'
+                 '                self.__blocked = True\n                print("Wrong PIN, card blocked")\n'
+                 '            else:\n                print("Wrong PIN")\n            return\n'
+                 '        self.__wrong = 0\n        if amount > self.__balance:\n'
+                 '            print("Not enough money")\n            return\n        self.__balance -= amount\n'
+                 '        print(f"Withdrawn: {amount}, left: {self.__balance}")\n\n    def get_balance(self):\n'
+                 '        return self.__balance\n\n\ncard = Card(pin, balance)\nfor i in range(len(pins)):\n'
+                 '    card.withdraw(pins[i], amounts[i])\nprint(f"Balance: {card.get_balance()} rub")',
+        wrong=[("не обнуляет счётчик ошибок после верного PIN — карта блокируется после трёх ошибок не подряд",
+                'class Card:\n    def __init__(self, pin, balance):\n        self.__pin = pin\n'
+                '        self.__balance = balance\n        self.__wrong = 0\n        self.__blocked = False\n\n'
+                '    def withdraw(self, pin, amount):\n        if self.__blocked:\n'
+                '            print("Card blocked")\n            return\n        if pin != self.__pin:\n'
+                '            self.__wrong += 1\n            if self.__wrong == 3:\n'
+                '                self.__blocked = True\n                print("Wrong PIN, card blocked")\n'
+                '            else:\n                print("Wrong PIN")\n            return\n'
+                '        if amount > self.__balance:\n            print("Not enough money")\n            return\n'
+                '        self.__balance -= amount\n        print(f"Withdrawn: {amount}, left: {self.__balance}")\n'
+                '\n    def get_balance(self):\n        return self.__balance\n\n\ncard = Card(pin, balance)\n'
+                'for i in range(len(pins)):\n    card.withdraw(pins[i], amounts[i])\n'
+                'print(f"Balance: {card.get_balance()} rub")'),
+               ("не проверяет блокировку — после трёх ошибок с картой всё равно можно работать",
+                'class Card:\n    def __init__(self, pin, balance):\n        self.__pin = pin\n'
+                '        self.__balance = balance\n        self.__wrong = 0\n        self.__blocked = False\n\n'
+                '    def withdraw(self, pin, amount):\n        if pin != self.__pin:\n'
+                '            self.__wrong += 1\n            if self.__wrong == 3:\n'
+                '                self.__blocked = True\n                print("Wrong PIN, card blocked")\n'
+                '            else:\n                print("Wrong PIN")\n            return\n'
+                '        self.__wrong = 0\n        if amount > self.__balance:\n'
+                '            print("Not enough money")\n            return\n        self.__balance -= amount\n'
+                '        print(f"Withdrawn: {amount}, left: {self.__balance}")\n\n    def get_balance(self):\n'
+                '        return self.__balance\n\n\ncard = Card(pin, balance)\nfor i in range(len(pins)):\n'
+                '    card.withdraw(pins[i], amounts[i])\nprint(f"Balance: {card.get_balance()} rub")'),
+               ("не даёт снять весь баланс целиком — сравнивает через >=",
+                'class Card:\n    def __init__(self, pin, balance):\n        self.__pin = pin\n'
+                '        self.__balance = balance\n        self.__wrong = 0\n        self.__blocked = False\n\n'
+                '    def withdraw(self, pin, amount):\n        if self.__blocked:\n'
+                '            print("Card blocked")\n            return\n        if pin != self.__pin:\n'
+                '            self.__wrong += 1\n            if self.__wrong == 3:\n'
+                '                self.__blocked = True\n                print("Wrong PIN, card blocked")\n'
+                '            else:\n                print("Wrong PIN")\n            return\n'
+                '        self.__wrong = 0\n        if amount >= self.__balance:\n'
+                '            print("Not enough money")\n            return\n        self.__balance -= amount\n'
+                '        print(f"Withdrawn: {amount}, left: {self.__balance}")\n\n    def get_balance(self):\n'
+                '        return self.__balance\n\n\ncard = Card(pin, balance)\nfor i in range(len(pins)):\n'
+                '    card.withdraw(pins[i], amounts[i])\nprint(f"Balance: {card.get_balance()} rub")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_PRIVATE],
+    ),
 ]

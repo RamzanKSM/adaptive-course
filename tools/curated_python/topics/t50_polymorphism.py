@@ -134,6 +134,129 @@ for hero in heroes:
 print(f"Team damage: {total}")
 """
 
+
+GUESTS = """\
+class Guest:
+    def __init__(self, name):
+        self.name = name
+
+    def greet(self):
+        return f"I am {self.name}"
+
+
+class EnglishGuest(Guest):
+    def greet(self):
+        return f"Hello, I am {self.name}"
+
+
+class FrenchGuest(Guest):
+    def greet(self):
+        return f"Bonjour, je suis {self.name}"
+
+
+class GermanGuest(Guest):
+    def greet(self):
+        return f"Hallo, ich bin {self.name}"
+
+
+guests = [EnglishGuest(english_name), FrenchGuest(french_name), GermanGuest(german_name)]
+for guest in guests:
+    print(guest.greet())
+"""
+
+TARIFFS = """\
+class Tariff:
+    title = "Tariff"
+
+    def cost(self, minutes):
+        return 0
+
+
+class PerMinute(Tariff):
+    title = "PerMinute"
+
+    def cost(self, minutes):
+        return 2 * minutes
+
+
+class Package(Tariff):
+    title = "Package"
+
+    def cost(self, minutes):
+        if minutes > 200:
+            return 300 + 3 * (minutes - 200)
+        return 300
+
+
+class Unlimited(Tariff):
+    title = "Unlimited"
+
+    def cost(self, minutes):
+        return 600
+
+
+tariffs = [PerMinute(), Package(), Unlimited()]
+best = tariffs[0]
+for tariff in tariffs:
+    print(f"{tariff.title}: {tariff.cost(minutes)} rub")
+    if tariff.cost(minutes) < best.cost(minutes):
+        best = tariff
+print(f"Best: {best.title}")
+"""
+
+PARKING = """\
+class Vehicle:
+    title = "Vehicle"
+
+    def __init__(self, hours):
+        self.hours = hours
+
+    def fee(self):
+        return 0
+
+
+class Car(Vehicle):
+    title = "Car"
+
+    def fee(self):
+        return 50 * self.hours
+
+
+class Bike(Vehicle):
+    title = "Bike"
+
+    def fee(self):
+        return 20 * (self.hours - 1)
+
+
+class Truck(Vehicle):
+    title = "Truck"
+
+    def fee(self):
+        if self.hours < 2:
+            return 150 * 2
+        return 150 * self.hours
+
+
+vehicles = []
+for record in parking:
+    parts = record.split(":")
+    hours = int(parts[1])
+    if parts[0] == "car":
+        vehicles.append(Car(hours))
+    elif parts[0] == "bike":
+        vehicles.append(Bike(hours))
+    elif parts[0] == "truck":
+        vehicles.append(Truck(hours))
+
+total = 0
+for vehicle in vehicles:
+    fee = vehicle.fee()
+    print(f"{vehicle.title}, {vehicle.hours} h: {fee} rub")
+    total += fee
+print(f"Total: {total} rub")
+"""
+
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-poly-farm-voices", title="Голоса на ферме",
@@ -231,5 +354,108 @@ TASKS = [
         constructs=["class", "for"],
         must_use=[NEED_CLASS, NEED_LOOP, child_of("Warrior", "Hero"), child_of("Mage", "Hero"),
                   child_of("Archer", "Hero"), no_title_check("герой", "damage()")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-poly-foreign-guests", title="Гости из разных стран",
+        given=["english_name", "french_name", "german_name"],
+        variants=[{"english_name": '"John"', "french_name": '"Pierre"', "german_name": '"Hans"'},
+                  {"english_name": '"Emma"', "french_name": '"Claire"', "german_name": '"Greta"'},
+                  {"english_name": '"Oliver"', "french_name": '"Louis"', "german_name": '"Klaus"'}],
+        hidden=[{"english_name": '"Lucy"', "french_name": '"Marie"', "german_name": '"Otto"'},
+                {"english_name": '"Jack"', "french_name": '"Julien"', "german_name": '"Anna"'},
+                {"english_name": '"Kate"', "french_name": '"Paul"', "german_name": '"Lena"'}],
+        intro="В школу на фестиваль приехали гости из Англии, Франции и Германии. Ведущий по очереди даёт каждому "
+              "микрофон, и каждый гость представляется на своём языке. Программа должна обойти всех гостей одним циклом.",
+        steps=["Создай класс `Guest`. В `__init__(self, name)` сохрани имя в `self.name`. Добавь метод `greet(self)`, "
+               "который возвращает строку вида `I am John`.",
+               "Создай три наследника `Guest` и переопредели в каждом `greet(self)`: `EnglishGuest` возвращает строку "
+               "вида `Hello, I am John`, `FrenchGuest` — `Bonjour, je suis Pierre`, `GermanGuest` — `Hallo, ich bin Hans`. "
+               "Имя в каждой строке бери из `self.name`.",
+               "Создай список `guests = [EnglishGuest(english_name), FrenchGuest(french_name), GermanGuest(german_name)]`.",
+               "Одним циклом `for` пройди по списку и выведи результат `greet()` каждого гостя. Метод `greet()` "
+               "в программе вызывай только в одном месте — внутри этого цикла."],
+        hint="Переопределённый метод тоже может пользоваться атрибутами объекта: `self.name` у каждого гостя своё. "
+             "А в цикле строка `guest.greet()` одна, но Python для каждого гостя вызывает версию его класса.",
+        solution=GUESTS,
+        wrong=[("опечатка в имени метода у немецкого гостя — он представляется по-нейтральному, методом родителя",
+                GUESTS.replace("class GermanGuest(Guest):\n    def greet(", "class GermanGuest(Guest):\n    def great(")),
+               ("создаёт всех гостей из класса Guest — никто не здоровается на своём языке",
+                GUESTS.replace("[EnglishGuest(english_name), FrenchGuest(french_name), GermanGuest(german_name)]",
+                               "[Guest(english_name), Guest(french_name), Guest(german_name)]"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, NEED_LOOP, child_of("EnglishGuest", "Guest"), child_of("FrenchGuest", "Guest"),
+                  child_of("GermanGuest", "Guest"),
+                  ("re:\\A(?![\\s\\S]*\\.greet\\(\\)[\\s\\S]*\\.greet\\(\\))[\\s\\S]*\\.greet\\(\\)",
+                   "Вызывай `greet()` только в одном месте — внутри цикла по списку `guests`. Каждый гость "
+                   "сам знает, как поздороваться, поэтому одна строка кода подходит для всех.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-poly-phone-tariffs", title="Выбор тарифа",
+        given=["minutes"],
+        variants=[{"minutes": "250"}, {"minutes": "120"}, {"minutes": "400"}],
+        hidden=[{"minutes": "0"}, {"minutes": "200"}, {"minutes": "150"}, {"minutes": "1000"}],
+        intro="Ты помогаешь бабушке выбрать тариф мобильной связи. Она говорит по телефону `minutes` минут в месяц. "
+              "У оператора три тарифа, и каждый считает стоимость по-своему. Нужно показать цену каждого тарифа "
+              "и выбрать самый дешёвый.",
+        steps=["Создай класс `Tariff` с атрибутом класса `title = \"Tariff\"` и методом `cost(self, minutes)`, "
+               "который возвращает `0`.",
+               "Создай наследника `PerMinute` с `title = \"PerMinute\"`: `cost` возвращает 2 руб. за каждую минуту.",
+               "Создай наследника `Package` с `title = \"Package\"`: 300 руб. в месяц, в них входит 200 минут, "
+               "а каждая минута сверх 200 стоит 3 руб.",
+               "Создай наследника `Unlimited` с `title = \"Unlimited\"`: `cost` всегда возвращает 600.",
+               "Создай список `tariffs = [PerMinute(), Package(), Unlimited()]`. Одним циклом по нему выведи для каждого "
+               "тарифа строку вида `Package: 450 rub` и попутно найди самый дешёвый тариф. Если цены равны, "
+               "остаётся тот, что раньше в списке. Последней строкой выведи `Best: …` с его названием. "
+               "Не проверяй в цикле, какой это тариф, — просто вызывай `cost(minutes)`."],
+        hint="Самый дешёвый ищи так же, как минимум в списке чисел, только храни весь объект: начни с "
+             "`best = tariffs[0]` и заменяй его, если `tariff.cost(minutes) < best.cost(minutes)`. "
+             "Строгое сравнение и оставляет при равенстве более ранний тариф.",
+        solution=TARIFFS,
+        wrong=[("в пакете считает по 3 руб. за все минуты, а не только за минуты сверх 200",
+                TARIFFS.replace("return 300 + 3 * (minutes - 200)", "return 300 + 3 * minutes")),
+               ("ищет самый дорогой тариф вместо самого дешёвого",
+                TARIFFS.replace("if tariff.cost(minutes) < best.cost(minutes):", "if tariff.cost(minutes) > best.cost(minutes):")),
+               ("при равной цене выбирает более поздний тариф",
+                TARIFFS.replace("if tariff.cost(minutes) < best.cost(minutes):", "if tariff.cost(minutes) <= best.cost(minutes):"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, NEED_LOOP, child_of("PerMinute", "Tariff"), child_of("Package", "Tariff"),
+                  child_of("Unlimited", "Tariff"), no_title_check("тариф", "cost(minutes)")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-poly-parking-fees", title="Оплата парковки",
+        given=["parking"],
+        variants=[{"parking": '["car:3", "bike:4", "truck:5"]'},
+                  {"parking": '["truck:1", "car:2", "car:1"]'},
+                  {"parking": '["bike:1", "truck:2", "bike:6", "car:4"]'}],
+        hidden=[{"parking": '["car:10"]'},
+                {"parking": '["bike:2", "truck:3"]'},
+                {"parking": '["truck:1", "bike:1", "truck:2", "car:1"]'}],
+        intro="На платной парковке стоят машины, мотоциклы и грузовики, и для каждого вида транспорта свои правила "
+              "оплаты. В списке `parking` по порядку записано, кто стоял: вид (`car`, `bike` или `truck`), двоеточие "
+              "и число часов. Нужно выписать каждому счёт и посчитать выручку парковки.",
+        steps=["Создай класс `Vehicle` с атрибутом класса `title = \"Vehicle\"`. В `__init__(self, hours)` сохрани часы "
+               "в `self.hours`. Добавь метод `fee(self)`, который возвращает `0`.",
+               "Создай трёх наследников `Vehicle`, в каждом задай свой `title` и переопредели `fee(self)`: "
+               "`Car` — `\"Car\"`, 50 руб. за каждый час; `Bike` — `\"Bike\"`, 20 руб. за час, но первый час бесплатный; "
+               "`Truck` — `\"Truck\"`, 150 руб. за час, но платят минимум за 2 часа.",
+               "Собери список `vehicles`: раздели каждую запись из `parking` по двоеточию, преврати часы в `int` "
+               "и создай объект нужного класса.",
+               "Вторым циклом пройди по `vehicles`: для каждого выведи строку вида `Car, 3 h: 150 rub` и прибавь плату "
+               "к выручке. В этом цикле не проверяй, кто есть кто, — просто вызывай `fee()`.",
+               "Последней строкой выведи выручку в виде `Total: 960 rub`."],
+        hint="Проверять вид транспорта через `if` нужно только один раз — когда создаёшь объекты из строк. "
+             "Особые правила живут внутри методов `fee`: у мотоцикла оплачиваются часы без первого (`self.hours - 1`), "
+             "а у грузовика, если он стоял меньше 2 часов, платят как за 2.",
+        solution=PARKING,
+        wrong=[("забыл про бесплатный первый час у мотоцикла",
+                PARKING.replace("return 20 * (self.hours - 1)", "return 20 * self.hours")),
+               ("не учитывает минимальную оплату грузовика — за 1 час берёт как за 1",
+                PARKING.replace("        if self.hours < 2:\n            return 150 * 2\n", "")),
+               ("опечатка в имени метода у машины — её плата считается как у Vehicle, то есть 0",
+                PARKING.replace("class Car(Vehicle):\n    title = \"Car\"\n\n    def fee(",
+                                "class Car(Vehicle):\n    title = \"Car\"\n\n    def fees("))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, NEED_LOOP, child_of("Car", "Vehicle"), child_of("Bike", "Vehicle"),
+                  child_of("Truck", "Vehicle"), no_title_check("транспорт", "fee()")],
     ),
 ]

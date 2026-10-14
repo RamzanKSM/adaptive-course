@@ -91,4 +91,129 @@ TASKS = [
                    "Распакуй каждый кортеж в три переменные — например, прямо в заголовке цикла: "
                    "for название, цена, количество in cart. Так не придётся обращаться к элементам по индексам.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-tup-birthday", title="День рождения",
+        given=["birthday", "now_year"],
+        variants=[{"birthday": "(14, 3, 2011)", "now_year": "2026"},
+                  {"birthday": "(2, 12, 2009)", "now_year": "2025"},
+                  {"birthday": "(30, 7, 2014)", "now_year": "2026"}],
+        hidden=[{"birthday": "(1, 1, 2000)", "now_year": "2024"},
+                {"birthday": "(28, 2, 2012)", "now_year": "2027"},
+                {"birthday": "(31, 12, 2010)", "now_year": "2026"},
+                {"birthday": "(9, 6, 2008)", "now_year": "2023"}],
+        intro="В анкете ученика дата рождения записана кортежем `birthday` из трёх чисел: день, месяц и год. "
+              "Сейчас идёт `now_year` год. Нужно вывести дату и узнать, сколько лет исполнится ученику в этом году.",
+        steps=["Распакуй кортеж `birthday` одной строкой в три переменные: `day`, `month` и `year` — именно в таком порядке "
+               "числа стоят в кортеже.",
+               "Выведи строку вида `Born: 14.3.2011` — день, месяц и год через точку.",
+               "Следующей строкой выведи строку вида `Turns 15 this year` — разницу между `now_year` и годом рождения.",
+               "Последней строкой выведи `Winter birthday`, если месяц — 12, 1 или 2, иначе `Not a winter birthday`."],
+        hint="После `a, b, c = (7, 8, 9)` в `a` будет 7, в `b` — 8, в `c` — 9. Зимние месяцы — декабрь (12), январь (1) "
+             "и февраль (2): декабрь стоит в конце года, поэтому одной проверкой «меньше трёх» не обойтись.",
+        solution='day, month, year = birthday\nprint(f"Born: {day}.{month}.{year}")\n'
+                 'print(f"Turns {now_year - year} this year")\nif month == 12 or month <= 2:\n'
+                 '    print("Winter birthday")\nelse:\n    print("Not a winter birthday")',
+        wrong=[("путает день и месяц при распаковке",
+                'month, day, year = birthday\nprint(f"Born: {day}.{month}.{year}")\n'
+                'print(f"Turns {now_year - year} this year")\nif month == 12 or month <= 2:\n'
+                '    print("Winter birthday")\nelse:\n    print("Not a winter birthday")'),
+               ("забывает про декабрь — зимними считает только январь и февраль",
+                'day, month, year = birthday\nprint(f"Born: {day}.{month}.{year}")\n'
+                'print(f"Turns {now_year - year} this year")\nif month <= 2:\n'
+                '    print("Winter birthday")\nelse:\n    print("Not a winter birthday")')],
+        must_use=[("re:(?m)^\\s*\\(?\\s*\\w+\\s*,\\s*\\w+\\s*,\\s*\\w+\\s*\\)?\\s*=[^=]",
+                   "Достань день, месяц и год распаковкой кортежа — одной строкой вида a, b, c = кортеж.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-tup-min-max-temp", title="Самая холодная и самая тёплая ночь",
+        given=["temps"],
+        variants=[{"temps": "[3, -2, 5, 0, -4, 1]"},
+                  {"temps": "[12, 15, 9, 14]"},
+                  {"temps": "[-8, -3, -11, -5, -6]"}],
+        hidden=[{"temps": "[7]"},
+                {"temps": "[20, 22, 18, 25, 21, 19, 24]"},
+                {"temps": "[-1, -1, -1]"},
+                {"temps": "[0, 10, -10, 5]"}],
+        intro="Метеостанция записала ночные температуры за несколько дней в список `temps`. Нужна функция, которая "
+              "за один проход находит и самую низкую, и самую высокую температуру и возвращает их сразу обе — кортежем.",
+        steps=["Напиши функцию `extremes(values)`. Сначала и самой низкой, и самой высокой считай первую температуру "
+               "списка `values`, потом пройди циклом по всем температурам и обнови оба значения, где нужно.",
+               "Функция возвращает кортеж из двух чисел: сначала самая низкая температура, потом самая высокая — "
+               "`return low, high`.",
+               "Вызови функцию для `temps` и распакуй результат одной строкой в две переменные.",
+               "Выведи строку вида `Min: -4, max: 5, range: 9` — самую низкую, самую высокую температуру и разницу между ними."],
+        hint="`return a, b` возвращает кортеж `(a, b)`, и его сразу можно распаковать: `x, y = f()`. Не начинай поиск "
+             "с нуля: если все температуры выше нуля, ноль окажется «самой низкой», хотя его в списке нет.",
+        solution='def extremes(values):\n    low = values[0]\n    high = values[0]\n    for value in values:\n'
+                 '        if value < low:\n            low = value\n        if value > high:\n            high = value\n'
+                 '    return low, high\n\n\nlow, high = extremes(temps)\nprint(f"Min: {low}, max: {high}, range: {high - low}")',
+        wrong=[("возвращает кортеж в обратном порядке — минимум и максимум меняются местами",
+                'def extremes(values):\n    low = values[0]\n    high = values[0]\n    for value in values:\n'
+                '        if value < low:\n            low = value\n        if value > high:\n            high = value\n'
+                '    return high, low\n\n\nlow, high = extremes(temps)\nprint(f"Min: {low}, max: {high}, range: {high - low}")'),
+               ("начинает поиск с нуля — для тёплых и морозных дней ответ неверный",
+                'def extremes(values):\n    low = 0\n    high = 0\n    for value in values:\n'
+                '        if value < low:\n            low = value\n        if value > high:\n            high = value\n'
+                '    return low, high\n\n\nlow, high = extremes(temps)\nprint(f"Min: {low}, max: {high}, range: {high - low}")')],
+        constructs=["function", "for"],
+        must_use=[("re:(?m)^\\s*return\\s*\\(?\\s*\\w+\\s*,", "Верни обе температуры сразу кортежем: return low, high."),
+                  ("re:(?m)^\\s*\\(?\\s*\\w+\\s*,\\s*\\w+\\s*\\)?\\s*=[^=]",
+                   "Распакуй результат функции одной строкой в две переменные.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-tup-football-season", title="Футбольный сезон",
+        given=["matches"],
+        variants=[{"matches": "[(3, 1), (0, 0), (1, 2), (4, 0)]"},
+                  {"matches": "[(2, 2), (1, 0), (0, 3)]"},
+                  {"matches": "[(1, 1), (5, 2), (2, 1), (0, 1), (3, 0)]"}],
+        hidden=[{"matches": "[(0, 1), (2, 3)]"},
+                {"matches": "[(0, 0)]"},
+                {"matches": "[(2, 0), (3, 1), (1, 0), (4, 4)]"},
+                {"matches": "[(1, 0), (6, 6), (0, 2), (5, 1)]"}],
+        intro="Школьная команда сыграла сезон. Результаты матчей записаны в список `matches`: каждый матч — кортеж "
+              "из двух чисел, сначала забитые голы, потом пропущенные. За победу дают 3 очка, за ничью 1, за поражение 0.",
+        steps=["Пройди циклом `for` по `matches`, распаковывая каждый кортеж прямо в заголовке цикла в две переменные.",
+               "Для каждого матча выведи строку вида `3:1 win`, `0:0 draw` или `1:2 loss` и прибавь к общему числу очков "
+               "3, 1 или 0.",
+               "Запоминай самую крупную победу — матч, где разница забитых и пропущенных голов больше всего, — как кортеж "
+               "из двух чисел: забитые и пропущенные голы. При равной разнице остаётся победа, которая была раньше.",
+               "После цикла выведи строку вида `Points: 7`, а затем строку вида `Best win: 4:0` или `No wins`, "
+               "если команда не выиграла ни разу."],
+        hint="Начни с `best = None` — победы ещё не было. Победа лучше запомненной, если `best` ещё `None` или её разница "
+             "голов строго больше. Из запомненного кортежа два числа потом можно достать распаковкой.",
+        solution='points = 0\nbest = None\nfor scored, missed in matches:\n    if scored > missed:\n'
+                 '        print(f"{scored}:{missed} win")\n        points += 3\n'
+                 '        if best is None or scored - missed > best[0] - best[1]:\n            best = (scored, missed)\n'
+                 '    elif scored == missed:\n        print(f"{scored}:{missed} draw")\n        points += 1\n'
+                 '    else:\n        print(f"{scored}:{missed} loss")\nprint(f"Points: {points}")\n'
+                 'if best is None:\n    print("No wins")\nelse:\n    goals_for, goals_against = best\n'
+                 '    print(f"Best win: {goals_for}:{goals_against}")',
+        wrong=[("запоминает самую результативную победу по числу забитых голов, а не по разнице",
+                'points = 0\nbest = None\nfor scored, missed in matches:\n    if scored > missed:\n'
+                '        print(f"{scored}:{missed} win")\n        points += 3\n'
+                '        if best is None or scored > best[0]:\n            best = (scored, missed)\n'
+                '    elif scored == missed:\n        print(f"{scored}:{missed} draw")\n        points += 1\n'
+                '    else:\n        print(f"{scored}:{missed} loss")\nprint(f"Points: {points}")\n'
+                'if best is None:\n    print("No wins")\nelse:\n    goals_for, goals_against = best\n'
+                '    print(f"Best win: {goals_for}:{goals_against}")'),
+               ("за ничью не даёт очков",
+                'points = 0\nbest = None\nfor scored, missed in matches:\n    if scored > missed:\n'
+                '        print(f"{scored}:{missed} win")\n        points += 3\n'
+                '        if best is None or scored - missed > best[0] - best[1]:\n            best = (scored, missed)\n'
+                '    elif scored == missed:\n        print(f"{scored}:{missed} draw")\n'
+                '    else:\n        print(f"{scored}:{missed} loss")\nprint(f"Points: {points}")\n'
+                'if best is None:\n    print("No wins")\nelse:\n    goals_for, goals_against = best\n'
+                '    print(f"Best win: {goals_for}:{goals_against}")'),
+               ("при равной разнице заменяет победу на более позднюю",
+                'points = 0\nbest = None\nfor scored, missed in matches:\n    if scored > missed:\n'
+                '        print(f"{scored}:{missed} win")\n        points += 3\n'
+                '        if best is None or scored - missed >= best[0] - best[1]:\n            best = (scored, missed)\n'
+                '    elif scored == missed:\n        print(f"{scored}:{missed} draw")\n        points += 1\n'
+                '    else:\n        print(f"{scored}:{missed} loss")\nprint(f"Points: {points}")\n'
+                'if best is None:\n    print("No wins")\nelse:\n    goals_for, goals_against = best\n'
+                '    print(f"Best win: {goals_for}:{goals_against}")')],
+        constructs=["for"],
+        must_use=[("re:(?m)^\\s*for\\s+\\(?\\s*\\w+\\s*,\\s*\\w+\\s*\\)?\\s*in\\b",
+                   "Распакуй каждый матч прямо в заголовке цикла: for забитые, пропущенные in matches.")],
+    ),
 ]

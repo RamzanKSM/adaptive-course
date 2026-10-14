@@ -178,4 +178,150 @@ TASKS = [
                                  "Для посещений выбери словарь, который сам хранит ключи по алфавиту, — тогда ничего не "
                                  "придётся сортировать вручную")),
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-select-shoe-sizes", title="Размеры кроссовок на складе",
+        given=[("List<Integer>", "boxes")],
+        variants=[{"boxes": "new ArrayList<>(List.of(42, 38, 40, 38, 44, 42, 39))"},
+                  {"boxes": "new ArrayList<>(List.of(36, 35, 36, 37, 35))"},
+                  {"boxes": "new ArrayList<>(List.of(45, 41, 43, 41, 45, 40, 43, 41))"}],
+        hidden=[{"boxes": "new ArrayList<>(List.of(40))"},
+                {"boxes": "new ArrayList<>(List.of(39, 39, 39))"},
+                {"boxes": "new ArrayList<>(List.of(46, 44, 42, 40, 38))"},
+                {"boxes": "new ArrayList<>(List.of(37, 38, 37, 36))"}],
+        intro="На складе обувного магазина стоят коробки с кроссовками, и размер каждой коробки записан в список "
+              "`boxes`. Коробок одного размера бывает много. Продавцу нужен перечень размеров, которые есть "
+              "в наличии, — без повторов и по возрастанию.",
+        steps=["Выведи строку вида `Boxes: 7` — сколько всего коробок в `boxes`.",
+               "Выбери коллекцию, которая сама не хранит повторов и сама держит элементы по возрастанию. Сложи "
+               "в неё все размеры из `boxes`.",
+               "Выведи эту коллекцию через `System.out.println` — получится строка вида `[38, 39, 40]`.",
+               "Последней строкой выведи строку вида `Different sizes: 3` — сколько размеров в этой коллекции."],
+        hint="Повторы убирает множество. Из трёх видов множеств одно хранит элементы в порядке добавления, а другое "
+             "сортирует их само — выбери второе.",
+        solution='System.out.println("Boxes: " + boxes.size());\nSet<Integer> sizes = new TreeSet<>(boxes);\n'
+                 'System.out.println(sizes);\nSystem.out.println("Different sizes: " + sizes.size());',
+        wrong=[("выбрал LinkedHashSet — размеры идут в порядке коробок, а не по возрастанию",
+                'System.out.println("Boxes: " + boxes.size());\nSet<Integer> sizes = new LinkedHashSet<>(boxes);\n'
+                'System.out.println(sizes);\nSystem.out.println("Different sizes: " + sizes.size());'),
+               ("оставил размеры в списке — повторы никуда не делись",
+                'System.out.println("Boxes: " + boxes.size());\nList<Integer> sizes = new ArrayList<>(boxes);\n'
+                'System.out.println(sizes);\nSystem.out.println("Different sizes: " + sizes.size());'),
+               ("убирает повторы вручную через contains и сортирует список — вывод тот же, но коллекция не выбрана",
+                'System.out.println("Boxes: " + boxes.size());\nList<Integer> sizes = new ArrayList<>();\n'
+                "for (int size : boxes) {\n    if (!sizes.contains(size)) {\n        sizes.add(size);\n    }\n}\n"
+                'Collections.sort(sizes);\nSystem.out.println(sizes);\nSystem.out.println("Different sizes: " + sizes.size());')],
+        checks=uses_collections((("java/util/TreeSet",),
+                                 "Сложи размеры в коллекцию, которая сама убирает повторы и сама сортирует, — тогда "
+                                 "ничего не придётся делать вручную")),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-select-play-roles", title="Роли в школьном спектакле",
+        given=[("List<String>", "roles"), ("List<String>", "actors")],
+        variants=[{"roles": 'new ArrayList<>(List.of("Wolf", "Fox", "Bear", "Fox"))',
+                   "actors": 'new ArrayList<>(List.of("Anya", "Boris", "Vika", "Gleb"))'},
+                  {"roles": 'new ArrayList<>(List.of("King", "Queen", "Jester", "King", "Guard"))',
+                   "actors": 'new ArrayList<>(List.of("Dima", "Lena", "Oleg", "Pasha", "Rita"))'},
+                  {"roles": 'new ArrayList<>(List.of("Snowman", "Bunny", "Crow"))',
+                   "actors": 'new ArrayList<>(List.of("Sasha", "Tanya", "Ulyana"))'}],
+        hidden=[{"roles": 'new ArrayList<>(List.of("Tree"))', "actors": 'new ArrayList<>(List.of("Kira"))'},
+                {"roles": 'new ArrayList<>(List.of("Moon", "Moon", "Moon"))', "actors": 'new ArrayList<>(List.of("Fedya", "Zoya", "Mila"))'},
+                {"roles": 'new ArrayList<>(List.of("Witch", "Cat", "Witch", "Cat"))', "actors": 'new ArrayList<>(List.of("Nina", "Egor", "Inna", "Lev"))'},
+                {"roles": 'new ArrayList<>(List.of("Hero", "Dragon"))', "actors": 'new ArrayList<>(List.of("Yasha", "Timur"))'}],
+        intro="Для школьного спектакля учительница записывала, кому какую роль дали: роли — в список `roles`, "
+              "актёров — в список `actors` (роль `roles.get(i)` досталась `actors.get(i)`). Иногда роль передавали "
+              "другому, и тогда действует последняя запись. В афише роли идут в том порядке, в котором их впервые раздали.",
+        steps=["Выбери коллекцию пар «роль — актёр», в которой у каждой роли один актёр, новая запись заменяет "
+               "старую, а роли сами хранятся в порядке, в котором их впервые добавили. Заполни её из `roles` и `actors`.",
+               "Для каждой роли выведи строку вида `Wolf: Anya` — с актёром, который играет её сейчас.",
+               "Последней строкой выведи строку вида `Roles: 3` — сколько ролей в спектакле."],
+        hint="Пары «ключ — значение» хранит словарь, и `put` с тем же ключом заменяет значение. Из трёх видов "
+             "словарей нужен тот, что помнит порядок добавления ключей, а не сортирует их.",
+        solution="Map<String, String> cast = new LinkedHashMap<>();\nfor (int i = 0; i < roles.size(); i++) {\n"
+                 "    cast.put(roles.get(i), actors.get(i));\n}\nfor (String role : cast.keySet()) {\n"
+                 '    System.out.println(role + ": " + cast.get(role));\n}\n'
+                 'System.out.println("Roles: " + cast.size());',
+        wrong=[("выбрал TreeMap — роли идут по алфавиту, а не в порядке раздачи",
+                "Map<String, String> cast = new TreeMap<>();\nfor (int i = 0; i < roles.size(); i++) {\n"
+                "    cast.put(roles.get(i), actors.get(i));\n}\nfor (String role : cast.keySet()) {\n"
+                '    System.out.println(role + ": " + cast.get(role));\n}\n'
+                'System.out.println("Roles: " + cast.size());'),
+               ("печатает все записи подряд из списков — переданные роли повторяются",
+                "for (int i = 0; i < roles.size(); i++) {\n"
+                '    System.out.println(roles.get(i) + ": " + actors.get(i));\n}\n'
+                'System.out.println("Roles: " + roles.size());'),
+               ("ведёт роли вручную в двух списках через indexOf и set — вывод тот же, но словарь не выбран",
+                "List<String> names = new ArrayList<>();\nList<String> who = new ArrayList<>();\n"
+                "for (int i = 0; i < roles.size(); i++) {\n    int k = names.indexOf(roles.get(i));\n"
+                "    if (k >= 0) {\n        who.set(k, actors.get(i));\n    } else {\n"
+                "        names.add(roles.get(i));\n        who.add(actors.get(i));\n    }\n}\n"
+                'for (int k = 0; k < names.size(); k++) {\n    System.out.println(names.get(k) + ": " + who.get(k));\n}\n'
+                'System.out.println("Roles: " + names.size());')],
+        constructs=["for"],
+        checks=uses_collections((("java/util/LinkedHashMap",),
+                                 "Сложи роли в словарь, который помнит порядок добавления ключей, — тогда новая запись "
+                                 "сама заменит старую, а порядок ролей сохранится")),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-select-marks-journal", title="Журнал оценок за урок",
+        given=[("List<String>", "names"), ("List<Integer>", "marks")],
+        variants=[{"names": 'new ArrayList<>(List.of("Vika", "Anya", "Vika", "Boris", "Anya"))',
+                   "marks": "new ArrayList<>(List.of(5, 4, 3, 5, 4))"},
+                  {"names": 'new ArrayList<>(List.of("Oleg", "Dima", "Oleg"))',
+                   "marks": "new ArrayList<>(List.of(3, 3, 4))"},
+                  {"names": 'new ArrayList<>(List.of("Tanya", "Masha", "Kirill", "Masha", "Tanya", "Egor"))',
+                   "marks": "new ArrayList<>(List.of(4, 5, 2, 5, 3, 4))"}],
+        hidden=[{"names": 'new ArrayList<>(List.of("Lena"))', "marks": "new ArrayList<>(List.of(5))"},
+                {"names": 'new ArrayList<>(List.of("Gosha", "Gosha", "Gosha"))', "marks": "new ArrayList<>(List.of(2, 2, 3))"},
+                {"names": 'new ArrayList<>(List.of("Zoya", "Yan", "Inna", "Yan"))', "marks": "new ArrayList<>(List.of(5, 4, 3, 5))"},
+                {"names": 'new ArrayList<>(List.of("Anton", "Boris", "Anton"))', "marks": "new ArrayList<>(List.of(4, 5, 5))"}],
+        intro="На уроке учитель спрашивал учеников и сразу ставил оценки: кто отвечал — в списке `names`, какую "
+              "оценку получил — в списке `marks` (ответ номер `i` — это `names.get(i)` и `marks.get(i)`). "
+              "Один ученик мог отвечать несколько раз. Для трёх отчётов подбери подходящие коллекции.",
+        steps=["Выведи `Journal: ` и словарь, который сам хранит ключи по алфавиту: ключ — ученик, значение — "
+               "список его оценок в том порядке, в котором он их получал, например "
+               "`Journal: {{Anya=[4, 4], Boris=[5]}}`.",
+               "Выведи `Different marks: ` и коллекцию, которая сама убирает повторы и хранит оценки по возрастанию, "
+               "например `Different marks: [3, 4, 5]`.",
+               "Выведи `Answer order: ` и коллекцию учеников без повторов в том порядке, в котором они впервые "
+               "отвечали, например `Answer order: [Vika, Anya, Boris]`."],
+        hint="Для журнала: если ученика ещё нет в словаре, положи под его имя новый пустой список, а потом добавь "
+             "оценку в список этого ученика. Для двух других отчётов подумай, какое множество сортирует, а какое "
+             "помнит порядок добавления.",
+        solution="Map<String, List<Integer>> journal = new TreeMap<>();\nfor (int i = 0; i < names.size(); i++) {\n"
+                 "    String name = names.get(i);\n    if (!journal.containsKey(name)) {\n"
+                 "        journal.put(name, new ArrayList<>());\n    }\n    journal.get(name).add(marks.get(i));\n}\n"
+                 'System.out.println("Journal: " + journal);\nSet<Integer> different = new TreeSet<>(marks);\n'
+                 'System.out.println("Different marks: " + different);\nSet<String> order = new LinkedHashSet<>(names);\n'
+                 'System.out.println("Answer order: " + order);',
+        wrong=[("выбрал LinkedHashMap для журнала — ученики идут в порядке ответов, а не по алфавиту",
+                "Map<String, List<Integer>> journal = new LinkedHashMap<>();\nfor (int i = 0; i < names.size(); i++) {\n"
+                "    String name = names.get(i);\n    if (!journal.containsKey(name)) {\n"
+                "        journal.put(name, new ArrayList<>());\n    }\n    journal.get(name).add(marks.get(i));\n}\n"
+                'System.out.println("Journal: " + journal);\nSet<Integer> different = new TreeSet<>(marks);\n'
+                'System.out.println("Different marks: " + different);\nSet<String> order = new LinkedHashSet<>(names);\n'
+                'System.out.println("Answer order: " + order);'),
+               ("для порядка ответов взял список — ученики, отвечавшие дважды, повторяются",
+                "Map<String, List<Integer>> journal = new TreeMap<>();\nfor (int i = 0; i < names.size(); i++) {\n"
+                "    String name = names.get(i);\n    if (!journal.containsKey(name)) {\n"
+                "        journal.put(name, new ArrayList<>());\n    }\n    journal.get(name).add(marks.get(i));\n}\n"
+                'System.out.println("Journal: " + journal);\nSet<Integer> different = new TreeSet<>(marks);\n'
+                'System.out.println("Different marks: " + different);\nList<String> order = new ArrayList<>(names);\n'
+                'System.out.println("Answer order: " + order);'),
+               ("убирает повторы в порядке ответов вручную через contains — вывод тот же, но коллекция не выбрана",
+                "Map<String, List<Integer>> journal = new TreeMap<>();\nfor (int i = 0; i < names.size(); i++) {\n"
+                "    String name = names.get(i);\n    if (!journal.containsKey(name)) {\n"
+                "        journal.put(name, new ArrayList<>());\n    }\n    journal.get(name).add(marks.get(i));\n}\n"
+                'System.out.println("Journal: " + journal);\nSet<Integer> different = new TreeSet<>(marks);\n'
+                'System.out.println("Different marks: " + different);\nList<String> order = new ArrayList<>();\n'
+                "for (String name : names) {\n    if (!order.contains(name)) {\n        order.add(name);\n    }\n}\n"
+                'System.out.println("Answer order: " + order);')],
+        constructs=["for"],
+        checks=uses_collections((("java/util/TreeMap",),
+                                 "Для журнала выбери словарь, который сам хранит ключи по алфавиту"),
+                                (("java/util/TreeSet",),
+                                 "Для разных оценок выбери множество, которое само хранит элементы по возрастанию"),
+                                (("java/util/LinkedHashSet",),
+                                 "Для порядка ответов выбери множество, которое убирает повторы и помнит порядок "
+                                 "добавления, — тогда ничего не придётся проверять вручную")),
+    ),
 ]

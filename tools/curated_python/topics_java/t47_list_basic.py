@@ -104,4 +104,116 @@ TASKS = [
                 'System.out.println(playlist);\nSystem.out.println("Total songs: " + playlist.size());')],
         constructs=["for", "if"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-list-weather-diary", title="Дневник погоды",
+        given=[("List<Integer>", "temps"), ("int", "today"), ("int", "day")],
+        variants=[{"temps": "new ArrayList<>(List.of(12, 15, 9, 14))", "today": "17", "day": "2"},
+                  {"temps": "new ArrayList<>(List.of(-3, -5, 0))", "today": "2", "day": "1"},
+                  {"temps": "new ArrayList<>(List.of(20, 22, 25, 24, 19, 18))", "today": "21", "day": "4"}],
+        hidden=[{"temps": "new ArrayList<>()", "today": "5", "day": "1"},
+                {"temps": "new ArrayList<>(List.of(7))", "today": "8", "day": "2"},
+                {"temps": "new ArrayList<>(List.of(1, 2, 3))", "today": "4", "day": "3"},
+                {"temps": "new ArrayList<>(List.of(30, 31, 29, 28, 27))", "today": "26", "day": "1"}],
+        intro="Ты ведёшь дневник погоды: каждый день записываешь температуру в список `temps`. Сегодня на улице "
+              "`today` градусов. А ещё друг спрашивает, какая температура была в день номер `day` (дни считаются с 1).",
+        steps=["Добавь сегодняшнюю температуру `today` в конец списка `temps` методом `add`.",
+               "Выведи строку вида `Days: 5` — сколько дней теперь записано в дневнике (метод `size()`).",
+               "Выведи строку вида `Day 2: 15` — номер дня `day` и температуру в этот день. Достань её методом `get`; "
+               "помни, что день номер 1 лежит в списке под номером 0.",
+               "Последней строкой выведи весь список командой `System.out.println(temps);`."],
+        hint="Номер элемента в списке на единицу меньше номера дня: день `day` достаётся как `temps.get(day - 1)`.",
+        solution='temps.add(today);\nSystem.out.println("Days: " + temps.size());\n'
+                 'System.out.println("Day " + day + ": " + temps.get(day - 1));\nSystem.out.println(temps);',
+        wrong=[("берёт элемент с номером day — это следующий день",
+                'temps.add(today);\nSystem.out.println("Days: " + temps.size());\n'
+                'System.out.println("Day " + day + ": " + temps.get(day));\nSystem.out.println(temps);'),
+               ("выводит число дней до того, как добавил сегодняшний",
+                'System.out.println("Days: " + temps.size());\ntemps.add(today);\n'
+                'System.out.println("Day " + day + ": " + temps.get(day - 1));\nSystem.out.println(temps);')],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-list-step-goal", title="Цель по шагам",
+        given=[("List<Integer>", "steps"), ("int", "goal")],
+        variants=[{"steps": "new ArrayList<>(List.of(8000, 12000, 10000, 6500, 10000, 15000, 3000))", "goal": "10000"},
+                  {"steps": "new ArrayList<>(List.of(4200, 5100, 4999, 7000))", "goal": "5000"},
+                  {"steps": "new ArrayList<>(List.of(9000, 11000, 8000, 7999, 12500))", "goal": "8000"}],
+        hidden=[{"steps": "new ArrayList<>(List.of(100, 200))", "goal": "1000"},
+                {"steps": "new ArrayList<>(List.of(6000))", "goal": "6000"},
+                {"steps": "new ArrayList<>(List.of(3000, 3001, 2999, 3000, 5000, 1))", "goal": "3000"},
+                {"steps": "new ArrayList<>()", "goal": "5000"}],
+        intro="Фитнес-браслет записывает, сколько шагов ты прошёл за каждый день, — по порядку, в список `steps`. "
+              "Твоя цель — не меньше `goal` шагов в день. Нужно найти номера дней, когда цель выполнена.",
+        steps=["Создай пустой список `List<Integer> goodDays = new ArrayList<>();` для номеров удачных дней.",
+               "Пройди по списку `steps` циклом по номерам `i` от 0 до `steps.size() - 1`. Если в день с номером `i` "
+               "шагов не меньше `goal`, добавь в `goodDays` номер этого дня для людей — `i + 1` (дни считаются с 1).",
+               "Выведи `Good days: ` и сразу за этим список `goodDays`, например `Good days: [2, 3, 5]`.",
+               "Последней строкой выведи строку вида `Goal reached: 3 of 7 days` — сколько дней в `goodDays` "
+               "и сколько всего дней в `steps`."],
+        hint="Цикл for-each даёт сами числа шагов, но не номер дня. Здесь нужен номер, поэтому иди по индексам и "
+             "доставай шаги через `steps.get(i)`.",
+        solution="List<Integer> goodDays = new ArrayList<>();\nfor (int i = 0; i < steps.size(); i++) {\n"
+                 "    if (steps.get(i) >= goal) {\n        goodDays.add(i + 1);\n    }\n}\n"
+                 'System.out.println("Good days: " + goodDays);\n'
+                 'System.out.println("Goal reached: " + goodDays.size() + " of " + steps.size() + " days");',
+        wrong=[("сравнивает строго больше — день ровно с goal шагами не засчитан",
+                "List<Integer> goodDays = new ArrayList<>();\nfor (int i = 0; i < steps.size(); i++) {\n"
+                "    if (steps.get(i) > goal) {\n        goodDays.add(i + 1);\n    }\n}\n"
+                'System.out.println("Good days: " + goodDays);\n'
+                'System.out.println("Goal reached: " + goodDays.size() + " of " + steps.size() + " days");'),
+               ("добавляет индекс i — дни получаются пронумерованы с нуля",
+                "List<Integer> goodDays = new ArrayList<>();\nfor (int i = 0; i < steps.size(); i++) {\n"
+                "    if (steps.get(i) >= goal) {\n        goodDays.add(i);\n    }\n}\n"
+                'System.out.println("Good days: " + goodDays);\n'
+                'System.out.println("Goal reached: " + goodDays.size() + " of " + steps.size() + " days");')],
+        constructs=["for", "if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-list-price-changes", title="Цена на рынке",
+        given=[("List<Integer>", "prices")],
+        variants=[{"prices": "new ArrayList<>(List.of(120, 150, 140, 140, 170))"},
+                  {"prices": "new ArrayList<>(List.of(300, 280, 250, 260))"},
+                  {"prices": "new ArrayList<>(List.of(90, 80, 70))"}],
+        hidden=[{"prices": "new ArrayList<>(List.of(100))"},
+                {"prices": "new ArrayList<>(List.of(50, 50, 50))"},
+                {"prices": "new ArrayList<>(List.of(10, 40, 20, 50, 45, 80))"},
+                {"prices": "new ArrayList<>(List.of(200, 200, 230))"}],
+        intro="Бабушка каждый день записывает цену килограмма огурцов на рынке в список `prices` — по порядку дней. "
+              "Она хочет понять, как цена менялась от дня к дню и на сколько она подскакивала сильнее всего.",
+        steps=["Создай пустой список `List<Integer> changes = new ArrayList<>();`. Пройди по номерам `i` начиная "
+               "с 1 и для каждого дня добавь в `changes` изменение цены: `prices.get(i) - prices.get(i - 1)` "
+               "(рост — положительное число, падение — отрицательное).",
+               "Выведи `Changes: ` и сразу за этим список `changes`, например `Changes: [30, -10]`.",
+               "Посчитай, сколько изменений больше нуля, и выведи строку вида `Days of growth: 2`.",
+               "Если таких изменений нет, последней строкой выведи `No growth`, иначе — строку вида "
+               "`Biggest rise: 30 rub` с самым большим изменением."],
+        hint="У первого дня нет предыдущего, поэтому цикл начинается с `i = 1`, и изменений на одно меньше, чем "
+             "дней. Если цена не изменилась, изменение равно 0 — это не рост.",
+        solution="List<Integer> changes = new ArrayList<>();\nfor (int i = 1; i < prices.size(); i++) {\n"
+                 "    changes.add(prices.get(i) - prices.get(i - 1));\n}\n"
+                 'System.out.println("Changes: " + changes);\nint growth = 0;\nint biggest = 0;\n'
+                 "for (int change : changes) {\n    if (change > 0) {\n        growth++;\n"
+                 "        if (change > biggest) {\n            biggest = change;\n        }\n    }\n}\n"
+                 'System.out.println("Days of growth: " + growth);\nif (growth == 0) {\n'
+                 '    System.out.println("No growth");\n} else {\n'
+                 '    System.out.println("Biggest rise: " + biggest + " rub");\n}',
+        wrong=[("вычитает в обратном порядке — рост и падение меняются местами",
+                "List<Integer> changes = new ArrayList<>();\nfor (int i = 1; i < prices.size(); i++) {\n"
+                "    changes.add(prices.get(i - 1) - prices.get(i));\n}\n"
+                'System.out.println("Changes: " + changes);\nint growth = 0;\nint biggest = 0;\n'
+                "for (int change : changes) {\n    if (change > 0) {\n        growth++;\n"
+                "        if (change > biggest) {\n            biggest = change;\n        }\n    }\n}\n"
+                'System.out.println("Days of growth: " + growth);\nif (growth == 0) {\n'
+                '    System.out.println("No growth");\n} else {\n'
+                '    System.out.println("Biggest rise: " + biggest + " rub");\n}'),
+               ("считает ростом и дни без изменений (change >= 0)",
+                "List<Integer> changes = new ArrayList<>();\nfor (int i = 1; i < prices.size(); i++) {\n"
+                "    changes.add(prices.get(i) - prices.get(i - 1));\n}\n"
+                'System.out.println("Changes: " + changes);\nint growth = 0;\nint biggest = 0;\n'
+                "for (int change : changes) {\n    if (change >= 0) {\n        growth++;\n"
+                "        if (change > biggest) {\n            biggest = change;\n        }\n    }\n}\n"
+                'System.out.println("Days of growth: " + growth);\nif (growth == 0) {\n'
+                '    System.out.println("No growth");\n} else {\n'
+                '    System.out.println("Biggest rise: " + biggest + " rub");\n}')],
+        constructs=["for", "if"],
+    ),
 ]

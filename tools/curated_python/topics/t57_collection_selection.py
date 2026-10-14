@@ -106,4 +106,106 @@ TASKS = [
         must_use=[("Dict", "Сгруппируй участников в словаре: ключ — номер школы, значение — список фамилий. "
                            "Словарь помнит порядок, в котором добавлялись школы, и сразу находит нужную.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-sel-rgb-color", title="Цвет из трёх чисел",
+        given=["red", "green", "blue"],
+        variants=[{"red": "255", "green": "128", "blue": "0"},
+                  {"red": "120", "green": "120", "blue": "120"},
+                  {"red": "0", "green": "200", "blue": "255"}],
+        hidden=[{"red": "0", "green": "0", "blue": "0"},
+                {"red": "10", "green": "10", "blue": "11"},
+                {"red": "77", "green": "50", "blue": "77"},
+                {"red": "200", "green": "30", "blue": "60"}],
+        intro="Графический редактор хранит цвет как три числа от 0 до 255: сколько в нём красного `red`, зелёного `green` "
+              "и синего `blue`. Цвет — это одна запись: порядок чисел важен, их всегда ровно три, и после того как цвет "
+              "выбран, менять его отдельные части программа не должна.",
+        steps=["Сложи три числа в порядке красный, зелёный, синий в такую коллекцию, которая хранит порядок, "
+               "а изменить её после создания нельзя. Сохрани её в переменную `color`.",
+               "Выведи строку вида `Color: (10, 20, 30)` — после двоеточия и пробела сама коллекция `color`.",
+               "Следующей строкой выведи `Shade of gray`, если все три числа в `color` равны, иначе `Colored`. "
+               "Числа бери из `color` по индексам."],
+        hint="Список тоже хранит порядок, но его можно случайно изменить: `color[0] = 0`. Вспомни коллекцию, которая "
+             "пишется в круглых скобках и после создания не меняется.",
+        solution='color = (red, green, blue)\nprint(f"Color: {color}")\nif color[0] == color[1] and color[1] == color[2]:\n'
+                 '    print("Shade of gray")\nelse:\n    print("Colored")',
+        wrong=[("складывает цвет в список — печатаются квадратные скобки",
+                'color = [red, green, blue]\nprint(f"Color: {color}")\nif color[0] == color[1] and color[1] == color[2]:\n'
+                '    print("Shade of gray")\nelse:\n    print("Colored")'),
+               ("сравнивает только красный и зелёный — синий не проверяется",
+                'color = (red, green, blue)\nprint(f"Color: {color}")\nif color[0] == color[1]:\n'
+                '    print("Shade of gray")\nelse:\n    print("Colored")')],
+        constructs=["if"],
+        must_use=[("Tuple", "Для цвета выбери кортеж: (red, green, blue). Он хранит порядок трёх чисел, "
+                            "а изменить его после создания нельзя.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-sel-chat-feed", title="Лента чата",
+        given=["chat"],
+        variants=[{"chat": '[("Anya", "hi"), ("Boris", "hello"), ("Anya", "who is coming?"), ("Vika", "me"), ("Boris", "me too")]'},
+                  {"chat": '[("Oleg", "ready?"), ("Oleg", "start"), ("Mila", "go"), ("Oleg", "ok")]'},
+                  {"chat": '[("Kira", "lunch?"), ("Lev", "yes"), ("Kira", "where"), ("Nina", "cafe"), ("Lev", "fine"), '
+                           '("Kira", "at 2")]'}],
+        hidden=[{"chat": '[("Zoya", "hey")]'},
+                {"chat": '[("Ada", "a"), ("Ben", "b"), ("Cid", "c"), ("Dan", "d"), ("Eva", "e")]'},
+                {"chat": '[("Max", "one"), ("Max", "two"), ("Max", "three"), ("Max", "four")]'}],
+        intro="В групповом чате сообщения записаны в список `chat` в порядке отправки. Каждое сообщение — кортеж "
+              "из имени автора и текста. Один человек может написать много сообщений. Под окном чата нужно показать "
+              "три последних сообщения и сколько разных людей писало в чат.",
+        steps=["Выведи три последних сообщения ленты в порядке отправки — каждое строкой вида `Anya: hi`. Если сообщений "
+               "меньше трёх, выведи все. Порядок и повторы авторов здесь важны.",
+               "Собери авторов всех сообщений в такую коллекцию, которая сама избавляется от повторов.",
+               "Последней строкой выведи строку вида `Authors: 4` — сколько разных людей писало в чат."],
+        hint="Лента уже хранится в списке — он помнит порядок, и срез `[-3:]` даёт последние три элемента (или все, если "
+             "их меньше). А для подсчёта разных авторов подойдёт коллекция, в которой каждый элемент хранится один раз.",
+        solution='for author, text in chat[-3:]:\n    print(f"{author}: {text}")\nauthors = set()\nfor author, text in chat:\n'
+                 '    authors.add(author)\nprint(f"Authors: {len(authors)}")',
+        wrong=[("считает авторов по числу сообщений — повторы учитываются",
+                'for author, text in chat[-3:]:\n    print(f"{author}: {text}")\nprint(f"Authors: {len(chat)}")\nauthors = set()'),
+               ("берёт три первых сообщения вместо трёх последних",
+                'for author, text in chat[:3]:\n    print(f"{author}: {text}")\nauthors = set()\nfor author, text in chat:\n'
+                '    authors.add(author)\nprint(f"Authors: {len(authors)}")')],
+        constructs=["for"],
+        must_use=[("re:\\bset\\(", "Для разных авторов выбери множество set: каждый автор попадёт в него только один раз.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-sel-office-pass", title="Пропуска в офис",
+        given=["cards", "scans"],
+        variants=[{"cards": '[(12, "Anya"), (34, "Boris"), (56, "Vika")]', "scans": "[12, 34, 77, 12, 56, 34, 12]"},
+                  {"cards": '[(1, "Oleg"), (2, "Mila")]', "scans": "[2, 2, 2, 5, 1]"},
+                  {"cards": '[(101, "Kira"), (202, "Lev"), (303, "Nina"), (404, "Petr")]', "scans": "[303, 404, 303, 999, 101]"}],
+        hidden=[{"cards": '[(7, "Zoya")]', "scans": "[7]"},
+                {"cards": '[(1, "Ada"), (2, "Ben")]', "scans": "[3, 4]"},
+                {"cards": '[(5, "Max"), (6, "Eva")]', "scans": "[5, 6, 6, 5, 6, 5, 8]"}],
+        intro="На входе в офис стоит турникет. Сотрудники записаны в список `cards`: каждая запись — кортеж из номера "
+              "пропуска и имени. В списке `scans` — номера пропусков в том порядке, в котором их прикладывали к турникету. "
+              "Первое прикладывание — человек входит, следующее — выходит, потом снова входит и так далее.",
+        steps=["Собери из `cards` коллекцию, в которой по номеру пропуска сразу находится имя сотрудника.",
+               "Заведи коллекцию для тех, кто сейчас в офисе: в ней нужно только быстро проверять, есть ли там человек, "
+               "добавлять и убирать его; повторов в ней быть не может.",
+               "Пройди по `scans`. Если такого пропуска нет среди сотрудников, выведи строку вида `Card 77: denied`. "
+               "Если человек сейчас в офисе, выведи строку вида `Card 12: goodbye, Anya` и убери его из тех, кто внутри; "
+               "иначе выведи `Card 12: welcome, Anya` и добавь его.",
+               "Последней строкой выведи строку вида `Inside: 2` — сколько людей осталось в офисе."],
+        hint="Имя по номеру удобно искать в словаре: ключ — номер пропуска, значение — имя. А тех, кто внутри, удобно "
+             "хранить в множестве: `.add(x)` добавляет элемент, `.remove(x)` убирает его, `x in inside` проверяет.",
+        solution='names = {}\nfor number, name in cards:\n    names[number] = name\ninside = set()\nfor card in scans:\n'
+                 '    if card not in names:\n        print(f"Card {card}: denied")\n    elif card in inside:\n'
+                 '        print(f"Card {card}: goodbye, {names[card]}")\n        inside.remove(card)\n    else:\n'
+                 '        print(f"Card {card}: welcome, {names[card]}")\n        inside.add(card)\nprint(f"Inside: {len(inside)}")',
+        wrong=[("не убирает вышедших — каждый следующий проход считается выходом",
+                'names = {}\nfor number, name in cards:\n    names[number] = name\ninside = set()\nfor card in scans:\n'
+                '    if card not in names:\n        print(f"Card {card}: denied")\n    elif card in inside:\n'
+                '        print(f"Card {card}: goodbye, {names[card]}")\n    else:\n'
+                '        print(f"Card {card}: welcome, {names[card]}")\n        inside.add(card)\nprint(f"Inside: {len(inside)}")'),
+               ("впускает и незнакомые пропуска — проверка сотрудников пропущена",
+                'names = {}\nfor number, name in cards:\n    names[number] = name\ninside = set()\nfor card in scans:\n'
+                '    if card in inside:\n        print(f"Card {card}: goodbye, {names.get(card)}")\n        inside.remove(card)\n'
+                '    else:\n        print(f"Card {card}: welcome, {names.get(card)}")\n        inside.add(card)\n'
+                'print(f"Inside: {len(inside)}")')],
+        constructs=["dict", "for"],
+        must_use=[("Dict", "Для поиска имени по номеру пропуска выбери словарь: создай его фигурными скобками {} "
+                           "и заполни парами «номер — имя»."),
+                  ("re:\\bset\\(", "Для тех, кто в офисе, выбери множество set(): оно быстро проверяет, есть ли в нём "
+                                       "человек, и не хранит повторов.")],
+    ),
 ]

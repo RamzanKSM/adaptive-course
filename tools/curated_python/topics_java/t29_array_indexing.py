@@ -93,4 +93,89 @@ TASKS = [
                 'System.out.println("First stage: " + team[0]);')],
         constructs=["list"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-ai-week-weather", title="Погода за неделю",
+        given=[("int[]", "temps")],
+        variants=[{"temps": "{12, 14, 9, 11, 15, 18, 17}"}, {"temps": "{-3, -5, -2, 0, 1, -1, -4}"},
+                  {"temps": "{22, 25, 27, 24, 21, 19, 26}"}],
+        hidden=[{"temps": "{1, 2, 3, 4, 5, 6, 7}"}, {"temps": "{30, 10, 20, 0, -10, 5, 15}"},
+                {"temps": "{8, 8, 8, 9, 8, 8, 8}"}],
+        intro="Метеостанция записала дневную температуру за неделю в массив `temps`: первый элемент — понедельник, "
+              "второй — вторник, и так до воскресенья. В массиве всегда ровно 7 чисел.",
+        steps=["Выведи три строки: `Monday: … C`, `Friday: … C` и `Sunday: … C` — температуру в понедельник, пятницу "
+               "и воскресенье.",
+               "Следующей строкой выведи `Change: …` — температура в воскресенье минус температура в понедельник.",
+               "Бери числа из массива `temps` по индексу."],
+        hint="Индексы начинаются с нуля: понедельник — `temps[0]`. Посчитай по пальцам, какой индекс у пятницы и у воскресенья.",
+        solution='System.out.println("Monday: " + temps[0] + " C");\nSystem.out.println("Friday: " + temps[4] + " C");\n'
+                 'System.out.println("Sunday: " + temps[6] + " C");\nSystem.out.println("Change: " + (temps[6] - temps[0]));',
+        wrong=[("для пятницы индекс 5: выводит субботу",
+                'System.out.println("Monday: " + temps[0] + " C");\nSystem.out.println("Friday: " + temps[5] + " C");\n'
+                'System.out.println("Sunday: " + temps[6] + " C");\nSystem.out.println("Change: " + (temps[6] - temps[0]));'),
+               ("для понедельника индекс 1: выводит вторник",
+                'System.out.println("Monday: " + temps[1] + " C");\nSystem.out.println("Friday: " + temps[4] + " C");\n'
+                'System.out.println("Sunday: " + temps[6] + " C");\nSystem.out.println("Change: " + (temps[6] - temps[1]));')],
+        constructs=["list"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-ai-cafe-order", title="Заказ по номерам меню",
+        given=[("int[]", "prices"), ("int", "first"), ("int", "second")],
+        variants=[{"prices": "{250, 180, 320, 90, 150}", "first": "3", "second": "1"},
+                  {"prices": "{120, 450, 300, 200, 80, 60}", "first": "2", "second": "5"},
+                  {"prices": "{99, 199, 299, 399}", "first": "1", "second": "3"}],
+        hidden=[{"prices": "{10, 20, 30}", "first": "2", "second": "2"},
+                {"prices": "{500, 100, 700, 300, 900, 50, 40}", "first": "5", "second": "4"},
+                {"prices": "{70, 80}", "first": "1", "second": "1"},
+                {"prices": "{15, 25, 35, 45, 55}", "first": "4", "second": "2"}],
+        intro="В меню кафе блюда пронумерованы с 1, а их цены в рублях записаны в массив `prices` по порядку. "
+              "Гость заказал блюдо номер {first} (поле `first`) и блюдо номер {second} (поле `second`).",
+        steps=["Выведи строку `Dish {first}: … rub` — цену первого заказанного блюда, и строку `Dish {second}: … rub` — "
+               "цену второго. Номера блюд в строках бери из `first` и `second`.",
+               "Последней строкой выведи `Total: … rub` — сумму двух цен.",
+               "Индексы вычисляй из `first` и `second`: при других номерах программа должна вывести другие цены."],
+        hint="Блюдо номер 1 лежит в массиве под индексом 0, поэтому индекс блюда — его номер минус 1. "
+             "Сумму двух чисел в строке возьми в скобки, иначе числа склеятся.",
+        solution='System.out.println("Dish " + first + ": " + prices[first - 1] + " rub");\n'
+                 'System.out.println("Dish " + second + ": " + prices[second - 1] + " rub");\n'
+                 'System.out.println("Total: " + (prices[first - 1] + prices[second - 1]) + " rub");',
+        wrong=[("использует номер блюда как индекс: берёт цену следующего блюда",
+                'System.out.println("Dish " + first + ": " + prices[first] + " rub");\n'
+                'System.out.println("Dish " + second + ": " + prices[second] + " rub");\n'
+                'System.out.println("Total: " + (prices[first] + prices[second]) + " rub");'),
+               ("сумма без скобок: цены склеиваются в одну строку",
+                'System.out.println("Dish " + first + ": " + prices[first - 1] + " rub");\n'
+                'System.out.println("Dish " + second + ": " + prices[second - 1] + " rub");\n'
+                'System.out.println("Total: " + prices[first - 1] + prices[second - 1] + " rub");')],
+        constructs=["list"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-ai-shelf-stock", title="Товар на полке",
+        given=[("int[]", "stock"), ("int", "shelf"), ("int", "want")],
+        variants=[{"stock": "{12, 5, 8, 20}", "shelf": "3", "want": "6"},
+                  {"stock": "{7, 3, 15, 0, 9}", "shelf": "2", "want": "5"},
+                  {"stock": "{30, 14, 6}", "shelf": "1", "want": "10"}],
+        hidden=[{"stock": "{4, 9}", "shelf": "1", "want": "9"}, {"stock": "{4, 9, 2}", "shelf": "2", "want": "9"},
+                {"stock": "{10, 0, 5, 1}", "shelf": "4", "want": "3"}, {"stock": "{8, 8, 8}", "shelf": "1", "want": "8"},
+                {"stock": "{2, 6, 11, 3, 7}", "shelf": "5", "want": "1"}],
+        intro="На складе полки пронумерованы с 1, а сколько коробок стоит на каждой полке, записано в массив `stock`. "
+              "Покупатель хочет забрать {want} коробок (поле `want`) с полки номер {shelf} (поле `shelf`). "
+              "Если на полке меньше коробок, он забирает всё, что есть.",
+        steps=["Посчитай, сколько коробок покупатель заберёт: `want`, если на полке их не меньше, иначе — всё, что на полке.",
+               "Уменьши элемент массива для этой полки на это число — массив должен измениться.",
+               "Выведи три строки: `Sold: …`, `Left on shelf {shelf}: …` (сколько коробок теперь на этой полке, номер "
+               "полки бери из `shelf`) и `Shelf 1 now: …` — сколько коробок теперь на первой полке склада."],
+        hint="Индекс полки на 1 меньше её номера. Элемент массива меняется так же, как переменная: `stock[i] -= 3;`. "
+             "Если покупатель брал с первой полки, в последней строке должно быть уже новое число.",
+        solution='int sold;\nif (stock[shelf - 1] >= want) {\n    sold = want;\n} else {\n    sold = stock[shelf - 1];\n}\n'
+                 'stock[shelf - 1] -= sold;\nSystem.out.println("Sold: " + sold);\n'
+                 'System.out.println("Left on shelf " + shelf + ": " + stock[shelf - 1]);\nSystem.out.println("Shelf 1 now: " + stock[0]);',
+        wrong=[("не проверяет, хватает ли коробок: на полке получается минус",
+                'int sold = want;\nstock[shelf - 1] -= sold;\nSystem.out.println("Sold: " + sold);\n'
+                'System.out.println("Left on shelf " + shelf + ": " + stock[shelf - 1]);\nSystem.out.println("Shelf 1 now: " + stock[0]);'),
+               ("считает остаток в отдельной переменной и не меняет массив: первая полка не уменьшается",
+                'int sold;\nif (stock[shelf - 1] >= want) {\n    sold = want;\n} else {\n    sold = stock[shelf - 1];\n}\n'
+                'int left = stock[shelf - 1] - sold;\nSystem.out.println("Sold: " + sold);\n'
+                'System.out.println("Left on shelf " + shelf + ": " + left);\nSystem.out.println("Shelf 1 now: " + stock[0]);')],
+        constructs=["list", "if"],
+    ),
 ]

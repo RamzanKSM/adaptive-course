@@ -68,4 +68,65 @@ TASKS = [
                 "def ticket_price(age):\n    if age < 7:\n        return 0\n    elif age < 18:\n        return {child}\n"
                 "    elif age < 65:\n        return {adult}\n")],
     ),
+    FunctionTask(
+        skill=SKILL, difficulty=1, slug="py-ret-coffee-change", title="Сдача в кофейне",
+        function="change",
+        variants=[{"price": 120}, {"price": 150}, {"price": 180}],
+        intro="Стакан кофе стоит {price} руб. Касса вызывает функцию, чтобы узнать сдачу, и потом сама решает, "
+              "какими монетами её выдать, — поэтому сдачу нужно вернуть, а не напечатать.",
+        steps=["Допиши функцию `change(paid)`: параметр `paid` — сколько рублей дал покупатель (не меньше цены кофе).",
+               "Функция должна вернуть через `return` сдачу целым числом: `paid` минус {price}."],
+        hint="После `x = change(500)` в переменной `x` должна оказаться сдача. Если функция только печатает, "
+             "в `x` попадёт `None`: функция без `return` ничего не возвращает.",
+        starter="def change(paid):\n    # Напиши решение здесь\n    pass\n",
+        solution="def change(paid):\n    return paid - {price}\n",
+        inputs=["200", "500", "1000", "300", "250", "180"],
+        wrong=[("печатает сдачу вместо return", "def change(paid):\n    print(paid - {price})\n"),
+               ("вычитает в обратном порядке — сдача отрицательная", "def change(paid):\n    return {price} - paid\n")],
+    ),
+    FunctionTask(
+        skill=SKILL, difficulty=2, slug="py-ret-hide-card", title="Номер карты в SMS",
+        function="hide_card",
+        variants=[{"keep": 4}, {"keep": 3}, {"keep": 2}],
+        intro="Банк присылает SMS о покупках, но не показывает номер карты целиком: видны только последние {keep} цифры, "
+              "а остальные заменены звёздочками. Строку для SMS собирает функция, а отправляет её другая часть "
+              "программы — поэтому строку нужно вернуть.",
+        steps=["Допиши функцию `hide_card(number)`: `number` — номер карты, строка из цифр (длина может быть разной).",
+               "Верни строку той же длины: сначала столько звёздочек `*`, сколько цифр скрыто, "
+               "а потом последние {keep} цифры номера. Посмотри на примеры ниже."],
+        hint="Последние цифры даёт срез с отрицательным началом: `number[-{keep}:]`. Число звёздочек — длина номера "
+             "минус {keep}, а строку из одинаковых символов получают умножением: `\"*\" * 3` даёт `\"***\"`.",
+        starter="def hide_card(number):\n    # Напиши решение здесь\n    pass\n",
+        solution='def hide_card(number):\n    return "*" * (len(number) - {keep}) + number[-{keep}:]\n',
+        inputs=['"1234567890123456"', '"4000123412341234"', '"9876543210"', '"55554444"', '"220012345678"', '"10203040"'],
+        wrong=[("печатает строку вместо return",
+                'def hide_card(number):\n    print("*" * (len(number) - {keep}) + number[-{keep}:])\n'),
+               ("показывает первые цифры вместо последних",
+                'def hide_card(number):\n    return number[:{keep}] + "*" * (len(number) - {keep})\n')],
+    ),
+    FunctionTask(
+        skill=SKILL, difficulty=3, slug="py-ret-steps-goal", title="День, когда цель выполнена",
+        function="goal_day",
+        variants=[{"goal": 10000}, {"goal": 15000}, {"goal": 5000}],
+        intro="Фитнес-браслет записывает, сколько шагов человек прошёл за каждый день, и хочет поздравить его, "
+              "когда за всё время наберётся {goal} шагов. Функция находит номер этого дня и возвращает его приложению.",
+        steps=["Допиши функцию `goal_day(steps)`: `steps` — список, где `steps[0]` — шаги за первый день, "
+               "`steps[1]` — за второй и так далее.",
+               "Складывай шаги день за днём. Как только сумма стала {goal} или больше, сразу верни номер этого дня — "
+               "дни нумеруются с 1.",
+               "Если и за все дни сумма не дошла до {goal}, верни `-1`."],
+        hint="`return` внутри цикла сразу завершает функцию — дальше цикл уже не идёт. А `return -1` пиши после цикла: "
+             "до него дело дойдёт, только если цель так и не была выполнена. Номер дня на 1 больше индекса.",
+        starter="def goal_day(steps):\n    # Напиши решение здесь\n    pass\n",
+        solution="def goal_day(steps):\n    total = 0\n    for i in range(len(steps)):\n        total += steps[i]\n"
+                 "        if total >= {goal}:\n            return i + 1\n    return -1\n",
+        inputs=["[3000, 4000, 2000, 6000, 1000]", "[1000, 2000]", "[5000, 5000, 5000]", "[20000]",
+                "[4000, 1000, 4000, 1000, 5000, 3000]", "[]", "[2500, 2500, 2500, 2500, 2500, 2500]"],
+        wrong=[("возвращает индекс, а не номер дня (на 1 меньше)",
+                "def goal_day(steps):\n    total = 0\n    for i in range(len(steps)):\n        total += steps[i]\n"
+                "        if total >= {goal}:\n            return i\n    return -1\n"),
+               ("нет return -1 после цикла — если цель не выполнена, функция возвращает None",
+                "def goal_day(steps):\n    total = 0\n    for i in range(len(steps)):\n        total += steps[i]\n"
+                "        if total >= {goal}:\n            return i + 1\n")],
+    ),
 ]

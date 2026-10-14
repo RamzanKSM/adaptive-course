@@ -133,4 +133,145 @@ TASKS = [
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PROPERTY],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-prop-temperature", title="Градусы в разных шкалах",
+        given=["celsius"],
+        variants=[{"celsius": "25"}, {"celsius": "-10"}, {"celsius": "35"}],
+        hidden=[{"celsius": "0"}, {"celsius": "-40"}, {"celsius": "100"}],
+        intro="Метеостанция хранит температуру в градусах Цельсия, а на табло для туристов нужно показать её ещё "
+              "в градусах Фаренгейта и в кельвинах. Эти значения удобно сделать свойствами: они читаются как атрибуты, "
+              "а вычисляются из градусов Цельсия.",
+        steps=["Создай класс `Temperature`. В `__init__(self, celsius)` сохрани температуру в атрибут `self.celsius`.",
+               "Добавь свойство `fahrenheit` — метод с `@property` над ним. Оно возвращает температуру по Фаренгейту: "
+               "градусы Цельсия умножить на 9, разделить нацело на 5 и прибавить 32.",
+               "Добавь свойство `kelvin`, которое возвращает градусы Цельсия плюс 273.",
+               "Создай объект `temp = Temperature(celsius)` и выведи три строки: `Celsius: …`, `Fahrenheit: …` и "
+               "`Kelvin: …` со значениями `temp.celsius`, `temp.fahrenheit` и `temp.kelvin`. Свойства читай без скобок."],
+        hint="`@property` ставится на отдельной строке прямо над `def`, и тогда `temp.fahrenheit` работает без скобок. "
+             "Порядок действий в формуле важен: сначала умножение и деление, потом прибавление 32. "
+             "Деление нацело `//` даёт целое число, а обычное `/` — дробное вроде `77.0`.",
+        solution='class Temperature:\n    def __init__(self, celsius):\n        self.celsius = celsius\n\n'
+                 '    @property\n    def fahrenheit(self):\n        return self.celsius * 9 // 5 + 32\n\n'
+                 '    @property\n    def kelvin(self):\n        return self.celsius + 273\n\n\n'
+                 'temp = Temperature(celsius)\nprint(f"Celsius: {temp.celsius}")\n'
+                 'print(f"Fahrenheit: {temp.fahrenheit}")\nprint(f"Kelvin: {temp.kelvin}")',
+        wrong=[("сначала прибавляет 32, а потом умножает — формула перепутана",
+                'class Temperature:\n    def __init__(self, celsius):\n        self.celsius = celsius\n\n'
+                '    @property\n    def fahrenheit(self):\n        return (self.celsius + 32) * 9 // 5\n\n'
+                '    @property\n    def kelvin(self):\n        return self.celsius + 273\n\n\n'
+                'temp = Temperature(celsius)\nprint(f"Celsius: {temp.celsius}")\n'
+                'print(f"Fahrenheit: {temp.fahrenheit}")\nprint(f"Kelvin: {temp.kelvin}")'),
+               ("делит обычным делением — печатается дробное число вроде 77.0",
+                'class Temperature:\n    def __init__(self, celsius):\n        self.celsius = celsius\n\n'
+                '    @property\n    def fahrenheit(self):\n        return self.celsius * 9 / 5 + 32\n\n'
+                '    @property\n    def kelvin(self):\n        return self.celsius + 273\n\n\n'
+                'temp = Temperature(celsius)\nprint(f"Celsius: {temp.celsius}")\n'
+                'print(f"Fahrenheit: {temp.fahrenheit}")\nprint(f"Kelvin: {temp.kelvin}")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_PROPERTY],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-prop-reading-progress", title="Прогресс чтения",
+        given=["pages", "day1", "day2"],
+        variants=[{"pages": "200", "day1": "40", "day2": "70"},
+                  {"pages": "150", "day1": "15", "day2": "45"},
+                  {"pages": "320", "day1": "100", "day2": "33"}],
+        hidden=[{"pages": "100", "day1": "0", "day2": "100"},
+                {"pages": "300", "day1": "1", "day2": "2"},
+                {"pages": "90", "day1": "45", "day2": "44"},
+                {"pages": "500", "day1": "250", "day2": "125"}],
+        intro="Приложение для чтения показывает, какую часть книги ты уже прочитал. В книге `pages` страниц; "
+              "в первый день ты прочитал `day1` страниц, во второй — ещё `day2`. После каждого дня приложение "
+              "пересчитывает процент и число оставшихся страниц.",
+        steps=["Создай класс `Reading`. В `__init__(self, pages)` сохрани число страниц в `self.pages` "
+               "и задай `self.read = 0` — сколько страниц прочитано.",
+               "Добавь свойство `percent` (метод с `@property`), которое возвращает, сколько процентов книги прочитано: "
+               "прочитанные страницы умножить на 100 и разделить нацело на число страниц.",
+               "Добавь свойство `left`, которое возвращает, сколько страниц осталось.",
+               "Создай объект `reading = Reading(pages)`. Увеличь `reading.read` на `day1` и выведи строку вида "
+               "`Read 40 of 200: 20%, 160 left`. Потом увеличь `reading.read` на `day2` и выведи строку того же вида. "
+               "Значения бери из атрибутов и свойств объекта, свойства — без скобок."],
+        hint="Свойство вычисляется заново при каждом чтении, поэтому после изменения `reading.read` процент сам "
+             "станет новым. Если посчитать его один раз в `__init__`, он останется нулевым. Сначала умножай на 100, "
+             "а потом дели: `40 // 200` уже даёт 0.",
+        solution='class Reading:\n    def __init__(self, pages):\n        self.pages = pages\n        self.read = 0\n'
+                 '\n    @property\n    def percent(self):\n        return self.read * 100 // self.pages\n\n'
+                 '    @property\n    def left(self):\n        return self.pages - self.read\n\n\n'
+                 'reading = Reading(pages)\nreading.read += day1\n'
+                 'print(f"Read {reading.read} of {reading.pages}: {reading.percent}%, {reading.left} left")\n'
+                 'reading.read += day2\n'
+                 'print(f"Read {reading.read} of {reading.pages}: {reading.percent}%, {reading.left} left")',
+        wrong=[("считает процент и остаток один раз в __init__ — после чтения они не меняются",
+                'class Reading:\n    def __init__(self, pages):\n        self.pages = pages\n        self.read = 0\n'
+                '        self.percent = self.read * 100 // pages\n        self.left = pages - self.read\n\n\n'
+                'reading = Reading(pages)\nreading.read += day1\n'
+                'print(f"Read {reading.read} of {reading.pages}: {reading.percent}%, {reading.left} left")\n'
+                'reading.read += day2\n'
+                'print(f"Read {reading.read} of {reading.pages}: {reading.percent}%, {reading.left} left")'),
+               ("сначала делит, потом умножает на 100 — процент почти всегда 0",
+                'class Reading:\n    def __init__(self, pages):\n        self.pages = pages\n        self.read = 0\n'
+                '\n    @property\n    def percent(self):\n        return self.read // self.pages * 100\n\n'
+                '    @property\n    def left(self):\n        return self.pages - self.read\n\n\n'
+                'reading = Reading(pages)\nreading.read += day1\n'
+                'print(f"Read {reading.read} of {reading.pages}: {reading.percent}%, {reading.left} left")\n'
+                'reading.read += day2\n'
+                'print(f"Read {reading.read} of {reading.pages}: {reading.percent}%, {reading.left} left")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_PROPERTY],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-prop-loyalty-card", title="Карта постоянного покупателя",
+        given=["purchases"],
+        variants=[{"purchases": "[3000, 2500, -400, 16000]"},
+                  {"purchases": "[1200, 0, 3800, 900]"},
+                  {"purchases": "[20000, 150, -20000]"}],
+        hidden=[{"purchases": "[4999, 1]"},
+                {"purchases": "[19999, 1, 5]"},
+                {"purchases": "[-5000, 100]"},
+                {"purchases": "[5000, 14999, 2]"}],
+        intro="В магазине есть карта постоянного покупателя. Чем больше потрачено по карте, тем выше статус: "
+              "до 5000 руб. — `bronze` без скидки, от 5000 руб. — `silver` со скидкой 5 %, от 20000 руб. — `gold` "
+              "со скидкой 10 %. В списке `purchases` — суммы покупок по порядку. Иногда кассир ошибается и вводит "
+              "ноль или отрицательное число — такие суммы карта пропускает.",
+        steps=["Создай класс `LoyaltyCard`. В `__init__(self)` заведи внутренний атрибут `self._spent = 0`.",
+               "Добавь метод `buy(self, amount)`: он прибавляет `amount` к потраченному, только если это число больше нуля.",
+               "Добавь три свойства с `@property`: `spent` возвращает потраченную сумму; `status` — строку `bronze`, "
+               "`silver` или `gold` по правилам выше; `discount` — скидку в процентах (0, 5 или 10). Скидку определяй "
+               "по свойству `self.status`, а не повторяй сравнения с суммами.",
+               "Создай карту и пройди циклом по `purchases`: передай каждую сумму в `buy`, а после неё выведи строку "
+               "вида `Spent: 3000, status: bronze, discount: 0%` со значениями `card.spent`, `card.status` и "
+               "`card.discount` — без скобок."],
+        hint="Свойство можно читать и внутри класса: в `discount` пиши `self.status` без скобок, как атрибут. "
+             "Ровно 5000 руб. — это уже `silver`, а ровно 20000 руб. — уже `gold`: проверяй сначала "
+             "`self._spent < 5000`, потом `self._spent < 20000`.",
+        solution='class LoyaltyCard:\n    def __init__(self):\n        self._spent = 0\n\n    def buy(self, amount):\n'
+                 '        if amount > 0:\n            self._spent += amount\n\n    @property\n    def spent(self):\n'
+                 '        return self._spent\n\n    @property\n    def status(self):\n        if self._spent < 5000:\n'
+                 '            return "bronze"\n        if self._spent < 20000:\n            return "silver"\n'
+                 '        return "gold"\n\n    @property\n    def discount(self):\n        if self.status == "gold":\n'
+                 '            return 10\n        if self.status == "silver":\n            return 5\n'
+                 '        return 0\n\n\ncard = LoyaltyCard()\nfor amount in purchases:\n    card.buy(amount)\n'
+                 '    print(f"Spent: {card.spent}, status: {card.status}, discount: {card.discount}%")',
+        wrong=[("сравнивает через <= — ровно 5000 и ровно 20000 руб. дают статус на ступень ниже",
+                'class LoyaltyCard:\n    def __init__(self):\n        self._spent = 0\n\n    def buy(self, amount):\n'
+                '        if amount > 0:\n            self._spent += amount\n\n    @property\n    def spent(self):\n'
+                '        return self._spent\n\n    @property\n    def status(self):\n'
+                '        if self._spent <= 5000:\n            return "bronze"\n        if self._spent <= 20000:\n'
+                '            return "silver"\n        return "gold"\n\n    @property\n    def discount(self):\n'
+                '        if self.status == "gold":\n            return 10\n        if self.status == "silver":\n'
+                '            return 5\n        return 0\n\n\ncard = LoyaltyCard()\nfor amount in purchases:\n'
+                '    card.buy(amount)\n'
+                '    print(f"Spent: {card.spent}, status: {card.status}, discount: {card.discount}%")'),
+               ("buy не проверяет сумму — отрицательные покупки уменьшают потраченное",
+                'class LoyaltyCard:\n    def __init__(self):\n        self._spent = 0\n\n    def buy(self, amount):\n'
+                '        self._spent += amount\n\n    @property\n    def spent(self):\n        return self._spent\n\n'
+                '    @property\n    def status(self):\n        if self._spent < 5000:\n            return "bronze"\n'
+                '        if self._spent < 20000:\n            return "silver"\n        return "gold"\n\n'
+                '    @property\n    def discount(self):\n        if self.status == "gold":\n            return 10\n'
+                '        if self.status == "silver":\n            return 5\n        return 0\n\n\n'
+                'card = LoyaltyCard()\nfor amount in purchases:\n    card.buy(amount)\n'
+                '    print(f"Spent: {card.spent}, status: {card.status}, discount: {card.discount}%")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_PROPERTY],
+    ),
 ]

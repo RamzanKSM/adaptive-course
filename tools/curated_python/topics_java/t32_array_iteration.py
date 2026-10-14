@@ -90,4 +90,88 @@ TASKS = [
                 'System.out.println("Coldest day: " + day);\nSystem.out.println("Temperature: " + min);')],
         constructs=["list", "for", "if"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-it-shopping-list", title="Список покупок",
+        given=[("String[]", "items")],
+        variants=[{"items": '{"milk", "bread", "apples", "cheese"}'}, {"items": '{"rice", "tea", "eggs"}'},
+                  {"items": '{"pasta", "tomatoes", "onion", "butter", "honey"}'}],
+        hidden=[{"items": '{"water"}'}, {"items": '{"salt", "sugar"}'},
+                {"items": '{"carrots", "fish", "juice", "yogurt", "oats", "pears", "nuts"}'}],
+        intro="Мама написала список покупок — он лежит в массиве `items`. Аня хочет переписать его в заметку на телефоне "
+              "аккуратным столбиком.",
+        steps=["Выведи первой строкой `Shopping list:`.",
+               "Пройди по массиву `items` циклом `for (String item : items)` и для каждой покупки выведи строку: "
+               "дефис, пробел и название, например `- milk`.",
+               "После цикла выведи `Total items: …` — сколько покупок в списке."],
+        hint="В цикле `for (String item : items)` переменная `item` по очереди становится каждым элементом массива — "
+             "индексы здесь не нужны. Количество покупок даёт `items.length`.",
+        solution='System.out.println("Shopping list:");\nfor (String item : items) {\n    System.out.println("- " + item);\n}\n'
+                 'System.out.println("Total items: " + items.length);',
+        wrong=[("цикл с индекса 1: первая покупка пропадает",
+                'System.out.println("Shopping list:");\nfor (int i = 1; i < items.length; i++) {\n    System.out.println("- " + items[i]);\n}\n'
+                'System.out.println("Total items: " + items.length);'),
+               ("итог печатается внутри цикла после каждой покупки",
+                'System.out.println("Shopping list:");\nfor (String item : items) {\n    System.out.println("- " + item);\n'
+                '    System.out.println("Total items: " + items.length);\n}')],
+        constructs=["list", "for"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-it-rainy-days", title="Дождливые дни",
+        given=[("int[]", "rain")],
+        variants=[{"rain": "{0, 5, 12, 0, 0, 3, 8}"}, {"rain": "{2, 0, 0, 0, 14}"}, {"rain": "{7, 1, 0, 9, 4, 0}"}],
+        hidden=[{"rain": "{0, 0, 0}"}, {"rain": "{1}"}, {"rain": "{10, 20, 30, 40}"}, {"rain": "{0, 1, 0, 1, 0, 25, 0, 2}"}],
+        intro="Метеостанция записала, сколько миллиметров дождя выпало в каждый день, — массив `rain`. "
+              "Если в какой-то день дождя не было, там стоит 0.",
+        steps=["Заведи до цикла две переменные со значением 0: число дождливых дней и всего миллиметров дождя.",
+               "Пройди по массиву `rain` циклом `for-each`. Если в этот день выпало больше 0 мм, увеличь число дождливых "
+               "дней на 1 и прибавь эти миллиметры к общему количеству.",
+               "После цикла выведи три строки: `Days: …` (сколько дней в массиве), `Rainy days: …` и `Total rain: … mm`."],
+        hint="Счётчик растёт на 1 только когда выполнено условие, а сумма копит сами значения. День с 0 мм — сухой.",
+        solution='int rainy = 0;\nint total = 0;\nfor (int mm : rain) {\n    if (mm > 0) {\n        rainy++;\n        total += mm;\n    }\n}\n'
+                 'System.out.println("Days: " + rain.length);\nSystem.out.println("Rainy days: " + rainy);\n'
+                 'System.out.println("Total rain: " + total + " mm");',
+        wrong=[(">= 0 вместо > 0: сухие дни тоже считаются дождливыми",
+                'int rainy = 0;\nint total = 0;\nfor (int mm : rain) {\n    if (mm >= 0) {\n        rainy++;\n        total += mm;\n    }\n}\n'
+                'System.out.println("Days: " + rain.length);\nSystem.out.println("Rainy days: " + rainy);\n'
+                'System.out.println("Total rain: " + total + " mm");'),
+               ("прибавляет к сумме 1 вместо миллиметров",
+                'int rainy = 0;\nint total = 0;\nfor (int mm : rain) {\n    if (mm > 0) {\n        rainy++;\n        total += 1;\n    }\n}\n'
+                'System.out.println("Days: " + rain.length);\nSystem.out.println("Rainy days: " + rainy);\n'
+                'System.out.println("Total rain: " + total + " mm");')],
+        constructs=["list", "for", "if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-it-practice-streak", title="Серия занятий на гитаре",
+        given=[("int[]", "minutes"), ("int", "goal")],
+        variants=[{"minutes": "{30, 45, 10, 35, 40, 50, 0, 30}", "goal": "30"},
+                  {"minutes": "{20, 25, 5, 20, 30, 15}", "goal": "20"},
+                  {"minutes": "{60, 0, 45, 45, 50, 10, 60}", "goal": "45"}],
+        hidden=[{"minutes": "{10, 5, 0}", "goal": "15"}, {"minutes": "{30, 30, 30, 30}", "goal": "30"},
+                {"minutes": "{29, 30, 31, 0, 30}", "goal": "30"}, {"minutes": "{40}", "goal": "40"},
+                {"minutes": "{50, 50, 0, 50, 0, 50, 50, 50}", "goal": "50"}],
+        intro="Дима учится играть на гитаре. Сколько минут он занимался в каждый день, записано в массив `minutes`. "
+              "День считается удачным, если Дима занимался не меньше {goal} минут (поле `goal`).",
+        steps=["Заведи до цикла три переменные со значением 0: длина текущей серии удачных дней подряд, самая длинная "
+               "серия и всего удачных дней.",
+               "Пройди по массиву циклом. В удачный день увеличь текущую серию и число удачных дней на 1, и если текущая "
+               "серия стала длиннее самой длинной, запомни её. В неудачный день текущая серия обнуляется.",
+               "После цикла выведи две строки: `Good days: …` и `Longest streak: … days`."],
+        hint="Самую длинную серию обновляй сразу, как только текущая её обогнала, — а не в момент, когда серия "
+             "прерывается: иначе серия, которая идёт до самого конца массива, не будет учтена.",
+        solution='int current = 0;\nint best = 0;\nint good = 0;\nfor (int m : minutes) {\n    if (m >= goal) {\n        current++;\n'
+                 '        good++;\n        if (current > best) {\n            best = current;\n        }\n    } else {\n'
+                 '        current = 0;\n    }\n}\nSystem.out.println("Good days: " + good);\n'
+                 'System.out.println("Longest streak: " + best + " days");',
+        wrong=[("обновляет самую длинную серию только при её обрыве: серия в конце массива теряется",
+                'int current = 0;\nint best = 0;\nint good = 0;\nfor (int m : minutes) {\n    if (m >= goal) {\n        current++;\n'
+                '        good++;\n    } else {\n        if (current > best) {\n            best = current;\n        }\n'
+                '        current = 0;\n    }\n}\nSystem.out.println("Good days: " + good);\n'
+                'System.out.println("Longest streak: " + best + " days");'),
+               ("не обнуляет серию в неудачный день: считает все удачные дни одной серией",
+                'int current = 0;\nint best = 0;\nint good = 0;\nfor (int m : minutes) {\n    if (m >= goal) {\n        current++;\n'
+                '        good++;\n        if (current > best) {\n            best = current;\n        }\n    }\n}\n'
+                'System.out.println("Good days: " + good);\n'
+                'System.out.println("Longest streak: " + best + " days");')],
+        constructs=["list", "for", "if"],
+    ),
 ]

@@ -135,4 +135,147 @@ TASKS = [
                   ("re:self\\.total\\(\\s*\\)", "В методе fits вызови метод total того же объекта через self.total() — "
                                                "так сумма считается в одном месте.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-self-water-bottle", title="Бутылка воды",
+        given=["volume", "sip1", "sip2"],
+        variants=[{"volume": "500", "sip1": "150", "sip2": "100"}, {"volume": "750", "sip1": "200", "sip2": "320"},
+                  {"volume": "330", "sip1": "30", "sip2": "90"}],
+        hidden=[{"volume": "1000", "sip1": "0", "sip2": "1000"}, {"volume": "600", "sip1": "250", "sip2": "250"},
+                {"volume": "450", "sip1": "45", "sip2": "5"}],
+        intro="Умная бутылка для воды сама считает, сколько воды в ней осталось и сколько раз из неё пили. "
+              "В бутылку налили `volume` миллилитров, потом из неё выпили сначала `sip1`, а позже ещё `sip2` миллилитров.",
+        steps=["Создай класс `Bottle`. В `__init__(self, volume)` сохрани объём в `self.volume` и задай счётчик глотков "
+               "`self.sips = 0`.",
+               "Добавь метод `drink(self, amount)`, который за один вызов делает две вещи: уменьшает `self.volume` "
+               "на `amount` и увеличивает `self.sips` на 1.",
+               "Создай объект `bottle = Bottle(volume)`. Вызови `bottle.drink(sip1)` и выведи строку вида "
+               "`Sips: 1, left: 350 ml` — со значениями из `bottle.sips` и `bottle.volume`.",
+               "Потом вызови `bottle.drink(sip2)` и снова выведи строку того же вида."],
+        hint="Через `self` метод меняет атрибуты именно той бутылки, у которой его вызвали, и изменения сохраняются "
+             "между вызовами. Уменьшить атрибут можно записью `self.volume -= amount`.",
+        solution='class Bottle:\n    def __init__(self, volume):\n        self.volume = volume\n        self.sips = 0\n\n'
+                 '    def drink(self, amount):\n        self.volume -= amount\n        self.sips += 1\n\n\n'
+                 'bottle = Bottle(volume)\nbottle.drink(sip1)\nprint(f"Sips: {bottle.sips}, left: {bottle.volume} ml")\n'
+                 'bottle.drink(sip2)\nprint(f"Sips: {bottle.sips}, left: {bottle.volume} ml")',
+        wrong=[("в методе пишет self.volume = amount — в бутылке оказывается ровно столько, сколько выпили",
+                'class Bottle:\n    def __init__(self, volume):\n        self.volume = volume\n        self.sips = 0\n\n'
+                '    def drink(self, amount):\n        self.volume = amount\n        self.sips += 1\n\n\n'
+                'bottle = Bottle(volume)\nbottle.drink(sip1)\nprint(f"Sips: {bottle.sips}, left: {bottle.volume} ml")\n'
+                'bottle.drink(sip2)\nprint(f"Sips: {bottle.sips}, left: {bottle.volume} ml")'),
+               ("забыл увеличить счётчик глотков — он всегда 0",
+                'class Bottle:\n    def __init__(self, volume):\n        self.volume = volume\n        self.sips = 0\n\n'
+                '    def drink(self, amount):\n        self.volume -= amount\n\n\n'
+                'bottle = Bottle(volume)\nbottle.drink(sip1)\nprint(f"Sips: {bottle.sips}, left: {bottle.volume} ml")\n'
+                'bottle.drink(sip2)\nprint(f"Sips: {bottle.sips}, left: {bottle.volume} ml")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_METHOD],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-self-two-lamps", title="Две лампы",
+        given=["room1", "room2", "presses"],
+        variants=[{"room1": '"kitchen"', "room2": '"hall"', "presses": '["kitchen", "hall", "kitchen", "kitchen", "hall"]'},
+                  {"room1": '"bedroom"', "room2": '"bath"', "presses": '["bath", "bedroom", "bath", "bath"]'},
+                  {"room1": '"study"', "room2": '"garage"', "presses": '["study", "garage"]'}],
+        hidden=[{"room1": '"attic"', "room2": '"porch"', "presses": "[]"},
+                {"room1": '"left"', "room2": '"right"', "presses": '["right", "right"]'},
+                {"room1": '"red"', "room2": '"blue"', "presses": '["red", "red", "red", "blue", "red", "blue", "blue"]'}],
+        intro="В умном доме две лампы — в комнатах `room1` и `room2`, и сначала обе выключены. Каждое нажатие "
+              "выключателя переключает лампу: выключенная загорается, горящая гаснет. В списке `presses` по порядку "
+              "записано, в какой комнате нажимали выключатель.",
+        steps=["Создай класс `Lamp`. В `__init__(self, room)` сохрани комнату в `self.room`, задай `self.on = False` "
+               "и счётчик нажатий `self.clicks = 0`.",
+               "Добавь метод `switch(self)`: он меняет `self.on` на противоположное значение и увеличивает "
+               "`self.clicks` на 1. И метод `status(self)`, который возвращает строку `on`, если лампа горит, и `off`, если нет.",
+               "Создай две лампы: `lamp1 = Lamp(room1)` и `lamp2 = Lamp(room2)`. Пройди циклом по `presses`: "
+               "если нажали в комнате первой лампы, вызови `lamp1.switch()`, иначе — `lamp2.switch()`.",
+               "Для каждой лампы выведи строку вида `kitchen: on, clicks 3` — комнату, результат `status()` и число нажатий.",
+               "Последней строкой выведи `Lamps on: …` — сколько ламп горит в конце."],
+        hint="Противоположное логическое значение даёт `not`: `self.on = not self.on`. Метод один на обе лампы, "
+             "но `self` в нём — та лампа, у которой его вызвали, поэтому `lamp1.switch()` не трогает `lamp2`.",
+        solution='class Lamp:\n    def __init__(self, room):\n        self.room = room\n        self.on = False\n        self.clicks = 0\n\n'
+                 '    def switch(self):\n        self.on = not self.on\n        self.clicks += 1\n\n    def status(self):\n'
+                 '        if self.on:\n            return "on"\n        return "off"\n\n\nlamp1 = Lamp(room1)\nlamp2 = Lamp(room2)\n'
+                 'for room in presses:\n    if room == lamp1.room:\n        lamp1.switch()\n    else:\n        lamp2.switch()\n\n'
+                 'print(f"{lamp1.room}: {lamp1.status()}, clicks {lamp1.clicks}")\n'
+                 'print(f"{lamp2.room}: {lamp2.status()}, clicks {lamp2.clicks}")\ncount = 0\nif lamp1.on:\n    count += 1\n'
+                 'if lamp2.on:\n    count += 1\nprint(f"Lamps on: {count}")',
+        wrong=[("switch всегда включает лампу, а не переключает её",
+                'class Lamp:\n    def __init__(self, room):\n        self.room = room\n        self.on = False\n        self.clicks = 0\n\n'
+                '    def switch(self):\n        self.on = True\n        self.clicks += 1\n\n    def status(self):\n'
+                '        if self.on:\n            return "on"\n        return "off"\n\n\nlamp1 = Lamp(room1)\nlamp2 = Lamp(room2)\n'
+                'for room in presses:\n    if room == lamp1.room:\n        lamp1.switch()\n    else:\n        lamp2.switch()\n\n'
+                'print(f"{lamp1.room}: {lamp1.status()}, clicks {lamp1.clicks}")\n'
+                'print(f"{lamp2.room}: {lamp2.status()}, clicks {lamp2.clicks}")\ncount = 0\nif lamp1.on:\n    count += 1\n'
+                'if lamp2.on:\n    count += 1\nprint(f"Lamps on: {count}")'),
+               ("при каждом нажатии переключает первую лампу, в какой бы комнате ни нажали",
+                'class Lamp:\n    def __init__(self, room):\n        self.room = room\n        self.on = False\n        self.clicks = 0\n\n'
+                '    def switch(self):\n        self.on = not self.on\n        self.clicks += 1\n\n    def status(self):\n'
+                '        if self.on:\n            return "on"\n        return "off"\n\n\nlamp1 = Lamp(room1)\nlamp2 = Lamp(room2)\n'
+                'for room in presses:\n    lamp1.switch()\n\n'
+                'print(f"{lamp1.room}: {lamp1.status()}, clicks {lamp1.clicks}")\n'
+                'print(f"{lamp2.room}: {lamp2.status()}, clicks {lamp2.clicks}")\ncount = 0\nif lamp1.on:\n    count += 1\n'
+                'if lamp2.on:\n    count += 1\nprint(f"Lamps on: {count}")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_METHOD],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-self-bus-stops", title="Автобус на маршруте",
+        given=["capacity", "entering", "leaving"],
+        variants=[{"capacity": "30", "entering": "[20, 25, 10]", "leaving": "[0, 8, 12]"},
+                  {"capacity": "40", "entering": "[35, 12, 6, 20]", "leaving": "[0, 3, 15, 5]"},
+                  {"capacity": "20", "entering": "[25, 4, 9]", "leaving": "[0, 10, 2]"}],
+        hidden=[{"capacity": "10", "entering": "[10]", "leaving": "[0]"},
+                {"capacity": "10", "entering": "[11, 3]", "leaving": "[0, 0]"},
+                {"capacity": "50", "entering": "[5, 0, 60]", "leaving": "[0, 5, 0]"},
+                {"capacity": "15", "entering": "[15, 15]", "leaving": "[0, 15]"}],
+        intro="Автобус вмещает `capacity` пассажиров и выезжает на маршрут пустым. На каждой остановке сначала выходят "
+              "пассажиры, а потом заходят новые — сколько поместится; остальные остаются ждать следующий автобус. "
+              "В списке `leaving` — сколько человек выходит на каждой остановке, в списке `entering` на тех же местах — "
+              "сколько хочет зайти.",
+        steps=["Создай класс `Bus`. В `__init__(self, capacity)` сохрани вместимость в `self.capacity` и задай "
+               "`self.passengers = 0`.",
+               "Добавь метод `free_seats(self)`, который возвращает число свободных мест, и метод `leave(self, count)`, "
+               "который уменьшает число пассажиров на `count`.",
+               "Добавь метод `board(self, count)`: он узнаёт число свободных мест, вызвав свой же метод "
+               "`self.free_seats()`. Если все `count` человек помещаются, он сажает их всех и возвращает 0. "
+               "Иначе сажает столько, сколько есть мест, и возвращает, сколько человек не поместилось.",
+               "Создай автобус и пройди по остановкам циклом по `range(len(entering))`: на каждой сначала вызови `leave`, "
+               "потом `board`. После каждой остановки выведи строку вида `Stop 1: 20 on board, 0 left behind` — "
+               "номер остановки начиная с 1, число пассажиров и сколько человек не поместилось."],
+        hint="Внутри класса методы вызывают друг друга через `self`: `free = self.free_seats()`. Свободных мест — это "
+             "вместимость минус те, кто уже едет, а не вся вместимость. Порядок на остановке важен: сначала выход, "
+             "потом посадка.",
+        solution='class Bus:\n    def __init__(self, capacity):\n        self.capacity = capacity\n'
+                 '        self.passengers = 0\n\n    def free_seats(self):\n'
+                 '        return self.capacity - self.passengers\n\n    def leave(self, count):\n'
+                 '        self.passengers -= count\n\n    def board(self, count):\n'
+                 '        free = self.free_seats()\n        if count <= free:\n'
+                 '            self.passengers += count\n            return 0\n        self.passengers += free\n'
+                 '        return count - free\n\n\nbus = Bus(capacity)\nfor i in range(len(entering)):\n'
+                 '    bus.leave(leaving[i])\n    behind = bus.board(entering[i])\n'
+                 '    print(f"Stop {i + 1}: {bus.passengers} on board, {behind} left behind")',
+        wrong=[("считает свободными все места автобуса, не вычитая тех, кто уже едет",
+                'class Bus:\n    def __init__(self, capacity):\n        self.capacity = capacity\n'
+                '        self.passengers = 0\n\n    def free_seats(self):\n        return self.capacity\n\n'
+                '    def leave(self, count):\n        self.passengers -= count\n\n    def board(self, count):\n'
+                '        free = self.free_seats()\n        if count <= free:\n'
+                '            self.passengers += count\n            return 0\n        self.passengers += free\n'
+                '        return count - free\n\n\nbus = Bus(capacity)\nfor i in range(len(entering)):\n'
+                '    bus.leave(leaving[i])\n    behind = bus.board(entering[i])\n'
+                '    print(f"Stop {i + 1}: {bus.passengers} on board, {behind} left behind")'),
+               ("на остановке сначала сажает новых пассажиров, а потом выпускает выходящих",
+                'class Bus:\n    def __init__(self, capacity):\n        self.capacity = capacity\n'
+                '        self.passengers = 0\n\n    def free_seats(self):\n'
+                '        return self.capacity - self.passengers\n\n    def leave(self, count):\n'
+                '        self.passengers -= count\n\n    def board(self, count):\n'
+                '        free = self.free_seats()\n        if count <= free:\n'
+                '            self.passengers += count\n            return 0\n        self.passengers += free\n'
+                '        return count - free\n\n\nbus = Bus(capacity)\nfor i in range(len(entering)):\n'
+                '    behind = bus.board(entering[i])\n    bus.leave(leaving[i])\n'
+                '    print(f"Stop {i + 1}: {bus.passengers} on board, {behind} left behind")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_METHOD,
+                  ("re:self\\.free_seats\\(\\s*\\)", "В методе board узнай число мест вызовом своего же метода "
+                                                    "self.free_seats() — так оно считается в одном месте.")],
+    ),
 ]

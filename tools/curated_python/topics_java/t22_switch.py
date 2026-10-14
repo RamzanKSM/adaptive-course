@@ -275,4 +275,198 @@ TASKS = [
 }""")],
         checks=uses_switch("op"),
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-switch-traffic-light", title="Сигнал светофора",
+        given=[("String", "light")],
+        variants=[{"light": '"red"'}, {"light": '"green"'}, {"light": '"yellow"'}],
+        hidden=[{"light": '"red"'}, {"light": '"yellow"'}, {"light": '"green"'}, {"light": '"blue"'}, {"light": '"off"'}],
+        intro="Умный светофор подсказывает пешеходу, что делать. Цвет, который сейчас горит, записан строкой в поле `light`.",
+        steps=["Сделай `switch` по `light` и выведи подсказку: `\"red\"` — `Stop`, `\"yellow\"` — `Wait`, `\"green\"` — `Go`.",
+               "Для любой другой строки (ветка `default`) выведи `The light is broken`.",
+               "Программа должна выводить ровно одну строку."],
+        hint="`switch` работает и со строками: `case \"red\":`. Заканчивай каждую ветку командой `break`, "
+             "иначе Java выполнит и следующие ветки.",
+        solution="""switch (light) {
+    case "red":
+        System.out.println("Stop");
+        break;
+    case "yellow":
+        System.out.println("Wait");
+        break;
+    case "green":
+        System.out.println("Go");
+        break;
+    default:
+        System.out.println("The light is broken");
+}""",
+        wrong=[("нет break: после подсказки печатаются все следующие",
+                """switch (light) {
+    case "red":
+        System.out.println("Stop");
+    case "yellow":
+        System.out.println("Wait");
+    case "green":
+        System.out.println("Go");
+    default:
+        System.out.println("The light is broken");
+}"""),
+               ("перепутаны подсказки для жёлтого и зелёного",
+                """switch (light) {
+    case "red":
+        System.out.println("Stop");
+        break;
+    case "yellow":
+        System.out.println("Go");
+        break;
+    case "green":
+        System.out.println("Wait");
+        break;
+    default:
+        System.out.println("The light is broken");
+}""")],
+        checks=uses_switch("light"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-switch-pizza-size", title="Размер пиццы",
+        given=[("char", "size")],
+        variants=[{"size": "'M'"}, {"size": "'l'"}, {"size": "'s'"}],
+        hidden=[{"size": "'S'"}, {"size": "'s'"}, {"size": "'m'"}, {"size": "'L'"}, {"size": "'X'"}, {"size": "'1'"}],
+        intro="В приложении пиццерии размер пиццы выбирают одной буквой — она записана в поле `size`. "
+              "Буква может быть и заглавной, и строчной.",
+        steps=["Сделай `switch` по `size`: для `'S'` и `'s'` выведи `Small: 25 cm`, для `'M'` и `'m'` — `Medium: 30 cm`, "
+               "для `'L'` и `'l'` — `Large: 35 cm`.",
+               "Для любого другого символа (ветка `default`) выведи `Unknown size: …`, подставив `size`.",
+               "Программа должна выводить ровно одну строку."],
+        hint="Несколько значений можно перечислить в одной ветке через запятую: `case 'S', 's':`. "
+             "Тогда у каждого размера будет одна ветка со своим `break`.",
+        solution="""switch (size) {
+    case 'S', 's':
+        System.out.println("Small: 25 cm");
+        break;
+    case 'M', 'm':
+        System.out.println("Medium: 30 cm");
+        break;
+    case 'L', 'l':
+        System.out.println("Large: 35 cm");
+        break;
+    default:
+        System.out.println("Unknown size: " + size);
+}""",
+        wrong=[("только заглавные буквы: строчная буква считается неизвестным размером",
+                """switch (size) {
+    case 'S':
+        System.out.println("Small: 25 cm");
+        break;
+    case 'M':
+        System.out.println("Medium: 30 cm");
+        break;
+    case 'L':
+        System.out.println("Large: 35 cm");
+        break;
+    default:
+        System.out.println("Unknown size: " + size);
+}"""),
+               ("нет break после «Medium»: средняя пицца печатает ещё и большую",
+                """switch (size) {
+    case 'S', 's':
+        System.out.println("Small: 25 cm");
+        break;
+    case 'M', 'm':
+        System.out.println("Medium: 30 cm");
+    case 'L', 'l':
+        System.out.println("Large: 35 cm");
+        break;
+    default:
+        System.out.println("Unknown size: " + size);
+}""")],
+        checks=uses_switch("size"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-switch-taxi-tariff", title="Тариф такси",
+        given=[("String", "tariff"), ("int", "km")],
+        variants=[{"tariff": '"comfort"', "km": "12"}, {"tariff": '"economy"', "km": "4"}, {"tariff": '"business"', "km": "9"}],
+        hidden=[{"tariff": '"economy"', "km": "8"}, {"tariff": '"economy"', "km": "7"}, {"tariff": '"comfort"', "km": "5"},
+                {"tariff": '"comfort"', "km": "3"}, {"tariff": '"business"', "km": "2"}, {"tariff": '"cargo"', "km": "10"}],
+        intro="Такси считает стоимость поездки по тарифу — он записан строкой в поле `tariff`. Длина поездки в километрах — "
+              "в поле `km`. Дешевле 150 руб. поездка не стоит.",
+        steps=["Сделай `switch` по `tariff` и узнай цену километра: `\"economy\"` — 20 руб., `\"comfort\"` — 30 руб., "
+               "`\"business\"` — 50 руб.",
+               "Если тариф другой (ветка `default`), выведи одну строку `Unknown tariff` и больше ничего.",
+               "Иначе посчитай стоимость: цена километра, умноженная на `km`; если вышло меньше 150, стоимость равна 150.",
+               "Выведи две строки: `Tariff: …` (значение `tariff`) и `Fare: … rub`."],
+        hint="Заведи до `switch` переменную для цены километра со значением 0 и в ветках `case` только присваивай её. "
+             "После `switch` цена 0 означает, что тариф неизвестен, — это удобно проверить обычным `if`.",
+        solution="""int perKm = 0;
+switch (tariff) {
+    case "economy":
+        perKm = 20;
+        break;
+    case "comfort":
+        perKm = 30;
+        break;
+    case "business":
+        perKm = 50;
+        break;
+    default:
+        perKm = 0;
+}
+if (perKm == 0) {
+    System.out.println("Unknown tariff");
+} else {
+    int fare = perKm * km;
+    if (fare < 150) {
+        fare = 150;
+    }
+    System.out.println("Tariff: " + tariff);
+    System.out.println("Fare: " + fare + " rub");
+}""",
+        wrong=[("нет break после economy: эконом считается по цене комфорта",
+                """int perKm = 0;
+switch (tariff) {
+    case "economy":
+        perKm = 20;
+    case "comfort":
+        perKm = 30;
+        break;
+    case "business":
+        perKm = 50;
+        break;
+    default:
+        perKm = 0;
+}
+if (perKm == 0) {
+    System.out.println("Unknown tariff");
+} else {
+    int fare = perKm * km;
+    if (fare < 150) {
+        fare = 150;
+    }
+    System.out.println("Tariff: " + tariff);
+    System.out.println("Fare: " + fare + " rub");
+}"""),
+               ("забыта минимальная стоимость 150 руб.",
+                """int perKm = 0;
+switch (tariff) {
+    case "economy":
+        perKm = 20;
+        break;
+    case "comfort":
+        perKm = 30;
+        break;
+    case "business":
+        perKm = 50;
+        break;
+    default:
+        perKm = 0;
+}
+if (perKm == 0) {
+    System.out.println("Unknown tariff");
+} else {
+    int fare = perKm * km;
+    System.out.println("Tariff: " + tariff);
+    System.out.println("Fare: " + fare + " rub");
+}""")],
+        constructs=["if"],
+        checks=uses_switch("tariff"),
+    ),
 ]

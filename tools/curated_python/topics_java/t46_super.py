@@ -149,6 +149,137 @@ for (Vehicle vehicle : garage) {
     System.out.println(vehicle.info());
 }"""
 
+TICKET = """\
+class Ticket {
+    private String route;
+    private int price;
+
+    Ticket(String route, int price) {
+        this.route = route;
+        this.price = price;
+    }
+
+    String info() {
+        return route + ": " + price + " rub";
+    }
+}
+
+class StudentTicket extends Ticket {
+    StudentTicket(String route, int price) {
+        super(route, price / 2);
+    }
+}"""
+
+TICKET_MAIN = """\
+Ticket adult = new Ticket(route, price);
+StudentTicket student = new StudentTicket(route, price);
+System.out.println("Adult: " + adult.info());
+System.out.println("Student: " + student.info());"""
+
+CARD = """\
+class Card {
+    private int points;
+
+    Card(int points) {
+        this.points = points;
+    }
+
+    void buy(int sum) {
+        points += sum / 100;
+    }
+
+    int getPoints() {
+        return points;
+    }
+}
+
+class GoldCard extends Card {
+    GoldCard(int points) {
+        super(points + 500);
+    }
+
+    @Override
+    void buy(int sum) {
+        super.buy(sum * 2);
+    }
+}"""
+
+CARD_MAIN = """\
+Card card = new Card(start);
+GoldCard gold = new GoldCard(start);
+for (int sum : purchases) {
+    card.buy(sum);
+    gold.buy(sum);
+}
+System.out.println("Regular card: " + card.getPoints() + " points");
+System.out.println("Gold card: " + gold.getPoints() + " points");"""
+
+COFFEE = """\
+class Drink {
+    private String name;
+    private int price;
+
+    Drink(String name, int price) {
+        this.name = name;
+        this.price = price;
+    }
+
+    int getPrice() {
+        return price;
+    }
+
+    String info() {
+        return name;
+    }
+}
+
+class Coffee extends Drink {
+    private int shots;
+
+    Coffee(String name, int shots) {
+        super(name, 100);
+        this.shots = shots;
+    }
+
+    @Override
+    int getPrice() {
+        return super.getPrice() + 40 * (shots - 1);
+    }
+
+    @Override
+    String info() {
+        return super.info() + ", shots: " + shots;
+    }
+}
+
+class Latte extends Coffee {
+    private String syrup;
+
+    Latte(int shots, String syrup) {
+        super("latte", shots);
+        this.syrup = syrup;
+    }
+
+    @Override
+    int getPrice() {
+        return super.getPrice() + 60;
+    }
+
+    @Override
+    String info() {
+        return super.info() + ", syrup: " + syrup;
+    }
+}"""
+
+COFFEE_MAIN = """\
+Drink[] order = {new Drink("tea", 80), new Coffee("espresso", shots), new Latte(shots, syrup)};
+int total = 0;
+for (Drink drink : order) {
+    System.out.println(drink.info() + " - " + drink.getPrice() + " rub");
+    total += drink.getPrice();
+}
+System.out.println("Total: " + total + " rub");"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-super-courier", title="Курьер службы доставки",
@@ -256,5 +387,118 @@ TASKS = [
         + no_empty_constructor("Vehicle", "Vehicle(String name, int wheels)", "super(name, 2)")
         + private_fields("Vehicle", "name", "wheels")
         + f'need({declares("Motorbike", "info")}, "Переопредели в Motorbike метод String info() с пометкой @Override и допиши в нём скорость к super.info()");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-super-student-ticket", title="Студенческий билет на поезд",
+        given=[("String", "route"), ("int", "price")],
+        variants=[{"route": '"Kazan - Sochi"', "price": "3000"},
+                  {"route": '"Moscow - Tver"', "price": "850"},
+                  {"route": '"Perm - Ufa"', "price": "1250"}],
+        hidden=[{"route": '"Omsk - Tomsk"', "price": "1001"},
+                {"route": '"Pskov - Luga"', "price": "4400"},
+                {"route": '"Tula - Oryol"', "price": "1"}],
+        intro="Железная дорога продаёт билеты по маршруту `route` за `price` руб. Студенческий билет — это тот же "
+              "билет, только за полцены. Хранить маршрут и цену и составлять описание умеет обычный билет, "
+              "а студенческий только передаёт ему уменьшенную цену.",
+        steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Ticket` без слова `public`. Дай ему "
+               "закрытые поля `private String route` и `private int price`, конструктор `Ticket(String route, int price)` "
+               "и метод `String info()`, который возвращает строку вида `Kazan - Sochi: 3000 rub`.",
+               "Опиши класс `StudentTicket` — наследник `Ticket` — с конструктором `StudentTicket(String route, int price)`. "
+               "Своих полей у него нет: в конструкторе вызови `super(route, price / 2);` — родитель сохранит маршрут "
+               "и половину цены (деление целое).",
+               "В `main` создай обычный билет `new Ticket(route, price)` и студенческий `new StudentTicket(route, price)` "
+               "и выведи две строки: `Adult: ` и `info()` обычного билета, затем `Student: ` и `info()` студенческого — "
+               "например `Student: Kazan - Sochi: 1500 rub`."],
+        hint="В `super(...)` можно передать не только параметры как есть, но и выражение: родитель получит уже "
+             "посчитанную половину цены. Метод `info()` студенческий билет наследует и сам не пишет.",
+        solution=TICKET_MAIN, classes=TICKET,
+        wrong=[("передаёт родителю полную цену — студенческий билет стоит как обычный",
+                TICKET_MAIN, TICKET.replace("super(route, price / 2);", "super(route, price);")),
+               ("умножает на 1 / 2 — при целом делении это 0, и билет становится бесплатным",
+                TICKET_MAIN, TICKET.replace("super(route, price / 2);", "super(route, price * (1 / 2));"))],
+        constructs=["class"],
+        checks=exist("Ticket", "StudentTicket")
+        + extends("StudentTicket", "Ticket")
+        + no_empty_constructor("Ticket", "Ticket(String route, int price)", "super(route, price / 2)")
+        + private_fields("Ticket", "route", "price"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-super-gold-card", title="Золотая бонусная карта",
+        given=[("int", "start"), ("int[]", "purchases")],
+        variants=[{"start": "0", "purchases": "{350, 1200, 99}"},
+                  {"start": "40", "purchases": "{500, 500}"},
+                  {"start": "15", "purchases": "{2750, 180, 620, 75}"}],
+        hidden=[{"start": "100", "purchases": "{}"},
+                {"start": "0", "purchases": "{50}"},
+                {"start": "7", "purchases": "{1000, 1000, 1000}"},
+                {"start": "250", "purchases": "{149, 151}"}],
+        intro="Магазин выдаёт бонусные карты: за каждые полные 100 руб. покупки на карту начисляется 1 балл. Золотая "
+              "карта — та же карта, но при выдаче на неё сразу дарят 500 баллов, а баллы за покупки начисляются "
+              "в двойном размере. Покупатель с `start` баллами завёл обе карты и сделал покупки `purchases` (в рублях).",
+        steps=["Ниже класса `Solution` опиши класс `Card` (без `public`) с закрытым полем `private int points`, "
+               "конструктором `Card(int points)`, методом `void buy(int sum)`, который прибавляет к баллам "
+               "`sum / 100`, и геттером `int getPoints()`.",
+               "Опиши класс `GoldCard` — наследник `Card` — с конструктором `GoldCard(int points)`, который вызывает "
+               "`super(points + 500);` — подарочные баллы.",
+               "Переопредели в `GoldCard` метод `void buy(int sum)` (с `@Override`): пусть он вызывает родительский "
+               "метод `super.buy(sum * 2);` — баллы начисляются как за вдвое большую покупку.",
+               "В `main` создай `Card card = new Card(start);` и `GoldCard gold = new GoldCard(start);`, в одном цикле "
+               "проведи каждую покупку из `purchases` по обеим картам и выведи строки вида `Regular card: 15 points` "
+               "и `Gold card: 532 points`."],
+        hint="Поле `points` закрыто в `Card`, поэтому `GoldCard` не может прибавить баллы сам — он просит родителя "
+             "сделать это через `super.buy(...)`. Без `super.` метод `buy` вызывал бы сам себя бесконечно.",
+        solution=CARD_MAIN, classes=CARD,
+        wrong=[("передаёт родителю только points — подарочные 500 баллов не начислены",
+                CARD_MAIN, CARD.replace("super(points + 500);", "super(points);")),
+               ("переопределил buy, но вызывает super.buy(sum) — баллы не удваиваются",
+                CARD_MAIN, CARD.replace("super.buy(sum * 2);", "super.buy(sum);"))],
+        constructs=["class", "for"],
+        checks=exist("Card", "GoldCard")
+        + extends("GoldCard", "Card")
+        + no_empty_constructor("Card", "Card(int points)", "super(points + 500)")
+        + private_fields("Card", "points")
+        + f'need({declares("GoldCard", "buy")}, "Переопредели в GoldCard метод void buy(int sum) с пометкой @Override и вызови в нём super.buy(sum * 2)");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-super-coffee-latte", title="Кофе, латте и чай",
+        given=[("int", "shots"), ("String", "syrup")],
+        variants=[{"shots": "2", "syrup": '"vanilla"'},
+                  {"shots": "1", "syrup": '"caramel"'},
+                  {"shots": "3", "syrup": '"coconut"'}],
+        hidden=[{"shots": "4", "syrup": '"cherry"'},
+                {"shots": "1", "syrup": '"mint"'},
+                {"shots": "5", "syrup": '"maple"'}],
+        intro="Кофейня описывает напитки в программе. У каждого напитка есть название и цена. Кофе — это напиток "
+              "с порциями эспрессо: каждая порция сверх первой добавляет 40 руб. Латте — это кофе с молоком "
+              "(+60 руб.) и сиропом. Гость заказал чай, эспрессо и латте; порций эспрессо в кофе — `shots`, "
+              "сироп для латте — `syrup`.",
+        steps=["Ниже класса `Solution` опиши класс `Drink` (без `public`) с закрытыми полями `private String name` и "
+               "`private int price`, конструктором `Drink(String name, int price)`, методом `int getPrice()`, который "
+               "возвращает цену, и методом `String info()`, который возвращает название.",
+               "Опиши класс `Coffee extends Drink` с полем `private int shots` и конструктором "
+               "`Coffee(String name, int shots)`: первой строкой вызови `super(name, 100);` — базовая цена кофе "
+               "100 руб. Переопредели `getPrice()`: `super.getPrice() + 40 * (shots - 1)`, и `info()`: "
+               "`super.info()` и дописка `, shots: 2`.",
+               "Опиши класс `Latte extends Coffee` с полем `private String syrup` и конструктором "
+               "`Latte(int shots, String syrup)`: первой строкой вызови `super(\"latte\", shots);`. Переопредели "
+               "`getPrice()` — цена кофе через `super.getPrice()` плюс 60 — и `info()` — `super.info()` и дописка "
+               "`, syrup: vanilla`.",
+               "В `main` создай массив `Drink[] order = {{new Drink(\"tea\", 80), new Coffee(\"espresso\", shots), "
+               "new Latte(shots, syrup)}};`. Одним циклом выведи для каждого напитка строку вида "
+               "`espresso, shots: 2 - 140 rub` — `info()`, ` - ` и цену, а последней строкой — `Total: 440 rub`."],
+        hint="`super.getPrice()` в `Latte` вызывает версию из `Coffee`, а та через свой `super.getPrice()` — версию "
+             "из `Drink`. Каждый класс добавляет только своё, поэтому цена и описание латте собираются по цепочке.",
+        solution=COFFEE_MAIN, classes=COFFEE,
+        wrong=[("в info латте не вызывает super.info() — пропадают порции эспрессо",
+                COFFEE_MAIN, COFFEE.replace('return super.info() + ", syrup: " + syrup;',
+                                            'return "latte, syrup: " + syrup;')),
+               ("считает цену латте от базовых 100 руб., а не от цены кофе — лишние порции не учтены",
+                COFFEE_MAIN, COFFEE.replace("return super.getPrice() + 60;", "return 100 + 60;"))],
+        constructs=["class", "for"],
+        checks=exist("Drink", "Coffee", "Latte")
+        + extends("Coffee", "Drink") + extends("Latte", "Coffee")
+        + no_empty_constructor("Drink", "Drink(String name, int price)", "super(name, 100)")
+        + private_fields("Drink", "name", "price")
+        + f'need({declares("Latte", "getPrice")} && {declares("Latte", "info")}, "Переопредели в Latte методы getPrice() и info() с пометкой @Override и опирайся в них на super");\n',
     ),
 ]

@@ -141,6 +141,136 @@ if (hero.getHealth() == 0) {
     System.out.println("Hero is still in");
 }'''
 
+# ───────── Weather sensor ─────────
+
+SENSOR = '''class Sensor {
+    private int temperature;
+
+    void record(int value) {
+        if (value >= -50 && value <= 50) {
+            temperature = value;
+        }
+    }
+
+    int getTemperature() {
+        return temperature;
+    }
+}'''
+
+SENSOR_MAIN = '''Sensor sensor = new Sensor();
+for (int i = 0; i < readings.length; i++) {
+    sensor.record(readings[i]);
+}
+System.out.println("Temperature: " + sensor.getTemperature());'''
+
+# ───────── Locker ─────────
+
+LOCKER = '''class Locker {
+    private String code;
+    private int mistakes;
+
+    Locker(String code) {
+        this.code = code;
+    }
+
+    boolean tryCode(String attempt) {
+        if (mistakes >= 3) {
+            return false;
+        }
+        if (attempt.equals(code)) {
+            return true;
+        }
+        mistakes++;
+        return false;
+    }
+
+    boolean isBlocked() {
+        return mistakes >= 3;
+    }
+}'''
+
+LOCKER_MAIN = '''Locker locker = new Locker(code);
+for (int i = 0; i < attempts.length; i++) {
+    if (locker.tryCode(attempts[i])) {
+        System.out.println(attempts[i] + ": open");
+    } else {
+        System.out.println(attempts[i] + ": wrong");
+    }
+}
+if (locker.isBlocked()) {
+    System.out.println("Locker is blocked");
+} else {
+    System.out.println("Locker works");
+}'''
+
+LOCKER_BEHAVIOUR = '''{ Object o = null; Method t = null;
+  try { Constructor<?> k = c.getDeclaredConstructor(String.class); k.setAccessible(true); o = k.newInstance("42");
+        t = c.getDeclaredMethod("tryCode", String.class); t.setAccessible(true); } catch (Exception e) { }
+  Object r1 = null, r2 = null;
+  try { r1 = t.invoke(o, "42"); t.invoke(o, "1"); t.invoke(o, "2"); t.invoke(o, "3"); r2 = t.invoke(o, "42"); } catch (Exception e) { }
+  need(Objects.equals(r1, true), "Метод tryCode должен возвращать true, если код совпал с кодом шкафчика");
+  need(Objects.equals(r2, false), "После трёх ошибок tryCode должен возвращать false даже для верного кода — проверь это внутри метода"); }
+'''
+
+# ───────── Parking ─────────
+
+PARKING = '''class Parking {
+    private int places;
+    private int cars;
+
+    Parking(int places) {
+        this.places = places;
+    }
+
+    boolean enter() {
+        if (cars < places) {
+            cars++;
+            return true;
+        }
+        return false;
+    }
+
+    boolean leave() {
+        if (cars > 0) {
+            cars--;
+            return true;
+        }
+        return false;
+    }
+
+    int getFree() {
+        return places - cars;
+    }
+}'''
+
+PARKING_MAIN = '''Parking parking = new Parking(places);
+for (int i = 0; i < events.length; i++) {
+    if (events[i].equals("in")) {
+        if (parking.enter()) {
+            System.out.println("in: ok");
+        } else {
+            System.out.println("in: full");
+        }
+    } else {
+        if (parking.leave()) {
+            System.out.println("out: ok");
+        } else {
+            System.out.println("out: empty");
+        }
+    }
+}
+System.out.println("Free places: " + parking.getFree());'''
+
+PARKING_BEHAVIOUR = '''{ Object o = null; Method in = null, out = null;
+  try { Constructor<?> k = c.getDeclaredConstructor(int.class); k.setAccessible(true); o = k.newInstance(1);
+        in = c.getDeclaredMethod("enter"); in.setAccessible(true); out = c.getDeclaredMethod("leave"); out.setAccessible(true); } catch (Exception e) { }
+  Field f = c.getDeclaredField("cars"); f.setAccessible(true);
+  try { in.invoke(o); in.invoke(o); } catch (Exception e) { }
+  need(o != null && Objects.equals(f.get(o), 1), "Проверка должна быть внутри enter: когда все места заняты, машина не заезжает");
+  try { out.invoke(o); out.invoke(o); } catch (Exception e) { }
+  need(Objects.equals(f.get(o), 0), "Проверка должна быть внутри leave: с пустой парковки машина уехать не может"); }
+'''
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-enc-metro-card", title="Пополнение карты метро",
@@ -253,5 +383,114 @@ TASKS = [
                                   "Метод heal не должен поднимать здоровье выше 100: после лечения проверь границу внутри метода")
                + need_after_calls("", "", [("damage", "int", "150")], "health", "0",
                                   "Метод damage не должен опускать здоровье ниже 0: после урона проверь границу внутри метода"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-enc-weather-sensor", title="Датчик температуры",
+        given=[("int[]", "readings")],
+        variants=[{"readings": "{12, 15, 99, 14}"}, {"readings": "{-5, -60, -8, 200}"}, {"readings": "{30, 25, -51}"}],
+        hidden=[{"readings": "{}"}, {"readings": "{50}"}, {"readings": "{-50}"}, {"readings": "{51, -51, 7}"},
+                {"readings": "{3, 4, 5, 6, 77}"}],
+        intro="Уличный датчик раз в час передаёт температуру. Иногда он сбоит и присылает невозможные числа — ниже -50 "
+              "или выше 50 градусов. Такие показания нужно пропускать, а хранить последнее нормальное. Показания по "
+              "порядку записаны в массиве `readings`.",
+        steps=["Ниже класса `Solution` создай класс `Sensor` (без `public`) с полем `private int temperature`. Из-за `private` "
+               "код снаружи класса не может напрямую ни прочитать, ни изменить это поле.",
+               "Добавь метод `void record(int value)`: он записывает `value` в поле, только если число от -50 до 50 "
+               "включительно. Иначе температура не меняется.",
+               "Добавь метод `int getTemperature()`, который возвращает температуру.",
+               "В `main` создай датчик, по очереди передай методу `record` все показания из `readings` и выведи строку "
+               "вида `Temperature: 14` — число получи через `getTemperature()`."],
+        hint="Поле закрыто, поэтому из `main` нельзя написать `sensor.temperature = 99` — так ошибочное число не попадёт "
+             "в датчик в обход проверки. Пока нормальных показаний не было, температура равна 0.",
+        solution=SENSOR_MAIN,
+        classes=SENSOR,
+        wrong=[("record не проверяет число — сбойные показания тоже записываются",
+                SENSOR_MAIN, SENSOR.replace("        if (value >= -50 && value <= 50) {\n            temperature = value;\n        }",
+                                            "        temperature = value;")),
+               ("границы строгие — ровно 50 и ровно -50 датчик не принимает",
+                SENSOR_MAIN, SENSOR.replace("value >= -50 && value <= 50", "value > -50 && value < 50"))],
+        constructs=["class"],
+        checks=find_class("Sensor")
+               + need_private_field("Sensor", "temperature", "int", "тогда температура меняется только через record с проверкой")
+               + need_method("Sensor", "void", "record", ["int value"], "он сохраняет показание, если оно возможное")
+               + need_method("Sensor", "int", "getTemperature", [], "через него код снаружи узнаёт температуру")
+               + need_after_calls("", "", [("record", "int", "20"), ("record", "int", "90"), ("record", "int", "-70")],
+                                  "temperature", "20", "Проверка должна быть внутри record: числа ниже -50 и выше 50 метод не записывает"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-enc-gym-locker", title="Кодовый шкафчик",
+        given=[("String", "code"), ("String[]", "attempts")],
+        variants=[{"code": '"2580"', "attempts": '{"1111", "2580", "0000"}'},
+                  {"code": '"7314"', "attempts": '{"7341", "1234", "0000", "7314"}'},
+                  {"code": '"4096"', "attempts": '{"4096", "4069"}'}],
+        hidden=[{"code": '"1000"', "attempts": "{}"},
+                {"code": '"5555"', "attempts": '{"1", "2", "5555"}'},
+                {"code": '"8642"', "attempts": '{"0", "0", "0", "8642", "0"}'},
+                {"code": '"3030"', "attempts": '{"3030", "1", "3030", "2", "3"}'}],
+        intro="Шкафчик в спортзале открывается кодом `code`. После трёх неверных попыток он блокируется и больше не "
+              "открывается даже верным кодом. Коды, которые вводили по очереди, записаны в массиве `attempts`.",
+        steps=["Ниже класса `Solution` создай класс `Locker` (без `public`) с закрытыми полями `private String code` и "
+               "`private int mistakes` и конструктором `Locker(String code)`, который запоминает код.",
+               "Добавь метод `boolean tryCode(String attempt)`: если ошибок уже 3, сразу верни `false`. Иначе, если "
+               "`attempt` совпадает с кодом, верни `true`; если не совпадает, увеличь `mistakes` на 1 и верни `false`.",
+               "Добавь метод `boolean isBlocked()` — он возвращает `true`, когда ошибок 3.",
+               "В `main` создай шкафчик и для каждого кода из `attempts` выведи строку вида `2580: open`, если `tryCode` "
+               "вернул `true`, иначе — `1111: wrong`. В конце выведи `Locker is blocked` или `Locker works`."],
+        hint="Строки сравнивай методом `equals`. Счётчик ошибок закрыт, поэтому код снаружи не может его обнулить — "
+             "разблокировать шкафчик через `main` не получится.",
+        solution=LOCKER_MAIN,
+        classes=LOCKER,
+        wrong=[("не проверяет блокировку — после трёх ошибок верный код всё равно открывает шкафчик",
+                LOCKER_MAIN, LOCKER.replace("        if (mistakes >= 3) {\n            return false;\n        }\n", "")),
+               ("блокирует шкафчик уже после двух ошибок",
+                LOCKER_MAIN, LOCKER.replace("mistakes >= 3", "mistakes >= 2"))],
+        constructs=["class"],
+        checks=find_class("Locker")
+               + need_private_field("Locker", "code", "String", "код нельзя подсмотреть или поменять снаружи класса")
+               + need_private_field("Locker", "mistakes", "int", "тогда счётчик ошибок нельзя обнулить снаружи")
+               + need_constructor("Locker", ["String code"], "он запоминает код шкафчика")
+               + need_method("Locker", "boolean", "tryCode", ["String attempt"], "он проверяет введённый код")
+               + need_method("Locker", "boolean", "isBlocked", [], "через него код снаружи узнаёт, заблокирован ли шкафчик")
+               + LOCKER_BEHAVIOUR,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-enc-parking-places", title="Парковка у торгового центра",
+        given=[("int", "places"), ("String[]", "events")],
+        variants=[{"places": "2", "events": '{"in", "in", "in", "out", "in"}'},
+                  {"places": "3", "events": '{"out", "in", "out", "out", "in"}'},
+                  {"places": "1", "events": '{"in", "out", "out", "in", "in"}'}],
+        hidden=[{"places": "5", "events": "{}"},
+                {"places": "1", "events": '{"in", "in"}'},
+                {"places": "4", "events": '{"in", "in", "in", "in", "in", "out"}'},
+                {"places": "2", "events": '{"out", "out", "in"}'}],
+        intro="Шлагбаум на парковке пускает машину, только если есть свободное место, и выпускает, только если на "
+              "парковке кто-то стоит. Всего мест `places`, сначала парковка пустая. События по порядку записаны в массиве "
+              "`events`: `in` — машина хочет заехать, `out` — выехать.",
+        steps=["Ниже класса `Solution` создай класс `Parking` (без `public`) с закрытыми полями `private int places` и "
+               "`private int cars` и конструктором `Parking(int places)`.",
+               "Добавь метод `boolean enter()`: если машин меньше, чем мест, он добавляет машину и возвращает `true`, "
+               "иначе возвращает `false`. И метод `boolean leave()`: если машины есть, он убирает одну и возвращает `true`, "
+               "иначе `false`.",
+               "Добавь метод `int getFree()` — он возвращает число свободных мест.",
+               "В `main` создай парковку и пройди по `events`. Для `in` выведи `in: ok` или `in: full`, для `out` — "
+               "`out: ok` или `out: empty`, смотря что вернул метод. В конце выведи строку вида `Free places: 1`."],
+        hint="Поле `cars` закрыто, поэтому число машин меняется только в `enter` и `leave`. Если обе проверки стоят "
+             "внутри этих методов, машин не станет ни больше, чем мест, ни меньше нуля.",
+        solution=PARKING_MAIN,
+        classes=PARKING,
+        wrong=[("enter пускает машину и на занятое последнее место (`<=` вместо `<`)",
+                PARKING_MAIN, PARKING.replace("cars < places", "cars <= places")),
+               ("leave не проверяет, есть ли машины, — их число уходит в минус",
+                PARKING_MAIN, PARKING.replace("        if (cars > 0) {\n            cars--;\n            return true;\n        }\n        return false;",
+                                              "        cars--;\n        return true;"))],
+        constructs=["class"],
+        checks=find_class("Parking")
+               + need_private_field("Parking", "places", "int", "число мест нельзя менять снаружи класса")
+               + need_private_field("Parking", "cars", "int", "тогда машины заезжают и выезжают только через enter и leave")
+               + need_constructor("Parking", ["int places"], "он запоминает, сколько на парковке мест")
+               + need_method("Parking", "boolean", "enter", [], "он пускает машину, если есть место")
+               + need_method("Parking", "boolean", "leave", [], "он выпускает машину, если она есть")
+               + need_method("Parking", "int", "getFree", [], "через него код снаружи узнаёт число свободных мест")
+               + PARKING_BEHAVIOUR,
     ),
 ]

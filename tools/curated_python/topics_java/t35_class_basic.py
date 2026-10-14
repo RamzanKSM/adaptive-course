@@ -93,6 +93,73 @@ System.out.println("Workouts: " + workout.minutes.length);
 System.out.println("Total minutes: " + workout.total());
 System.out.println("Longest: " + workout.longest() + " min");'''
 
+# ───────── Pet passport ─────────
+
+PET = """class Pet {
+    String name;
+    String kind;
+    int age;
+}"""
+
+PET_MAIN = """Pet pet = new Pet();
+pet.name = petName;
+pet.kind = kind;
+pet.age = age;
+System.out.println("Pet: " + pet.name + " (" + pet.kind + ")");
+System.out.println("Age: " + pet.age + " years");"""
+
+# ───────── Phone tariff ─────────
+
+TARIFF = """class Tariff {
+    String title;
+    int fee;
+    int gigabytes;
+
+    int perGigabyte() {
+        return fee / gigabytes;
+    }
+}"""
+
+TARIFF_MAIN = """Tariff tariff = new Tariff();
+tariff.title = title;
+tariff.fee = fee;
+tariff.gigabytes = gigabytes;
+System.out.println("Tariff: " + tariff.title);
+System.out.println("Price of 1 GB: " + tariff.perGigabyte() + " rub");"""
+
+# ───────── Piggy bank ─────────
+
+PIGGY = """class PiggyBank {
+    String owner;
+    int[] coins;
+
+    int sum() {
+        int total = 0;
+        for (int coin : coins) {
+            total += coin;
+        }
+        return total;
+    }
+
+    int countOf(int value) {
+        int count = 0;
+        for (int coin : coins) {
+            if (coin == value) {
+                count++;
+            }
+        }
+        return count;
+    }
+}"""
+
+PIGGY_MAIN = """PiggyBank bank = new PiggyBank();
+bank.owner = owner;
+bank.coins = coins;
+System.out.println("Owner: " + bank.owner);
+System.out.println("Coins: " + bank.coins.length);
+System.out.println("Sum: " + bank.sum() + " rub");
+System.out.println("Fives: " + bank.countOf(5));"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-class-library-card", title="Читательский билет",
@@ -193,5 +260,103 @@ TASKS = [
                + need_field("Workout", "minutes", "int[]", "длительности тренировок")
                + need_method("Workout", "total", "int", "он возвращает сумму минут")
                + need_method("Workout", "longest", "int", "он возвращает самую долгую тренировку"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-class-pet-passport", title="Паспорт питомца",
+        given=[("String", "petName"), ("String", "kind"), ("int", "age")],
+        variants=[{"petName": '"Murka"', "kind": '"cat"', "age": "3"},
+                  {"petName": '"Rex"', "kind": '"dog"', "age": "5"},
+                  {"petName": '"Kesha"', "kind": '"parrot"', "age": "2"}],
+        hidden=[{"petName": '"Bublik"', "kind": '"hamster"', "age": "1"},
+                {"petName": '"Tuzik"', "kind": '"dog"', "age": "12"},
+                {"petName": '"Snezhok"', "kind": '"rabbit"', "age": "4"}],
+        intro="В ветеринарной клинике на каждого питомца заводят паспорт: кличка, вид животного и возраст в годах. "
+              "Паспорта у всех одинаковые по устройству, поэтому их удобно описать классом.",
+        steps=["Ниже класса `Solution`, после его последней закрывающей скобки, создай класс `Pet` — без слова `public`. "
+               "Объяви в нём поля `String name`, `String kind` и `int age`.",
+               "В `main` создай объект `Pet pet = new Pet();` и запиши в его поля данные из заготовки: "
+               "`pet.name = petName;`, а также `kind` и `age`.",
+               "Выведи две строки вида `Pet: Murka (cat)` и `Age: 3 years`. Значения бери из полей объекта `pet`."],
+        hint="Поле объекта читается и записывается через точку: `pet.kind`. Обрати внимание, что поле в классе "
+             "называется `name`, а данные в заготовке — `petName`.",
+        solution=PET_MAIN,
+        classes=PET,
+        wrong=[("забыл записать в объект возраст — у нового объекта поле age равно 0",
+                PET_MAIN.replace("pet.age = age;\n", "")),
+               ("перепутал поля: кличку записал в kind, а вид — в name",
+                PET_MAIN.replace("pet.name = petName;\npet.kind = kind;", "pet.name = kind;\npet.kind = petName;"))],
+        constructs=["class"],
+        checks=find_class("Pet")
+               + need_field("Pet", "name", "String", "кличка питомца")
+               + need_field("Pet", "kind", "String", "вид животного")
+               + need_field("Pet", "age", "int", "возраст в годах"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-class-phone-tariff", title="Тариф связи",
+        given=[("String", "title"), ("int", "fee"), ("int", "gigabytes")],
+        variants=[{"title": '"Smart"', "fee": "600", "gigabytes": "20"},
+                  {"title": '"Start"', "fee": "350", "gigabytes": "7"},
+                  {"title": '"Max"', "fee": "900", "gigabytes": "40"}],
+        hidden=[{"title": '"Mini"', "fee": "200", "gigabytes": "3"},
+                {"title": '"Family"', "fee": "1200", "gigabytes": "50"},
+                {"title": '"Light"', "fee": "450", "gigabytes": "9"},
+                {"title": '"Unlim"', "fee": "1000", "gigabytes": "100"}],
+        intro="Ты сравниваешь тарифы мобильной связи. У тарифа есть название `title`, абонентская плата `fee` в рублях "
+              "в месяц и объём интернета `gigabytes`. Чтобы сравнивать честно, хочется знать цену одного гигабайта.",
+        steps=["Ниже класса `Solution` создай класс `Tariff` (без `public`) с полями `String title`, `int fee` "
+               "и `int gigabytes`.",
+               "Добавь в класс метод `int perGigabyte()` без слова `static`: он возвращает плату, делённую на число "
+               "гигабайтов (дробную часть отбрось).",
+               "В `main` создай объект `Tariff tariff = new Tariff();` и запиши в его поля данные из заготовки.",
+               "Выведи две строки вида `Tariff: Smart` и `Price of 1 GB: 30 rub`. Цену гигабайта получи вызовом "
+               "`tariff.perGigabyte()`."],
+        hint="Метод объекта видит поля `fee` и `gigabytes` своего объекта без точки и без параметров — просто по имени.",
+        solution=TARIFF_MAIN,
+        classes=TARIFF,
+        wrong=[("в методе деление перевёрнуто: гигабайты делятся на плату",
+                TARIFF_MAIN, TARIFF.replace("fee / gigabytes", "gigabytes / fee")),
+               ("забыл записать в объект плату — поле fee остаётся 0",
+                TARIFF_MAIN.replace("tariff.fee = fee;\n", ""))],
+        constructs=["class"],
+        checks=find_class("Tariff")
+               + need_field("Tariff", "title", "String", "название тарифа")
+               + need_field("Tariff", "fee", "int", "плата в месяц")
+               + need_field("Tariff", "gigabytes", "int", "объём интернета")
+               + need_method("Tariff", "perGigabyte", "int", "он считает цену гигабайта по полям объекта"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-class-piggy-bank", title="Копилка",
+        given=[("String", "owner"), ("int[]", "coins")],
+        variants=[{"owner": '"Anya"', "coins": "{10, 5, 10, 2, 1}"},
+                  {"owner": '"Timur"', "coins": "{5, 5, 10, 10, 10, 2}"},
+                  {"owner": '"Liza"', "coins": "{1, 2, 5, 10}"}],
+        hidden=[{"owner": '"Gosha"', "coins": "{2}"},
+                {"owner": '"Masha"', "coins": "{10, 10, 10}"},
+                {"owner": '"Kolya"', "coins": "{1, 1, 5, 2, 2, 5, 10}"},
+                {"owner": '"Nina"', "coins": "{}"}],
+        intro="Ты разбиваешь копилку и пересчитываешь монеты. Чья копилка, записано в поле `owner`, а номиналы всех "
+              "монет в рублях — в массиве `coins`. Пусть копилка будет объектом, который сам считает свои деньги.",
+        steps=["Ниже класса `Solution` создай класс `PiggyBank` (без `public`) с полями `String owner` и `int[] coins`.",
+               "Добавь в класс метод `int sum()` без `static` — он возвращает сумму всех монет.",
+               "Добавь метод `int countOf(int value)` без `static` — он возвращает, сколько в копилке монет "
+               "номиналом `value`.",
+               "В `main` создай объект `PiggyBank`, запиши в него данные из заготовки и выведи четыре строки вида "
+               "`Owner: Anya`, `Coins: 5` (сколько монет в массиве), `Sum: 28 rub` и `Fives: 1` (результат `countOf(5)`)."],
+        hint="Метод объекта может принимать параметры, как обычный метод: внутри `countOf` сравнивай каждую монету "
+             "из поля `coins` с параметром `value`. Копилка может оказаться пустой — тогда все числа равны 0.",
+        solution=PIGGY_MAIN,
+        classes=PIGGY,
+        wrong=[("countOf считает монеты номиналом не меньше value, а не ровно value",
+                PIGGY_MAIN, PIGGY.replace("coin == value", "coin >= value")),
+               ("sum() считает количество монет, а не их сумму",
+                PIGGY_MAIN, PIGGY.replace("total += coin;", "total++;"))],
+        constructs=["class"],
+        checks=find_class("PiggyBank")
+               + need_field("PiggyBank", "owner", "String", "владелец копилки")
+               + need_field("PiggyBank", "coins", "int[]", "номиналы монет")
+               + need_method("PiggyBank", "sum", "int", "он возвращает сумму монет")
+               + '{ Method m = null; try { m = c.getDeclaredMethod("countOf", int.class); } catch (NoSuchMethodException e) { }\n'
+                 '  need(m != null && m.getReturnType() == int.class && !Modifier.isStatic(m.getModifiers()), '
+                 '"Добавь в класс PiggyBank метод int countOf(int value) без static — он считает монеты одного номинала"); }\n',
     ),
 ]

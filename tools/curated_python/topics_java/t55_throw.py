@@ -94,6 +94,100 @@ boolean thrown = false;
 try { set.invoke(thermostat, 35); } catch (InvocationTargetException e) { thrown = e.getCause() instanceof IllegalArgumentException; }
 need(thrown, "Метод setTemperature должен выбрасывать IllegalArgumentException через throw, если температура меньше 10 или больше 30");'''
 
+# ── 4. Пароль ──
+PASS_MAIN = ('try {\n    checkPassword(password);\n    System.out.println("Password saved");\n'
+             '} catch (IllegalArgumentException e) {\n    System.out.println("Error: " + e.getMessage());\n}')
+PASS_CHECK = """static void checkPassword(String password) {
+    if (password.length() < 8) {
+        throw new IllegalArgumentException("Too short: " + password.length() + " characters, need at least 8");
+    }
+}"""
+PASS_CHECKS = """Method m = null;
+try { m = Solution.class.getDeclaredMethod("checkPassword", String.class); } catch (NoSuchMethodException e) { }
+need(m != null && Modifier.isStatic(m.getModifiers()), "Добавь в класс Solution метод static void checkPassword(String password): проверка пароля должна жить в нём");
+m.setAccessible(true);
+boolean thrown = false;
+try { m.invoke(null, "abc"); } catch (InvocationTargetException e) { thrown = e.getCause() instanceof IllegalArgumentException; }
+need(thrown, "Метод checkPassword должен выбрасывать IllegalArgumentException через throw, если в пароле меньше 8 символов");
+try { m.invoke(null, "longpassword"); } catch (InvocationTargetException e) { need(false, "Для длинного пароля метод checkPassword не должен выбрасывать исключение"); }"""
+
+# ── 5. Средний балл ──
+AVG_MAIN = ('try {\n    System.out.println("Average: " + average(marks));\n'
+            '} catch (IllegalArgumentException e) {\n    System.out.println("Error: " + e.getMessage());\n}')
+AVG_METHOD = """static int average(int[] marks) {
+    if (marks.length == 0) {
+        throw new IllegalArgumentException("No marks yet");
+    }
+    int sum = 0;
+    for (int i = 0; i < marks.length; i++) {
+        if (marks[i] < 1 || marks[i] > 5) {
+            throw new IllegalArgumentException("Wrong mark: " + marks[i]);
+        }
+        sum += marks[i];
+    }
+    return sum / marks.length;
+}"""
+AVG_CHECKS = """Method m = null;
+try { m = Solution.class.getDeclaredMethod("average", int[].class); } catch (NoSuchMethodException e) { }
+need(m != null && Modifier.isStatic(m.getModifiers()) && m.getReturnType() == int.class, "Добавь в класс Solution метод static int average(int[] marks): он возвращает средний балл");
+m.setAccessible(true);
+for (int[] bad : new int[][]{{}, {3, 9}}) {
+  boolean thrown = false;
+  try { m.invoke(null, (Object) bad); } catch (InvocationTargetException e) { thrown = e.getCause() instanceof IllegalArgumentException; }
+  need(thrown, "Метод average должен выбрасывать IllegalArgumentException через throw, если оценок нет или какая-то оценка не от 1 до 5");
+}
+Object avg = null;
+try { avg = m.invoke(null, (Object) new int[]{4, 5}); } catch (InvocationTargetException e) { }
+need(Integer.valueOf(4).equals(avg), "average для оценок 4 и 5 должен вернуть 4 — среднее, округлённое вниз");"""
+
+# ── 6. Места в вагоне ──
+TRAIN = """class Train {
+    private boolean[] taken;
+
+    Train(int seats) {
+        taken = new boolean[seats];
+    }
+
+    void book(int seat) {
+        if (seat < 1 || seat > taken.length) {
+            throw new IllegalArgumentException("No seat " + seat);
+        }
+        if (taken[seat - 1]) {
+            throw new IllegalArgumentException("Seat " + seat + " is taken");
+        }
+        taken[seat - 1] = true;
+    }
+
+    int free() {
+        int count = 0;
+        for (boolean t : taken) {
+            if (!t) {
+                count++;
+            }
+        }
+        return count;
+    }
+}"""
+TRAIN_MAIN = ('Train train = new Train(seats);\nfor (int seat : requests) {\n    try {\n        train.book(seat);\n'
+              '        System.out.println("Seat " + seat + " booked");\n    } catch (IllegalArgumentException e) {\n'
+              '        System.out.println(e.getMessage());\n    }\n}\nSystem.out.println("Free seats: " + train.free());')
+TRAIN_CHECKS = """Class<?> c = cls("Train");
+need(c != null, "Создай класс Train: он хранит, какие места заняты, и сам проверяет каждую бронь");
+Method book = null;
+try { book = c.getDeclaredMethod("book", int.class); } catch (NoSuchMethodException e) { }
+need(book != null, "Добавь в класс Train метод void book(int seat)");
+Object train = null;
+try { Constructor<?> k = c.getDeclaredConstructor(int.class); k.setAccessible(true); train = k.newInstance(3); } catch (NoSuchMethodException | InvocationTargetException e) { }
+need(train != null, "Добавь в класс Train конструктор Train(int seats)");
+book.setAccessible(true);
+boolean thrown = false;
+try { book.invoke(train, 0); } catch (InvocationTargetException e) { thrown = e.getCause() instanceof IllegalArgumentException; }
+need(thrown, "Метод book должен выбрасывать IllegalArgumentException через throw, если такого места в вагоне нет");
+try { book.invoke(train, 2); } catch (InvocationTargetException e) { need(false, "Свободное место 2 в вагоне на 3 места метод book должен бронировать без исключения"); }
+thrown = false;
+try { book.invoke(train, 2); } catch (InvocationTargetException e) { thrown = e.getCause() instanceof IllegalArgumentException; }
+need(thrown, "Метод book должен выбрасывать IllegalArgumentException через throw, если место уже занято");"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-throw-cafe-table", title="Бронь столика в кафе",
@@ -178,5 +272,90 @@ TASKS = [
                 'System.out.println("Final temperature: " + thermostat.getTemperature());')],
         constructs=["try", "class"],
         checks=THERMO_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-throw-password", title="Длина пароля",
+        given=[("String", "password")],
+        variants=[{"password": '"qwerty"'}, {"password": '"sunflower22"'}, {"password": '"cat2024"'}],
+        hidden=[{"password": '"abcdefgh"'}, {"password": '""'}, {"password": '"1234567"'}, {"password": '"correct horse"'}],
+        intro="Сайт принимает пароль только из 8 символов и больше. Пароль, который придумал пользователь, записан "
+              "в поле `password`. Проверку вынеси в отдельный метод: если пароль слишком короткий, он должен "
+              "сообщить об этом исключением.",
+        steps=["Добавь в класс `Solution` метод `static void checkPassword(String password)`. Если в пароле меньше "
+               "8 символов (длину даёт `password.length()`), он выбрасывает `IllegalArgumentException` с сообщением "
+               "вида `Too short: 6 characters, need at least 8` — с настоящей длиной пароля.",
+               "В `main` в блоке `try` вызови `checkPassword(password)`, а следующей строкой выведи `Password saved`.",
+               "В блоке `catch (IllegalArgumentException e)` выведи `Error: ` и текст исключения из `e.getMessage()`."],
+        hint="Сообщение для исключения собирается так же, как строка для `println`: `\"Too short: \" + password.length() + ...`. "
+             "Пароль ровно из 8 символов уже подходит.",
+        solution=with_methods(PASS_MAIN, PASS_CHECK),
+        wrong=[("проверяет через <= 8 — пароль ровно из 8 символов не принимается",
+                with_methods(PASS_MAIN, PASS_CHECK.replace("password.length() < 8", "password.length() <= 8"))),
+               ("печатает «Password saved» до проверки — при ошибке выводятся обе строки",
+                with_methods('try {\n    System.out.println("Password saved");\n    checkPassword(password);\n'
+                             '} catch (IllegalArgumentException e) {\n    System.out.println("Error: " + e.getMessage());\n}',
+                             PASS_CHECK))],
+        constructs=["try", "function", "if"],
+        checks=PASS_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-throw-average-mark", title="Средний балл",
+        given=[("int[]", "marks")],
+        variants=[{"marks": "{5, 4, 4, 3}"}, {"marks": "{4, 7, 5}"}, {"marks": "{}"}],
+        hidden=[{"marks": "{5}"}, {"marks": "{0, 3}"}, {"marks": "{1, 5, 5}"}, {"marks": "{4, 4, 6}"},
+                {"marks": "{2, 3, 3, 3}"}],
+        intro="Электронный дневник считает средний балл по оценкам из массива `marks`. Оценки бывают только от 1 "
+              "до 5, но после сбоя в массив может попасть что-то другое, а у новичка оценок может ещё не быть. "
+              "Метод подсчёта в таких случаях не считает, а сообщает о проблеме исключением.",
+        steps=["Добавь в класс `Solution` метод `static int average(int[] marks)`, который возвращает средний балл — "
+               "сумму оценок, делённую нацело на их количество.",
+               "Если массив пустой, метод выбрасывает `IllegalArgumentException` с сообщением `No marks yet`.",
+               "Проходя по оценкам, проверяй каждую: если оценка меньше 1 или больше 5, метод выбрасывает "
+               "`IllegalArgumentException` с сообщением вида `Wrong mark: 7` — с этой оценкой.",
+               "В `main` в блоке `try` выведи строку вида `Average: 4` с результатом `average(marks)`, а в `catch` "
+               "выведи `Error: ` и сообщение исключения."],
+        hint="`throw` можно написать и внутри цикла: он сразу прерывает и цикл, и весь метод, так что `return` "
+             "с неправильным средним уже не выполнится.",
+        solution=with_methods(AVG_MAIN, AVG_METHOD),
+        wrong=[("цикл начинается с i = 1 — первая оценка не проверяется и не считается",
+                with_methods(AVG_MAIN, AVG_METHOD.replace("for (int i = 0;", "for (int i = 1;"))),
+               ("проверяет через >= 5 — пятёрка считается неправильной оценкой",
+                with_methods(AVG_MAIN, AVG_METHOD.replace("marks[i] > 5", "marks[i] >= 5")))],
+        constructs=["try", "function", "if", "for"],
+        checks=AVG_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-throw-train-seats", title="Места в вагоне",
+        given=[("int", "seats"), ("int[]", "requests")],
+        variants=[{"seats": "4", "requests": "{2, 3, 2, 5}"},
+                  {"seats": "6", "requests": "{6, 1, 0}"},
+                  {"seats": "3", "requests": "{1, 2, 3, 3}"}],
+        hidden=[{"seats": "2", "requests": "{}"},
+                {"seats": "1", "requests": "{1}"},
+                {"seats": "5", "requests": "{5, 5, 6, -1}"},
+                {"seats": "3", "requests": "{3, 4, 1, 1, 2}"}],
+        intro="В вагоне `seats` мест с номерами от 1. Пассажиры по очереди бронируют места — номера записаны в массив "
+              "`requests`. Бронь не проходит, если такого места нет или его уже заняли, и вагон сам сообщает об этом "
+              "исключением.",
+        steps=["Создай класс `Train` с приватным массивом `boolean[] taken`, конструктором `Train(int seats)`, который "
+               "создаёт массив на `seats` мест, и методом `int free()`, который возвращает, сколько мест свободно.",
+               "Добавь метод `void book(int seat)`: если `seat` меньше 1 или больше числа мест, он выбрасывает "
+               "`IllegalArgumentException` с сообщением вида `No seat 5`; если место уже занято — с сообщением вида "
+               "`Seat 2 is taken`; иначе отмечает место занятым. Место номер `seat` хранится в `taken[seat - 1]`.",
+               "В `main` создай один вагон и для каждого номера из `requests` в блоке `try` вызови `book` и выведи "
+               "строку вида `Seat 2 booked`; в `catch` выведи только сообщение исключения.",
+               "После всех броней выведи строку вида `Free seats: 2`."],
+        hint="Сначала проверь, что номер вообще есть в вагоне, и только потом смотри в `taken[seat - 1]`: для номера "
+             "вне вагона такого элемента массива нет.",
+        solution=TRAIN_MAIN,
+        classes=TRAIN,
+        wrong=[("сравнивает номер места с длиной массива через >= — последнее место считается несуществующим",
+                TRAIN_MAIN, TRAIN.replace("seat > taken.length", "seat >= taken.length")),
+               ("try вокруг всего цикла — после первой неудачной брони остальные не обрабатываются",
+                'Train train = new Train(seats);\ntry {\n    for (int seat : requests) {\n        train.book(seat);\n'
+                '        System.out.println("Seat " + seat + " booked");\n    }\n} catch (IllegalArgumentException e) {\n'
+                '    System.out.println(e.getMessage());\n}\nSystem.out.println("Free seats: " + train.free());')],
+        constructs=["try", "class", "for"],
+        checks=TRAIN_CHECKS,
     ),
 ]

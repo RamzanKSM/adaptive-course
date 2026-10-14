@@ -73,4 +73,72 @@ TASKS = [
                 '        System.out.println("Minute " + i + ": run");\n    }\n}')],
         constructs=["for", "if"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-for-rocket-countdown", title="Обратный отсчёт",
+        given=[("int", "start")],
+        variants=[{"start": "5"}, {"start": "3"}, {"start": "7"}],
+        hidden=[{"start": "1"}, {"start": "2"}, {"start": "4"}, {"start": "10"}],
+        intro="Перед запуском модели ракеты Борис ведёт обратный отсчёт. С какого числа начинать, записано в поле `start`.",
+        steps=["Напиши цикл `for`, который перебирает числа от `start` вниз до 1 включительно и выводит каждое отдельной строкой.",
+               "После цикла выведи `Liftoff!`."],
+        hint="Счётчик цикла может уменьшаться: начни с `start`, а в третьей части заголовка напиши `i--`. "
+             "Подумай, какое условие нужно, чтобы последним было число 1, а не 0.",
+        solution='for (int i = start; i >= 1; i--) {\n    System.out.println(i);\n}\nSystem.out.println("Liftoff!");',
+        wrong=[("условие i >= 0: перед стартом выводится лишний 0",
+                'for (int i = start; i >= 0; i--) {\n    System.out.println(i);\n}\nSystem.out.println("Liftoff!");'),
+               ("условие i > 1: единица пропадает",
+                'for (int i = start; i > 1; i--) {\n    System.out.println(i);\n}\nSystem.out.println("Liftoff!");')],
+        constructs=["for"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-for-bus-timetable", title="Расписание автобуса",
+        given=[("int", "hour"), ("int", "interval")],
+        variants=[{"hour": "9", "interval": "15"}, {"hour": "14", "interval": "20"}, {"hour": "7", "interval": "12"}],
+        hidden=[{"hour": "8", "interval": "5"}, {"hour": "18", "interval": "30"}, {"hour": "6", "interval": "60"},
+                {"hour": "11", "interval": "25"}, {"hour": "22", "interval": "7"}],
+        intro="Автобус отходит от остановки каждые `interval` минут, первый рейс часа — ровно в начале часа. "
+              "Нужно напечатать расписание на один час — час записан в поле `hour`.",
+        steps=["Напиши цикл `for` по минутам: начни с 0 и на каждом шаге увеличивай минуты на `interval`, "
+               "пока минут меньше 60.",
+               "На каждом шаге выведи время отправления: час, двоеточие и минуты, например `9:15`.",
+               "Минуты всегда пиши двумя цифрами: если минут меньше 10, перед ними нужен 0 — `9:00`, `8:05`."],
+        hint="Третья часть заголовка `for` может быть `m += interval`. Для двух цифр внутри цикла пригодится `if`: "
+             "при `m < 10` печатай `hour + \":0\" + m`.",
+        solution='for (int m = 0; m < 60; m += interval) {\n    if (m < 10) {\n        System.out.println(hour + ":0" + m);\n'
+                 '    } else {\n        System.out.println(hour + ":" + m);\n    }\n}',
+        wrong=[("нет нуля перед минутами: выводит 9:0 вместо 9:00",
+                'for (int m = 0; m < 60; m += interval) {\n    System.out.println(hour + ":" + m);\n}'),
+               ("<= 60 вместо < 60: появляется время вида 9:60",
+                'for (int m = 0; m <= 60; m += interval) {\n    if (m < 10) {\n        System.out.println(hour + ":0" + m);\n'
+                '    } else {\n        System.out.println(hour + ":" + m);\n    }\n}')],
+        constructs=["for", "if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-for-reading-plan", title="План чтения книги",
+        given=[("int", "pages"), ("int", "perDay")],
+        variants=[{"pages": "90", "perDay": "20"}, {"pages": "60", "perDay": "15"}, {"pages": "100", "perDay": "30"}],
+        hidden=[{"pages": "10", "perDay": "20"}, {"pages": "40", "perDay": "20"}, {"pages": "41", "perDay": "20"},
+                {"pages": "25", "perDay": "7"}, {"pages": "1", "perDay": "1"}],
+        intro="Вера хочет прочитать книгу из `pages` страниц, читая по `perDay` страниц в день. В последний день "
+              "может остаться меньше страниц. Составь ей план по дням.",
+        steps=["Посчитай число дней: `pages / perDay`, и если `pages` делится на `perDay` с остатком, прибавь ещё 1 день.",
+               "Перебери циклом `for` номера дней от 1 до этого числа включительно.",
+               "Для каждого дня посчитай первую страницу (номер дня минус 1, умноженный на `perDay`, плюс 1) и последнюю "
+               "(номер дня, умноженный на `perDay`, но не больше `pages`). Выведи `Day …: pages …-…`, например `Day 2: pages 21-40`.",
+               "После цикла выведи `Finished in … days`."],
+        hint="Остаток от деления даёт `%`: если `pages % perDay != 0`, нужен ещё один день. Последнюю страницу "
+             "поправь внутри цикла обычным `if`: если она получилась больше `pages`, сделай её равной `pages`.",
+        solution='int days = pages / perDay;\nif (pages % perDay != 0) {\n    days++;\n}\nfor (int day = 1; day <= days; day++) {\n'
+                 '    int from = (day - 1) * perDay + 1;\n    int to = day * perDay;\n    if (to > pages) {\n        to = pages;\n    }\n'
+                 '    System.out.println("Day " + day + ": pages " + from + "-" + to);\n}\nSystem.out.println("Finished in " + days + " days");',
+        wrong=[("не добавляет день для остатка страниц: конец книги не попадает в план",
+                'int days = pages / perDay;\nfor (int day = 1; day <= days; day++) {\n'
+                '    int from = (day - 1) * perDay + 1;\n    int to = day * perDay;\n    if (to > pages) {\n        to = pages;\n    }\n'
+                '    System.out.println("Day " + day + ": pages " + from + "-" + to);\n}\nSystem.out.println("Finished in " + days + " days");'),
+               ("не ограничивает последний день: план заканчивается на странице, которой нет",
+                'int days = pages / perDay;\nif (pages % perDay != 0) {\n    days++;\n}\nfor (int day = 1; day <= days; day++) {\n'
+                '    int from = (day - 1) * perDay + 1;\n    int to = day * perDay;\n'
+                '    System.out.println("Day " + day + ": pages " + from + "-" + to);\n}\nSystem.out.println("Finished in " + days + " days");')],
+        constructs=["for", "if"],
+    ),
 ]

@@ -79,4 +79,80 @@ TASKS = [
                 "def delivery_cost(weight, distance=10, express=False):\n    cost = weight * {per_kg} + 10 * {per_km}\n"
                 "    if express:\n        cost = cost * 2\n    return cost\n")],
     ),
+    FunctionTask(
+        skill=SKILL, difficulty=1, slug="py-par-split-bill", title="Делим счёт в кафе",
+        function="split_bill",
+        variants=[{"tip": 50}, {"tip": 30}, {"tip": 100}],
+        intro="Друзья поужинали в кафе и делят счёт поровну. Кроме своей доли, каждый оставляет официанту "
+              "{tip} руб. чаевых. Нужна функция, которая считает, сколько платит один человек.",
+        steps=["Допиши функцию `split_bill(total, people)`: `total` — сумма счёта в рублях, `people` — сколько человек "
+               "делят счёт.",
+               "Верни целым числом, сколько платит один человек: `total`, делённое нацело на `people`, плюс {tip} руб. чаевых.",
+               "Функцию вызывают и с именованными аргументами, например `split_bill(people=3, total=900)`, "
+               "поэтому не меняй названия и порядок параметров."],
+        hint="При вызове с именами Python кладёт значение в параметр с таким же именем, в каком бы порядке их ни написали. "
+             "Чаевые прибавляются к доле каждого, а не к общему счёту: сначала раздели, потом прибавь.",
+        starter="def split_bill(total, people):\n    # Напиши решение здесь\n    pass\n",
+        solution="def split_bill(total, people):\n    return total // people + {tip}\n",
+        inputs=["1200, 4", "people=3, total=900", "500, 1", "total=2000, people=5", "1000, 3", "people=2, total=750"],
+        public=3,
+        wrong=[("переставил параметры местами: счёт и число людей путаются",
+                "def split_bill(people, total):\n    return total // people + {tip}\n"),
+               ("делит чаевые вместе со счётом — каждому достаётся только часть чаевых",
+                "def split_bill(total, people):\n    return (total + {tip}) // people\n")],
+    ),
+    FunctionTask(
+        skill=SKILL, difficulty=2, slug="py-par-cake-boxes", title="Коробки для пирожных",
+        function="boxes_needed",
+        variants=[{"size": 6}, {"size": 4}, {"size": 9}],
+        intro="Кондитерская упаковывает пирожные в коробки. Обычная коробка вмещает {size} штук, но для больших заказов "
+              "берут коробки другого размера — тогда размер передают в функцию отдельно.",
+        steps=["Допиши функцию `boxes_needed(cakes, size={size})`: `cakes` — сколько пирожных нужно упаковать, "
+               "`size` — сколько пирожных помещается в одну коробку. Значение по умолчанию {size} уже стоит в заготовке.",
+               "Сначала посчитай полные коробки: `cakes`, делённое нацело на `size`. Если после этого остались "
+               "пирожные (остаток от деления не 0), им нужна ещё одна неполная коробка.",
+               "Верни число коробок целым числом. Функцию вызывают и так: `boxes_needed(20)`, "
+               "и так: `boxes_needed(50, 8)` или `boxes_needed(50, size=8)`."],
+        hint="Внутри функции используй параметр `size`, а не число {size}: если размер передали при вызове, "
+             "в `size` окажется он. Остаток от деления даёт `%`.",
+        starter="def boxes_needed(cakes, size={size}):\n    # Напиши решение здесь\n    pass\n",
+        solution="def boxes_needed(cakes, size={size}):\n    boxes = cakes // size\n    if cakes % size != 0:\n"
+                 "        boxes += 1\n    return boxes\n",
+        inputs=["20", "50, 8", "cakes=36", "7, size=7", "size=10, cakes=45", "0", "1"],
+        public=3,
+        wrong=[("использует число из условия вместо параметра size — переданный размер не учитывается",
+                "def boxes_needed(cakes, size={size}):\n    boxes = cakes // {size}\n    if cakes % {size} != 0:\n"
+                "        boxes += 1\n    return boxes\n"),
+               ("забывает про неполную коробку для оставшихся пирожных",
+                "def boxes_needed(cakes, size={size}):\n    return cakes // size\n")],
+    ),
+    FunctionTask(
+        skill=SKILL, difficulty=3, slug="py-par-letter-greeting", title="Обращение в письме",
+        function="greeting",
+        variants=[{"word": "Dear"}, {"word": "Hello"}, {"word": "Hi"}],
+        intro="Школа рассылает родителям письма, и каждое начинается с обращения. Чаще всего пишут `{word}` и полное имя, "
+              "но иногда нужно другое приветствие или короткая форма с первой буквой имени.",
+        steps=["Допиши функцию `greeting(name, surname, word=\"{word}\", short=False)`: `name` — имя, `surname` — фамилия, "
+               "`word` — слово приветствия (по умолчанию `{word}`), `short` — нужна ли короткая форма (по умолчанию нет).",
+               "Обычно функция возвращает приветствие, пробел, имя, пробел и фамилию, например `{word} Anna Petrova`.",
+               "Если `short` равно `True`, вместо имени ставится его первая буква с точкой: `{word} A. Petrova`.",
+               "Функцию вызывают по-разному, например `greeting(\"Gleb\", \"Lebedev\", short=True)` "
+               "или `greeting(surname=\"Kim\", name=\"Egor\", word=\"Hey\")`."],
+        hint="Первая буква строки — `name[0]`. Удобно сначала положить в переменную то, что будет на месте имени "
+             "(всё имя или букву с точкой), а потом собрать строку через f-строку. Используй параметр `word`, "
+             "а не слово `{word}` в кавычках — иначе переданное приветствие потеряется.",
+        starter="def greeting(name, surname, word=\"{word}\", short=False):\n    # Напиши решение здесь\n    pass\n",
+        solution="def greeting(name, surname, word=\"{word}\", short=False):\n    if short:\n        first = name[0] + \".\"\n"
+                 "    else:\n        first = name\n    return f\"{{word}} {{first}} {{surname}}\"\n",
+        inputs=['"Anna", "Petrova"', '"Boris", "Ivanov", short=True', '"Vika", "Orlova", "Good day"',
+                'surname="Kim", name="Egor", word="Hey"', '"Dina", "Sokolova", short=True, word="Miss"',
+                '"Timur", "Belov", "Mr", True'],
+        public=3,
+        wrong=[("всегда пишет приветствие по умолчанию — переданное слово не учитывается",
+                "def greeting(name, surname, word=\"{word}\", short=False):\n    if short:\n        first = name[0] + \".\"\n"
+                "    else:\n        first = name\n    return \"{word} \" + first + \" \" + surname\n"),
+               ("в короткой форме забывает точку после буквы",
+                "def greeting(name, surname, word=\"{word}\", short=False):\n    if short:\n        first = name[0]\n"
+                "    else:\n        first = name\n    return f\"{{word}} {{first}} {{surname}}\"\n")],
+    ),
 ]

@@ -124,4 +124,122 @@ TASKS = [
         must_use=[NEED_CLASS, NEED_INIT,
                   ("re:def days_to_read\\(\\s*self", "Посчитай дни в методе days_to_read(self, per_day) внутри класса Book.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-class-train-ticket", title="Билет на поезд",
+        given=["train", "origin", "destination"],
+        variants=[{"train": "102", "origin": '"Kazan"', "destination": '"Moscow"'},
+                  {"train": "35", "origin": '"Sochi"', "destination": '"Rostov"'},
+                  {"train": "418", "origin": '"Perm"', "destination": '"Ufa"'}],
+        hidden=[{"train": "7", "origin": '"Tula"', "destination": '"Oryol"'},
+                {"train": "250", "origin": '"Omsk"', "destination": '"Tomsk"'},
+                {"train": "64", "origin": '"Samara"', "destination": '"Saratov"'}],
+        intro="На вокзале печатают билеты на поезда. В каждом билете есть номер поезда, станция отправления и станция "
+              "прибытия. Все билеты устроены одинаково, поэтому билет удобно описать классом и создавать по нему объекты.",
+        steps=["Создай класс `Ticket`. В его методе `__init__(self, train, origin, destination)` сохрани параметры "
+               "в атрибуты объекта: `self.train`, `self.origin` и `self.destination`.",
+               "Создай по классу объект из переменных заготовки: `ticket = Ticket(train, origin, destination)`.",
+               "Выведи две строки: `Train: …` с атрибутом `ticket.train` и `Route: … - …` — сначала `ticket.origin`, "
+               "потом пробел, дефис, пробел и `ticket.destination`. Например, `Route: Kazan - Moscow`."],
+        hint="Внутри `__init__` строка `self.origin = origin` кладёт значение параметра в сам объект. "
+             "После создания объекта значения достаются через точку: `ticket.origin`. "
+             "Следи за порядком аргументов — он должен совпадать с порядком параметров в `__init__`.",
+        solution='class Ticket:\n    def __init__(self, train, origin, destination):\n        self.train = train\n'
+                 '        self.origin = origin\n        self.destination = destination\n\n\n'
+                 'ticket = Ticket(train, origin, destination)\nprint(f"Train: {ticket.train}")\n'
+                 'print(f"Route: {ticket.origin} - {ticket.destination}")',
+        wrong=[("перепутал станции при создании объекта — маршрут печатается задом наперёд",
+                'class Ticket:\n    def __init__(self, train, origin, destination):\n        self.train = train\n'
+                '        self.origin = origin\n        self.destination = destination\n\n\n'
+                'ticket = Ticket(train, destination, origin)\nprint(f"Train: {ticket.train}")\n'
+                'print(f"Route: {ticket.origin} - {ticket.destination}")'),
+               ("записал данные билета прямо в __init__ вместо параметров — билет всегда один и тот же",
+                'class Ticket:\n    def __init__(self):\n        self.train = 102\n'
+                '        self.origin = "Kazan"\n        self.destination = "Moscow"\n\n\n'
+                'ticket = Ticket()\nprint(f"Train: {ticket.train}")\n'
+                'print(f"Route: {ticket.origin} - {ticket.destination}")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_INIT],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-class-cafe-order", title="Заказ в кафе",
+        given=["price", "quantity", "paid"],
+        variants=[{"price": "80", "quantity": "5", "paid": "500"},
+                  {"price": "120", "quantity": "3", "paid": "400"},
+                  {"price": "65", "quantity": "6", "paid": "1000"}],
+        hidden=[{"price": "100", "quantity": "2", "paid": "200"},
+                {"price": "45", "quantity": "7", "paid": "500"},
+                {"price": "250", "quantity": "1", "paid": "300"}],
+        intro="В кафе покупатель берёт несколько одинаковых пирожков. Цена одного пирожка — `price` рублей, "
+              "количество — `quantity`, а `paid` — сколько денег покупатель дал кассиру. "
+              "Нужно посчитать сумму заказа и сдачу.",
+        steps=["Создай класс `Order`. В методе `__init__(self, price, quantity)` сохрани цену и количество в атрибуты "
+               "`self.price` и `self.quantity`.",
+               "Добавь классу метод `total(self)`, который возвращает сумму заказа: цену, умноженную на количество. "
+               "Внутри метода бери данные из атрибутов объекта — через `self.`.",
+               "Создай объект `order = Order(price, quantity)` и выведи строку вида `Order total: 400 rub`, "
+               "получив сумму вызовом `order.total()`.",
+               "Ниже выведи строку вида `Change: 100 rub` — сдачу: `paid` минус сумма заказа."],
+        hint="Метод — это функция внутри класса, и первым параметром у неё идёт `self` — сам объект. "
+             "Поэтому в методе цена доступна как `self.price`. Сдача — это то, что дали, минус то, что стоит заказ, "
+             "а не наоборот.",
+        solution='class Order:\n    def __init__(self, price, quantity):\n        self.price = price\n        self.quantity = quantity\n\n'
+                 '    def total(self):\n        return self.price * self.quantity\n\n\norder = Order(price, quantity)\n'
+                 'print(f"Order total: {order.total()} rub")\nprint(f"Change: {paid - order.total()} rub")',
+        wrong=[("в методе складывает цену и количество вместо умножения",
+                'class Order:\n    def __init__(self, price, quantity):\n        self.price = price\n        self.quantity = quantity\n\n'
+                '    def total(self):\n        return self.price + self.quantity\n\n\norder = Order(price, quantity)\n'
+                'print(f"Order total: {order.total()} rub")\nprint(f"Change: {paid - order.total()} rub")'),
+               ("считает сдачу наоборот — из суммы заказа вычитает деньги покупателя",
+                'class Order:\n    def __init__(self, price, quantity):\n        self.price = price\n        self.quantity = quantity\n\n'
+                '    def total(self):\n        return self.price * self.quantity\n\n\norder = Order(price, quantity)\n'
+                'print(f"Order total: {order.total()} rub")\nprint(f"Change: {order.total() - paid} rub")')],
+        constructs=["class"],
+        must_use=[NEED_CLASS, NEED_INIT,
+                  ("re:def total\\(\\s*self", "Посчитай сумму заказа в методе total(self) внутри класса Order.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-class-phone-minutes", title="Минуты сверх тарифа",
+        given=["owner", "minutes", "limit", "price"],
+        variants=[{"owner": '"Anya"', "minutes": "420", "limit": "400", "price": "3"},
+                  {"owner": '"Boris"', "minutes": "150", "limit": "300", "price": "2"},
+                  {"owner": '"Vika"', "minutes": "655", "limit": "500", "price": "4"}],
+        hidden=[{"owner": '"Gleb"', "minutes": "300", "limit": "300", "price": "5"},
+                {"owner": '"Dasha"', "minutes": "301", "limit": "300", "price": "5"},
+                {"owner": '"Egor"', "minutes": "0", "limit": "200", "price": "3"},
+                {"owner": '"Zhenya"', "minutes": "1000", "limit": "600", "price": "2"}],
+        intro="Мобильный оператор считает, сколько абонент должен доплатить за месяц. В тариф входит `limit` минут "
+              "разговоров. Если абонент `owner` проговорил `minutes` минут и это больше, чем входит в тариф, "
+              "каждая лишняя минута стоит `price` рублей. Если не больше — доплачивать ничего не нужно.",
+        steps=["Создай класс `Phone`. В методе `__init__(self, owner, minutes)` сохрани имя абонента и число минут "
+               "в атрибуты `self.owner` и `self.minutes`.",
+               "Добавь метод `extra_cost(self, limit, price)`, который возвращает доплату. Если `self.minutes` больше "
+               "`limit`, доплата — число лишних минут (`self.minutes - limit`), умноженное на `price`. Иначе метод "
+               "возвращает 0.",
+               "Создай объект `phone = Phone(owner, minutes)`.",
+               "Выведи строку вида `Owner: Anya, 420 min` — с атрибутами `phone.owner` и `phone.minutes`, "
+               "а второй строкой — `Extra cost: …` с результатом `phone.extra_cost(limit, price)` и словом `rub` "
+               "через пробел, например `Extra cost: 60 rub`."],
+        hint="Платить нужно только за минуты сверх тарифа, а не за все: из 420 минут при тарифе на 400 "
+             "лишних всего 20. Если минут меньше лимита, разность получится отрицательной — поэтому сначала "
+             "проверь условие через `if`.",
+        solution='class Phone:\n    def __init__(self, owner, minutes):\n        self.owner = owner\n        self.minutes = minutes\n\n'
+                 '    def extra_cost(self, limit, price):\n        if self.minutes > limit:\n'
+                 '            return (self.minutes - limit) * price\n        return 0\n\n\n'
+                 'phone = Phone(owner, minutes)\nprint(f"Owner: {phone.owner}, {phone.minutes} min")\n'
+                 'print(f"Extra cost: {phone.extra_cost(limit, price)} rub")',
+        wrong=[("при превышении берёт плату за все минуты, а не только за лишние",
+                'class Phone:\n    def __init__(self, owner, minutes):\n        self.owner = owner\n        self.minutes = minutes\n\n'
+                '    def extra_cost(self, limit, price):\n        if self.minutes > limit:\n'
+                '            return self.minutes * price\n        return 0\n\n\n'
+                'phone = Phone(owner, minutes)\nprint(f"Owner: {phone.owner}, {phone.minutes} min")\n'
+                'print(f"Extra cost: {phone.extra_cost(limit, price)} rub")'),
+               ("не проверяет лимит — при малом числе минут доплата получается отрицательной",
+                'class Phone:\n    def __init__(self, owner, minutes):\n        self.owner = owner\n        self.minutes = minutes\n\n'
+                '    def extra_cost(self, limit, price):\n        return (self.minutes - limit) * price\n\n\n'
+                'phone = Phone(owner, minutes)\nprint(f"Owner: {phone.owner}, {phone.minutes} min")\n'
+                'print(f"Extra cost: {phone.extra_cost(limit, price)} rub")')],
+        constructs=["class", "if"],
+        must_use=[NEED_CLASS, NEED_INIT,
+                  ("re:def extra_cost\\(\\s*self", "Посчитай доплату в методе extra_cost(self, limit, price) внутри класса Phone.")],
+    ),
 ]

@@ -83,4 +83,78 @@ TASKS = [
                 '    System.out.println("Triangle: no");\n}')],
         constructs=["if"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-and-bakery-hours", title="Открыта ли пекарня",
+        given=[("int", "hour")],
+        variants=[{"hour": "14"}, {"hour": "7"}, {"hour": "21"}],
+        hidden=[{"hour": "8"}, {"hour": "9"}, {"hour": "20"}, {"hour": "22"}, {"hour": "0"}, {"hour": "12"}],
+        intro="Пекарня у дома работает с 8 утра до 9 вечера: покупателей обслуживают, если сейчас не раньше 8 часов "
+              "и не позже 20 часов. Который сейчас час (от 0 до 23), записано в поле `hour`.",
+        steps=["Если `hour` не меньше 8 **и** не больше 20, выведи `The bakery is open`.",
+               "Иначе выведи `Come back later`.",
+               "Запиши обе проверки в одном условии через `&&`."],
+        hint="Каждая часть условия с `&&` — отдельное полное сравнение с `hour`. В 8 и в 20 часов пекарня ещё работает.",
+        solution='if (hour >= 8 && hour <= 20) {\n    System.out.println("The bakery is open");\n} else {\n'
+                 '    System.out.println("Come back later");\n}',
+        wrong=[("строгие сравнения: в 8 и в 20 часов пекарня считается закрытой",
+                'if (hour > 8 && hour < 20) {\n    System.out.println("The bakery is open");\n} else {\n'
+                '    System.out.println("Come back later");\n}'),
+               ("проверяет только начало работы: поздно вечером тоже пишет, что открыто",
+                'if (hour >= 8) {\n    System.out.println("The bakery is open");\n} else {\n'
+                '    System.out.println("Come back later");\n}')],
+        constructs=["if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-and-card-discount", title="Скидка по карте",
+        given=[("boolean", "hasCard"), ("int", "total")],
+        variants=[{"hasCard": "true", "total": "1800"}, {"hasCard": "false", "total": "2500"},
+                  {"hasCard": "true", "total": "600"}],
+        hidden=[{"hasCard": "true", "total": "1000"}, {"hasCard": "true", "total": "990"},
+                {"hasCard": "false", "total": "1000"}, {"hasCard": "true", "total": "4500"},
+                {"hasCard": "false", "total": "300"}],
+        intro="В книжном магазине скидка 10 процентов положена тем, у кого есть карта покупателя и покупка на 1000 руб. или больше. "
+              "Есть ли у покупателя карта, записано в поле `hasCard` (`true` или `false`), сумма покупки в рублях — в поле `total`.",
+        steps=["Если карта есть **и** `total` не меньше 1000, скидка равна `total / 10`, иначе скидка 0. Объедини обе проверки в одном условии через `&&`.",
+               "Выведи две строки: `Discount: … rub` и `To pay: … rub` (сумма покупки минус скидка)."],
+        hint="Переменная типа `boolean` сама является условием: `hasCard && …`. Заведи переменную для скидки до `if`, "
+             "а в ветках только присвой ей значение. Покупка ровно на 1000 руб. уже со скидкой.",
+        solution='int discount;\nif (hasCard && total >= 1000) {\n    discount = total / 10;\n} else {\n    discount = 0;\n}\n'
+                 'System.out.println("Discount: " + discount + " rub");\nSystem.out.println("To pay: " + (total - discount) + " rub");',
+        wrong=[("|| вместо &&: скидка даже без карты или на маленькую покупку",
+                'int discount;\nif (hasCard || total >= 1000) {\n    discount = total / 10;\n} else {\n    discount = 0;\n}\n'
+                'System.out.println("Discount: " + discount + " rub");\nSystem.out.println("To pay: " + (total - discount) + " rub");'),
+               ("строгое > 1000: покупка ровно на 1000 руб. остаётся без скидки",
+                'int discount;\nif (hasCard && total > 1000) {\n    discount = total / 10;\n} else {\n    discount = 0;\n}\n'
+                'System.out.println("Discount: " + discount + " rub");\nSystem.out.println("To pay: " + (total - discount) + " rub");')],
+        constructs=["if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-and-cabin-bag", title="Ручная кладь в самолёт",
+        given=[("int", "length"), ("int", "width"), ("int", "depth")],
+        variants=[{"length": "50", "width": "35", "depth": "20"}, {"length": "60", "width": "40", "depth": "20"},
+                  {"length": "55", "width": "30", "depth": "25"}],
+        hidden=[{"length": "55", "width": "40", "depth": "20"}, {"length": "56", "width": "30", "depth": "15"},
+                {"length": "40", "width": "41", "depth": "15"}, {"length": "40", "width": "30", "depth": "21"},
+                {"length": "30", "width": "20", "depth": "10"}, {"length": "45", "width": "40", "depth": "20"}],
+        intro="В салон самолёта можно взять сумку не больше 55 × 40 × 20 см. Размеры сумки Ани записаны в полях "
+              "`length`, `width` и `depth` (в сантиметрах).",
+        steps=["Составь одно условие из трёх сравнений, соединённых `&&`: `length` не больше 55, `width` не больше 40 "
+               "и `depth` не больше 20.",
+               "Если условие верно, выведи `Cabin bag: OK`, а следующей строкой — `Volume: … l`: объём сумки в литрах, "
+               "то есть произведение трёх размеров, делённое на 1000 нацело.",
+               "Иначе выведи одну строку `Cabin bag: too big`."],
+        hint="Сумка ровно 55 × 40 × 20 см ещё проходит, поэтому нужны `<=`. Длинное условие можно перенести на новую строку сразу после `&&`.",
+        solution='if (length <= 55 && width <= 40 && depth <= 20) {\n    System.out.println("Cabin bag: OK");\n'
+                 '    System.out.println("Volume: " + length * width * depth / 1000 + " l");\n} else {\n'
+                 '    System.out.println("Cabin bag: too big");\n}',
+        wrong=[("проверяет только длину и ширину, забывает про глубину",
+                'if (length <= 55 && width <= 40) {\n    System.out.println("Cabin bag: OK");\n'
+                '    System.out.println("Volume: " + length * width * depth / 1000 + " l");\n} else {\n'
+                '    System.out.println("Cabin bag: too big");\n}'),
+               ("строгие сравнения: сумка ровно по размерам считается слишком большой",
+                'if (length < 55 && width < 40 && depth < 20) {\n    System.out.println("Cabin bag: OK");\n'
+                '    System.out.println("Volume: " + length * width * depth / 1000 + " l");\n} else {\n'
+                '    System.out.println("Cabin bag: too big");\n}')],
+        constructs=["if"],
+    ),
 ]

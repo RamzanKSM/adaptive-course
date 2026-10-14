@@ -163,6 +163,107 @@ WALLET_BEHAVIOUR = '''{ Constructor<?> k = c.getDeclaredConstructor(String.class
   need(Objects.equals(r2, false) && Objects.equals(fm.get(a), 70) && Objects.equals(fm.get(b), 80), "Метод sendTo должен проверять, хватает ли денег у отправителя — у this, а не у other, и при нехватке возвращать false"); }
 '''
 
+# ───────── Thermos ─────────
+
+THERMOS = '''class Thermos {
+    String color;
+    int volume;
+
+    Thermos(String color, int volume) {
+        this.color = color;
+        this.volume = volume;
+    }
+
+    int cups() {
+        return this.volume / 250;
+    }
+}'''
+
+THERMOS_MAIN = '''Thermos thermos = new Thermos(color, volume);
+System.out.println("Thermos: " + thermos.color);
+System.out.println("Volume: " + thermos.volume + " ml");
+System.out.println("Cups: " + thermos.cups());'''
+
+# ───────── Odometer ─────────
+
+CAR = '''class Car {
+    String number;
+    int mileage;
+
+    Car(String number, int mileage) {
+        this.number = number;
+        this.mileage = mileage;
+    }
+
+    boolean update(int mileage) {
+        if (mileage > this.mileage) {
+            this.mileage = mileage;
+            return true;
+        }
+        return false;
+    }
+}'''
+
+CAR_MAIN = '''Car car = new Car(number, start);
+for (int i = 0; i < readings.length; i++) {
+    if (car.update(readings[i])) {
+        System.out.println(readings[i] + ": ok");
+    } else {
+        System.out.println(readings[i] + ": rejected");
+    }
+}
+System.out.println("Car " + car.number + ", mileage: " + car.mileage + " km");'''
+
+CAR_BEHAVIOUR = '''{ Constructor<?> k = c.getDeclaredConstructor(String.class, int.class); k.setAccessible(true);
+  Object o = null; try { o = k.newInstance("T1", 100); } catch (Exception e) { }
+  Field fm = c.getDeclaredField("mileage"); fm.setAccessible(true);
+  need(o != null && Objects.equals(fm.get(o), 100), "Конструктор Car должен записать параметры в поля объекта: this.number = number; и this.mileage = mileage;");
+  Method up = c.getDeclaredMethod("update", int.class); up.setAccessible(true);
+  Object r1 = null, r2 = null; try { r1 = up.invoke(o, 150); r2 = up.invoke(o, 120); } catch (Exception e) { }
+  need(Objects.equals(r1, true) && Objects.equals(r2, false) && Objects.equals(fm.get(o), 150), "Метод update(int mileage) должен сравнивать параметр mileage с полем this.mileage и менять поле, только если новое число больше"); }
+'''
+
+# ───────── Football ─────────
+
+TEAM = '''class Team {
+    String name;
+    int points;
+
+    Team(String name) {
+        this.name = name;
+    }
+
+    void playWith(Team other, int goals, int otherGoals) {
+        if (goals > otherGoals) {
+            this.points += 3;
+        } else if (goals < otherGoals) {
+            other.points += 3;
+        } else {
+            this.points += 1;
+            other.points += 1;
+        }
+    }
+}'''
+
+TEAM_MAIN = '''Team first = new Team(team1);
+Team second = new Team(team2);
+for (int i = 0; i < goals1.length; i++) {
+    first.playWith(second, goals1[i], goals2[i]);
+    System.out.println(first.name + " " + goals1[i] + ":" + goals2[i] + " " + second.name);
+}
+System.out.println(first.name + ": " + first.points + " points");
+System.out.println(second.name + ": " + second.points + " points");'''
+
+TEAM_BEHAVIOUR = '''{ Constructor<?> k = c.getDeclaredConstructor(String.class); k.setAccessible(true);
+  Method play = c.getDeclaredMethod("playWith", c, int.class, int.class); play.setAccessible(true);
+  Field fp = c.getDeclaredField("points"); fp.setAccessible(true);
+  Object a = null, b = null;
+  try { a = k.newInstance("A"); b = k.newInstance("B"); play.invoke(a, b, 2, 0); } catch (Exception e) { }
+  need(a != null && Objects.equals(fp.get(a), 3) && Objects.equals(fp.get(b), 0), "За победу метод playWith должен прибавлять 3 очка команде this — той, у которой вызвали метод");
+  try { play.invoke(a, b, 1, 4); play.invoke(a, b, 2, 2); } catch (Exception e) { }
+  need(Objects.equals(fp.get(a), 4) && Objects.equals(fp.get(b), 4), "При поражении 3 очка получает other, а при ничьей обе команды получают по 1 очку"); }
+'''
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-this-game-profile", title="Профиль игрока",
@@ -276,5 +377,109 @@ TASKS = [
                             "Конструктор Wallet должен записать параметры в поля объекта: this.owner = owner; и this.money = money;")
                + need_method("Wallet", "boolean", "sendTo", ["Wallet other", "int amount"], "он переводит деньги из этого кошелька в кошелёк other")
                + WALLET_BEHAVIOUR,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-this-thermos-cups", title="Термос в поход",
+        given=[("String", "color"), ("int", "volume")],
+        variants=[{"color": '"red"', "volume": "750"}, {"color": '"green"', "volume": "1000"}, {"color": '"black"', "volume": "500"}],
+        hidden=[{"color": '"blue"', "volume": "1200"}, {"color": '"white"', "volume": "249"},
+                {"color": '"orange"', "volume": "1750"}],
+        intro="Ты собираешься в поход и выбираешь термос. В одну кружку помещается 250 мл чая, и хочется знать, на сколько "
+              "полных кружек хватит термоса. Цвет термоса записан в поле `color`, объём в миллилитрах — в поле `volume`.",
+        steps=["Ниже класса `Solution` создай класс `Thermos` (без `public`) с полями `String color` и `int volume`.",
+               "Добавь конструктор `Thermos(String color, int volume)` — параметры называются так же, как поля. Запиши их "
+               "в поля через `this`: `this.color = color;` и так же для объёма.",
+               "Добавь метод `int cups()`, который возвращает, сколько полных кружек по 250 мл даёт термос (дробную часть отбрось).",
+               "В `main` создай термос `new Thermos(color, volume)` и выведи три строки вида `Thermos: red`, `Volume: 750 ml` "
+               "и `Cups: 3` — с полями объекта и результатом `cups()`."],
+        hint="Когда параметр называется так же, как поле, имя без точки означает параметр. Чтобы попасть в поле объекта, "
+             "пиши `this.` перед именем, иначе параметр просто присвоится сам себе.",
+        solution=THERMOS_MAIN,
+        classes=THERMOS,
+        wrong=[("в конструкторе забыл this у обоих полей — поля остаются пустыми",
+                THERMOS_MAIN, THERMOS.replace("this.color = color;", "color = color;").replace("this.volume = volume;", "volume = volume;")),
+               ("this только у цвета, а объём присваивается сам себе — объём 0 и кружек 0",
+                THERMOS_MAIN, THERMOS.replace("this.volume = volume;", "volume = volume;"))],
+        constructs=["class"],
+        checks=find_class("Thermos")
+               + need_field("Thermos", "color", "String", "цвет термоса")
+               + need_field("Thermos", "volume", "int", "объём в миллилитрах")
+               + need_constructor("Thermos", ["String color", "int volume"], "он заполняет поля, когда создаётся объект")
+               + need_built("Thermos", ["String color", "int volume"], '"Test", 600', {"color": '"Test"', "volume": "600"},
+                            "Конструктор Thermos должен записать параметры в поля объекта: this.color = color; и this.volume = volume;")
+               + need_method("Thermos", "int", "cups", [], "он возвращает число полных кружек"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-this-car-odometer", title="Пробег машины",
+        given=[("String", "number"), ("int", "start"), ("int[]", "readings")],
+        variants=[{"number": '"A123BC"', "start": "15000", "readings": "{15200, 15100, 15600}"},
+                  {"number": '"K777OK"', "start": "8000", "readings": "{8000, 8450, 9100, 9050}"},
+                  {"number": '"M505TX"', "start": "42000", "readings": "{41000, 43500}"}],
+        hidden=[{"number": '"B001AA"', "start": "100", "readings": "{}"},
+                {"number": '"E555KX"', "start": "5000", "readings": "{5001}"},
+                {"number": '"H321PP"', "start": "70000", "readings": "{69999, 70000, 10, 70100, 70050}"},
+                {"number": '"T900OO"', "start": "0", "readings": "{300, 900, 1500}"}],
+        intro="В автопарке механик каждый раз записывает показания одометра машины. Пробег не может уменьшаться, поэтому "
+              "показание меньше текущего или равное ему — ошибка, его не принимают. Номер машины записан в поле `number`, "
+              "начальный пробег — в поле `start`, новые показания по порядку — в массиве `readings`.",
+        steps=["Ниже класса `Solution` создай класс `Car` (без `public`) с полями `String number` и `int mileage` "
+               "и конструктором `Car(String number, int mileage)`, который записывает параметры в поля через `this`.",
+               "Добавь метод `boolean update(int mileage)`. Если новое показание `mileage` больше пробега машины `this.mileage`, "
+               "метод записывает его в поле и возвращает `true`, иначе ничего не меняет и возвращает `false`.",
+               "В `main` создай машину `new Car(number, start)` и для каждого показания из `readings` вызови `update`. "
+               "Выведи строку вида `15200: ok`, если показание приняли, и `15100: rejected`, если нет.",
+               "Последней строкой выведи `Car A123BC, mileage: 15600 km` — номер и пробег из полей объекта."],
+        hint="В `update` имя `mileage` без точки — это новое показание из параметра, а `this.mileage` — пробег, "
+             "который уже записан в машине. В условии сравни именно их.",
+        solution=CAR_MAIN,
+        classes=CAR,
+        wrong=[("в update забыл this при записи: `mileage = mileage;` — пробег машины не меняется",
+                CAR_MAIN, CAR.replace("            this.mileage = mileage;", "            mileage = mileage;")),
+               ("принимает показание, равное текущему пробегу (>= вместо >)",
+                CAR_MAIN, CAR.replace("mileage > this.mileage", "mileage >= this.mileage"))],
+        constructs=["class"],
+        checks=find_class("Car")
+               + need_field("Car", "number", "String", "номер машины")
+               + need_field("Car", "mileage", "int", "пробег в километрах")
+               + need_constructor("Car", ["String number", "int mileage"], "он заполняет поля, когда создаётся объект")
+               + need_method("Car", "boolean", "update", ["int mileage"], "он принимает новое показание одометра")
+               + CAR_BEHAVIOUR,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-this-football-points", title="Очки в футбольной серии",
+        given=[("String", "team1"), ("String", "team2"), ("int[]", "goals1"), ("int[]", "goals2")],
+        variants=[{"team1": '"Lions"', "team2": '"Tigers"', "goals1": "{2, 0, 1}", "goals2": "{1, 3, 1}"},
+                  {"team1": '"Comets"', "team2": '"Rockets"', "goals1": "{3, 2, 0, 4}", "goals2": "{3, 1, 0, 2}"},
+                  {"team1": '"Bears"', "team2": '"Wolves"', "goals1": "{0, 1}", "goals2": "{2, 5}"}],
+        hidden=[{"team1": '"Owls"', "team2": '"Foxes"', "goals1": "{}", "goals2": "{}"},
+                {"team1": '"Sharks"', "team2": '"Eagles"', "goals1": "{1}", "goals2": "{0}"},
+                {"team1": '"Hawks"', "team2": '"Bulls"', "goals1": "{2, 2, 0, 1, 3}", "goals2": "{2, 4, 0, 1, 0}"},
+                {"team1": '"Seals"', "team2": '"Crows"', "goals1": "{0, 0}", "goals2": "{1, 1}"}],
+        intro="Две школьные команды, `team1` и `team2`, играют серию футбольных матчей. Счёт матчей по порядку записан в "
+              "массивах: `goals1` — голы первой команды, `goals2` — второй. За победу команда получает 3 очка, за ничью "
+              "обе получают по 1 очку, за поражение — 0.",
+        steps=["Ниже класса `Solution` создай класс `Team` (без `public`) с полями `String name` и `int points` и "
+               "конструктором `Team(String name)`, который записывает имя через `this`. Очков у новой команды 0.",
+               "Добавь метод `void playWith(Team other, int goals, int otherGoals)`: команда, у которой вызвали метод, — "
+               "это `this`, она забила `goals`; соперник `other` забил `otherGoals`. Победителю прибавь 3 очка, "
+               "при ничьей — по 1 очко обеим командам.",
+               "В `main` создай команды `first` и `second`. Для каждого матча вызови `first.playWith(second, goals1[i], goals2[i])` "
+               "и выведи строку вида `Lions 2:1 Tigers`.",
+               "В конце выведи две строки вида `Lions: 4 points` — очки первой и второй команды."],
+        hint="Внутри `playWith` есть две команды: `this` — та, что стоит перед точкой в вызове, и `other` — та, что "
+             "передана в скобках. `this.points` и `other.points` — очки разных объектов.",
+        solution=TEAM_MAIN,
+        classes=TEAM,
+        wrong=[("при поражении прибавляет 3 очка не сопернику, а команде this",
+                TEAM_MAIN, TEAM.replace("            other.points += 3;", "            this.points += 3;")),
+               ("при ничьей даёт очко только команде this",
+                TEAM_MAIN, TEAM.replace("            this.points += 1;\n            other.points += 1;", "            this.points += 1;"))],
+        constructs=["class", "for"],
+        checks=find_class("Team")
+               + need_field("Team", "name", "String", "название команды")
+               + need_field("Team", "points", "int", "очки команды")
+               + need_constructor("Team", ["String name"], "он сохраняет название, когда создаётся объект")
+               + need_method("Team", "void", "playWith", ["Team other", "int goals", "int otherGoals"], "он начисляет очки за матч этой команде и сопернику")
+               + TEAM_BEHAVIOUR,
     ),
 ]

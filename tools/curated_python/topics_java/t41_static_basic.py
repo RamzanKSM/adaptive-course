@@ -137,6 +137,100 @@ for (int i = 0; i < exams.length; i++) {
 }
 System.out.println("Passed: " + passed);'''
 
+# ───────── Sleep ─────────
+
+SLEEP = '''class Sleep {
+    static int hours(int bedtime, int wakeUp) {
+        return (wakeUp - bedtime + 24) % 24;
+    }
+}'''
+
+SLEEP_MAIN = '''for (int i = 0; i < bedtimes.length; i++) {
+    System.out.println("Night " + (i + 1) + ": " + Sleep.hours(bedtimes[i], wakeUps[i]) + " h");
+}'''
+
+# ───────── Donations ─────────
+
+DONATION = '''class Donation {
+    static int total = 0;
+    static int count = 0;
+    String donor;
+    int amount;
+
+    Donation(String donor, int amount) {
+        this.donor = donor;
+        this.amount = amount;
+        total += amount;
+        count++;
+    }
+}'''
+
+DONATION_MAIN = '''for (int i = 0; i < donors.length; i++) {
+    Donation donation = new Donation(donors[i], amounts[i]);
+    System.out.println(donation.donor + " gave " + donation.amount + " rub, total " + Donation.total + " rub");
+}
+System.out.println("Donations: " + Donation.count + ", total: " + Donation.total + " rub");'''
+
+DONATION_OWN_TOTAL = '''int count = 0;
+int total = 0;
+for (int i = 0; i < donors.length; i++) {
+    Donation donation = new Donation(donors[i], amounts[i]);
+    System.out.println(donation.donor + " gave " + donation.amount + " rub, total " + donation.total + " rub");
+    count = Donation.count;
+    total = donation.total;
+}
+System.out.println("Donations: " + count + ", total: " + total + " rub");'''
+
+DONATION_BEHAVIOUR = '''{ setStatic("Donation", "total", 0); setStatic("Donation", "count", 0);
+  Constructor<?> k = c.getDeclaredConstructor(String.class, int.class); k.setAccessible(true);
+  try { k.newInstance("A", 100); k.newInstance("B", 50); } catch (Exception e) { }
+  Field ft = c.getDeclaredField("total"); ft.setAccessible(true);
+  Field fc = c.getDeclaredField("count"); fc.setAccessible(true);
+  need(Objects.equals(ft.get(null), 150) && Objects.equals(fc.get(null), 2),
+       "Конструктор Donation должен прибавлять сумму к общему полю total и увеличивать общий счётчик count на 1");
+  setStatic("Donation", "total", 0); setStatic("Donation", "count", 0); }
+'''
+
+# ───────── Dollar prices ─────────
+
+PRICE = '''class Price {
+    static int rate = 90;
+    String item;
+    int dollars;
+
+    Price(String item, int dollars) {
+        this.item = item;
+        this.dollars = dollars;
+    }
+
+    int rubles() {
+        return dollars * rate;
+    }
+
+    static void setRate(int newRate) {
+        if (newRate > 0) {
+            rate = newRate;
+        }
+    }
+}'''
+
+PRICE_MAIN = '''Price[] prices = new Price[items.length];
+for (int i = 0; i < items.length; i++) {
+    prices[i] = new Price(items[i], dollars[i]);
+}
+for (int round = 0; round < 2; round++) {
+    if (round == 1) {
+        Price.setRate(newRate);
+    }
+    System.out.println("Rate: " + Price.rate);
+    int total = 0;
+    for (int i = 0; i < prices.length; i++) {
+        System.out.println(prices[i].item + ": " + prices[i].dollars + " $ = " + prices[i].rubles() + " rub");
+        total += prices[i].rubles();
+    }
+    System.out.println("Total: " + total + " rub");
+}'''
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-static-fahrenheit", title="Градусы по Фаренгейту",
@@ -239,5 +333,114 @@ TASKS = [
                + need_constructor("Exam", ["String student", "int score"], "он заполняет поля, когда создаётся объект")
                + need_method("Exam", "boolean", "passed", [], "он сравнивает балл ученика с общим проходным баллом"),
         reset='setStatic("Exam", "passScore", 60);',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-static-sleep-hours", title="Сколько я спал",
+        given=[("int[]", "bedtimes"), ("int[]", "wakeUps")],
+        variants=[{"bedtimes": "{23, 22, 1}", "wakeUps": "{7, 6, 9}"},
+                  {"bedtimes": "{0, 21}", "wakeUps": "{8, 5}"},
+                  {"bedtimes": "{22, 23, 23, 2}", "wakeUps": "{7, 8, 6, 10}"}],
+        hidden=[{"bedtimes": "{20}", "wakeUps": "{4}"},
+                {"bedtimes": "{3, 23, 0}", "wakeUps": "{11, 23, 0}"},
+                {"bedtimes": "{12, 21}", "wakeUps": "{14, 9}"},
+                {"bedtimes": "{22, 22, 22, 22, 22}", "wakeUps": "{6, 7, 8, 5, 9}"}],
+        intro="Ты записываешь, во сколько лёг спать и во сколько проснулся, — целыми часами от 0 до 23. Посчитать, сколько "
+              "часов длился сон, — просто формула, для неё не нужен никакой объект. Такой метод делают статическим и вызывают "
+              "через имя класса. Время отхода ко сну по ночам записано в массиве `bedtimes`, время подъёма — в `wakeUps`.",
+        steps=["Ниже класса `Solution` создай класс `Sleep` (без `public`) со статическим методом "
+               "`static int hours(int bedtime, int wakeUp)`. Он возвращает `(wakeUp - bedtime + 24) % 24` — "
+               "так сон через полночь (с 23 до 7) тоже считается правильно: 8 часов.",
+               "В `main` не создавай объект `Sleep`: вызывай метод через имя класса — `Sleep.hours(...)`.",
+               "Для каждой ночи выведи строку вида `Night 1: 8 h` — номер ночи (с единицы) и сколько часов длился сон."],
+        hint="Если лёг в 23, а встал в 7, то `7 - 23` даёт -16. Прибавив 24, получаешь 8, а остаток от деления на 24 "
+             "нужен для ночей, когда лёг уже после полуночи: `9 - 1 + 24 = 32`, а спал ты 8 часов.",
+        solution=SLEEP_MAIN,
+        classes=SLEEP,
+        wrong=[("метод без static — пришлось создавать объект, хотя он не нужен",
+                SLEEP_MAIN.replace("Sleep.hours(", "new Sleep().hours("),
+                SLEEP.replace("    static int hours", "    int hours")),
+               ("забыл прибавить 24 — сон через полночь выходит отрицательным",
+                SLEEP_MAIN, SLEEP.replace("(wakeUp - bedtime + 24) % 24", "(wakeUp - bedtime) % 24"))],
+        constructs=["class"],
+        checks=find_class("Sleep")
+               + need_method("Sleep", "int", "hours", ["int bedtime", "int wakeUp"], "он считает, сколько часов длился сон", static=True),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-static-charity-total", title="Сбор на приют",
+        given=[("String[]", "donors"), ("int[]", "amounts")],
+        variants=[{"donors": '{"Anya", "Boris", "Vika"}', "amounts": "{100, 250, 50}"},
+                  {"donors": '{"Gleb", "Dina"}', "amounts": "{500, 300}"},
+                  {"donors": '{"Egor", "Zhanna", "Zakhar", "Ira"}', "amounts": "{70, 30, 200, 100}"}],
+        hidden=[{"donors": '{"Lena"}', "amounts": "{1000}"},
+                {"donors": "{}", "amounts": "{}"},
+                {"donors": '{"Mark", "Nina", "Oleg", "Polya", "Roma"}', "amounts": "{10, 20, 30, 40, 50}"}],
+        intro="Школа собирает деньги на корм для приюта. Каждое пожертвование — отдельный объект с именем и суммой, "
+              "а общая собранная сумма и число пожертвований — одни на всех, поэтому их хранят в статических полях. "
+              "Имена жертвователей записаны в массиве `donors`, суммы — в `amounts` под теми же номерами.",
+        steps=["Ниже класса `Solution` создай класс `Donation` (без `public`) с обычными полями `String donor` и `int amount` "
+               "и статическими полями `static int total = 0` и `static int count = 0`.",
+               "Добавь конструктор `Donation(String donor, int amount)`: он сохраняет имя и сумму, прибавляет сумму к `total` "
+               "и увеличивает `count` на 1.",
+               "В `main` для каждого жертвователя создай `new Donation(...)` и выведи строку вида "
+               "`Anya gave 100 rub, total 100 rub` — сумму этого объекта и общую сумму `Donation.total` после него.",
+               "Последней строкой выведи строку вида `Donations: 3, total: 400 rub` — значения статических полей через имя класса."],
+        hint="Статическое поле одно на весь класс: каждый новый объект прибавляет к тому же самому `total`, поэтому общая "
+             "сумма растёт от пожертвования к пожертвованию.",
+        solution=DONATION_MAIN,
+        classes=DONATION,
+        wrong=[("total — обычное поле: у каждого пожертвования свой «итог», равный его сумме",
+                DONATION_OWN_TOTAL, DONATION.replace("    static int total = 0;", "    int total = 0;")),
+               ("в конструкторе `total = amount;` — итог перезаписывается, а не накапливается",
+                DONATION_MAIN, DONATION.replace("        total += amount;", "        total = amount;"))],
+        constructs=["class"],
+        checks=find_class("Donation")
+               + need_field("Donation", "total", "int", "общая сумма всех пожертвований", static=True)
+               + need_field("Donation", "count", "int", "число всех пожертвований", static=True)
+               + need_field("Donation", "donor", "String", "имя жертвователя")
+               + need_field("Donation", "amount", "int", "сумма этого пожертвования")
+               + need_constructor("Donation", ["String donor", "int amount"], "он сохраняет пожертвование и пополняет общий итог")
+               + DONATION_BEHAVIOUR,
+        reset='setStatic("Donation", "total", 0);\nsetStatic("Donation", "count", 0);',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-static-dollar-rate", title="Цены в долларах",
+        given=[("String[]", "items"), ("int[]", "dollars"), ("int", "newRate")],
+        variants=[{"items": '{"Book", "Game"}', "dollars": "{20, 50}", "newRate": "95"},
+                  {"items": '{"Lamp", "Mouse", "Cable"}', "dollars": "{15, 10, 3}", "newRate": "0"},
+                  {"items": '{"Watch"}', "dollars": "{120}", "newRate": "88"}],
+        hidden=[{"items": '{"Pen", "Bag"}', "dollars": "{2, 40}", "newRate": "-5"},
+                {"items": '{"Phone", "Case", "Glass", "Charger"}', "dollars": "{300, 12, 8, 25}", "newRate": "100"},
+                {"items": '{"Kite"}', "dollars": "{9}", "newRate": "1"},
+                {"items": "{}", "dollars": "{}", "newRate": "92"}],
+        intro="Ты присматриваешь товары в иностранном магазине, где цены в долларах. Курс доллара один для всех товаров — "
+              "сначала 90 руб., но потом он меняется на `newRate`. Если новый курс не больше 0, это ошибка, и курс остаётся "
+              "прежним. Названия товаров записаны в массиве `items`, цены в долларах — в `dollars`.",
+        steps=["Ниже класса `Solution` создай класс `Price` (без `public`) со статическим полем `static int rate = 90`, "
+               "обычными полями `String item` и `int dollars` и конструктором `Price(String item, int dollars)`.",
+               "Добавь обычный метод `int rubles()` — цена в рублях по текущему курсу, и статический метод "
+               "`static void setRate(int newRate)`, который меняет курс, только если `newRate` больше 0.",
+               "В `main` создай массив объектов `Price` для всех товаров. Выведи строку вида `Rate: 90`, для каждого товара "
+               "строку вида `Book: 20 $ = 1800 rub` и строку вида `Total: 6300 rub` — сумму всех цен в рублях.",
+               "Вызови `Price.setRate(newRate)` и выведи те же строки ещё раз — для тех же объектов, новых не создавай."],
+        hint="Статический метод работает со статическими полями класса и вызывается через имя класса. Поменяв `rate` "
+             "один раз, ты меняешь его для всех объектов сразу: `rubles()` у каждого прочитает новый курс.",
+        solution=PRICE_MAIN,
+        classes=PRICE,
+        wrong=[("setRate не проверяет курс — курс 0 или отрицательный тоже записывается",
+                PRICE_MAIN, PRICE.replace("        if (newRate > 0) {\n            rate = newRate;\n        }", "        rate = newRate;")),
+               ("курс — обычное поле, и новый курс получил только первый товар",
+                PRICE_MAIN.replace("        Price.setRate(newRate);", "        if (newRate > 0 && prices.length > 0) {\n            prices[0].rate = newRate;\n        }")
+                          .replace('"Rate: " + Price.rate', '"Rate: " + (prices.length > 0 ? prices[0].rate : 90)'),
+                PRICE.replace("    static int rate = 90;", "    int rate = 90;")
+                     .replace("    static void setRate(int newRate) {\n        if (newRate > 0) {\n            rate = newRate;\n        }\n    }\n", ""))],
+        constructs=["class", "for"],
+        checks=find_class("Price")
+               + need_field("Price", "rate", "int", "курс доллара один для всех товаров", static=True)
+               + need_field("Price", "item", "String", "название товара")
+               + need_field("Price", "dollars", "int", "цена в долларах")
+               + need_constructor("Price", ["String item", "int dollars"], "он заполняет поля, когда создаётся объект")
+               + need_method("Price", "int", "rubles", [], "он считает цену в рублях по общему курсу")
+               + need_method("Price", "void", "setRate", ["int newRate"], "он меняет курс для всех товаров сразу", static=True),
+        reset='setStatic("Price", "rate", 90);',
     ),
 ]

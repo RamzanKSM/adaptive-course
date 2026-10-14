@@ -102,6 +102,91 @@ for weight in fragile:
 print(f"Total: {total} rub")
 """
 
+
+STAFF = """\
+class Employee:
+    def __init__(self, name, salary):
+        self.name = name
+        self.salary = salary
+
+    def year_salary(self):
+        return self.salary * 12
+
+
+class Worker(Employee):
+    pass
+
+
+class Chief(Employee):
+    def bonus(self):
+        return self.salary * 2
+
+
+worker = Worker(worker_name, worker_salary)
+chief = Chief(chief_name, chief_salary)
+print(f"{worker.name} earns {worker.year_salary()} rub a year")
+print(f"{chief.name} earns {chief.year_salary()} rub a year")
+print(f"{chief.name} gets a bonus of {chief.bonus()} rub")
+"""
+
+PLAYLIST = """\
+class Playlist:
+    def __init__(self, name):
+        self.name = name
+        self.songs = []
+
+    def add(self, song):
+        self.songs.append(song)
+
+    def show(self):
+        print(f"{self.name} ({len(self.songs)}): {', '.join(self.songs)}")
+
+
+class SmartPlaylist(Playlist):
+    def add_many(self, songs):
+        for song in songs:
+            if song not in self.songs:
+                self.add(song)
+
+
+playlist = SmartPlaylist(name)
+playlist.add_many(first)
+playlist.show()
+playlist.add_many(second)
+playlist.show()
+"""
+
+TRAINS = """\
+class Train:
+    def __init__(self, wagons):
+        self.wagons = wagons
+
+    def seats(self):
+        return self.wagons * 50
+
+
+class SleeperTrain(Train):
+    def beds(self):
+        return self.seats() - 20 * self.wagons
+
+
+number = 1
+total = 0
+for record in trains:
+    parts = record.split(":")
+    wagons = int(parts[1])
+    if parts[0] == "day":
+        train = Train(wagons)
+        print(f"Train {number}: {train.wagons} wagons, {train.seats()} seats")
+        total += train.seats()
+    else:
+        train = SleeperTrain(wagons)
+        print(f"Train {number}: {train.wagons} wagons, {train.beds()} beds")
+        total += train.beds()
+    number += 1
+print(f"Passengers: {total}")
+"""
+
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-inh-pet-food", title="Корм для питомцев",
@@ -204,6 +289,113 @@ TASKS = [
         must_use=[NEED_CLASS, child_of("FragileParcel", "Parcel"),
                   ("re:self\\.price\\(\\)",
                    "Внутри `safe_price` вызови унаследованный метод `self.price()`, а не считай цену доставки заново: "
+                   "так формула живёт в одном месте.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-inh-staff-salary", title="Зарплата сотрудников",
+        given=["worker_name", "worker_salary", "chief_name", "chief_salary"],
+        variants=[{"worker_name": '"Anya"', "worker_salary": "50000", "chief_name": '"Boris"', "chief_salary": "90000"},
+                  {"worker_name": '"Vika"', "worker_salary": "42000", "chief_name": '"Gleb"', "chief_salary": "75000"},
+                  {"worker_name": '"Dasha"', "worker_salary": "38000", "chief_name": '"Egor"', "chief_salary": "120000"}],
+        hidden=[{"worker_name": '"Zoya"', "worker_salary": "60000", "chief_name": '"Igor"', "chief_salary": "60000"},
+                {"worker_name": '"Katya"', "worker_salary": "30500", "chief_name": '"Lev"', "chief_salary": "81000"},
+                {"worker_name": '"Masha"', "worker_salary": "55000", "chief_name": '"Nikita"', "chief_salary": "100000"}],
+        intro="Бухгалтер небольшой фирмы считает годовые зарплаты. И рабочий, и начальник — сотрудники: у каждого "
+              "есть имя и зарплата за месяц, и годовую зарплату обоим считают одинаково. А вот премию в конце года "
+              "получает только начальник.",
+        steps=["Создай класс `Employee`. В `__init__(self, name, salary)` сохрани имя и месячную зарплату "
+               "в атрибуты `self.name` и `self.salary`.",
+               "Добавь в `Employee` метод `year_salary(self)`, который возвращает зарплату за год — за 12 месяцев.",
+               "Создай класс `Worker` — наследник `Employee`. Внутри напиши только `pass`.",
+               "Создай класс `Chief` — тоже наследник `Employee`. Добавь в него один новый метод `bonus(self)`: "
+               "премия равна двум месячным зарплатам.",
+               "Создай `worker = Worker(worker_name, worker_salary)` и `chief = Chief(chief_name, chief_salary)`. "
+               "Выведи три строки: годовую зарплату рабочего, годовую зарплату начальника и премию начальника — "
+               "в виде `Anya earns 600000 rub a year`, `Boris earns 1080000 rub a year` и `Boris gets a bonus of 180000 rub`."],
+        hint="Запись `class Chief(Employee):` значит «начальник — это сотрудник»: объект `Chief` получает `__init__` "
+             "и `year_salary` от `Employee`, хотя в самом `Chief` их нет. В наследнике пишут только новое — `bonus`.",
+        solution=STAFF,
+        wrong=[("создаёт начальника с зарплатой рабочего — скопировал строку и не поправил",
+                STAFF.replace("Chief(chief_name, chief_salary)", "Chief(chief_name, worker_salary)")),
+               ("считает премию как одну месячную зарплату",
+                STAFF.replace("return self.salary * 2", "return self.salary"))],
+        constructs=["class"],
+        must_use=[NEED_CLASS, child_of("Worker", "Employee"), child_of("Chief", "Employee"),
+                  written_once("year_salary", "Employee")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-inh-smart-playlist", title="Умный плейлист",
+        given=["name", "first", "second"],
+        variants=[{"name": '"Road"', "first": '["Sun", "Rain", "Wind"]', "second": '["Rain", "Snow"]'},
+                  {"name": '"Gym"', "first": '["Run", "Jump"]', "second": '["Swim", "Run", "Jump", "Lift"]'},
+                  {"name": '"Sleep"', "first": '["Moon", "Stars", "Moon"]', "second": '["Night"]'}],
+        hidden=[{"name": '"Party"', "first": '["Dance"]', "second": '["Dance"]'},
+                {"name": '"Study"', "first": '["Focus", "Calm"]', "second": '["Calm", "Calm", "Ocean", "Focus"]'},
+                {"name": '"Trip"', "first": '["Hills", "River", "Forest"]', "second": '["Sea", "Sky"]'}],
+        intro="В музыкальном приложении есть обычные плейлисты, куда песни добавляют по одной. Ты делаешь умный "
+              "плейлист: он умеет всё то же самое, но ещё может добавить сразу целый список песен и при этом пропускает "
+              "песни, которые в нём уже есть. Плейлист называется `name`; сначала в него добавляют список `first`, "
+              "потом — список `second`.",
+        steps=["Создай класс `Playlist`. В `__init__(self, name)` сохрани название в `self.name` и создай пустой "
+               "список `self.songs`.",
+               "Добавь в `Playlist` метод `add(self, song)`, который добавляет песню в конец списка, и метод `show(self)`, "
+               "который печатает строку вида `Road (3): Sun, Rain, Wind` — название, число песен в скобках и песни "
+               "через запятую и пробел.",
+               "Создай класс `SmartPlaylist` — наследник `Playlist`. Напиши в нём только один новый метод "
+               "`add_many(self, songs)`: он проходит по списку `songs` и каждую песню, которой ещё нет в `self.songs`, "
+               "добавляет через унаследованный метод `self.add(...)`.",
+               "Создай `playlist = SmartPlaylist(name)`. Вызови `add_many(first)` и `show()`, потом `add_many(second)` "
+               "и снова `show()`."],
+        hint="Проверить, есть ли песня в списке, можно так: `if song not in self.songs`. Добавлять песню внутри "
+             "`add_many` нужно через `self.add(song)` — метод родителя вызывается через `self`, как свой. "
+             "Песни в строку склеивает `\", \".join(self.songs)`.",
+        solution=PLAYLIST,
+        wrong=[("не проверяет повторы — одна и та же песня попадает в плейлист дважды",
+                PLAYLIST.replace("            if song not in self.songs:\n                self.add(song)",
+                                 "            self.add(song)")),
+               ("add_many заменяет весь список новым — старые песни пропадают",
+                PLAYLIST.replace("        for song in songs:\n            if song not in self.songs:\n                self.add(song)",
+                                 "        self.songs = []\n        for song in songs:\n            if song not in self.songs:\n"
+                                 "                self.add(song)"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, child_of("SmartPlaylist", "Playlist"), written_once("add", "Playlist"),
+                  ("re:self\\.add\\(",
+                   "Добавляй песни через унаследованный метод `self.add(...)`: наследник может вызывать "
+                   "методы родителя так же, как свои.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-inh-sleeper-train", title="Дневные и спальные поезда",
+        given=["trains"],
+        variants=[{"trains": '["day:10", "sleeper:8", "day:4"]'},
+                  {"trains": '["sleeper:12", "sleeper:5"]'},
+                  {"trains": '["day:7", "day:3", "sleeper:15", "day:1"]'}],
+        hidden=[{"trains": '["day:20"]'},
+                {"trains": '["sleeper:1"]'},
+                {"trains": '["sleeper:6", "day:6", "sleeper:2"]'}],
+        intro="Вокзал отправляет за день несколько поездов. В дневном поезде в каждом вагоне 50 сидячих мест. "
+              "Спальный поезд — тоже поезд, но в его вагонах полки вместо кресел, и в каждом вагоне на 20 мест меньше. "
+              "В списке `trains` по порядку записаны поезда: тип (`day` или `sleeper`), двоеточие и число вагонов.",
+        steps=["Создай класс `Train`. В `__init__(self, wagons)` сохрани число вагонов в `self.wagons`. "
+               "Добавь метод `seats(self)`, который возвращает число мест: по 50 на каждый вагон.",
+               "Создай класс `SleeperTrain` — наследник `Train`. Свой `__init__` ему не нужен. Добавь только новый метод "
+               "`beds(self)`: число мест из унаследованного `self.seats()` минус по 20 мест за каждый вагон.",
+               "Пройди по списку `trains`. Каждую запись раздели по двоеточию на тип и число вагонов "
+               "(не забудь превратить число в `int`).",
+               "Для дневного поезда создай `Train` и выведи строку вида `Train 1: 10 wagons, 500 seats`, "
+               "для спального — `SleeperTrain` и строку вида `Train 2: 8 wagons, 240 beds`. Поезда нумеруй по порядку с 1.",
+               "Последней строкой выведи `Passengers: …` — сколько всего пассажиров увезут все поезда, если все места "
+               "и полки будут заняты."],
+        hint="Внутри `beds` не считай места заново — вызови `self.seats()`: спальный поезд тоже поезд, и этот метод "
+             "у него уже есть от родителя. Разделить строку `\"day:10\"` по двоеточию можно методом `.split(\":\")`.",
+        solution=TRAINS,
+        wrong=[("вычитает 20 мест на весь поезд, а не на каждый вагон",
+                TRAINS.replace("return self.seats() - 20 * self.wagons", "return self.seats() - 20")),
+               ("добавляет в итог для спального поезда сидячие места, а не полки",
+                TRAINS.replace("        total += train.beds()", "        total += train.seats()"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, child_of("SleeperTrain", "Train"),
+                  ("re:self\\.seats\\(\\)",
+                   "Внутри `beds` вызови унаследованный метод `self.seats()`, а не считай места заново: "
                    "так формула живёт в одном месте.")],
     ),
 ]

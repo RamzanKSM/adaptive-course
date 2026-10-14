@@ -111,4 +111,115 @@ TASKS = [
                    "Случай, когда оценок нет, обработай вторым блоком `try` с `except ZeroDivisionError:` — "
                    "так ты потренируешься ловить и эту ошибку.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-try-age-field", title="Возраст из анкеты",
+        given=["age_text"],
+        variants=[{"age_text": '"14"'}, {"age_text": '"fourteen"'}, {"age_text": '"9"'}],
+        hidden=[{"age_text": '"12 years"'}, {"age_text": '"30"'}, {"age_text": '""'}, {"age_text": '"0"'}],
+        intro="На сайте кружка ребёнок вводит свой возраст в поле анкеты, и программа получает его строкой `age_text`. "
+              "Если ввести не число, `int()` вызывает ошибку `ValueError`, и программа останавливается. "
+              "Нужно, чтобы вместо этого она вежливо попросила ввести число.",
+        steps=["В блоке `try` преврати `age_text` в целое число и выведи строку вида `Next year you will be 15` — "
+               "возраст, увеличенный на 1.",
+               "Добавь блок `except ValueError:` и выведи в нём `Please type your age in digits`."],
+        hint="Если `int()` не смог превратить строку в число, Python сразу перейдёт в `except`, и печать внутри `try` "
+             "уже не выполнится. Поэтому печатай результат внутри `try`, сразу после превращения.",
+        solution='try:\n    age = int(age_text)\n    print(f"Next year you will be {age + 1}")\n'
+                 'except ValueError:\n    print("Please type your age in digits")',
+        wrong=[("забывает прибавить год — печатает текущий возраст",
+                'try:\n    age = int(age_text)\n    print(f"Next year you will be {age}")\n'
+                'except ValueError:\n    print("Please type your age in digits")'),
+               ("приклеивает 1 к строке вместо сложения чисел — из 14 получается 141",
+                'try:\n    age = int(age_text)\n    print(f"Next year you will be {age_text + \'1\'}")\n'
+                'except ValueError:\n    print("Please type your age in digits")')],
+        constructs=["try"],
+        must_use=[("re:except\\s+ValueError",
+                   "Перехвати именно ошибку превращения строки в число: напиши `except ValueError:`.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-try-bike-segments", title="Скорость на участках",
+        given=["segments"],
+        variants=[{"segments": "[(3, 15), (2, 0), (5, 20)]"},
+                  {"segments": "[(4, 12), (6, 30), (1, 0), (2, 0)]"},
+                  {"segments": "[(0, 0), (10, 40)]"}],
+        hidden=[{"segments": "[(6, 20)]"},
+                {"segments": "[(1, 0)]"},
+                {"segments": "[(9, 27), (0, 5), (3, 0), (8, 16)]"}],
+        intro="Велокомпьютер разбил поездку на участки. Каждый участок в списке `segments` — кортеж из длины в километрах "
+              "и времени в минутах. Иногда таймер сбоит и записывает 0 минут — тогда при делении на время "
+              "возникает `ZeroDivisionError`.",
+        steps=["Пройди по `segments` циклом с номером участка: номера начинаются с 1. Удобно так: "
+               "`for i in range(len(segments)):`, а участок — `segments[i]`.",
+               "Для каждого участка в блоке `try` посчитай скорость в км/ч нацело: `km * 60 // minutes` — и выведи "
+               "строку вида `Segment 1: 12 km/h`.",
+               "Если время равно нулю, перехвати `ZeroDivisionError` и выведи строку вида `Segment 2: timer error`.",
+               "После цикла выведи строку вида `Errors: 1` — сколько участков оказались со сбоем."],
+        hint="Поставь `try` внутрь цикла: тогда сбой на одном участке не помешает посчитать остальные. "
+             "Счётчик сбоев увеличивай в блоке `except`.",
+        solution='errors = 0\nfor i in range(len(segments)):\n    km, minutes = segments[i]\n    try:\n'
+                 '        print(f"Segment {i + 1}: {km * 60 // minutes} km/h")\n    except ZeroDivisionError:\n'
+                 '        print(f"Segment {i + 1}: timer error")\n        errors += 1\nprint(f"Errors: {errors}")',
+        wrong=[("try вокруг всего цикла — после первого сбоя остальные участки не считаются",
+                'errors = 0\ntry:\n    for i in range(len(segments)):\n        km, minutes = segments[i]\n'
+                '        print(f"Segment {i + 1}: {km * 60 // minutes} km/h")\nexcept ZeroDivisionError:\n'
+                '    print(f"Segment {i + 1}: timer error")\n    errors += 1\nprint(f"Errors: {errors}")'),
+               ("нумерует участки с нуля",
+                'errors = 0\nfor i in range(len(segments)):\n    km, minutes = segments[i]\n    try:\n'
+                '        print(f"Segment {i}: {km * 60 // minutes} km/h")\n    except ZeroDivisionError:\n'
+                '        print(f"Segment {i}: timer error")\n        errors += 1\nprint(f"Errors: {errors}")')],
+        constructs=["try", "for"],
+        must_use=[("re:except\\s+ZeroDivisionError",
+                   "Сбой таймера поймай именно как ошибку деления на ноль: `except ZeroDivisionError:`.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-try-ticket-sales", title="Продажа билетов",
+        given=["left", "requests"],
+        variants=[{"left": "10", "requests": '["3", "two", "8", "7"]'},
+                  {"left": "5", "requests": '["many", "6", "?"]'},
+                  {"left": "20", "requests": '["4", "4", "lots", "15", "5"]'}],
+        hidden=[{"left": "1", "requests": '["1"]'},
+                {"left": "3", "requests": '["x", "y"]'},
+                {"left": "12", "requests": '["2", "12", "3", "a", "7"]'},
+                {"left": "8", "requests": '["9", "8", "1"]'}],
+        intro="В кассе кинотеатра осталось `left` билетов на вечерний сеанс. Покупатели по очереди вводят в автомате, "
+              "сколько билетов им нужно, — запросы строками лежат в списке `requests`. Некоторые вводят не число.",
+        steps=["Заведи счётчики проданных билетов и удачных продаж, обоим присвой `0`. Пройди по `requests` и в блоке `try` "
+               "преврати запрос в целое число.",
+               "Если билетов хватает (запрошено не больше, чем осталось), продай их: уменьши `left`, увеличь оба счётчика "
+               "и выведи строку вида `3: sold, 7 left`. Иначе выведи строку вида `8: only 7 left` и ничего не продавай.",
+               "Если запрос не число, перехвати `ValueError` и выведи запрос и слова `not a number` — например, "
+               "`two: not a number`.",
+               "После цикла во втором блоке `try` выведи строку вида `Average sale: 5` — сколько билетов в среднем "
+               "покупали за одну удачную продажу, нацело через `//`. Если продаж не было, перехвати "
+               "`ZeroDivisionError` и выведи `No sales`."],
+        hint="Всё, что зависит от числа, ставь внутрь `try` после `int()`: если превращение не удалось, эти строки "
+             "не выполнятся. Последние билеты продать можно — запрос, равный остатку, удачный.",
+        solution='sold = 0\nsales = 0\nfor text in requests:\n    try:\n        wanted = int(text)\n'
+                 '        if wanted <= left:\n            left -= wanted\n            sold += wanted\n            sales += 1\n'
+                 '            print(f"{wanted}: sold, {left} left")\n        else:\n            print(f"{wanted}: only {left} left")\n'
+                 '    except ValueError:\n        print(f"{text}: not a number")\ntry:\n'
+                 '    print(f"Average sale: {sold // sales}")\nexcept ZeroDivisionError:\n    print("No sales")',
+        wrong=[("не продаёт последние билеты — запрос, равный остатку, отклоняется",
+                'sold = 0\nsales = 0\nfor text in requests:\n    try:\n        wanted = int(text)\n'
+                '        if wanted < left:\n            left -= wanted\n            sold += wanted\n            sales += 1\n'
+                '            print(f"{wanted}: sold, {left} left")\n        else:\n            print(f"{wanted}: only {left} left")\n'
+                '    except ValueError:\n        print(f"{text}: not a number")\ntry:\n'
+                '    print(f"Average sale: {sold // sales}")\nexcept ZeroDivisionError:\n    print("No sales")'),
+               ("try вокруг всего цикла — после первого неправильного запроса продажи прекращаются",
+                'sold = 0\nsales = 0\ntry:\n    for text in requests:\n        wanted = int(text)\n'
+                '        if wanted <= left:\n            left -= wanted\n            sold += wanted\n            sales += 1\n'
+                '            print(f"{wanted}: sold, {left} left")\n        else:\n            print(f"{wanted}: only {left} left")\n'
+                'except ValueError:\n    print(f"{text}: not a number")\ntry:\n'
+                '    print(f"Average sale: {sold // sales}")\nexcept ZeroDivisionError:\n    print("No sales")'),
+               ("считает удачной продажей и отказ — среднее занижено",
+                'sold = 0\nsales = 0\nfor text in requests:\n    try:\n        wanted = int(text)\n        sales += 1\n'
+                '        if wanted <= left:\n            left -= wanted\n            sold += wanted\n'
+                '            print(f"{wanted}: sold, {left} left")\n        else:\n            print(f"{wanted}: only {left} left")\n'
+                '    except ValueError:\n        print(f"{text}: not a number")\ntry:\n'
+                '    print(f"Average sale: {sold // sales}")\nexcept ZeroDivisionError:\n    print("No sales")')],
+        constructs=["try", "for"],
+        must_use=[("re:except\\s+ValueError", "Запрос, который не число, отсей, перехватив `except ValueError:`."),
+                  ("re:except\\s+ZeroDivisionError",
+                   "Случай без продаж обработай вторым блоком `try` с `except ZeroDivisionError:`.")],
+    ),
 ]

@@ -86,4 +86,77 @@ TASKS = [
         constructs=["function"],
         must_use=[NEED_DEF],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-fn-tile-area", title="Плитка для пола",
+        given=["side"],
+        variants=[{"side": "5"}, {"side": "3"}, {"side": "8"}],
+        hidden=[{"side": "1"}, {"side": "4"}, {"side": "12"}],
+        intro="Мастер кладёт плитку в квадратных комнатах и каждый раз считает площадь пола. "
+              "Длина стороны комнаты в метрах записана в переменной `side`.",
+        steps=["Создай функцию `show_area` с одним параметром `side`. Она печатает площадь квадратной комнаты "
+               "(сторона, умноженная на саму себя) в виде `Area: 16 sq m`",
+               "После функции вызови её один раз и передай ей переменную `side` из заготовки."],
+        hint="Запись `def` только описывает функцию — сама по себе она ничего не печатает. "
+             "Чтобы код внутри выполнился, функцию нужно вызвать: написать её имя и в скобках аргумент.",
+        solution='def show_area(side):\n    print(f"Area: {side * side} sq m")\n\n\nshow_area(side)',
+        wrong=[("забыл вызвать функцию — ничего не печатается",
+                'def show_area(side):\n    print(f"Area: {side * side} sq m")'),
+               ("считает периметр вместо площади",
+                'def show_area(side):\n    print(f"Area: {side * 4} sq m")\n\n\nshow_area(side)')],
+        constructs=["function"],
+        must_use=[NEED_DEF],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-fn-two-races", title="Старт двух заездов",
+        given=["first", "second"],
+        variants=[{"first": "3", "second": "5"}, {"first": "4", "second": "2"}, {"first": "5", "second": "3"}],
+        hidden=[{"first": "1", "second": "2"}, {"first": "6", "second": "1"}, {"first": "2", "second": "4"}],
+        intro="На картинге два заезда. Перед каждым судья ведёт обратный отсчёт, но с разного числа: "
+              "перед первым заездом — с `first`, перед вторым — с `second`. Отсчёт устроен одинаково, "
+              "поэтому его удобно описать один раз в функции.",
+        steps=["Создай функцию `countdown` с параметром `n`. Она печатает числа от `n` до 1 по убыванию, "
+               "каждое на отдельной строке, а потом строку `Go!`",
+               "Вызови функцию два раза: сначала с `first`, потом с `second`."],
+        hint="Внутри функции можно писать цикл, как в обычной программе: `range(n, 0, -1)` даёт числа от `n` до 1. "
+             "Следи за отступами: `print(\"Go!\")` должен быть внутри функции, но после цикла.",
+        solution='def countdown(n):\n    for i in range(n, 0, -1):\n        print(i)\n    print("Go!")\n\n\n'
+                 'countdown(first)\ncountdown(second)',
+        wrong=[("«Go!» внутри цикла — печатается после каждого числа",
+                'def countdown(n):\n    for i in range(n, 0, -1):\n        print(i)\n        print("Go!")\n\n\n'
+                'countdown(first)\ncountdown(second)'),
+               ("вызывает функцию только для первого заезда",
+                'def countdown(n):\n    for i in range(n, 0, -1):\n        print(i)\n    print("Go!")\n\n\n'
+                'countdown(first)')],
+        constructs=["function"],
+        must_use=[NEED_DEF],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-fn-movie-stars", title="Оценки фильмов звёздочками",
+        given=["titles", "stars"],
+        variants=[{"titles": '["Up", "Cars", "Coco"]', "stars": "[5, 3, 4]"},
+                  {"titles": '["Shrek", "Frozen", "Moana", "Soul"]', "stars": "[4, 2, 5, 3]"},
+                  {"titles": '["Bolt", "Rio"]', "stars": "[1, 4]"}],
+        hidden=[{"titles": '["Dumbo"]', "stars": "[0]"},
+                {"titles": '["Wall-E", "Brave", "Luca", "Onward", "Elio"]', "stars": "[5, 2, 3, 1, 4]"},
+                {"titles": '["Mulan", "Tarzan"]', "stars": "[3, 5]"}],
+        intro="Ты делаешь страничку с оценками мультфильмов. Названия записаны в список `titles`, а оценки от 0 до 5 — "
+              "в список `stars` в том же порядке: `stars[0]` — оценка фильма `titles[0]` и так далее.",
+        steps=["Создай функцию `show_rating` с двумя параметрами: `title` и `count`. Она печатает название, двоеточие, "
+               "пробел, затем `count` звёздочек `*` и точки `.` до пяти знаков. Например, `show_rating(\"Up\", 3)` "
+               "печатает `Up: ***..`",
+               "Пройди циклом `for` по всем индексам списка `titles` (от 0 до последнего) и вызови функцию для каждого фильма "
+               "с его названием и оценкой — каждую строку в том же порядке, что и в списке."],
+        hint="Строку можно умножить на число: `\"*\" * 3` даёт `\"***\"`. Точек нужно `5 - count`. "
+             "Индексы перебирает `range(len(titles))`, а название и оценку одного фильма берёшь по одному и тому же индексу.",
+        solution='def show_rating(title, count):\n    print(title + ": " + "*" * count + "." * (5 - count))\n\n\n'
+                 'for i in range(len(titles)):\n    show_rating(titles[i], stars[i])',
+        wrong=[("не дописывает точки до пяти знаков",
+                'def show_rating(title, count):\n    print(title + ": " + "*" * count)\n\n\n'
+                'for i in range(len(titles)):\n    show_rating(titles[i], stars[i])'),
+               ("печатает через запятую — между звёздочками и точками появляется пробел",
+                'def show_rating(title, count):\n    print(title + ":", "*" * count, "." * (5 - count))\n\n\n'
+                'for i in range(len(titles)):\n    show_rating(titles[i], stars[i])')],
+        constructs=["function"],
+        must_use=[NEED_DEF],
+    ),
 ]

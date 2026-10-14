@@ -79,4 +79,75 @@ TASKS = [
                 '    pos -= down\nprint(f"The snail gets out on day {day}")')],
         constructs=["while"],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-lt-mountain", title="Подъём на гору",
+        given=["height", "top", "step"],
+        variants=[{"height": "1200", "top": "2000", "step": "300"}, {"height": "500", "top": "1500", "step": "250"},
+                  {"height": "800", "top": "1600", "step": "400"}],
+        hidden=[{"height": "1000", "top": "1900", "step": "300"}, {"height": "100", "top": "450", "step": "100"},
+                {"height": "700", "top": "700", "step": "50"}, {"height": "0", "top": "350", "step": "200"}],
+        intro="Туристы поднимаются на гору высотой `top = {top}` м. Сейчас они на высоте `height = {height}` м "
+              "и каждый час поднимаются ещё на `step = {step}` м.",
+        steps=["Напиши цикл `while`, который работает, пока `height` меньше `top`.",
+               "В цикле сначала выведи строку вида `Height: 900 m`, а потом увеличь `height` на `step`.",
+               "После цикла выведи `Top reached`."],
+        hint="Цикл закончится, только когда условие `while` станет ложным, поэтому внутри цикла высота обязательно "
+             "должна расти. Если туристы уже на вершине, цикл не выполнится ни разу и сразу выведется `Top reached`.",
+        solution='while height < top:\n    print(f"Height: {height} m")\n    height += step\nprint("Top reached")',
+        wrong=[("условие <=: когда высота ровно равна top, выводится лишняя строка",
+                'while height <= top:\n    print(f"Height: {height} m")\n    height += step\nprint("Top reached")'),
+               ("увеличивает высоту до вывода: первая строка теряется",
+                'while height < top:\n    height += step\n    print(f"Height: {height} m")\nprint("Top reached")')],
+        constructs=["while"],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-lt-price-drop", title="Ждём скидку",
+        given=["price", "budget"],
+        variants=[{"price": "1000", "budget": "700"}, {"price": "5000", "budget": "4000"}, {"price": "300", "budget": "250"}],
+        hidden=[{"price": "1000", "budget": "900"}, {"price": "800", "budget": "800"}, {"price": "2000", "budget": "1000"},
+                {"price": "150", "budget": "100"}],
+        intro="Гоша хочет купить игру, которая стоит `price = {price}` руб., но у него только `budget = {budget}` руб. "
+              "Каждую неделю магазин снижает цену на десятую часть текущей цены (дели нацело через `//`).",
+        steps=["Заведи счётчик недель, который сначала равен 0.",
+               "Пока цена больше `budget`, уменьшай `price` на `price // 10` и прибавляй к счётчику недель 1.",
+               "После цикла выведи одной строкой число недель и новую цену в формате `Weeks: 3, price: 729 rub`"],
+        hint="Скидку считай от текущей цены, а не от начальной: каждую неделю цена становится меньше, поэтому и скидка меньше. "
+             "Если цена стала ровно равна бюджету, игру уже можно купить — ждать ещё неделю не нужно.",
+        solution='weeks = 0\nwhile price > budget:\n    price -= price // 10\n    weeks += 1\n'
+                 'print(f"Weeks: {weeks}, price: {price} rub")',
+        wrong=[("условие >=: когда цена ровно равна бюджету, ждёт лишнюю неделю",
+                'weeks = 0\nwhile price >= budget:\n    price -= price // 10\n    weeks += 1\n'
+                'print(f"Weeks: {weeks}, price: {price} rub")'),
+               ("скидка считается от начальной цены, а не от текущей",
+                'weeks = 0\nstep = price // 10\nwhile price > budget:\n    price -= step\n    weeks += 1\n'
+                'print(f"Weeks: {weeks}, price: {price} rub")')],
+        constructs=["while"],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-lt-loan", title="Долг с процентами",
+        given=["debt", "pay", "fee"],
+        variants=[{"debt": "1000", "pay": "300", "fee": "20"}, {"debt": "2000", "pay": "700", "fee": "50"},
+                  {"debt": "500", "pay": "200", "fee": "10"}],
+        hidden=[{"debt": "1050", "pay": "550", "fee": "50"}, {"debt": "300", "pay": "400", "fee": "30"},
+                {"debt": "1200", "pay": "250", "fee": "100"}, {"debt": "900", "pay": "300", "fee": "0"}],
+        intro="Вова взял в долг `debt = {debt}` руб. Каждый месяц он отдаёт `pay = {pay}` руб. Если после этого долг ещё "
+              "не закрыт, к остатку добавляется плата `fee = {fee}` руб. Если он отдал больше, чем был должен, "
+              "лишнее ему возвращают, и долг становится 0.",
+        steps=["Заведи счётчик месяцев, который сначала равен 0.",
+               "Пока `debt` больше 0, повторяй месяц: счётчик увеличивается на 1, долг уменьшается на `pay`. "
+               "Если долг всё ещё больше 0, прибавь к нему `fee`, а иначе сделай долг равным 0.",
+               "В конце каждого месяца выведи строку вида `Month 2: 460 rub left`",
+               "После цикла выведи строку вида `Paid off in 4 months`"],
+        hint="Цикл закончится, только если долг когда-нибудь станет ровно 0 — поэтому, когда он ушёл в минус, его нужно "
+             "обнулить. Плату добавляй только к незакрытому долгу: если долг закрылся ровно в 0, платы нет.",
+        solution='month = 0\nwhile debt > 0:\n    month += 1\n    debt -= pay\n    if debt > 0:\n        debt += fee\n'
+                 '    else:\n        debt = 0\n    print(f"Month {month}: {debt} rub left")\nprint(f"Paid off in {month} months")',
+        wrong=[("добавляет плату до платежа",
+                'month = 0\nwhile debt > 0:\n    month += 1\n    debt += fee\n    debt -= pay\n    if debt < 0:\n        debt = 0\n'
+                '    print(f"Month {month}: {debt} rub left")\nprint(f"Paid off in {month} months")'),
+               ("нестрогое сравнение: при долге ровно 0 всё равно добавляет плату",
+                'month = 0\nwhile debt > 0:\n    month += 1\n    debt -= pay\n    if debt >= 0:\n        debt += fee\n'
+                '    else:\n        debt = 0\n    print(f"Month {month}: {debt} rub left")\nprint(f"Paid off in {month} months")')],
+        constructs=["while"],
+    ),
 ]

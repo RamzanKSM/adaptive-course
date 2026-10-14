@@ -76,4 +76,70 @@ TASKS = [
                 'print(f"To pay: {total} rub")')],
         constructs=["if"],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-if-phone-battery", title="Заряд телефона",
+        given=["charge"],
+        variants=[{"charge": "15"}, {"charge": "64"}, {"charge": "8"}],
+        hidden=[{"charge": "20"}, {"charge": "19"}, {"charge": "100"}, {"charge": "3"}],
+        intro="Телефон напоминает поставить его на зарядку, когда заряда осталось меньше 20 процентов. "
+              "Сколько процентов заряда сейчас, записано в переменной: `charge = {charge}`.",
+        steps=["Если `charge` равен 20 или больше, выведи `Battery OK`.",
+               "Иначе выведи `Please charge`.",
+               "Программа должна вывести ровно одну строку."],
+        hint="«20 или больше» записывается как `charge >= 20`. При ровно 20 процентах напоминания ещё нет. "
+             "После условия и после `else` нужно двоеточие, а `print` внутри веток пишется с отступом.",
+        solution='if charge >= 20:\n    print("Battery OK")\nelse:\n    print("Please charge")',
+        wrong=[("строгое сравнение: при ровно 20 процентах просит зарядить",
+                'if charge > 20:\n    print("Battery OK")\nelse:\n    print("Please charge")'),
+               ("ветки перепутаны местами",
+                'if charge >= 20:\n    print("Please charge")\nelse:\n    print("Battery OK")')],
+        constructs=["if"],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-if-phone-minutes", title="Минуты по тарифу",
+        given=["minutes"],
+        variants=[{"minutes": "340"}, {"minutes": "125"}, {"minutes": "410"}],
+        hidden=[{"minutes": "300"}, {"minutes": "301"}, {"minutes": "0"}, {"minutes": "299"}],
+        intro="В тариф мобильной связи входит 300 минут разговоров в месяц. Каждая минута сверх них стоит 2 руб. "
+              "Сколько минут абонент проговорил за месяц, записано в `minutes = {minutes}`.",
+        steps=["Сначала выведи строку с потраченными минутами в формате `Used: 120 min`.",
+               "Если `minutes` больше 300, выведи второй строкой доплату: лишние минуты (сверх 300), умноженные на 2, "
+               "в формате `Extra: 20 rub`.",
+               "Иначе выведи второй строкой, сколько минут ещё осталось из 300, в формате `Left: 180 min`."],
+        hint="Ровно 300 минут — это ещё не «больше 300»: доплаты нет, осталось `0` минут. "
+             "Лишние минуты — это `minutes - 300`, оставшиеся — `300 - minutes`.",
+        solution='print(f"Used: {minutes} min")\nif minutes > 300:\n    print(f"Extra: {(minutes - 300) * 2} rub")\n'
+                 'else:\n    print(f"Left: {300 - minutes} min")',
+        wrong=[("забывает умножить лишние минуты на цену",
+                'print(f"Used: {minutes} min")\nif minutes > 300:\n    print(f"Extra: {minutes - 300} rub")\n'
+                'else:\n    print(f"Left: {300 - minutes} min")'),
+               ("берёт за все минуты, а не только за лишние",
+                'print(f"Used: {minutes} min")\nif minutes > 300:\n    print(f"Extra: {minutes * 2} rub")\n'
+                'else:\n    print(f"Left: {300 - minutes} min")')],
+        constructs=["if"],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-if-parking", title="Оплата парковки",
+        given=["start", "end"],
+        variants=[{"start": "9", "end": "14"}, {"start": "10", "end": "11"}, {"start": "8", "end": "17"}],
+        hidden=[{"start": "12", "end": "14"}, {"start": "13", "end": "16"}, {"start": "7", "end": "7"},
+                {"start": "6", "end": "22"}],
+        intro="На парковке у торгового центра первые 2 часа бесплатные, а каждый следующий час стоит 60 руб. "
+              "Машина заехала в `start = {start}` часов, а уехала в `end = {end}` часов того же дня.",
+        steps=["Посчитай, сколько часов машина стояла: `end` минус `start`.",
+               "Если она стояла больше 2 часов, платных часов столько, сколько получилось сверх двух. Иначе платных часов 0.",
+               "Выведи три строки: сколько часов машина стояла, сколько из них платных и сколько нужно заплатить "
+               "(платные часы, умноженные на 60). Например, для 4 часов это `Time: 4 h`, `Paid: 2 h` и `Cost: 120 rub`"],
+        hint="Сохрани время стоянки в одну переменную, а в `if` и в `else` запиши в другую переменную число платных часов. "
+             "После условия останется вывести три строки через f-строки.",
+        solution='hours = end - start\nif hours > 2:\n    paid = hours - 2\nelse:\n    paid = 0\n'
+                 'print(f"Time: {hours} h")\nprint(f"Paid: {paid} h")\nprint(f"Cost: {paid * 60} rub")',
+        wrong=[("не вычитает бесплатные часы",
+                'hours = end - start\nif hours > 2:\n    paid = hours\nelse:\n    paid = 0\n'
+                'print(f"Time: {hours} h")\nprint(f"Paid: {paid} h")\nprint(f"Cost: {paid * 60} rub")'),
+               ("нет else: при короткой стоянке платные часы уходят в минус",
+                'hours = end - start\npaid = hours - 2\n'
+                'print(f"Time: {hours} h")\nprint(f"Paid: {paid} h")\nprint(f"Cost: {paid * 60} rub")')],
+        constructs=["if"],
+    ),
 ]

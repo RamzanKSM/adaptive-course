@@ -122,4 +122,114 @@ TASKS = [
                   ("re:except\\s+TypeError", "Номер раунда, записанный строкой, поймай отдельным блоком "
                                              "`except TypeError:`.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-exc-prize-pick", title="Выбери приз",
+        given=["prizes", "choice"],
+        variants=[{"prizes": '["ball", "kite", "puzzle"]', "choice": '"2"'},
+                  {"prizes": '["book", "cap"]', "choice": '"5"'},
+                  {"prizes": '["yo-yo", "robot", "paints", "dominoes"]', "choice": '"third"'}],
+        hidden=[{"prizes": '["car"]', "choice": '"1"'},
+                {"prizes": '["pen", "mug", "toy"]', "choice": '"4"'},
+                {"prizes": '["bag", "game"]', "choice": '"x"'},
+                {"prizes": '["cube", "doll", "ship", "lamp", "drum"]', "choice": '"5"'}],
+        intro="Победитель конкурса выбирает приз, вводя его номер в поле на экране. Призы лежат в списке `prizes` "
+              "и нумеруются с 1, а введённый номер приходит строкой `choice`. Ошибиться можно двумя способами, "
+              "и подсказки для них разные.",
+        steps=["В блоке `try` преврати `choice` в целое число, достань из списка приз с этим номером (индекс на 1 меньше "
+               "номера) и выведи строку вида `Your prize: kite`.",
+               "Если введено не число, `int()` вызовет `ValueError` — перехвати её своим блоком `except` и выведи "
+               "`Type the number of the prize`.",
+               "Если приза с таким номером нет, обращение к списку вызовет `IndexError` — перехвати её отдельным блоком "
+               "`except` и выведи `There is no such prize`."],
+        hint="Слишком большой индекс списка вызывает `IndexError`. Не забудь вычесть 1: приз номер 1 лежит под индексом 0.",
+        solution='try:\n    print(f"Your prize: {prizes[int(choice) - 1]}")\nexcept ValueError:\n'
+                 '    print("Type the number of the prize")\nexcept IndexError:\n    print("There is no such prize")',
+        wrong=[("не вычитает 1 — выдаёт следующий приз, а последний считает несуществующим",
+                'try:\n    print(f"Your prize: {prizes[int(choice)]}")\nexcept ValueError:\n'
+                '    print("Type the number of the prize")\nexcept IndexError:\n    print("There is no such prize")'),
+               ("один общий except — на любую ошибку просит ввести число",
+                'try:\n    print(f"Your prize: {prizes[int(choice) - 1]}")\nexcept:\n'
+                '    print("Type the number of the prize")')],
+        constructs=["try"],
+        must_use=[("re:except\\s+ValueError", "Для строки, которая не похожа на число, нужен свой блок `except ValueError:`."),
+                  ("re:except\\s+IndexError", "Для несуществующего номера приза нужен отдельный блок `except IndexError:`.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-exc-stock-add", title="Приёмка товара",
+        given=["stock", "item", "amount"],
+        variants=[{"stock": '{"pens": 40, "pencils": 25, "erasers": 10}', "item": '"pencils"', "amount": "15"},
+                  {"stock": '{"pens": 40, "pencils": 25, "erasers": 10}', "item": '"markers"', "amount": "5"},
+                  {"stock": '{"pens": 40, "pencils": 25, "erasers": 10}', "item": '"pens"', "amount": '"20"'}],
+        hidden=[{"item": '"erasers"', "amount": "1"}, {"item": '"glue"', "amount": "3"},
+                {"item": '"erasers"', "amount": '"ten"'}, {"item": '"Pens"', "amount": "2"},
+                {"item": '"pens"', "amount": "60"}],
+        intro="Кладовщик принимает товар. Остатки хранятся в словаре `stock`, принятый товар — в `item`, а количество — "
+              "в `amount`. Количество иногда попадает в программу строкой в кавычках вместо числа, а товара может не быть "
+              "в списке склада. На эти две ошибки нужно отвечать по-разному.",
+        steps=["В блоке `try` прибавь `amount` к остатку товара: `stock[item] + amount` — запиши результат обратно "
+               "в `stock[item]` и выведи строку вида `pens: 60 now`.",
+               "Если товара нет на складе, `stock[item]` вызовет `KeyError` — тогда выведи `Unknown item, ask the manager`.",
+               "Если количество — строка, сложение числа со строкой вызовет `TypeError` — тогда выведи "
+               "`Amount must be a number`."],
+        hint="`10 + \"5\"` вызывает `TypeError`: Python не складывает числа со строками. Для каждой ошибки напиши свой "
+             "блок `except` — их можно ставить один за другим после одного `try`.",
+        solution='try:\n    stock[item] = stock[item] + amount\n    print(f"{item}: {stock[item]} now")\nexcept KeyError:\n'
+                 '    print("Unknown item, ask the manager")\nexcept TypeError:\n    print("Amount must be a number")',
+        wrong=[("перепутал ошибки местами — на неизвестный товар отвечает про количество",
+                'try:\n    stock[item] = stock[item] + amount\n    print(f"{item}: {stock[item]} now")\nexcept TypeError:\n'
+                '    print("Unknown item, ask the manager")\nexcept KeyError:\n    print("Amount must be a number")'),
+               ("печатает только принятое количество, а не новый остаток",
+                'try:\n    stock[item] = stock[item] + amount\n    print(f"{item}: {amount} now")\nexcept KeyError:\n'
+                '    print("Unknown item, ask the manager")\nexcept TypeError:\n    print("Amount must be a number")')],
+        constructs=["try"],
+        must_use=[("re:except\\s+KeyError", "Неизвестный товар поймай отдельным блоком `except KeyError:`."),
+                  ("re:except\\s+TypeError", "Количество-строку поймай своим блоком `except TypeError:`.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-exc-command-calc", title="Пакет команд деления",
+        given=["commands"],
+        variants=[{"commands": '["10 / 2", "7 / 0", "abc / 3", "5", "9 / 4"]'},
+                  {"commands": '["100 / 10", "8 / x", "6 / 3", "12"]'},
+                  {"commands": '["1 / 0", "0 / 1", "3 / three", "20 / 6"]'}],
+        hidden=[{"commands": '["4 / 2"]'},
+                {"commands": '["3 / 0", "5 / 0"]'},
+                {"commands": '["seven / 7", "14 / 7", "21", "28 / 0", "35 / 5"]'},
+                {"commands": '["2 / two"]'}],
+        intro="Калькулятор получает пачку команд — строк вида `\"10 / 2\"` — в списке `commands` и делит числа нацело. "
+              "Команды набирают люди, поэтому в них бывают ошибки трёх видов: не число, деление на ноль "
+              "и команда без второго числа.",
+        steps=["Пройди по `commands`. Для каждой команды в блоке `try` разрежь строку методом `.split(\" / \")`, "
+               "преврати части с индексами 0 и 1 в целые числа и выведи строку вида `10 / 2 = 5`.",
+               "Если часть — не число (`ValueError`), выведи команду в кавычках и `has a bad number`, например "
+               "`\"abc / 3\" has a bad number`.",
+               "Если делитель равен нулю (`ZeroDivisionError`), выведи строку вида `\"7 / 0\" divides by zero`.",
+               "Если после разрезания второй части нет (`IndexError`), выведи строку вида `\"5\" is not complete`.",
+               "После цикла выведи строку вида `Done: 2, errors: 3` — сколько команд выполнено и сколько с ошибками."],
+        hint="Чтобы напечатать команду в двойных кавычках, возьми f-строку в одинарные кавычки: `f'\"{{command}}\" divides by zero'`. "
+             "Счётчик ошибок можно увеличивать в каждом блоке `except`.",
+        solution='done = 0\nerrors = 0\nfor command in commands:\n    try:\n        parts = command.split(" / ")\n'
+                 '        print(f"{command} = {int(parts[0]) // int(parts[1])}")\n        done += 1\n'
+                 '    except ValueError:\n        print(f\'"{command}" has a bad number\')\n        errors += 1\n'
+                 '    except ZeroDivisionError:\n        print(f\'"{command}" divides by zero\')\n        errors += 1\n'
+                 '    except IndexError:\n        print(f\'"{command}" is not complete\')\n        errors += 1\n'
+                 'print(f"Done: {done}, errors: {errors}")',
+        wrong=[("увеличивает счётчик выполненных до деления — ошибки тоже считаются выполненными",
+                'done = 0\nerrors = 0\nfor command in commands:\n    try:\n        done += 1\n        parts = command.split(" / ")\n'
+                '        print(f"{command} = {int(parts[0]) // int(parts[1])}")\n'
+                '    except ValueError:\n        print(f\'"{command}" has a bad number\')\n        errors += 1\n'
+                '    except ZeroDivisionError:\n        print(f\'"{command}" divides by zero\')\n        errors += 1\n'
+                '    except IndexError:\n        print(f\'"{command}" is not complete\')\n        errors += 1\n'
+                'print(f"Done: {done}, errors: {errors}")'),
+               ("путает ValueError и IndexError в ответах",
+                'done = 0\nerrors = 0\nfor command in commands:\n    try:\n        parts = command.split(" / ")\n'
+                '        print(f"{command} = {int(parts[0]) // int(parts[1])}")\n        done += 1\n'
+                '    except IndexError:\n        print(f\'"{command}" has a bad number\')\n        errors += 1\n'
+                '    except ZeroDivisionError:\n        print(f\'"{command}" divides by zero\')\n        errors += 1\n'
+                '    except ValueError:\n        print(f\'"{command}" is not complete\')\n        errors += 1\n'
+                'print(f"Done: {done}, errors: {errors}")')],
+        constructs=["try", "for"],
+        must_use=[("re:except\\s+ValueError", "Не число поймай отдельным блоком `except ValueError:`."),
+                  ("re:except\\s+ZeroDivisionError", "Деление на ноль поймай отдельным блоком `except ZeroDivisionError:`."),
+                  ("re:except\\s+IndexError", "Команду без второго числа поймай отдельным блоком `except IndexError:`.")],
+    ),
 ]

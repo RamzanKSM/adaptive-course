@@ -113,6 +113,85 @@ for (int i = 0; i < names.length; i++) {
 }
 System.out.println("Total km: " + total);'''
 
+# ───────── Parcel ─────────
+
+PARCEL = '''class Parcel {
+    String receiver;
+    String city;
+    String status;
+
+    Parcel(String receiverName, String cityName) {
+        receiver = receiverName;
+        city = cityName;
+        status = "accepted";
+    }
+}'''
+
+PARCEL_MAIN = '''Parcel parcel = new Parcel(receiver, city);
+System.out.println("Parcel for " + parcel.receiver);
+System.out.println("City: " + parcel.city);
+System.out.println("Status: " + parcel.status);'''
+
+PARCEL_PARAMS = ["String receiverName", "String cityName"]
+
+# ───────── Fuel ─────────
+
+TRIP = '''class Trip {
+    String route;
+    int km;
+    int liters;
+    int per100;
+
+    Trip(String routeName, int distance, int fuel) {
+        route = routeName;
+        km = distance;
+        liters = fuel;
+        per100 = fuel * 100 / distance;
+    }
+}'''
+
+TRIP_MAIN = '''for (int i = 0; i < routes.length; i++) {
+    Trip trip = new Trip(routes[i], distances[i], fuel[i]);
+    System.out.println(trip.route + ": " + trip.km + " km, " + trip.liters + " l, " + trip.per100 + " l per 100 km");
+}'''
+
+TRIP_PARAMS = ["String routeName", "int distance", "int fuel"]
+
+# ───────── Exams ─────────
+
+EXAM = '''class Exam {
+    String subject;
+    int best;
+    int average;
+
+    Exam(String subjectName, int[] scores) {
+        subject = subjectName;
+        int sum = 0;
+        best = scores[0];
+        for (int score : scores) {
+            sum += score;
+            if (score > best) {
+                best = score;
+            }
+        }
+        average = sum / scores.length;
+    }
+}'''
+
+EXAM_MAIN = '''Exam first = new Exam(subject1, scores1);
+Exam second = new Exam(subject2, scores2);
+System.out.println(first.subject + ": best " + first.best + ", average " + first.average);
+System.out.println(second.subject + ": best " + second.best + ", average " + second.average);
+if (first.average > second.average) {
+    System.out.println("Better: " + first.subject);
+} else if (second.average > first.average) {
+    System.out.println("Better: " + second.subject);
+} else {
+    System.out.println("Equal");
+}'''
+
+EXAM_PARAMS = ["String subjectName", "int[] scores"]
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-ctor-pool-membership", title="Абонемент в бассейн",
@@ -218,5 +297,112 @@ TASKS = [
                             "Конструктор Runner(String runnerName) должен сохранить имя и сам поставить дистанцию 5 км")
                + need_built(["String runnerName", "int distance"], '"Test", 21', {"name": '"Test"', "km": "21"},
                             "Конструктор Runner(String runnerName, int distance) должен сохранить имя и переданную дистанцию"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-ctor-parcel-accepted", title="Приём посылки",
+        given=[("String", "receiver"), ("String", "city")],
+        variants=[{"receiver": '"Anya"', "city": '"Kazan"'}, {"receiver": '"Boris"', "city": '"Sochi"'},
+                  {"receiver": '"Liza"', "city": '"Omsk"'}],
+        hidden=[{"receiver": '"Timur"', "city": '"Tula"'}, {"receiver": '"Zoya"', "city": '"Perm"'},
+                {"receiver": '"Marat"', "city": '"Samara"'}],
+        intro="На почте принимают посылку: записывают получателя и город, а статус у только что принятой посылки всегда "
+              "один — `accepted`. Пусть всё это делает конструктор. Получатель записан в поле `receiver`, город — в поле `city`.",
+        steps=["Ниже класса `Solution` создай класс `Parcel` (без `public`) с полями `String receiver`, `String city` "
+               "и `String status`.",
+               "Добавь конструктор `Parcel(String receiverName, String cityName)`. Он сохраняет получателя и город в поля, "
+               "а в поле `status` сам записывает строку `\"accepted\"` — её не передают при создании.",
+               "В `main` создай посылку одной строкой: `Parcel parcel = new Parcel(receiver, city);`.",
+               "Выведи три строки вида `Parcel for Anya`, `City: Kazan` и `Status: accepted` — значения бери из полей "
+               "объекта `parcel`."],
+        hint="Конструктор может заполнить поле и тем, чего нет среди его параметров. Только не пиши перед полем тип: "
+             "`String status = ...` внутри конструктора создаст новую переменную, а поле останется `null`.",
+        solution=PARCEL_MAIN,
+        classes=PARCEL,
+        wrong=[("в конструкторе забыл сохранить город — поле city остаётся null",
+                PARCEL_MAIN, PARCEL.replace("        city = cityName;\n", "")),
+               ("в конструкторе объявил новую переменную `String status` вместо записи в поле",
+                PARCEL_MAIN, PARCEL.replace('        status = "accepted";', '        String status = "accepted";'))],
+        constructs=["class"],
+        checks=find_class("Parcel")
+               + need_field("Parcel", "receiver", "String", "получатель посылки")
+               + need_field("Parcel", "city", "String", "город доставки")
+               + need_field("Parcel", "status", "String", "статус посылки")
+               + need_constructor("Parcel", PARCEL_PARAMS, "он заполняет поля, когда посылку принимают")
+               + need_built(PARCEL_PARAMS, '"Test", "Town"', {"receiver": '"Test"', "city": '"Town"', "status": '"accepted"'},
+                            "Конструктор Parcel должен сам заполнить поля receiver, city и status — статус всегда accepted"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-ctor-fuel-trips", title="Расход бензина",
+        given=[("String[]", "routes"), ("int[]", "distances"), ("int[]", "fuel")],
+        variants=[{"routes": '{"Kazan", "Tver"}', "distances": "{800, 170}", "fuel": "{64, 17}"},
+                  {"routes": '{"Sochi", "Anapa", "Yalta"}', "distances": "{1600, 300, 900}", "fuel": "{112, 27, 81}"},
+                  {"routes": '{"Pskov", "Ufa", "Omsk", "Tula"}', "distances": "{700, 1300, 2700, 180}", "fuel": "{49, 117, 189, 18}"}],
+        hidden=[{"routes": '{"Kirov"}', "distances": "{900}", "fuel": "{90}"},
+                {"routes": '{"Orel", "Perm"}', "distances": "{360, 1400}", "fuel": "{25, 140}"},
+                {"routes": '{"Chita", "Tomsk", "Kursk"}', "distances": "{150, 50, 530}", "fuel": "{12, 6, 37}"}],
+        intro="Водитель записывает свои поездки: куда ехал (массив `routes`), сколько километров проехал (массив "
+              "`distances`) и сколько литров бензина потратил (массив `fuel`) — всё под одинаковыми номерами. Ему "
+              "интересно, сколько машина тратит на 100 км в каждой поездке.",
+        steps=["Ниже класса `Solution` создай класс `Trip` (без `public`) с полями `String route`, `int km`, `int liters` "
+               "и `int per100`.",
+               "Добавь конструктор `Trip(String routeName, int distance, int fuel)`. Он сохраняет маршрут, километры и литры, "
+               "а в `per100` записывает расход на 100 км: `fuel * 100 / distance` (дробная часть отбрасывается).",
+               "В `main` в цикле создай для каждой поездки объект `new Trip(routes[i], distances[i], fuel[i])` и выведи строку "
+               "вида `Kazan: 800 km, 64 l, 8 l per 100 km` — с полями этого объекта."],
+        hint="Аргументы в `new Trip(...)` попадают в параметры конструктора строго по порядку: первый — маршрут, "
+             "второй — километры, третий — литры.",
+        solution=TRIP_MAIN,
+        classes=TRIP,
+        wrong=[("сначала делит литры на километры — целочисленное деление даёт 0",
+                TRIP_MAIN, TRIP.replace("fuel * 100 / distance", "fuel / distance * 100")),
+               ("перепутал порядок аргументов: километры и литры поменялись местами",
+                TRIP_MAIN.replace("new Trip(routes[i], distances[i], fuel[i])", "new Trip(routes[i], fuel[i], distances[i])"))],
+        constructs=["class", "for"],
+        checks=find_class("Trip")
+               + need_field("Trip", "route", "String", "куда ехал водитель")
+               + need_field("Trip", "km", "int", "сколько километров")
+               + need_field("Trip", "liters", "int", "сколько литров бензина")
+               + need_field("Trip", "per100", "int", "расход на 100 км")
+               + need_constructor("Trip", TRIP_PARAMS, "он заполняет поля поездки при создании")
+               + need_built(TRIP_PARAMS, '"Test", 200, 15', {"route": '"Test"', "km": "200", "liters": "15", "per100": "7"},
+                            "Конструктор Trip должен сам заполнить поля route, km, liters и per100 — расход равен fuel * 100 / distance"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-ctor-exam-stats", title="Итоги двух экзаменов",
+        given=[("String", "subject1"), ("int[]", "scores1"), ("String", "subject2"), ("int[]", "scores2")],
+        variants=[{"subject1": '"Math"', "scores1": "{70, 95, 81, 66}", "subject2": '"History"', "scores2": "{88, 74, 90}"},
+                  {"subject1": '"Physics"', "scores1": "{55, 61, 90}", "subject2": '"Biology"', "scores2": "{72, 68, 70, 80, 65}"},
+                  {"subject1": '"English"', "scores1": "{91, 87}", "subject2": '"Chemistry"', "scores2": "{60, 99, 75}"}],
+        hidden=[{"subject1": '"Art"', "scores1": "{50}", "subject2": '"Music"', "scores2": "{40, 60}"},
+                {"subject1": '"Drawing"', "scores1": "{100, 30, 80}", "subject2": '"Geography"', "scores2": "{77, 79}"},
+                {"subject1": '"Literature"', "scores1": "{64, 70, 58, 92, 81, 77}", "subject2": '"Algebra"', "scores2": "{85}"},
+                {"subject1": '"Economics"', "scores1": "{60, 61}", "subject2": '"Law"', "scores2": "{99, 20}"}],
+        intro="Учитель сравнивает результаты двух экзаменов: `subject1` с баллами `scores1` и `subject2` с баллами "
+              "`scores2`. Как только экзамен заносится в программу, по баллам сразу должны считаться лучший и средний "
+              "балл — это работа для конструктора.",
+        steps=["Ниже класса `Solution` создай класс `Exam` (без `public`) с полями `String subject`, `int best` и `int average`.",
+               "Добавь конструктор `Exam(String subjectName, int[] scores)`. Он сохраняет предмет, а по массиву `scores` "
+               "(в нём всегда есть хотя бы одно число) находит в цикле лучший балл и средний — сумму, делённую на количество, "
+               "дробную часть отбрось.",
+               "В `main` создай два объекта: `new Exam(subject1, scores1)` и `new Exam(subject2, scores2)`. Выведи для каждого "
+               "строку вида `Math: best 95, average 78`.",
+               "Третьей строкой выведи `Better: Math` с предметом, у которого средний балл выше, а если средние равны — `Equal`."],
+        hint="Внутри конструктора можно писать любой код — циклы, условия, вспомогательные переменные. Сумму держи "
+             "в обычной переменной, а результат запиши в поля `best` и `average` без указания типа.",
+        solution=EXAM_MAIN,
+        classes=EXAM,
+        wrong=[("в конструкторе объявил новую переменную `int best` — поле best остаётся 0",
+                EXAM_MAIN, EXAM.replace("        best = scores[0];", "        int best = scores[0];")),
+               ("сравнивает экзамены по лучшему баллу, а не по среднему",
+                EXAM_MAIN.replace("first.average > second.average", "first.best > second.best")
+                         .replace("second.average > first.average", "second.best > first.best"))],
+        constructs=["class", "for"],
+        checks=find_class("Exam")
+               + need_field("Exam", "subject", "String", "название предмета")
+               + need_field("Exam", "best", "int", "лучший балл")
+               + need_field("Exam", "average", "int", "средний балл")
+               + need_constructor("Exam", EXAM_PARAMS, "он считает итоги экзамена при создании")
+               + need_built(EXAM_PARAMS, '"Test", new int[]{60, 90, 70}', {"subject": '"Test"', "best": "90", "average": "73"},
+                            "Конструктор Exam должен сам заполнить поля subject, best и average — лучший и средний балл по массиву"),
     ),
 ]

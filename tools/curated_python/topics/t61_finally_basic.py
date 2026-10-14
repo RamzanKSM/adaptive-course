@@ -115,4 +115,106 @@ TASKS = [
                                       "даже после `return`, поэтому ни одна попытка не потеряется."),
                   ("re:except\\s+ValueError", "Нечитаемую карту поймай блоком `except ValueError:`.")],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-fin-pizza-party", title="Пицца на всех",
+        given=["slices", "friends"],
+        variants=[{"slices": "12", "friends": "4"}, {"slices": "8", "friends": "0"}, {"slices": "10", "friends": "2"}],
+        hidden=[{"slices": "6", "friends": "0"}, {"slices": "16", "friends": "5"}, {"slices": "8", "friends": "8"},
+                {"slices": "2", "friends": "7"}],
+        intro="На вечеринке пиццу из `slices` кусков делят поровну между `friends` друзьями. Иногда никто не пришёл, "
+              "и тогда деление на ноль вызывает `ZeroDivisionError`. А пустую коробку в конце нужно выбросить в любом случае.",
+        steps=["В блоке `try` раздели `slices` на `friends` нацело (через `//`) и выведи результат в виде "
+               "`Each friend gets 3 slices`.",
+               "Если возникла `ZeroDivisionError`, выведи `Nobody came, more pizza for me`.",
+               "В блоке `finally` выведи `Box goes to recycling` — эта строка должна появляться всегда."],
+        hint="`finally` пишется последним, после `except`, и выполняется и после удачи, и после ошибки. "
+             "Если поставить строку в конец `try`, после ошибки до неё дело не дойдёт.",
+        solution='try:\n    print(f"Each friend gets {slices // friends} slices")\nexcept ZeroDivisionError:\n'
+                 '    print("Nobody came, more pizza for me")\nfinally:\n    print("Box goes to recycling")',
+        wrong=[("выбрасывает коробку в конце try — после ошибки строки нет",
+                'try:\n    print(f"Each friend gets {slices // friends} slices")\n    print("Box goes to recycling")\n'
+                'except ZeroDivisionError:\n    print("Nobody came, more pizza for me")'),
+               ("делит через / вместо // — получается дробное число",
+                'try:\n    print(f"Each friend gets {slices / friends} slices")\nexcept ZeroDivisionError:\n'
+                '    print("Nobody came, more pizza for me")\nfinally:\n    print("Box goes to recycling")')],
+        constructs=["try"],
+        must_use=[("re:finally\\s*:", "Строку про коробку выведи в блоке `finally:` — он выполняется в любом случае."),
+                  ("re:except\\s+ZeroDivisionError", "Деление на ноль поймай блоком `except ZeroDivisionError:`.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-fin-phone-topup", title="Пополнение телефона",
+        given=["amount_text", "balance"],
+        variants=[{"amount_text": '"200"', "balance": "35"}, {"amount_text": '"5"', "balance": "120"},
+                  {"amount_text": '"two hundred"', "balance": "0"}],
+        hidden=[{"amount_text": '"10"', "balance": "1"}, {"amount_text": '"9"', "balance": "50"},
+                {"amount_text": '"100 rub"', "balance": "40"}, {"amount_text": '"500"', "balance": "250"}],
+        intro="Терминал пополняет баланс телефона. Сумму покупатель набирает на экране, и она приходит строкой "
+              "`amount_text`, а текущий баланс лежит в `balance`. Меньше 10 руб. терминал не принимает. "
+              "Чек терминал печатает всегда — даже если пополнить не получилось.",
+        steps=["В блоке `try` только преврати `amount_text` в целое число.",
+               "В блоке `except ValueError` выведи `Amount must be a number`.",
+               "В блоке `else`: если сумма меньше 10, выведи `Minimum top-up is 10 rub`, иначе прибавь её к балансу "
+               "и выведи строку вида `Balance: 235 rub`.",
+               "В блоке `finally` выведи `Receipt printed`."],
+        hint="Порядок блоков: `try`, `except`, `else`, `finally`. `else` выполняется только когда в `try` не было ошибки, "
+             "а `finally` — всегда. Ровно 10 руб. терминал принимает.",
+        solution='try:\n    amount = int(amount_text)\nexcept ValueError:\n    print("Amount must be a number")\n'
+                 'else:\n    if amount < 10:\n        print("Minimum top-up is 10 rub")\n    else:\n'
+                 '        balance += amount\n        print(f"Balance: {balance} rub")\nfinally:\n    print("Receipt printed")',
+        wrong=[("не принимает ровно 10 рублей",
+                'try:\n    amount = int(amount_text)\nexcept ValueError:\n    print("Amount must be a number")\n'
+                'else:\n    if amount <= 10:\n        print("Minimum top-up is 10 rub")\n    else:\n'
+                '        balance += amount\n        print(f"Balance: {balance} rub")\nfinally:\n    print("Receipt printed")'),
+               ("печатает чек в else, а не в finally — после ошибки чека нет",
+                'try:\n    amount = int(amount_text)\nexcept ValueError:\n    print("Amount must be a number")\n'
+                'else:\n    if amount < 10:\n        print("Minimum top-up is 10 rub")\n    else:\n'
+                '        balance += amount\n        print(f"Balance: {balance} rub")\n    print("Receipt printed")')],
+        constructs=["try", "if"],
+        must_use=[(TRY_ELSE, "Добавь блок `else:` сразу после `except` — на том же уровне отступа. Туда переносят "
+                             "действия, которые нужны только тогда, когда в `try` не было ошибки."),
+                  ("re:finally\\s*:", "Чек выведи в блоке `finally:` — он выполняется в любом случае.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-fin-coffee-machine", title="Кофейный автомат",
+        given=["menu", "orders"],
+        variants=[{"menu": '{"latte": 180, "tea": 90, "cocoa": 150}', "orders": '[("tea", 100), ("mocha", 200), ("latte", 150)]'},
+                  {"menu": '{"latte": 180, "tea": 90, "cocoa": 150}', "orders": '[("cocoa", 150), ("latte", 200)]'},
+                  {"menu": '{"latte": 180, "tea": 90, "cocoa": 150}', "orders": '[("juice", 50), ("tea", 50), ("tea", 90)]'}],
+        hidden=[{"orders": '[("latte", 180)]'},
+                {"orders": '[("water", 10)]'},
+                {"orders": '[("cocoa", 149), ("tea", 500), ("milk", 0), ("latte", 0)]'}],
+        intro="Кофейный автомат готовит напитки по меню `menu` (напиток → цена в рублях). Заказы лежат в списке `orders`: "
+              "каждый — кортеж из названия напитка и внесённой суммы. После каждого заказа — удачного или нет — "
+              "автомат обязательно промывает трубки.",
+        steps=["Напиши функцию `make(drink, paid)`. В блоке `try` возьми цену из `menu[drink]`. Если внесено меньше цены, "
+               "верни строку вида `latte: need 30 rub more`, иначе верни строку вида `tea: ready, change 10 rub`.",
+               "Если напитка нет в меню, `menu[drink]` вызовет `KeyError` — тогда верни строку вида `mocha: not on the menu`.",
+               "Добавь в функцию блок `finally` и выведи в нём `Rinsing the tubes`.",
+               "Для каждого заказа из `orders` вызови функцию и выведи то, что она вернула."],
+        hint="`finally` выполняется даже после `return` — перед тем как функция отдаст ответ. Поэтому строка про промывку "
+             "появится раньше, чем программа напечатает ответ функции.",
+        solution='def make(drink, paid):\n    try:\n        price = menu[drink]\n        if paid < price:\n'
+                 '            return f"{drink}: need {price - paid} rub more"\n        return f"{drink}: ready, change {paid - price} rub"\n'
+                 '    except KeyError:\n        return f"{drink}: not on the menu"\n    finally:\n        print("Rinsing the tubes")\n\n\n'
+                 'for drink, paid in orders:\n    print(make(drink, paid))',
+        wrong=[("промывает трубки внутри try после взятия цены — после неизвестного напитка промывки нет",
+                'def make(drink, paid):\n    try:\n        price = menu[drink]\n        print("Rinsing the tubes")\n'
+                '        if paid < price:\n            return f"{drink}: need {price - paid} rub more"\n'
+                '        return f"{drink}: ready, change {paid - price} rub"\n'
+                '    except KeyError:\n        return f"{drink}: not on the menu"\n\n\n'
+                'for drink, paid in orders:\n    print(make(drink, paid))'),
+               ("промывает трубки в цикле после ответа — строки выходят в другом порядке",
+                'def make(drink, paid):\n    try:\n        price = menu[drink]\n        if paid < price:\n'
+                '            return f"{drink}: need {price - paid} rub more"\n        return f"{drink}: ready, change {paid - price} rub"\n'
+                '    except KeyError:\n        return f"{drink}: not on the menu"\n\n\n'
+                'for drink, paid in orders:\n    print(make(drink, paid))\n    print("Rinsing the tubes")'),
+               ("отказывает, когда внесено ровно столько, сколько стоит напиток",
+                'def make(drink, paid):\n    try:\n        price = menu[drink]\n        if paid <= price:\n'
+                '            return f"{drink}: need {price - paid} rub more"\n        return f"{drink}: ready, change {paid - price} rub"\n'
+                '    except KeyError:\n        return f"{drink}: not on the menu"\n    finally:\n        print("Rinsing the tubes")\n\n\n'
+                'for drink, paid in orders:\n    print(make(drink, paid))')],
+        constructs=["function", "try", "for"],
+        must_use=[("re:finally\\s*:", "Промывку сделай в блоке `finally:` внутри функции — он выполняется даже после `return`."),
+                  ("re:except\\s+KeyError", "Напиток не из меню поймай блоком `except KeyError:`.")],
+    ),
 ]

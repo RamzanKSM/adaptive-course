@@ -73,6 +73,69 @@ for trip in trips:
     print(f"{trip.km} km: {trip.cost()} rub")
 """
 
+
+PIZZA = """\
+class Order:
+    slices = 8
+
+    def __init__(self, name, pizzas):
+        self.name = name
+        self.pizzas = pizzas
+
+    def total_slices(self):
+        return self.pizzas * Order.slices
+
+
+first = Order(name1, pizzas1)
+second = Order(name2, pizzas2)
+print(f"Slices in a pizza: {Order.slices}")
+print(f"{first.name}: {first.pizzas} pizzas, {first.total_slices()} slices")
+print(f"{second.name}: {second.pizzas} pizzas, {second.total_slices()} slices")
+print(f"Slices together: {first.total_slices() + second.total_slices()}")
+"""
+
+DONATION = """\
+class Donation:
+    goal = 1000
+    collected = 0
+
+    def __init__(self, name, amount):
+        self.name = name
+        self.amount = amount
+        Donation.collected += amount
+
+
+for i in range(len(names)):
+    donation = Donation(names[i], amounts[i])
+    print(f"{donation.name} gave {donation.amount} rub, collected {Donation.collected} rub")
+if Donation.collected >= Donation.goal:
+    print("Goal reached")
+else:
+    print(f"Need {Donation.goal - Donation.collected} rub more")
+"""
+
+SALE = """\
+class Product:
+    discount = 0
+
+    def __init__(self, name, price):
+        self.name = name
+        self.price = price
+
+    def final_price(self):
+        return self.price * (100 - self.discount) // 100
+
+
+products = []
+for i in range(len(names)):
+    products.append(Product(names[i], prices[i]))
+products[0].discount = 50
+Product.discount = sale
+print(f"Store sale: {Product.discount}%")
+for product in products:
+    print(f"{product.name}: {product.price} -> {product.final_price()} rub")
+"""
+
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-clsattr-library-shelves", title="Полки в библиотеке",
@@ -176,5 +239,108 @@ TASKS = [
                   ("re:Trip\\.rate\\s*=(?!=)",
                    "Поменяй тариф через сам класс: `Trip.rate = new_rate`. Тогда новая цена сразу "
                    "подействует на все поездки.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-clsattr-pizza-slices", title="Кусочки пиццы",
+        given=["name1", "pizzas1", "name2", "pizzas2"],
+        variants=[{"name1": '"Anya"', "pizzas1": "3", "name2": '"Boris"', "pizzas2": "2"},
+                  {"name1": '"Vika"', "pizzas1": "1", "name2": '"Gleb"', "pizzas2": "5"},
+                  {"name1": '"Dasha"', "pizzas1": "4", "name2": '"Egor"', "pizzas2": "4"}],
+        hidden=[{"name1": '"Zoya"', "pizzas1": "0", "name2": '"Igor"', "pizzas2": "1"},
+                {"name1": '"Katya"', "pizzas1": "10", "name2": '"Lev"', "pizzas2": "6"},
+                {"name1": '"Masha"', "pizzas1": "2", "name2": '"Nikita"', "pizzas2": "7"}],
+        intro="Пиццерия режет каждую пиццу на 8 кусочков — это правило одно для всех заказов, поэтому его удобно "
+              "записать один раз в самом классе. А имя заказчика и число пицц у каждого заказа свои. "
+              "Сегодня `name1` заказал `pizzas1` пицц, а `name2` — `pizzas2`.",
+        steps=["Создай класс `Order`. Прямо в теле класса, а не в `__init__`, запиши атрибут класса `slices = 8`.",
+               "В `__init__(self, name, pizzas)` сохрани имя и число пицц в атрибуты `self.name` и `self.pizzas`.",
+               "Добавь метод `total_slices(self)`, который возвращает число кусочков в заказе: пиццы, умноженные на `Order.slices`.",
+               "Создай два заказа: `first = Order(name1, pizzas1)` и `second = Order(name2, pizzas2)`.",
+               "Выведи строку `Slices in a pizza: 8` — число возьми из `Order.slices`. Потом по строке для каждого заказа "
+               "в виде `Anya: 3 pizzas, 24 slices` и в конце строку вида `Slices together: 40`."],
+        hint="Атрибут класса записывается в теле класса без `self` и читается через имя класса: `Order.slices`. "
+             "Он один на все заказы, а вот число пицц у каждого заказа своё — его бери из `self.pizzas`.",
+        solution=PIZZA,
+        wrong=[("в методе берёт число пицц из переменной pizzas1 вместо self.pizzas — у обоих заказов одинаково",
+                PIZZA.replace("self.pizzas * Order.slices", "pizzas1 * Order.slices")),
+               ("складывает пиццы и кусочки вместо умножения",
+                PIZZA.replace("self.pizzas * Order.slices", "self.pizzas + Order.slices"))],
+        constructs=["class"],
+        must_use=[NEED_CLASS, class_level("slices", "slices = 8", "Order",
+                                          "Тогда число кусочков будет одним на все заказы.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-clsattr-donations", title="Сбор на подарок",
+        given=["names", "amounts"],
+        variants=[{"names": '["Anya", "Boris", "Vika"]', "amounts": "[300, 500, 150]"},
+                  {"names": '["Gleb", "Dasha"]', "amounts": "[600, 400]"},
+                  {"names": '["Egor", "Zoya", "Igor", "Katya"]', "amounts": "[100, 250, 200, 600]"}],
+        hidden=[{"names": '["Lev"]', "amounts": "[999]"},
+                {"names": '["Masha", "Nina"]', "amounts": "[1000, 50]"},
+                {"names": '["Oleg", "Polina", "Rita"]', "amounts": "[500, 300, 200]"}],
+        intro="Класс собирает деньги на подарок учительнице: цель — 1000 руб. Ученики по очереди сдают деньги: "
+              "в списке `names` — имена, а в списке `amounts` на тех же местах — сколько сдал каждый. "
+              "Цель и собранная сумма — общие для всех взносов, поэтому это атрибуты класса.",
+        steps=["Создай класс `Donation` с двумя атрибутами класса: `goal = 1000` и `collected = 0`.",
+               "В `__init__(self, name, amount)` сохрани имя и сумму в `self.name` и `self.amount`, а потом прибавь "
+               "сумму к общему атрибуту `Donation.collected`.",
+               "Пройди циклом по позициям `range(len(names))` и для каждой создай взнос. Сразу после создания выведи "
+               "строку вида `Anya gave 300 rub, collected 300 rub` — имя и сумму из атрибутов объекта, "
+               "а собранное — из `Donation.collected`.",
+               "После цикла выведи `Goal reached`, если собрано не меньше цели, а иначе — строку вида `Need 50 rub more`."],
+        hint="Общую сумму меняй через имя класса: `Donation.collected += amount`. Запись `self.collected += amount` "
+             "создаст у взноса его собственную копию, и общая сумма класса так и останется нулём.",
+        solution=DONATION,
+        wrong=[("прибавляет к self.collected — у каждого взноса своя копия, общая сумма не растёт",
+                DONATION.replace("        Donation.collected += amount", "        self.collected += amount")
+                        .replace("collected {Donation.collected} rub", "collected {donation.collected} rub")),
+               ("строгое сравнение — когда собрано ровно 1000 руб., пишет, что не хватает",
+                DONATION.replace("Donation.collected >= Donation.goal", "Donation.collected > Donation.goal"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS,
+                  class_level("collected", "collected = 0", "Donation", "Тогда собранная сумма будет общей для всех взносов."),
+                  ("re:Donation\\.collected\\s*(\\+=|=\\s*Donation\\.collected\\s*\\+)",
+                   "Прибавляй взнос через имя класса: `Donation.collected += amount`. Так растёт общая сумма, "
+                   "а не копия у одного взноса.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-clsattr-store-sale", title="Распродажа в магазине",
+        given=["names", "prices", "sale"],
+        variants=[{"names": '["Kettle", "Lamp", "Iron"]', "prices": "[2000, 1500, 3000]", "sale": "10"},
+                  {"names": '["Mixer", "Fan"]', "prices": "[4000, 2500]", "sale": "20"},
+                  {"names": '["Toaster", "Clock", "Radio", "Scale"]', "prices": "[1800, 900, 2200, 1100]", "sale": "30"}],
+        hidden=[{"names": '["Heater"]', "prices": "[5000]", "sale": "15"},
+                {"names": '["Blender", "Vacuum"]', "prices": "[3000, 8000]", "sale": "0"},
+                {"names": '["Router", "Mouse", "Camera"]', "prices": "[2400, 600, 12000]", "sale": "50"}],
+        intro="В магазине бытовой техники скидка обычно одна на все товары — её удобно хранить атрибутом класса. "
+              "Сегодня объявили общую распродажу на `sale` процентов. Но первый товар в списке уценён отдельно: "
+              "на него своя скидка 50 %, и общая распродажа её не меняет. Названия товаров — в списке `names`, "
+              "цены на тех же местах — в списке `prices`.",
+        steps=["Создай класс `Product` с атрибутом класса `discount = 0` — скидка в процентах. "
+               "В `__init__(self, name, price)` сохрани название и цену в `self.name` и `self.price`.",
+               "Добавь метод `final_price(self)`, который возвращает цену со скидкой: цену умножить на "
+               "`(100 - self.discount)` и разделить нацело на 100.",
+               "Создай список `products` из объектов `Product` — по одному на каждую позицию `range(len(names))`.",
+               "Дай первому товару его собственную скидку через объект: `products[0].discount = 50`. "
+               "Потом объяви распродажу для всех через класс: `Product.discount = sale`.",
+               "Выведи строку вида `Store sale: 10%` — число из `Product.discount`, а затем для каждого товара строку "
+               "вида `Kettle: 2000 -> 1000 rub` — название, старая цена и результат `final_price()`."],
+        hint="Когда метод читает `self.discount`, Python сначала ищет атрибут у самого объекта и только если его нет — "
+             "у класса. Присваивание `products[0].discount = 50` создаёт свою скидку только у первого товара, поэтому "
+             "смена `Product.discount` его уже не касается, а все остальные товары её видят.",
+        solution=SALE,
+        wrong=[("ставит уценку через класс — общая распродажа затирает скидку 50 % и у первого товара",
+                SALE.replace("products[0].discount = 50", "Product.discount = 50")),
+               ("записывает скидку в __init__ как атрибут объекта — распродажа до товаров не доходит",
+                SALE.replace("        self.price = price", "        self.price = price\n        self.discount = 0")),
+               ("объявляет распродажу через первый товар — остальные товары остаются без скидки",
+                SALE.replace("Product.discount = sale\n", "products[0].discount = sale\n")
+                    .replace("Store sale: {Product.discount}%", "Store sale: {sale}%"))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS,
+                  class_level("discount", "discount = 0", "Product", "Тогда скидка будет общей для всех товаров."),
+                  ("re:Product\\.discount\\s*=(?!=)",
+                   "Объяви распродажу через сам класс: `Product.discount = sale`. Тогда скидка сразу "
+                   "подействует на все товары, у которых нет своей.")],
     ),
 ]

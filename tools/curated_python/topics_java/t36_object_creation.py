@@ -102,6 +102,94 @@ if (first.votes > second.votes) {
     System.out.println("Draw");
 }'''
 
+# ───────── Plants ─────────
+
+PLANT = """class Plant {
+    String name;
+    int height;
+}"""
+
+PLANT_MAIN = """Plant first = new Plant();
+first.name = plant1;
+first.height = height1;
+Plant second = new Plant();
+second.name = plant2;
+second.height = height2;
+second.height += growth;
+System.out.println(first.name + ": " + first.height + " cm");
+System.out.println(second.name + ": " + second.height + " cm");"""
+
+# ───────── Race ─────────
+
+RUNNER = """class Runner {
+    String name;
+    int seconds;
+}"""
+
+RACE_MAIN = """Runner[] runners = new Runner[names.length];
+for (int i = 0; i < names.length; i++) {
+    Runner runner = new Runner();
+    runner.name = names[i];
+    runner.seconds = seconds[i];
+    runners[i] = runner;
+}
+Runner best = runners[0];
+for (int i = 1; i < runners.length; i++) {
+    if (runners[i].seconds < best.seconds) {
+        best = runners[i];
+    }
+}
+System.out.println("Runners: " + runners.length);
+System.out.println("Winner: " + best.name + ", " + best.seconds + " s");"""
+
+RACE_ONE_OBJECT = """Runner[] runners = new Runner[names.length];
+Runner runner = new Runner();
+for (int i = 0; i < names.length; i++) {
+    runner.name = names[i];
+    runner.seconds = seconds[i];
+    runners[i] = runner;
+}
+Runner best = runners[0];
+for (int i = 1; i < runners.length; i++) {
+    if (runners[i].seconds < best.seconds) {
+        best = runners[i];
+    }
+}
+System.out.println("Runners: " + runners.length);
+System.out.println("Winner: " + best.name + ", " + best.seconds + " s");"""
+
+# ───────── Dice game ─────────
+
+PLAYER = """class Player {
+    String name;
+    int points;
+}"""
+
+DICE_MAIN = """Player first = new Player();
+first.name = name1;
+Player second = new Player();
+second.name = name2;
+Player current = first;
+for (int i = 0; i < rolls.length; i++) {
+    current.points += rolls[i];
+    if (rolls[i] != 6) {
+        if (current == first) {
+            current = second;
+        } else {
+            current = first;
+        }
+    }
+}
+System.out.println(first.name + ": " + first.points + " points");
+System.out.println(second.name + ": " + second.points + " points");
+if (first.points > second.points) {
+    System.out.println("Winner: " + first.name);
+} else if (second.points > first.points) {
+    System.out.println("Winner: " + second.name);
+} else {
+    System.out.println("Draw");
+}"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-obj-two-suitcases", title="Два чемодана",
@@ -195,5 +283,101 @@ TASKS = [
         checks=find_class("Candidate")
                + need_field("Candidate", "name", "String", "имя кандидата")
                + need_field("Candidate", "votes", "int", "сколько голосов набрал кандидат"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-obj-two-plants", title="Два цветка на подоконнике",
+        given=[("String", "plant1"), ("int", "height1"), ("String", "plant2"), ("int", "height2"), ("int", "growth")],
+        variants=[{"plant1": '"Ficus"', "height1": "40", "plant2": '"Cactus"', "height2": "15", "growth": "5"},
+                  {"plant1": '"Aloe"', "height1": "25", "plant2": '"Violet"', "height2": "10", "growth": "3"},
+                  {"plant1": '"Palm"', "height1": "90", "plant2": '"Mint"', "height2": "20", "growth": "8"}],
+        hidden=[{"plant1": '"Fern"', "height1": "30", "plant2": '"Basil"', "height2": "12", "growth": "0"},
+                {"plant1": '"Lemon"', "height1": "55", "plant2": '"Orchid"', "height2": "35", "growth": "11"},
+                {"plant1": '"Ivy"', "height1": "18", "plant2": '"Rose"', "height2": "18", "growth": "2"}],
+        intro="На подоконнике стоят два цветка. Их названия и высота в сантиметрах записаны в полях `plant1`, `height1`, "
+              "`plant2` и `height2`. Подкормку получил только второй цветок, и он вырос ещё на `growth` см.",
+        steps=["Ниже класса `Solution` создай класс `Plant` (без `public`) с полями `String name` и `int height`.",
+               "В `main` создай два отдельных объекта: `Plant first = new Plant();` и `Plant second = new Plant();`. "
+               "Заполни первый из `plant1` и `height1`, второй — из `plant2` и `height2`.",
+               "Увеличь высоту только второго цветка: `second.height += growth;`.",
+               "Выведи две строки вида `Ficus: 40 cm` — сначала для первого цветка, потом для второго, значения бери "
+               "из полей объектов."],
+        hint="У каждого объекта свои поля: изменение `second.height` никак не трогает `first.height`, потому что "
+             "`new` создал два разных цветка.",
+        solution=PLANT_MAIN,
+        classes=PLANT,
+        wrong=[("второй цветок — не новый объект, а тот же самый: `Plant second = first;`",
+                PLANT_MAIN.replace("Plant second = new Plant();", "Plant second = first;")),
+               ("поля класса объявлены static — оба цветка делят одну высоту и одно название",
+                PLANT_MAIN, PLANT.replace("    String name;", "    static String name;").replace("    int height;", "    static int height;"))],
+        constructs=["class"],
+        checks=find_class("Plant")
+               + need_field("Plant", "name", "String", "название цветка")
+               + need_field("Plant", "height", "int", "высота в сантиметрах"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-obj-race-winner", title="Победитель забега",
+        given=[("String[]", "names"), ("int[]", "seconds")],
+        variants=[{"names": '{"Anya", "Boris", "Vika"}', "seconds": "{62, 58, 65}"},
+                  {"names": '{"Gleb", "Dasha", "Egor", "Zoya"}', "seconds": "{71, 74, 69, 70}"},
+                  {"names": '{"Ilya", "Kira"}', "seconds": "{55, 60}"}],
+        hidden=[{"names": '{"Lev"}', "seconds": "{80}"},
+                {"names": '{"Mila", "Nik", "Olya", "Petya", "Rita"}', "seconds": "{66, 64, 70, 63, 68}"},
+                {"names": '{"Sasha", "Tanya", "Uma"}', "seconds": "{59, 61, 57}"},
+                {"names": '{"Vera", "Yan"}', "seconds": "{75, 52}"}],
+        intro="На школьной стометровке у каждого бегуна своё время. Имена записаны в массиве `names`, а время в секундах — "
+              "в массиве `seconds` под теми же номерами. Каждый бегун — отдельный объект.",
+        steps=["Ниже класса `Solution` создай класс `Runner` (без `public`) с полями `String name` и `int seconds`.",
+               "В `main` создай массив `Runner[] runners = new Runner[names.length];` и в цикле для каждого бегуна создай "
+               "новый объект `new Runner()`, заполни его поля и положи в массив.",
+               "Найди самого быстрого: заведи переменную `Runner best = runners[0];` и пройди по остальным бегунам; "
+               "если у бегуна время меньше, чем у `best`, запомни в `best` этого бегуна. Времена у всех разные.",
+               "Выведи две строки вида `Runners: 3` и `Winner: Boris, 58 s`, значения бери из массива и из полей `best`."],
+        hint="Переменная `best` не копирует бегуна, а просто указывает на один из объектов массива. Поэтому через "
+             "`best.name` и `best.seconds` видны данные именно этого бегуна.",
+        solution=RACE_MAIN,
+        classes=RUNNER,
+        wrong=[("создаёт один объект до цикла — все ячейки массива указывают на последнего бегуна", RACE_ONE_OBJECT),
+               ("перепутал знак сравнения — побеждает самый медленный",
+                RACE_MAIN.replace("runners[i].seconds < best.seconds", "runners[i].seconds > best.seconds"))],
+        constructs=["class", "for"],
+        checks=find_class("Runner")
+               + need_field("Runner", "name", "String", "имя бегуна")
+               + need_field("Runner", "seconds", "int", "время в секундах"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-obj-dice-turns", title="Игра в кости",
+        given=[("String", "name1"), ("String", "name2"), ("int[]", "rolls")],
+        variants=[{"name1": '"Anya"', "name2": '"Boris"', "rolls": "{3, 6, 2, 5, 4}"},
+                  {"name1": '"Gleb"', "name2": '"Nina"', "rolls": "{6, 6, 1, 2, 6, 3}"},
+                  {"name1": '"Sveta"', "name2": '"Artem"', "rolls": "{4, 2, 6, 5}"}],
+        hidden=[{"name1": '"Dasha"', "name2": '"Egor"', "rolls": "{5}"},
+                {"name1": '"Kira"', "name2": '"Lesha"', "rolls": "{2, 6, 4, 6}"},
+                {"name1": '"Roma"', "name2": '"Yulya"', "rolls": "{}"},
+                {"name1": '"Vanya"', "name2": '"Tanya"', "rolls": "{1, 3, 6, 1, 2, 5, 6, 6, 4}"}],
+        intro="Двое игроков — `name1` и `name2` — по очереди бросают кубик, первым ходит `name1`. Выпавшие очки по порядку "
+              "записаны в массиве `rolls`. Кто выбросил 6, бросает ещё раз, иначе ход переходит к сопернику.",
+        steps=["Ниже класса `Solution` создай класс `Player` (без `public`) с полями `String name` и `int points`.",
+               "В `main` создай два объекта-игрока `first` и `second` с именами из `name1` и `name2`. Заведи переменную "
+               "`Player current = first;` — она указывает на того, чей сейчас ход.",
+               "Пройди по массиву `rolls`: прибавь очки к `current.points`; если выпало не 6, переключи ход — если "
+               "`current == first`, присвой `current = second`, иначе `current = first`.",
+               "Выведи две строки вида `Anya: 7 points` — для первого игрока, потом для второго. Третьей строкой выведи "
+               "`Winner: Anya` с именем того, у кого очков больше, а при равенстве — `Draw`."],
+        hint="`current` — не третий игрок, а ссылка на одного из двух объектов. Поэтому `current.points += ...` меняет "
+             "очки того игрока, на которого `current` сейчас указывает.",
+        solution=DICE_MAIN,
+        classes=PLAYER,
+        wrong=[("переключает ход после каждого броска, даже после шестёрки",
+                DICE_MAIN.replace("    if (rolls[i] != 6) {\n        if (current == first) {\n            current = second;\n"
+                                  "        } else {\n            current = first;\n        }\n    }",
+                                  "    if (current == first) {\n        current = second;\n    } else {\n        current = first;\n    }")),
+               ("при равенстве очков объявляет победителем второго игрока вместо Draw",
+                DICE_MAIN.replace('} else if (second.points > first.points) {\n    System.out.println("Winner: " + second.name);\n'
+                                  '} else {\n    System.out.println("Draw");\n}',
+                                  '} else {\n    System.out.println("Winner: " + second.name);\n}'))],
+        constructs=["class", "for", "if"],
+        checks=find_class("Player")
+               + need_field("Player", "name", "String", "имя игрока")
+               + need_field("Player", "points", "int", "сколько очков набрал игрок"),
     ),
 ]

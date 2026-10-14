@@ -79,4 +79,77 @@ TASKS = [
                 '    count++;\n}\nSystem.out.println("Number " + number + ": digits " + count + ", sum " + sum);')],
         constructs=["while"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-while-ball-bounce", title="Прыгающий мяч",
+        given=[("int", "height")],
+        variants=[{"height": "80"}, {"height": "100"}, {"height": "30"}],
+        hidden=[{"height": "1"}, {"height": "2"}, {"height": "64"}, {"height": "7"}, {"height": "200"}],
+        intro="Аня уронила резиновый мяч с высоты `height` см. После каждого удара о пол мяч подпрыгивает ровно "
+              "на половину прежней высоты (целое число сантиметров, остаток отбрасывается).",
+        steps=["Заведи переменную `h` и положи в неё значение `height`.",
+               "С помощью цикла `while` повторяй, пока `h` больше 0: выведи строку `Height: … cm` с текущим значением `h`, "
+               "а потом раздели `h` на 2 нацело.",
+               "После цикла выведи `The ball is still`."],
+        hint="`h /= 2` — то же, что `h = h / 2`. Деление целых чисел отбрасывает остаток, поэтому рано или поздно `h` "
+             "станет 0 и цикл закончится.",
+        solution='int h = height;\nwhile (h > 0) {\n    System.out.println("Height: " + h + " cm");\n    h /= 2;\n}\n'
+                 'System.out.println("The ball is still");',
+        wrong=[("h > 1: последний прыжок на 1 см не выводится",
+                'int h = height;\nwhile (h > 1) {\n    System.out.println("Height: " + h + " cm");\n    h /= 2;\n}\n'
+                'System.out.println("The ball is still");'),
+               ("делит до вывода: начальная высота не выводится, а в конце появляется 0 см",
+                'int h = height;\nwhile (h > 0) {\n    h /= 2;\n    System.out.println("Height: " + h + " cm");\n}\n'
+                'System.out.println("The ball is still");')],
+        constructs=["while"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-while-news-spread", title="Как быстро расходится новость",
+        given=[("int", "town")],
+        variants=[{"town": "100"}, {"town": "30"}, {"town": "2000"}],
+        hidden=[{"town": "1"}, {"town": "3"}, {"town": "4"}, {"town": "27"}, {"town": "28"}, {"town": "1000000"}],
+        intro="В посёлке живёт `town` человек. В первый день новость знает 1 человек, а каждый следующий день "
+              "знающих становится втрое больше. Через сколько дней новость узнают все?",
+        steps=["Заведи две переменные: `known` со значением 1 (сколько человек знают новость) и `day` со значением 1 "
+               "(какой сейчас день).",
+               "С помощью цикла `while` повторяй, пока `known` меньше `town`: умножь `known` на 3 и увеличь `day` на 1.",
+               "После цикла выведи строку `Everyone knows on day …` с номером дня."],
+        hint="Если в посёлке живёт ровно столько, сколько уже знают новость, ждать следующего дня не нужно. "
+             "Если `town` равно 1, цикл не выполнится ни разу — и это правильно: все знают в первый же день.",
+        solution='int known = 1;\nint day = 1;\nwhile (known < town) {\n    known *= 3;\n    day++;\n}\n'
+                 'System.out.println("Everyone knows on day " + day);',
+        wrong=[("<= вместо <: при точном совпадении ждёт лишний день",
+                'int known = 1;\nint day = 1;\nwhile (known <= town) {\n    known *= 3;\n    day++;\n}\n'
+                'System.out.println("Everyone knows on day " + day);'),
+               ("дни считаются с нуля: ответ на день меньше",
+                'int known = 1;\nint day = 0;\nwhile (known < town) {\n    known *= 3;\n    day++;\n}\n'
+                'System.out.println("Everyone knows on day " + day);')],
+        constructs=["while"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-while-collatz", title="Игра «3n + 1»",
+        given=[("int", "start")],
+        variants=[{"start": "6"}, {"start": "7"}, {"start": "12"}],
+        hidden=[{"start": "1"}, {"start": "2"}, {"start": "3"}, {"start": "16"}, {"start": "27"}],
+        intro="Математическая игра: берём число `start`. Если оно чётное, делим его на 2, если нечётное — умножаем "
+              "на 3 и прибавляем 1. С новым числом повторяем то же самое, пока не получится 1.",
+        steps=["Заведи переменную `n`, равную `start`, переменную для числа шагов со значением 0 и переменную для "
+               "самого большого встреченного числа со значением `start`.",
+               "С помощью цикла `while` повторяй, пока `n` не равно 1: измени `n` по правилу игры, увеличь число шагов "
+               "на 1 и, если новое `n` больше самого большого, запомни его.",
+               "После цикла выведи две строки: `Steps: …` и `Highest: …`."],
+        hint="Чётность проверяет остаток от деления на 2: `n % 2 == 0`. Самое большое число сразу равно `start` — "
+             "ведь start тоже встретился в игре и может оказаться самым большим.",
+        solution='int n = start;\nint steps = 0;\nint highest = start;\nwhile (n != 1) {\n    if (n % 2 == 0) {\n        n /= 2;\n'
+                 '    } else {\n        n = 3 * n + 1;\n    }\n    steps++;\n    if (n > highest) {\n        highest = n;\n    }\n}\n'
+                 'System.out.println("Steps: " + steps);\nSystem.out.println("Highest: " + highest);',
+        wrong=[("самое большое начинается с 0: число start не учитывается",
+                'int n = start;\nint steps = 0;\nint highest = 0;\nwhile (n != 1) {\n    if (n % 2 == 0) {\n        n /= 2;\n'
+                '    } else {\n        n = 3 * n + 1;\n    }\n    steps++;\n    if (n > highest) {\n        highest = n;\n    }\n}\n'
+                'System.out.println("Steps: " + steps);\nSystem.out.println("Highest: " + highest);'),
+               ("шаги считаются с 1: на один шаг больше",
+                'int n = start;\nint steps = 1;\nint highest = start;\nwhile (n != 1) {\n    if (n % 2 == 0) {\n        n /= 2;\n'
+                '    } else {\n        n = 3 * n + 1;\n    }\n    steps++;\n    if (n > highest) {\n        highest = n;\n    }\n}\n'
+                'System.out.println("Steps: " + steps);\nSystem.out.println("Highest: " + highest);')],
+        constructs=["while", "if"],
+    ),
 ]

@@ -110,4 +110,112 @@ TASKS = [
                 "        int i = queue.indexOf(name);\n        if (i == -1) {{\n            return queue;\n        }}\n"
                 "        Collections.swap(queue, i, Math.max(0, i - {k}));\n        return queue;\n    }}\n}}\n")],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-listops-fix-name", title="Опечатка в списке класса",
+        given=[("List<String>", "pupils"), ("String", "typo"), ("String", "fixed")],
+        variants=[{"pupils": 'new ArrayList<>(List.of("Anya", "Brois", "Vika", "Gleb"))', "typo": '"Brois"', "fixed": '"Boris"'},
+                  {"pupils": 'new ArrayList<>(List.of("Dima", "Egor", "Zhenya"))', "typo": '"Ivna"', "fixed": '"Ivan"'},
+                  {"pupils": 'new ArrayList<>(List.of("Kira", "Lena", "Mark", "Nnia", "Olya"))', "typo": '"Nnia"', "fixed": '"Nina"'}],
+        hidden=[{"pupils": 'new ArrayList<>(List.of("Petay"))', "typo": '"Petay"', "fixed": '"Petya"'},
+                {"pupils": 'new ArrayList<>(List.of("Rita", "Sasha"))', "typo": '"Tima"', "fixed": '"Tim"'},
+                {"pupils": 'new ArrayList<>(List.of("Ulyana", "Fedya", "Yana", "Sasha", "Rma"))', "typo": '"Rma"', "fixed": '"Roma"'},
+                {"pupils": 'new ArrayList<>(List.of("Zoya", "Gosha"))', "typo": '"Zoya"', "fixed": '"Zoe"'}],
+        intro="Учительница заметила опечатку в списке класса `pupils`: имя `typo` написано неправильно, а должно быть "
+              "`fixed`. Исправленное имя должно остаться на том же месте списка. Может оказаться и так, что такой "
+              "опечатки в списке нет.",
+        steps=["Найди место опечатки методом `indexOf(typo)` — он возвращает номер элемента или `-1`, если его нет.",
+               "Если имя нашлось, замени его на `fixed` методом `set(index, fixed)` и выведи строку вида "
+               "`Fixed at place 2` — место в списке, считая с 1.",
+               "Если не нашлось, выведи строку вида `Ivna not found` — с именем `typo`.",
+               "Последней строкой выведи список командой `System.out.println(pupils);`."],
+        hint="`set` заменяет элемент на месте, и длина списка не меняется, а `add` вставил бы ещё один элемент. "
+             "Место для людей на 1 больше номера в списке.",
+        solution='int index = pupils.indexOf(typo);\nif (index >= 0) {\n    pupils.set(index, fixed);\n'
+                 '    System.out.println("Fixed at place " + (index + 1));\n} else {\n'
+                 '    System.out.println(typo + " not found");\n}\nSystem.out.println(pupils);',
+        wrong=[("вставляет исправленное имя через add — опечатка остаётся в списке",
+                'int index = pupils.indexOf(typo);\nif (index >= 0) {\n    pupils.add(index, fixed);\n'
+                '    System.out.println("Fixed at place " + (index + 1));\n} else {\n'
+                '    System.out.println(typo + " not found");\n}\nSystem.out.println(pupils);'),
+               ("печатает номер в списке, а не место — считает с нуля",
+                'int index = pupils.indexOf(typo);\nif (index >= 0) {\n    pupils.set(index, fixed);\n'
+                '    System.out.println("Fixed at place " + index);\n} else {\n'
+                '    System.out.println(typo + " not found");\n}\nSystem.out.println(pupils);')],
+        constructs=["if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-listops-height-line", title="Строимся по росту",
+        given=[("List<Integer>", "heights"), ("int", "newcomer")],
+        variants=[{"heights": "new ArrayList<>(List.of(128, 131, 135, 140, 142))", "newcomer": "137"},
+                  {"heights": "new ArrayList<>(List.of(150, 152, 152, 158))", "newcomer": "152"},
+                  {"heights": "new ArrayList<>(List.of(119, 124, 126))", "newcomer": "115"}],
+        hidden=[{"heights": "new ArrayList<>()", "newcomer": "130"},
+                {"heights": "new ArrayList<>(List.of(140, 145))", "newcomer": "150"},
+                {"heights": "new ArrayList<>(List.of(133, 133, 133))", "newcomer": "133"},
+                {"heights": "new ArrayList<>(List.of(120, 125, 130, 135, 140, 145))", "newcomer": "131"}],
+        intro="На физкультуре класс стоит в шеренге по росту — от низкого к высокому, рост в сантиметрах записан в "
+              "список `heights`. Пришёл новенький ростом `newcomer` см. Он встаёт сразу за последним, кто не выше "
+              "его, — остальные сдвигаются на одно место.",
+        steps=["Найди место для новенького: заведи `int place = 0;` и циклом `while` увеличивай `place`, пока "
+               "`place` меньше размера списка и `heights.get(place)` не больше `newcomer`.",
+               "Вставь новенького на это место методом `heights.add(place, newcomer);` — все, кто стоял с этого "
+               "места и дальше, сдвинутся вправо.",
+               "Выведи список командой `System.out.println(heights);`.",
+               "Последней строкой выведи строку вида `Newcomer stands at place 4` — его место в шеренге, считая с 1."],
+        hint="Условие `place < heights.size()` проверяй первым: если новенький выше всех, цикл дойдёт до конца "
+             "списка, и `add(heights.size(), ...)` просто поставит его последним.",
+        solution="int place = 0;\nwhile (place < heights.size() && heights.get(place) <= newcomer) {\n    place++;\n}\n"
+                 'heights.add(place, newcomer);\nSystem.out.println(heights);\n'
+                 'System.out.println("Newcomer stands at place " + (place + 1));',
+        wrong=[("сравнивает строго меньше — новенький встаёт перед ребятами такого же роста",
+                "int place = 0;\nwhile (place < heights.size() && heights.get(place) < newcomer) {\n    place++;\n}\n"
+                'heights.add(place, newcomer);\nSystem.out.println(heights);\n'
+                'System.out.println("Newcomer stands at place " + (place + 1));'),
+               ("заменяет ученика на найденном месте через set — один ученик пропадает из шеренги",
+                "int place = 0;\nwhile (place < heights.size() && heights.get(place) <= newcomer) {\n    place++;\n}\n"
+                'if (place < heights.size()) {\n    heights.set(place, newcomer);\n} else {\n    heights.add(newcomer);\n}\n'
+                'System.out.println(heights);\nSystem.out.println("Newcomer stands at place " + (place + 1));')],
+        constructs=["while"],
+    ),
+    JavaFunctionTask(
+        skill=SKILL, difficulty=3, slug="java-listops-short-songs", title="Убрать песни короче {limit} секунд",
+        function="removeShort",
+        variants=[{"limit": 60}, {"limit": 90}, {"limit": 120}],
+        intro="В плейлисте попались обрывки песен. Плейлист — список длительностей песен в секундах, и из него "
+              "нужно убрать все песни короче {limit} секунд, не меняя порядок остальных.",
+        steps=["Напиши метод `static List<Integer> removeShort(List<Integer> songs)`, который убирает из самого списка "
+               "`songs` все длительности меньше {limit} и возвращает этот же список.",
+               "Удаляй по номеру методом `songs.remove(i)`. Песня ровно {limit} секунд остаётся.",
+               "После удаления все элементы правее сдвигаются на одно место влево — сделай так, чтобы ни одна "
+               "песня не была пропущена."],
+        hint="Если удалить элемент с номером `i` и сразу перейти к `i + 1`, то элемент, который сдвинулся на место "
+             "`i`, никто не проверит. Можно идти по списку с конца к началу — тогда сдвиг не мешает.",
+        starter="import java.util.*;\n\npublic class Solution {{\n"
+                "    static List<Integer> removeShort(List<Integer> songs) {{\n"
+                "        // Напиши решение здесь\n        return songs;\n    }}\n}}\n",
+        solution="import java.util.*;\n\npublic class Solution {{\n"
+                 "    static List<Integer> removeShort(List<Integer> songs) {{\n"
+                 "        for (int i = songs.size() - 1; i >= 0; i--) {{\n"
+                 "            if (songs.get(i) < {limit}) {{\n                songs.remove(i);\n            }}\n        }}\n"
+                 "        return songs;\n    }}\n}}\n",
+        inputs=["new ArrayList<>(List.of(200, 45, 30, 180, 59, 61))",
+                "new ArrayList<>(List.of(10, 20, 240, 15))",
+                "new ArrayList<>(List.of(60, 90, 120, 119, 89, 59))",
+                "new ArrayList<>(List.of(300, 250))",
+                "new ArrayList<>(List.of(5, 6, 7))",
+                "new ArrayList<>(List.of(100, 30, 40, 50, 150, 20, 25))",
+                "new ArrayList<>()"],
+        wrong=[("удаляет и идёт вперёд с i++ — песня, сдвинувшаяся на место удалённой, пропускается",
+                "import java.util.*;\n\npublic class Solution {{\n"
+                "    static List<Integer> removeShort(List<Integer> songs) {{\n"
+                "        for (int i = 0; i < songs.size(); i++) {{\n"
+                "            if (songs.get(i) < {limit}) {{\n                songs.remove(i);\n            }}\n        }}\n"
+                "        return songs;\n    }}\n}}\n"),
+               ("сравнивает через <= — удаляет и песни ровно на границе",
+                "import java.util.*;\n\npublic class Solution {{\n"
+                "    static List<Integer> removeShort(List<Integer> songs) {{\n"
+                "        for (int i = songs.size() - 1; i >= 0; i--) {{\n"
+                "            if (songs.get(i) <= {limit}) {{\n                songs.remove(i);\n            }}\n        }}\n"
+                "        return songs;\n    }}\n}}\n")],
+    ),
 ]

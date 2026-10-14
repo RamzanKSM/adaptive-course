@@ -198,6 +198,193 @@ for (Hero hero : heroes) {
 }
 System.out.println("Team damage: " + total);"""
 
+GREETINGS = """\
+class Greeting {
+    String language() {
+        return "Unknown";
+    }
+
+    String hello(String name) {
+        return name;
+    }
+}
+
+class English extends Greeting {
+    @Override
+    String language() {
+        return "English";
+    }
+
+    @Override
+    String hello(String name) {
+        return "Hello, " + name + "!";
+    }
+}
+
+class Spanish extends Greeting {
+    @Override
+    String language() {
+        return "Spanish";
+    }
+
+    @Override
+    String hello(String name) {
+        return "Hola, " + name + "!";
+    }
+}
+
+class French extends Greeting {
+    @Override
+    String language() {
+        return "French";
+    }
+
+    @Override
+    String hello(String name) {
+        return "Bonjour, " + name + "!";
+    }
+}"""
+
+GREETINGS_MAIN = """\
+Greeting[] greetings = {new English(), new Spanish(), new French()};
+for (Greeting greeting : greetings) {
+    System.out.println(greeting.language() + ": " + greeting.hello(guest));
+}"""
+
+TARIFFS = """\
+class Tariff {
+    String title() {
+        return "Tariff";
+    }
+
+    int cost(int minutes) {
+        return 0;
+    }
+}
+
+class PerMinute extends Tariff {
+    @Override
+    String title() {
+        return "Per minute";
+    }
+
+    @Override
+    int cost(int minutes) {
+        return minutes * 3;
+    }
+}
+
+class Bundle extends Tariff {
+    @Override
+    String title() {
+        return "Bundle";
+    }
+
+    @Override
+    int cost(int minutes) {
+        if (minutes <= 200) {
+            return 300;
+        }
+        return 300 + (minutes - 200) * 2;
+    }
+}
+
+class Unlimited extends Tariff {
+    @Override
+    String title() {
+        return "Unlimited";
+    }
+
+    @Override
+    int cost(int minutes) {
+        return 550;
+    }
+}"""
+
+TARIFFS_MAIN = """\
+Tariff[] tariffs = {new PerMinute(), new Bundle(), new Unlimited()};
+Tariff best = tariffs[0];
+for (Tariff tariff : tariffs) {
+    System.out.println(tariff.title() + ": " + tariff.cost(minutes) + " rub");
+    if (tariff.cost(minutes) < best.cost(minutes)) {
+        best = tariff;
+    }
+}
+System.out.println("Best: " + best.title());"""
+
+ACTIVITIES = """\
+class Activity {
+    int minutes;
+
+    String title() {
+        return "Activity";
+    }
+
+    int calories() {
+        return 0;
+    }
+}
+
+class Running extends Activity {
+    @Override
+    String title() {
+        return "Running";
+    }
+
+    @Override
+    int calories() {
+        return minutes * 10;
+    }
+}
+
+class Swimming extends Activity {
+    @Override
+    String title() {
+        return "Swimming";
+    }
+
+    @Override
+    int calories() {
+        return minutes * 8;
+    }
+}
+
+class Yoga extends Activity {
+    @Override
+    String title() {
+        return "Yoga";
+    }
+
+    @Override
+    int calories() {
+        return 20 + minutes * 3;
+    }
+}"""
+
+ACTIVITIES_MAIN = """\
+Activity[] week = new Activity[kinds.length];
+for (int i = 0; i < kinds.length; i++) {
+    if (kinds[i].equals("run")) {
+        week[i] = new Running();
+    } else if (kinds[i].equals("swim")) {
+        week[i] = new Swimming();
+    } else {
+        week[i] = new Yoga();
+    }
+    week[i].minutes = minutes[i];
+}
+int total = 0;
+Activity best = week[0];
+for (Activity activity : week) {
+    System.out.println(activity.title() + " " + activity.minutes + " min: " + activity.calories() + " kcal");
+    total += activity.calories();
+    if (activity.calories() > best.calories()) {
+        best = activity;
+    }
+}
+System.out.println("Total: " + total + " kcal");
+System.out.println("Best: " + best.title());"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-poly-school-route", title="Дорога до школы",
@@ -293,5 +480,94 @@ TASKS = [
                                     "int total = 0;\nfor (Hero hero : heroes) {\n    total = 0;\n"))],
         constructs=["class", "for"],
         checks=exist("Hero", "Warrior", "Mage", "Archer") + children("Hero", "Warrior", "Mage", "Archer"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-poly-hello-languages", title="Приветствие на трёх языках",
+        given=[("String", "guest")],
+        variants=[{"guest": '"Anya"'}, {"guest": '"Boris"'}, {"guest": '"Maria"'}],
+        hidden=[{"guest": '"Timur"'}, {"guest": '"Pablo"'}, {"guest": '"Zoe"'}],
+        intro="Гостиница встречает гостей на табло сразу на трёх языках: английском, испанском и французском. Каждый язык "
+              "здоровается по-своему, а табло выводит все приветствия одним циклом. Имя гостя записано в поле `guest`.",
+        steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Greeting` без слова `public`, с двумя "
+               "методами: `String language()` возвращает `Unknown`, а `String hello(String name)` возвращает просто `name`.",
+               "Опиши трёх наследников `Greeting` и переопредели в каждом оба метода (с `@Override`): `English` — язык "
+               "`English`, приветствие вида `Hello, Anya!`; `Spanish` — `Spanish` и `Hola, Anya!`; `French` — `French` "
+               "и `Bonjour, Anya!`.",
+               "В `main` создай массив родительского типа: `Greeting[] greetings = {{new English(), new Spanish(), new French()}};`",
+               "Одним циклом `for` пройди по массиву и для каждого языка выведи строку вида `English: Hello, Anya!` — "
+               "имя возьми из `guest`. Методы вызывай только внутри этого цикла."],
+        hint="Переменная цикла имеет тип `Greeting`, но по очереди указывает на объекты трёх разных классов. "
+             "Вызов `greeting.hello(guest)` один и тот же, а Java каждый раз берёт версию метода из класса текущего объекта.",
+        solution=GREETINGS_MAIN, classes=GREETINGS,
+        wrong=[("в French забыл переопределить language — вместо названия языка печатается `Unknown`",
+                GREETINGS_MAIN, GREETINGS.replace('class French extends Greeting {\n    @Override\n    String language() {\n        return "French";\n    }\n\n',
+                                                  'class French extends Greeting {\n')),
+               ("опечатка в имени метода у испанского и нет @Override — печатается только имя",
+                GREETINGS_MAIN, GREETINGS.replace('    @Override\n    String hello(String name) {\n        return "Hola, " + name + "!";',
+                                                  '    String helo(String name) {\n        return "Hola, " + name + "!";'))],
+        constructs=["class", "for"],
+        checks=exist("Greeting", "English", "Spanish", "French") + children("Greeting", "English", "Spanish", "French"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-poly-phone-tariffs", title="Выбор тарифа",
+        given=[("int", "minutes")],
+        variants=[{"minutes": "150"}, {"minutes": "260"}, {"minutes": "90"}],
+        hidden=[{"minutes": "200"}, {"minutes": "201"}, {"minutes": "500"}, {"minutes": "0"}, {"minutes": "325"}],
+        intro="Оператор связи предлагает три тарифа, и плата за месяц у каждого считается по-своему. Ты говоришь по телефону "
+              "примерно `minutes` минут в месяц и хочешь увидеть цену на всех тарифах и выбрать самый дешёвый.",
+        steps=["Ниже класса `Solution` опиши класс `Tariff` (без `public`) с методами `String title()`, который возвращает "
+               "`Tariff`, и `int cost(int minutes)`, который возвращает `0`.",
+               "Опиши трёх наследников `Tariff` и переопредели в каждом оба метода: `PerMinute` — название `Per minute`, "
+               "3 руб. за минуту; `Bundle` — название `Bundle`, 300 руб., если минут не больше 200, а за каждую минуту "
+               "сверх 200 ещё по 2 руб.; `Unlimited` — название `Unlimited`, всегда 550 руб.",
+               "В `main` создай массив `Tariff[] tariffs = {{new PerMinute(), new Bundle(), new Unlimited()}};` и одним циклом "
+               "выведи для каждого тарифа строку вида `Per minute: 450 rub`.",
+               "В том же цикле найди самый дешёвый тариф (при равной цене — тот, что раньше в массиве): заведи до цикла "
+               "`Tariff best = tariffs[0];`. После цикла выведи строку вида `Best: Bundle`."],
+        hint="Внутри цикла не проверяй, какой это тариф: `tariff.cost(minutes)` сам вызовет нужную версию метода. "
+             "Переменная `best` — тоже типа `Tariff`, и `best.title()` вернёт название именно того тарифа, на который она указывает.",
+        solution=TARIFFS_MAIN, classes=TARIFFS,
+        wrong=[("в Bundle граница строгая — ровно 200 минут уже считаются сверх пакета",
+                TARIFFS_MAIN, TARIFFS.replace("if (minutes <= 200) {\n            return 300;\n        }\n        return 300 + (minutes - 200) * 2;",
+                                              "if (minutes < 200) {\n            return 300;\n        }\n        return 300 + (minutes - 199) * 2;")),
+               ("ищет самый дорогой тариф вместо самого дешёвого",
+                TARIFFS_MAIN.replace("tariff.cost(minutes) < best.cost(minutes)", "tariff.cost(minutes) > best.cost(minutes)"))],
+        constructs=["class", "for"],
+        checks=exist("Tariff", "PerMinute", "Bundle", "Unlimited") + children("Tariff", "PerMinute", "Bundle", "Unlimited"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-poly-fitness-week", title="Тренировки за неделю",
+        given=[("String[]", "kinds"), ("int[]", "minutes")],
+        variants=[{"kinds": '{"run", "yoga", "swim"}', "minutes": "{30, 60, 45}"},
+                  {"kinds": '{"swim", "swim", "run", "yoga"}', "minutes": "{20, 50, 25, 40}"},
+                  {"kinds": '{"yoga", "run"}', "minutes": "{90, 15}"}],
+        hidden=[{"kinds": '{"run"}', "minutes": "{10}"},
+                {"kinds": '{"yoga", "yoga", "swim"}', "minutes": "{30, 100, 40}"},
+                {"kinds": '{"swim", "run", "yoga", "run", "swim"}', "minutes": "{60, 48, 20, 50, 10}"},
+                {"kinds": '{"run", "swim"}', "minutes": "{40, 50}"}],
+        intro="Фитнес-браслет записал твои тренировки за неделю: в массиве `kinds` — вид тренировки (`run` — бег, `swim` — "
+              "плавание, `yoga` — йога), а в `minutes` — сколько минут она длилась. Калории каждый вид спорта считает "
+              "по-своему, а итоги нужно подвести одним циклом.",
+        steps=["Ниже класса `Solution` опиши класс `Activity` (без `public`) с полем `int minutes` и методами `String title()`, "
+               "который возвращает `Activity`, и `int calories()`, который возвращает `0`.",
+               "Опиши трёх наследников `Activity` и переопредели в каждом оба метода: `Running` — название `Running`, "
+               "10 ккал в минуту; `Swimming` — `Swimming`, 8 ккал в минуту; `Yoga` — `Yoga`, 20 ккал плюс 3 ккал в минуту.",
+               "В `main` создай массив `Activity[] week = new Activity[kinds.length];`. Пройди по `kinds` по индексам: для "
+               "`run` положи в `week[i]` новый `Running`, для `swim` — `Swimming`, для `yoga` — `Yoga`, и запиши в его поле "
+               "`minutes` значение `minutes[i]`.",
+               "Вторым циклом пройди по `week` и для каждой тренировки выведи строку вида `Running 30 min: 300 kcal`. В этом "
+               "цикле не проверяй вид тренировки — просто вызывай `title()` и `calories()`.",
+               "В конце выведи строку вида `Total: 860 kcal` — сумму калорий, и строку вида `Best: Swimming` — тренировку, "
+               "сжёгшую больше всего калорий (при равенстве — более раннюю)."],
+        hint="Выбирать класс через `if` нужно только при создании объектов из строк (сравнивай через `equals`). Для лучшей "
+             "тренировки заведи `Activity best = week[0];` и заменяй её, когда встретишь тренировку с большим числом калорий.",
+        solution=ACTIVITIES_MAIN, classes=ACTIVITIES,
+        wrong=[("опечатка в имени метода у йоги и нет @Override — её калории считаются как у Activity, то есть 0",
+                ACTIVITIES_MAIN, ACTIVITIES.replace("    @Override\n    int calories() {\n        return 20 + minutes * 3;",
+                                                    "    int calorie() {\n        return 20 + minutes * 3;")),
+               ("в Yoga забыл про 20 ккал за разминку",
+                ACTIVITIES_MAIN, ACTIVITIES.replace("return 20 + minutes * 3;", "return minutes * 3;"))],
+        constructs=["class", "for"],
+        checks=exist("Activity", "Running", "Swimming", "Yoga") + children("Activity", "Running", "Swimming", "Yoga"),
     ),
 ]

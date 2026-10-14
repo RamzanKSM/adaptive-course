@@ -187,6 +187,192 @@ for (Flyer flyer : flyers) {
 System.out.println("On water in total: " + water + " m");
 System.out.println("In the air in total: " + air + " m");"""
 
+PHONE = """\
+interface Signal {
+    String alert(String contact);
+}
+
+class Ring implements Signal {
+    @Override
+    public String alert(String contact) {
+        return "RING RING: call from " + contact;
+    }
+}
+
+class Vibrate implements Signal {
+    @Override
+    public String alert(String contact) {
+        return "bzz-bzz: call from " + contact;
+    }
+}"""
+
+PHONE_MAIN = """\
+Signal signal;
+if (silent) {
+    signal = new Vibrate();
+} else {
+    signal = new Ring();
+}
+System.out.println(signal.alert(contact));"""
+
+PHONE_AS_CLASS = (PHONE.replace("interface Signal {\n    String alert(String contact);\n}",
+                                'class Signal {\n    public String alert(String contact) {\n        return "";\n    }\n}')
+                  .replace("implements Signal", "extends Signal"))
+
+COUPONS = """\
+interface Coupon {
+    String label();
+
+    int apply(int price);
+}
+
+class Minus implements Coupon {
+    private int amount;
+
+    Minus(int amount) {
+        this.amount = amount;
+    }
+
+    @Override
+    public String label() {
+        return "-" + amount + " rub";
+    }
+
+    @Override
+    public int apply(int price) {
+        if (price < amount) {
+            return 0;
+        }
+        return price - amount;
+    }
+}
+
+class Percent implements Coupon {
+    private int percent;
+
+    Percent(int percent) {
+        this.percent = percent;
+    }
+
+    @Override
+    public String label() {
+        return "-" + percent + "%";
+    }
+
+    @Override
+    public int apply(int price) {
+        return price - price * percent / 100;
+    }
+}"""
+
+COUPONS_MAIN = """\
+System.out.println("Price: " + price + " rub");
+Coupon[] coupons = {new Minus(amount), new Percent(percent)};
+int total = price;
+for (Coupon coupon : coupons) {
+    total = coupon.apply(total);
+    System.out.println(coupon.label() + ": " + total + " rub");
+}"""
+
+GADGETS = """\
+interface Rechargeable {
+    String name();
+
+    int level();
+
+    void charge(int minutes);
+}
+
+class Phone implements Rechargeable {
+    private int level;
+
+    Phone(int level) {
+        this.level = level;
+    }
+
+    @Override
+    public String name() {
+        return "Phone";
+    }
+
+    @Override
+    public int level() {
+        return level;
+    }
+
+    @Override
+    public void charge(int minutes) {
+        level += 2 * minutes;
+        if (level > 100) {
+            level = 100;
+        }
+    }
+}
+
+class Watch implements Rechargeable {
+    private int level;
+
+    Watch(int level) {
+        this.level = level;
+    }
+
+    @Override
+    public String name() {
+        return "Watch";
+    }
+
+    @Override
+    public int level() {
+        return level;
+    }
+
+    @Override
+    public void charge(int minutes) {
+        level += 5 * minutes;
+        if (level > 100) {
+            level = 100;
+        }
+    }
+}
+
+class Headphones implements Rechargeable {
+    private int level;
+
+    Headphones(int level) {
+        this.level = level;
+    }
+
+    @Override
+    public String name() {
+        return "Headphones";
+    }
+
+    @Override
+    public int level() {
+        return level;
+    }
+
+    @Override
+    public void charge(int minutes) {
+        level += 10 * minutes;
+        if (level > 100) {
+            level = 100;
+        }
+    }
+}"""
+
+GADGETS_MAIN = """\
+Rechargeable[] gadgets = {new Phone(phone), new Watch(watch), new Headphones(headphones)};
+int full = 0;
+for (Rechargeable gadget : gadgets) {
+    gadget.charge(minutes);
+    System.out.println(gadget.name() + ": " + gadget.level() + "%");
+    if (gadget.level() == 100) {
+        full++;
+    }
+}
+System.out.println("Fully charged: " + full);"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-intf-garden-area", title="Грядка и газон",
@@ -288,5 +474,115 @@ TASKS = [
         checks=exist(("Swimmer", "Flyer"), ("Duck", "Fish", "Pigeon"))
         + interface("Swimmer") + interface("Flyer")
         + implements("Duck", "Swimmer", "Flyer") + implements("Fish", "Swimmer") + implements("Pigeon", "Flyer"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-intf-phone-signal", title="Звонок или вибрация",
+        given=[("String", "contact"), ("boolean", "silent")],
+        variants=[{"contact": '"Anya"', "silent": "false"},
+                  {"contact": '"Boris"', "silent": "true"},
+                  {"contact": '"Grandma"', "silent": "false"}],
+        hidden=[{"contact": '"Vika"', "silent": "true"},
+                {"contact": '"Dad"', "silent": "false"},
+                {"contact": '"Coach"', "silent": "true"}],
+        intro="Телефон сообщает о входящем звонке по-разному: в обычном режиме он звонит, а в беззвучном — только "
+              "вибрирует. Кто звонит, записано в поле `contact`, а включён ли беззвучный режим — в поле `silent`.",
+        steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши интерфейс `Signal` с одним методом "
+               "`String alert(String contact);` — без тела. Интерфейс и классы пиши без слова `public` перед ними.",
+               "Опиши класс `Ring implements Signal`: его метод `public String alert(String contact)` возвращает строку "
+               "вида `RING RING: call from Anya`.",
+               "Опиши класс `Vibrate implements Signal`: его метод `alert` возвращает строку вида "
+               "`bzz-bzz: call from Anya`.",
+               "В `main` объяви переменную `Signal signal;`. Если `silent` равно `true`, положи в неё `new Vibrate()`, "
+               "иначе — `new Ring()`. Затем выведи `signal.alert(contact)`."],
+        hint="Переменная типа интерфейса может хранить объект любого класса, который его реализует. Вызов "
+             "`signal.alert(...)` один и тот же, а что именно напечатается, решает объект, который в ней лежит.",
+        solution=PHONE_MAIN, classes=PHONE,
+        wrong=[("перепутал ветки — в беззвучном режиме телефон звонит",
+                PHONE_MAIN.replace("new Vibrate();\n} else {\n    signal = new Ring();",
+                                   "new Ring();\n} else {\n    signal = new Vibrate();")),
+               ("сделал Signal обычным классом-родителем вместо интерфейса",
+                PHONE_MAIN, PHONE_AS_CLASS)],
+        constructs=["class", "if"],
+        checks=exist(("Signal",), ("Ring", "Vibrate"))
+        + interface("Signal")
+        + implements("Ring", "Signal") + implements("Vibrate", "Signal")
+        + f'need({declares("Signal", "alert")}, "Объяви в интерфейсе Signal метод String alert(String contact); — его обязаны написать оба класса");\n',
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-intf-shop-coupons", title="Два купона в магазине",
+        given=[("int", "price"), ("int", "amount"), ("int", "percent")],
+        variants=[{"price": "1500", "amount": "200", "percent": "10"},
+                  {"price": "800", "amount": "300", "percent": "25"},
+                  {"price": "2400", "amount": "500", "percent": "15"}],
+        hidden=[{"price": "300", "amount": "500", "percent": "10"},
+                {"price": "500", "amount": "500", "percent": "50"},
+                {"price": "1000", "amount": "0", "percent": "0"},
+                {"price": "999", "amount": "99", "percent": "50"}],
+        intro="Покупка стоит `price` руб., а у покупателя два купона: один уменьшает цену на `amount` руб., другой — "
+              "на `percent` процентов. Касса применяет купоны по очереди: второй купон считается от цены, которая "
+              "получилась после первого.",
+        steps=["Ниже класса `Solution` опиши интерфейс `Coupon` (без `public`) с двумя методами без тела: "
+               "`String label();` и `int apply(int price);` — `apply` возвращает цену после купона.",
+               "Опиши класс `Minus implements Coupon` с полем для суммы и конструктором `Minus(int amount)`. "
+               "Его `label()` возвращает строку вида `-200 rub`, а `apply` вычитает сумму из цены; если цена меньше "
+               "суммы, `apply` возвращает `0` — цена не бывает отрицательной.",
+               "Опиши класс `Percent implements Coupon` с конструктором `Percent(int percent)`. Его `label()` "
+               "возвращает строку вида `-10%`, а `apply` возвращает `price - price * percent / 100`. Методы "
+               "интерфейса в классах пиши с `public`.",
+               "В `main` выведи строку вида `Price: 1500 rub`, создай массив "
+               "`Coupon[] coupons = {{new Minus(amount), new Percent(percent)}};` и одним циклом применяй купоны "
+               "по очереди к текущей цене. После каждого купона выведи строку вида `-200 rub: 1300 rub` — его "
+               "`label()` и цену после него."],
+        hint="Заведи переменную `total = price` и в цикле записывай в неё результат `coupon.apply(total)`: тогда "
+             "каждый следующий купон получит цену, уже уменьшенную предыдущим.",
+        solution=COUPONS_MAIN, classes=COUPONS,
+        wrong=[("применяет каждый купон к исходной цене, а не к цене после предыдущего купона",
+                COUPONS_MAIN.replace("total = coupon.apply(total);", "total = coupon.apply(price);")),
+               ("купон на сумму уводит цену в минус, если сумма больше цены",
+                COUPONS_MAIN, COUPONS.replace("        if (price < amount) {\n            return 0;\n        }\n", ""))],
+        constructs=["class", "for", "if"],
+        checks=exist(("Coupon",), ("Minus", "Percent"))
+        + interface("Coupon")
+        + implements("Minus", "Coupon") + implements("Percent", "Coupon"),
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-intf-gadget-charge", title="Зарядная станция",
+        given=[("int", "phone"), ("int", "watch"), ("int", "headphones"), ("int", "minutes")],
+        variants=[{"phone": "40", "watch": "70", "headphones": "20", "minutes": "15"},
+                  {"phone": "10", "watch": "5", "headphones": "50", "minutes": "10"},
+                  {"phone": "85", "watch": "30", "headphones": "0", "minutes": "5"}],
+        hidden=[{"phone": "50", "watch": "50", "headphones": "50", "minutes": "0"},
+                {"phone": "98", "watch": "96", "headphones": "95", "minutes": "1"},
+                {"phone": "100", "watch": "100", "headphones": "100", "minutes": "3"},
+                {"phone": "0", "watch": "0", "headphones": "0", "minutes": "50"}],
+        intro="На зарядной станции заряжаются телефон, часы и наушники. Их заряд в процентах сейчас записан в полях "
+              "`phone`, `watch` и `headphones`, а заряжать их будут `minutes` минут. Каждое устройство заряжается "
+              "со своей скоростью, но больше 100% заряд не поднимается.",
+        steps=["Ниже класса `Solution` опиши интерфейс `Rechargeable` (без `public`) с тремя методами без тела: "
+               "`String name();`, `int level();` и `void charge(int minutes);`.",
+               "Опиши классы `Phone`, `Watch` и `Headphones`, которые реализуют `Rechargeable`. У каждого — закрытое "
+               "поле с зарядом и конструктор с начальным зарядом, например `Phone(int level)`. `name()` возвращает "
+               "`Phone`, `Watch` или `Headphones`, `level()` — текущий заряд.",
+               "Метод `charge` увеличивает заряд: телефон — на 2% в минуту, часы — на 5%, наушники — на 10%. Если "
+               "заряд получился больше 100, он становится ровно 100. Методы интерфейса пиши с `public`.",
+               "В `main` создай массив `Rechargeable[] gadgets = {{new Phone(phone), new Watch(watch), "
+               "new Headphones(headphones)}};`. Одним циклом заряди каждое устройство `minutes` минут и после "
+               "зарядки выведи строку вида `Phone: 70%`.",
+               "Последней строкой выведи строку вида `Fully charged: 2` — сколько устройств зарядилось до 100%."],
+        hint="Каждый класс по-своему пишет `charge`, а цикл в `main` об этом не знает: он просто вызывает "
+             "`gadget.charge(minutes)` у объекта типа `Rechargeable`. Ограничение в 100% проверяй сразу после "
+             "увеличения заряда.",
+        solution=GADGETS_MAIN, classes=GADGETS,
+        wrong=[("не ограничивает заряд сотней — устройства заряжаются больше 100%",
+                GADGETS_MAIN, GADGETS.replace("        if (level > 100) {\n            level = 100;\n        }\n", "")),
+               ("выводит заряд до зарядки, а заряжает уже после печати",
+                GADGETS_MAIN.replace("    gadget.charge(minutes);\n    System.out.println(gadget.name() + \": \" + gadget.level() + \"%\");\n",
+                                     "    System.out.println(gadget.name() + \": \" + gadget.level() + \"%\");\n    gadget.charge(minutes);\n"))],
+        constructs=["class", "for", "if"],
+        checks=exist(("Rechargeable",), ("Phone", "Watch", "Headphones"))
+        + interface("Rechargeable")
+        + implements("Phone", "Rechargeable") + implements("Watch", "Rechargeable")
+        + implements("Headphones", "Rechargeable")
+        + f'need({declares("Rechargeable", "charge")}, "Объяви в интерфейсе Rechargeable метод void charge(int minutes); — его пишет каждый класс по-своему");\n',
     ),
 ]

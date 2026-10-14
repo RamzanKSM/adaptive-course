@@ -42,6 +42,37 @@ for (String coin : new String[]{"5", "washer"}) {
   need(buffer.toString("UTF-8").contains("Tray is free"), "Метод accept должен сам выводить «Tray is free» после каждой монеты, и распознанной, и нет: напиши это в блоке finally");
 }'''
 
+COOKIE_MAIN = 'int boxes = 0;\nfor (String batch : batches) {\n    boxes += fullBoxes(batch, perBox);\n}\nSystem.out.println("Boxes: " + boxes);'
+
+COOKIE_METHOD = """static int fullBoxes(String count, int perBox) {
+    try {
+        return Integer.parseInt(count) / perBox;
+    } catch (NumberFormatException e) {
+        System.out.println("Cannot read: " + count);
+        return 0;
+    } catch (ArithmeticException e) {
+        System.out.println("Box size is zero");
+        return 0;
+    } finally {
+        System.out.println("Scale reset");
+    }
+}"""
+
+COOKIE_CHECKS = """Method m = null;
+try { m = Solution.class.getDeclaredMethod("fullBoxes", String.class, int.class); } catch (NoSuchMethodException e) { }
+need(m != null && Modifier.isStatic(m.getModifiers()) && m.getReturnType() == int.class, "Добавь в класс Solution метод static int fullBoxes(String count, int perBox): он возвращает, сколько полных коробок получится из одной партии");
+m.setAccessible(true);
+Object[][] probes = {{"12", 5}, {"cookies", 5}, {"12", 0}};
+for (Object[] probe : probes) {
+  PrintStream saved = System.out;
+  ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+  System.setOut(new PrintStream(buffer, true, "UTF-8"));
+  try { m.invoke(null, probe[0], probe[1]); }
+  catch (InvocationTargetException e) { need(false, "Метод fullBoxes не должен падать: перехвати NumberFormatException и ArithmeticException внутри метода"); }
+  finally { System.setOut(saved); }
+  need(buffer.toString("UTF-8").contains("Scale reset"), "Метод fullBoxes должен сам выводить «Scale reset» после каждой партии — и удачной, и с ошибкой: напиши это в блоке finally");
+}"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-finally-parking", title="Оплата парковки",
@@ -138,5 +169,111 @@ TASKS = [
                     '        System.out.println("Tray is free");\n        return 0;\n    }')))],
         constructs=["try", "finally", "function"],
         checks=COIN_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-finally-photo-print", title="Печать фотографий",
+        given=[("int", "photos"), ("int", "perPage")],
+        variants=[{"photos": "20", "perPage": "4"}, {"photos": "15", "perPage": "0"}, {"photos": "37", "perPage": "6"}],
+        hidden=[{"photos": "9", "perPage": "0"}, {"photos": "3", "perPage": "5"}, {"photos": "100", "perPage": "1"},
+                {"photos": "0", "perPage": "2"}],
+        intro="Фотоателье печатает `photos` фотографий, по `perPage` штук на одном листе. Если размер раскладки не "
+              "выбран (`perPage` равно 0), деление выбрасывает `ArithmeticException`. В любом случае после задания "
+              "принтер должен сообщить, что снова готов.",
+        steps=["В блоке `try` выведи строку вида `Full pages: 5` — сколько листов заполнится целиком (целое деление).",
+               "Перехвати `ArithmeticException` и выведи `Choose how many photos fit on a page`.",
+               "Добавь блок `finally` и выведи в нём `Printer is ready` — эта строка нужна всегда, последней."],
+        hint="`finally` выполняется после `try`, если всё прошло хорошо, и после `catch`, если была ошибка. Поэтому "
+             "строку, которая нужна в обоих случаях, пишут один раз — в `finally`.",
+        solution='try {\n    System.out.println("Full pages: " + photos / perPage);\n} catch (ArithmeticException e) {\n'
+                 '    System.out.println("Choose how many photos fit on a page");\n} finally {\n'
+                 '    System.out.println("Printer is ready");\n}',
+        wrong=[("пишет «Printer is ready» в конце try — после ошибки этой строки нет",
+                'try {\n    System.out.println("Full pages: " + photos / perPage);\n    System.out.println("Printer is ready");\n'
+                '} catch (ArithmeticException e) {\n    System.out.println("Choose how many photos fit on a page");\n}'),
+               ("печатает «Printer is ready» до try — строка оказывается первой, а не последней",
+                'System.out.println("Printer is ready");\ntry {\n    System.out.println("Full pages: " + photos / perPage);\n'
+                '} catch (ArithmeticException e) {\n    System.out.println("Choose how many photos fit on a page");\n}')],
+        constructs=["try", "finally"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-finally-lift-buttons", title="Кнопки в лифте",
+        given=[("String[]", "buttons"), ("int", "floors")],
+        variants=[{"buttons": '{"3", "12", "five"}', "floors": "9"},
+                  {"buttons": '{"1", "0", "16"}', "floors": "16"},
+                  {"buttons": '{"7", "?", "25", "2"}', "floors": "20"}],
+        hidden=[{"buttons": "{}", "floors": "5"},
+                {"buttons": '{"5"}', "floors": "5"},
+                {"buttons": '{"6"}', "floors": "5"},
+                {"buttons": '{"", "-1", "4"}', "floors": "10"}],
+        intro="В доме `floors` этажей. Пассажиры по очереди нажимают кнопки в лифте, и то, что пришло с каждой "
+              "кнопки, записано строкой в массиве `buttons`. Иногда приходит не число, а иногда этажа с таким "
+              "номером нет. После каждого нажатия, что бы ни случилось, двери закрываются.",
+        steps=["Пройди по массиву `buttons`. Для каждого нажатия в блоке `try` преврати строку в число через "
+               "`Integer.parseInt`.",
+               "Если этаж меньше 1 или больше `floors`, выведи строку вида `No floor 12` и переходи к следующему "
+               "нажатию командой `continue;`.",
+               "Иначе выведи строку вида `Going to floor 3`.",
+               "Если строка не число, перехвати `NumberFormatException` и выведи `Press a number`.",
+               "В блоке `finally` выведи `Doors closed` — эта строка нужна после каждого нажатия, даже после `continue`."],
+        hint="`continue` сразу переходит к следующему шагу цикла, и строки после всего `try`/`catch` пропускаются. "
+             "А `finally` выполнится и в этом случае — Java запускает его перед переходом.",
+        solution='for (String button : buttons) {\n    try {\n        int floor = Integer.parseInt(button);\n'
+                 '        if (floor < 1 || floor > floors) {\n            System.out.println("No floor " + floor);\n'
+                 '            continue;\n        }\n        System.out.println("Going to floor " + floor);\n'
+                 '    } catch (NumberFormatException e) {\n        System.out.println("Press a number");\n'
+                 '    } finally {\n        System.out.println("Doors closed");\n    }\n}',
+        wrong=[("«Doors closed» стоит после try/catch, а не в finally — после continue её нет",
+                'for (String button : buttons) {\n    try {\n        int floor = Integer.parseInt(button);\n'
+                '        if (floor < 1 || floor > floors) {\n            System.out.println("No floor " + floor);\n'
+                '            continue;\n        }\n        System.out.println("Going to floor " + floor);\n'
+                '    } catch (NumberFormatException e) {\n        System.out.println("Press a number");\n'
+                '    }\n    System.out.println("Doors closed");\n}'),
+               ("«Doors closed» стоит в конце try — после ошибки и после continue её нет",
+                'for (String button : buttons) {\n    try {\n        int floor = Integer.parseInt(button);\n'
+                '        if (floor < 1 || floor > floors) {\n            System.out.println("No floor " + floor);\n'
+                '            continue;\n        }\n        System.out.println("Going to floor " + floor);\n'
+                '        System.out.println("Doors closed");\n'
+                '    } catch (NumberFormatException e) {\n        System.out.println("Press a number");\n    }\n}')],
+        constructs=["try", "finally", "for", "if"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-finally-cookie-boxes", title="Печенье по коробкам",
+        given=[("String[]", "batches"), ("int", "perBox")],
+        variants=[{"batches": '{"24", "30", "abc", "13"}', "perBox": "6"},
+                  {"batches": '{"10", "20"}', "perBox": "0"},
+                  {"batches": '{"7", "?", "50"}', "perBox": "7"}],
+        hidden=[{"batches": "{}", "perBox": "5"},
+                {"batches": '{"x"}', "perBox": "0"},
+                {"batches": '{"100", "99"}', "perBox": "10"},
+                {"batches": '{"5", "", "15"}', "perBox": "5"}],
+        intro="На фабрике печенье из каждой партии раскладывают в коробки по `perBox` штук. Весы присылают число "
+              "печений в партии строкой — все партии по порядку лежат в массиве `batches`; иногда весы сбоят, и "
+              "вместо числа приходит что-то другое. А если размер коробки не задан, `perBox` равно 0. После каждой "
+              "партии весы обнуляют.",
+        steps=["Добавь в класс `Solution` метод `static int fullBoxes(String count, int perBox)`. В блоке `try` он "
+               "превращает `count` в число через `Integer.parseInt`, делит его нацело на `perBox` и сразу "
+               "возвращает результат через `return`.",
+               "Если `count` не число (`NumberFormatException`), метод выводит строку вида `Cannot read: abc` и "
+               "возвращает `0`.",
+               "Если `perBox` равно 0 (`ArithmeticException`), метод выводит `Box size is zero` и возвращает `0`.",
+               "В блоке `finally` метод выводит `Scale reset` — после каждой партии, удачной или нет.",
+               "В `main` пропусти через `fullBoxes` все партии из `batches` по порядку, сложи результаты и в конце "
+               "выведи строку вида `Boxes: 11`."],
+        hint="Не обходи деление на ноль проверкой `if` с `return` до `try`: такой выход из метода пропустит "
+             "`finally`, ведь он стоит не внутри `try`. Пусть ошибку поймает второй `catch` — тогда `finally` "
+             "сработает и в этом случае.",
+        solution=with_methods(COOKIE_MAIN, COOKIE_METHOD),
+        wrong=[("«Scale reset» печатается в try перед return — после ошибки этой строки нет",
+                with_methods(COOKIE_MAIN, COOKIE_METHOD.replace(
+                    '        return Integer.parseInt(count) / perBox;\n',
+                    '        int boxes = Integer.parseInt(count) / perBox;\n        System.out.println("Scale reset");\n        return boxes;\n').replace(
+                    '    } finally {\n        System.out.println("Scale reset");\n    }\n', '    }\n'))),
+               ("проверяет ноль через if с return до try — для пустой коробки finally не выполняется",
+                with_methods(COOKIE_MAIN, COOKIE_METHOD.replace(
+                    '    try {\n',
+                    '    if (perBox == 0) {\n        System.out.println("Box size is zero");\n        return 0;\n    }\n    try {\n', 1).replace(
+                    '    } catch (ArithmeticException e) {\n        System.out.println("Box size is zero");\n        return 0;\n', '')))],
+        constructs=["try", "finally", "function"],
+        checks=COOKIE_CHECKS,
     ),
 ]

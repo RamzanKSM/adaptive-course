@@ -117,4 +117,116 @@ TASKS = [
         constructs=["function", "try", "for"],
         must_use=[RAISE],
     ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-raise-password-length", title="Длина пароля",
+        given=["password"],
+        variants=[{"password": '"sunflower7"'}, {"password": '"cat12"'}, {"password": '"qwerty12"'}],
+        hidden=[{"password": '"abcdefg"'}, {"password": '""'}, {"password": '"correct horse battery"'},
+                {"password": '"12345678"'}],
+        intro="При регистрации пользователь придумывает пароль — он записан в `password`. Пароль короче 8 символов "
+              "слишком легко подобрать: функция проверки должна выбросить ошибку, а сайт — показать её текст.",
+        steps=["Напиши функцию `check_password(password)`. Если в пароле меньше 8 символов, выброси `ValueError` "
+               "с сообщением `Password is too short`. Иначе верни длину пароля.",
+               "Вызови функцию для `password` в блоке `try` и, если ошибки не было, выведи строку вида "
+               "`Password saved, 10 characters`.",
+               "Перехвати ошибку блоком `except ValueError as error:` и выведи `Error: ` и текст ошибки — "
+               "например, `Error: Password is too short`."],
+        hint="`raise ValueError(\"text\")` сразу останавливает функцию и передаёт ошибку туда, где функцию вызвали. "
+             "Пароль ровно из 8 символов подходит.",
+        solution='def check_password(password):\n    if len(password) < 8:\n        raise ValueError("Password is too short")\n'
+                 '    return len(password)\n\n\ntry:\n    length = check_password(password)\n'
+                 '    print(f"Password saved, {length} characters")\nexcept ValueError as error:\n    print(f"Error: {error}")',
+        wrong=[("печатает сообщение вместо raise — короткий пароль всё равно сохраняется",
+                'def check_password(password):\n    if len(password) < 8:\n        print("Password is too short")\n'
+                '    return len(password)\n\n\ntry:\n    length = check_password(password)\n'
+                '    print(f"Password saved, {length} characters")\nexcept ValueError as error:\n    print(f"Error: {error}")'),
+               ("отклоняет и пароль ровно из 8 символов",
+                'def check_password(password):\n    if len(password) <= 8:\n        raise ValueError("Password is too short")\n'
+                '    return len(password)\n\n\ntry:\n    length = check_password(password)\n'
+                '    print(f"Password saved, {length} characters")\nexcept ValueError as error:\n    print(f"Error: {error}")')],
+        constructs=["function", "try", "if"],
+        must_use=[RAISE],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-raise-alarm-time", title="Будильник",
+        given=["hours", "minutes"],
+        variants=[{"hours": "7", "minutes": "30"}, {"hours": "25", "minutes": "10"}, {"hours": "6", "minutes": "75"}],
+        hidden=[{"hours": "0", "minutes": "0"}, {"hours": "23", "minutes": "59"}, {"hours": "24", "minutes": "0"},
+                {"hours": "12", "minutes": "60"}, {"hours": "-1", "minutes": "5"}, {"hours": "9", "minutes": "-5"}],
+        intro="Приложение-будильник получает время подъёма: часы `hours` и минуты `minutes`. Часы бывают только "
+              "от 0 до 23, минуты — от 0 до 59. Функция установки должна отказывать при неверном времени "
+              "и объяснять, что не так.",
+        steps=["Напиши функцию `set_alarm(hours, minutes)`. Если часы меньше 0 или больше 23, выброси `ValueError` "
+               "с сообщением `Hours must be from 0 to 23`.",
+               "Если минуты меньше 0 или больше 59, выброси `ValueError` с сообщением `Minutes must be from 0 to 59`. "
+               "Иначе верни строку вида `7 h 30 min`.",
+               "Вызови функцию в блоке `try` и выведи строку вида `Alarm set for 7 h 30 min`.",
+               "Перехвати `ValueError` через `except ValueError as error:` и выведи `Cannot set alarm: ` и текст ошибки."],
+        hint="Проверяй часы раньше минут: если неверно и то и другое, пользователь увидит сообщение про часы. "
+             "Границы 0, 23 и 59 — правильные значения.",
+        solution='def set_alarm(hours, minutes):\n    if hours < 0 or hours > 23:\n        raise ValueError("Hours must be from 0 to 23")\n'
+                 '    if minutes < 0 or minutes > 59:\n        raise ValueError("Minutes must be from 0 to 59")\n'
+                 '    return f"{hours} h {minutes} min"\n\n\ntry:\n    print(f"Alarm set for {set_alarm(hours, minutes)}")\n'
+                 'except ValueError as error:\n    print(f"Cannot set alarm: {error}")',
+        wrong=[("считает 24 часа и 60 минут правильным временем",
+                'def set_alarm(hours, minutes):\n    if hours < 0 or hours > 24:\n        raise ValueError("Hours must be from 0 to 23")\n'
+                '    if minutes < 0 or minutes > 60:\n        raise ValueError("Minutes must be from 0 to 59")\n'
+                '    return f"{hours} h {minutes} min"\n\n\ntry:\n    print(f"Alarm set for {set_alarm(hours, minutes)}")\n'
+                'except ValueError as error:\n    print(f"Cannot set alarm: {error}")'),
+               ("не проверяет отрицательные значения",
+                'def set_alarm(hours, minutes):\n    if hours > 23:\n        raise ValueError("Hours must be from 0 to 23")\n'
+                '    if minutes > 59:\n        raise ValueError("Minutes must be from 0 to 59")\n'
+                '    return f"{hours} h {minutes} min"\n\n\ntry:\n    print(f"Alarm set for {set_alarm(hours, minutes)}")\n'
+                'except ValueError as error:\n    print(f"Cannot set alarm: {error}")')],
+        constructs=["function", "try", "if"],
+        must_use=[RAISE],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-raise-test-marks", title="Оценки за контрольную",
+        given=["marks"],
+        variants=[{"marks": '["5", "four", "3", "7", "4"]'},
+                  {"marks": '["0", "x", "6"]'},
+                  {"marks": '["2", "5", "5", "1", "-3"]'}],
+        hidden=[{"marks": '["4"]'},
+                {"marks": '["", "9"]'},
+                {"marks": '["1", "5", "10", "3", "abc", "5"]'},
+                {"marks": '["5", "5"]'}],
+        intro="Учитель вносит оценки за контрольную в таблицу, и они попадают в программу строками — список `marks`. "
+              "Иногда в таблицу попадает опечатка: слово вместо числа или число вне шкалы от 1 до 5. Такие записи "
+              "нужно показать с объяснением, а средний балл посчитать только по правильным оценкам.",
+        steps=["Напиши функцию `parse_mark(text)`. Если строка не состоит из одних цифр (метод `.isdigit()`), выброси "
+               "`ValueError` с сообщением `not a number`. Преврати строку в число; если оно меньше 1 или больше 5, "
+               "выброси `ValueError` с сообщением `must be from 1 to 5`. Иначе верни оценку.",
+               "Заведи сумму и количество, обоим присвой 0. Для каждой строки из `marks` вызови функцию в блоке `try` "
+               "и учти оценку в сумме и количестве.",
+               "Если функция выбросила ошибку, выведи строку и текст ошибки через двоеточие — например, `four: not a number`.",
+               "После цикла выведи строку вида `Average: 4.2` — среднее, округлённое через `round(..., 1)`. "
+               "Если правильных оценок нет, выведи `No valid marks`."],
+        hint="`\"-3\".isdigit()` возвращает `False`: минус — не цифра, поэтому для такой строки будет `not a number`. "
+             "`try` ставь внутрь цикла, чтобы одна опечатка не мешала остальным оценкам.",
+        solution='def parse_mark(text):\n    if not text.isdigit():\n        raise ValueError("not a number")\n'
+                 '    mark = int(text)\n    if mark < 1 or mark > 5:\n        raise ValueError("must be from 1 to 5")\n'
+                 '    return mark\n\n\ntotal = 0\ncount = 0\nfor text in marks:\n    try:\n        mark = parse_mark(text)\n'
+                 '        total += mark\n        count += 1\n    except ValueError as error:\n        print(f"{text}: {error}")\n'
+                 'if count == 0:\n    print("No valid marks")\nelse:\n    print(f"Average: {round(total / count, 1)}")',
+        wrong=[("не проверяет шкалу — оценки 0, 6 и 7 входят в средний балл",
+                'def parse_mark(text):\n    if not text.isdigit():\n        raise ValueError("not a number")\n'
+                '    return int(text)\n\n\ntotal = 0\ncount = 0\nfor text in marks:\n    try:\n        mark = parse_mark(text)\n'
+                '        total += mark\n        count += 1\n    except ValueError as error:\n        print(f"{text}: {error}")\n'
+                'if count == 0:\n    print("No valid marks")\nelse:\n    print(f"Average: {round(total / count, 1)}")'),
+               ("try вокруг всего цикла — оценки после первой опечатки не учитываются",
+                'def parse_mark(text):\n    if not text.isdigit():\n        raise ValueError("not a number")\n'
+                '    mark = int(text)\n    if mark < 1 or mark > 5:\n        raise ValueError("must be from 1 to 5")\n'
+                '    return mark\n\n\ntotal = 0\ncount = 0\ntry:\n    for text in marks:\n        mark = parse_mark(text)\n'
+                '        total += mark\n        count += 1\nexcept ValueError as error:\n    print(f"{text}: {error}")\n'
+                'if count == 0:\n    print("No valid marks")\nelse:\n    print(f"Average: {round(total / count, 1)}")'),
+               ("увеличивает количество до проверки — опечатки тоже попадают в делитель",
+                'def parse_mark(text):\n    if not text.isdigit():\n        raise ValueError("not a number")\n'
+                '    mark = int(text)\n    if mark < 1 or mark > 5:\n        raise ValueError("must be from 1 to 5")\n'
+                '    return mark\n\n\ntotal = 0\ncount = 0\nfor text in marks:\n    try:\n        count += 1\n'
+                '        mark = parse_mark(text)\n        total += mark\n    except ValueError as error:\n        print(f"{text}: {error}")\n'
+                'if count == 0:\n    print("No valid marks")\nelse:\n    print(f"Average: {round(total / count, 1)}")')],
+        constructs=["function", "try", "for"],
+        must_use=[RAISE],
+    ),
 ]

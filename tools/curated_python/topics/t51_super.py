@@ -86,6 +86,85 @@ for vehicle in garage:
     print(vehicle.info())
 """
 
+
+LESSON = """\
+class Lesson:
+    def __init__(self, subject, minutes):
+        self.subject = subject
+        self.minutes = minutes
+
+    def info(self):
+        return f"{self.subject}: {self.minutes} min"
+
+
+class OnlineLesson(Lesson):
+    def __init__(self, subject, minutes, link):
+        super().__init__(subject, minutes)
+        self.link = link
+
+
+lesson = OnlineLesson(subject, minutes, link)
+print(lesson.info())
+print(f"Link: {lesson.link}")
+"""
+
+BOSS = """\
+class Character:
+    def __init__(self, name, health):
+        self.name = name
+        self.health = health
+        if self.health > 100:
+            self.health = 100
+
+
+class Boss(Character):
+    def __init__(self, name, health, armor):
+        super().__init__(name, health)
+        self.armor = armor
+        self.health += armor
+
+
+hero = Character(hero_name, hero_health)
+boss = Boss(boss_name, boss_health, armor)
+print(f"{hero.name}: health {hero.health}")
+print(f"{boss.name}: health {boss.health}, armor {boss.armor}")
+"""
+
+DELIVERY = """\
+class Order:
+    def __init__(self, prices):
+        self.prices = prices
+
+    def total(self):
+        result = 0
+        for price in self.prices:
+            result += price
+        return result
+
+    def describe(self):
+        return f"Items: {len(self.prices)}, total: {self.total()} rub"
+
+
+class DeliveryOrder(Order):
+    def __init__(self, prices, address):
+        super().__init__(prices)
+        self.address = address
+
+    def total(self):
+        base = super().total()
+        if base < 1000:
+            return base + 200
+        return base
+
+    def describe(self):
+        return super().describe() + f", delivery to {self.address}"
+
+
+orders = [Order(prices), DeliveryOrder(prices, address)]
+for order in orders:
+    print(order.describe())
+"""
+
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-super-courier", title="Курьер службы доставки",
@@ -184,5 +263,111 @@ TASKS = [
                   ("re:super\\(\\)\\.info\\(\\)",
                    "В `info` мотоцикла возьми описание родителя через `super().info()` и допиши к нему скорость — "
                    "так не придётся повторять код родителя.")],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=1, slug="py-super-online-lesson", title="Онлайн-урок",
+        given=["subject", "minutes", "link"],
+        variants=[{"subject": '"Math"', "minutes": "45", "link": '"meet.school.ru/math7"'},
+                  {"subject": '"English"', "minutes": "40", "link": '"meet.school.ru/eng5"'},
+                  {"subject": '"Physics"', "minutes": "90", "link": '"meet.school.ru/phys9"'}],
+        hidden=[{"subject": '"History"', "minutes": "30", "link": '"meet.school.ru/hist"'},
+                {"subject": '"Art"', "minutes": "60", "link": '"meet.school.ru/art2"'},
+                {"subject": '"Biology"', "minutes": "35", "link": '"meet.school.ru/bio"'}],
+        intro="В расписании школы у каждого урока есть предмет и длительность в минутах. Онлайн-урок — тоже урок, "
+              "только у него есть ещё ссылка на видеовстречу. Предмет и длительность пусть сохраняет класс-родитель, "
+              "а онлайн-урок добавит только ссылку.",
+        steps=["Создай класс `Lesson`. В `__init__(self, subject, minutes)` сохрани предмет и длительность "
+               "в `self.subject` и `self.minutes`. Добавь метод `info(self)`, который возвращает строку вида `Math: 45 min`.",
+               "Создай класс `OnlineLesson` — наследник `Lesson` — со своим `__init__(self, subject, minutes, link)`. "
+               "Первой строкой в нём вызови `super().__init__(subject, minutes)`, а потом сохрани `self.link`.",
+               "Создай `lesson = OnlineLesson(subject, minutes, link)`.",
+               "Выведи две строки: результат `lesson.info()` и строку вида `Link: meet.school.ru/math7`."],
+        hint="`super().__init__(...)` запускает `__init__` родителя для того же самого объекта, поэтому после него "
+             "у онлайн-урока уже есть `self.subject` и `self.minutes`. Передай родителю именно параметры, "
+             "а не готовые числа.",
+        solution=LESSON,
+        wrong=[("передаёт родителю аргументы в другом порядке — предмет и минуты меняются местами",
+                LESSON.replace("super().__init__(subject, minutes)", "super().__init__(minutes, subject)")),
+               ("передаёт родителю число 45 вместо параметра minutes — все уроки по 45 минут",
+                LESSON.replace("super().__init__(subject, minutes)", "super().__init__(subject, 45)"))],
+        constructs=["class"],
+        must_use=[NEED_CLASS, child_of("OnlineLesson", "Lesson"), NEED_SUPER_INIT],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=2, slug="py-super-boss-armor", title="Броня босса",
+        given=["hero_name", "hero_health", "boss_name", "boss_health", "armor"],
+        variants=[{"hero_name": '"Knight"', "hero_health": "150", "boss_name": '"Dragon"', "boss_health": "200", "armor": "30"},
+                  {"hero_name": '"Elf"', "hero_health": "80", "boss_name": '"Troll"', "boss_health": "90", "armor": "50"},
+                  {"hero_name": '"Wizard"', "hero_health": "100", "boss_name": '"Golem"', "boss_health": "120", "armor": "75"}],
+        hidden=[{"hero_name": '"Rogue"', "hero_health": "101", "boss_name": '"Hydra"', "boss_health": "100", "armor": "10"},
+                {"hero_name": '"Monk"', "hero_health": "60", "boss_name": '"Ogre"', "boss_health": "40", "armor": "0"},
+                {"hero_name": '"Bard"', "hero_health": "99", "boss_name": '"Lich"', "boss_health": "500", "armor": "100"}],
+        intro="В игре у любого персонажа здоровье не может быть больше 100: если при создании передали больше, "
+              "оно урезается до 100. Босс — тоже персонаж, к нему применяется то же правило, но у босса есть ещё броня, "
+              "и она добавляется к здоровью уже после урезания. Создай героя и босса.",
+        steps=["Создай класс `Character`. В `__init__(self, name, health)` сохрани имя в `self.name`, а здоровье — "
+               "в `self.health`; если оно больше 100, сделай его ровно 100.",
+               "Создай класс `Boss` — наследник `Character` — со своим `__init__(self, name, health, armor)`. "
+               "Сначала вызови `super().__init__(name, health)` — пусть родитель сохранит имя и урежет здоровье. "
+               "Потом сохрани `self.armor` и прибавь броню к `self.health`.",
+               "Создай `hero = Character(hero_name, hero_health)` и `boss = Boss(boss_name, boss_health, armor)`.",
+               "Выведи строки вида `Knight: health 100` и `Dragon: health 130, armor 30`."],
+        hint="Правило про 100 написано только в `Character.__init__`. Если наследник не вызовет `super().__init__`, "
+             "а сохранит здоровье сам, правило для босса не сработает. И порядок важен: броню прибавляй после "
+             "вызова родителя, иначе родитель перезапишет здоровье.",
+        solution=BOSS,
+        wrong=[("не вызывает super().__init__, а сохраняет имя и здоровье сам — здоровье босса не урезается",
+                BOSS.replace("        super().__init__(name, health)\n",
+                             "        self.name = name\n        self.health = health\n")),
+               ("прибавляет броню до вызова родителя — родитель перезаписывает здоровье, и брони в нём нет",
+                BOSS.replace("        super().__init__(name, health)\n        self.armor = armor\n        self.health += armor\n",
+                             "        self.health = health + armor\n        super().__init__(name, health)\n"
+                             "        self.armor = armor\n"))],
+        constructs=["class"],
+        must_use=[NEED_CLASS, child_of("Boss", "Character"), NEED_SUPER_INIT],
+    ),
+    OutputTask(
+        skill=SKILL, difficulty=3, slug="py-super-delivery-order", title="Заказ с доставкой",
+        given=["prices", "address"],
+        variants=[{"prices": "[350, 420, 80]", "address": '"Lenina 5"'},
+                  {"prices": "[600, 750]", "address": '"Mira 12"'},
+                  {"prices": "[120, 90, 45, 300]", "address": '"Sadovaya 3"'}],
+        hidden=[{"prices": "[1000]", "address": '"Gagarina 1"'},
+                {"prices": "[999]", "address": '"Pushkina 10"'},
+                {"prices": "[500, 500, 500]", "address": '"Lesnaya 7"'},
+                {"prices": "[10]", "address": '"Tsvetochnaya 2"'}],
+        intro="Магазин принимает заказы на самовывоз и с доставкой. Заказ с доставкой — тот же заказ, но к сумме "
+              "добавляется 200 руб. за доставку, если товаров меньше чем на 1000 руб., а в описании нужен адрес. "
+              "Покупатель сравнивает два варианта для одних и тех же товаров с ценами `prices` и адреса `address`.",
+        steps=["Создай класс `Order`. В `__init__(self, prices)` сохрани список цен в `self.prices`. Добавь метод "
+               "`total(self)`, который возвращает сумму цен, и метод `describe(self)`, который возвращает строку вида "
+               "`Items: 3, total: 850 rub` — число товаров и сумму, полученную вызовом `self.total()`.",
+               "Создай класс `DeliveryOrder` — наследник `Order` — со своим `__init__(self, prices, address)`: вызови "
+               "`super().__init__(prices)` и сохрани `self.address`.",
+               "Переопредели в `DeliveryOrder` метод `total(self)`: возьми сумму родителя через `super().total()` и, "
+               "если она меньше 1000, прибавь 200 руб. за доставку. От 1000 руб. доставка бесплатная.",
+               "Переопредели в `DeliveryOrder` метод `describe(self)`: строка родителя из `super().describe()` плюс "
+               "`, delivery to Lenina 5` — с адресом из `self.address`.",
+               "Создай список `orders = [Order(prices), DeliveryOrder(prices, address)]` и одним циклом выведи "
+               "`describe()` каждого заказа."],
+        hint="`describe` родителя вызывает `self.total()`. Для заказа с доставкой `self` — это `DeliveryOrder`, "
+             "поэтому сработает его `total` с доставкой, хотя сама строка собирается в родителе. А внутри "
+             "`DeliveryOrder.total` сумму товаров бери через `super().total()` — `self.total()` вызвал бы сам себя.",
+        solution=DELIVERY,
+        wrong=[("доставка бесплатна только от суммы больше 1000 — при ровно 1000 руб. берёт 200 руб.",
+                DELIVERY.replace("if base < 1000:", "if base <= 1000:")),
+               ("в describe родителя считает сумму заново, а не через self.total() — доставка в сумму не попадает",
+                DELIVERY.replace('total: {self.total()} rub', 'total: {Order.total(self)} rub')),
+               ("describe заказа с доставкой не вызывает super().describe() — пропадают число товаров и сумма",
+                DELIVERY.replace('        return super().describe() + f", delivery to {self.address}"',
+                                 '        return f"delivery to {self.address}"'))],
+        constructs=["class", "for"],
+        must_use=[NEED_CLASS, child_of("DeliveryOrder", "Order"), NEED_SUPER_INIT,
+                  ("re:super\\(\\)\\.total\\(\\)",
+                   "В `total` заказа с доставкой возьми сумму товаров через `super().total()` — так формула "
+                   "суммы остаётся в одном месте."),
+                  ("re:super\\(\\)\\.describe\\(\\)",
+                   "В `describe` заказа с доставкой возьми строку родителя через `super().describe()` и допиши "
+                   "к ней адрес.")],
     ),
 ]

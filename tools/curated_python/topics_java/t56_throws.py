@@ -112,6 +112,99 @@ boolean thrown = false;
 try { pay.invoke(card, 50); } catch (InvocationTargetException e) { thrown = ex.isInstance(e.getCause()); }
 need(thrown, "Если денег на карте не хватает, метод pay должен выбрасывать LowBalanceException через throw");'''
 
+# ── 4. Возрастное ограничение ──
+AGE_LIMIT = exception_class("AgeLimitException")
+CINEMA_MAIN = ('try {\n    checkAge(age, rating);\n    System.out.println("Enjoy the film");\n} catch (AgeLimitException e) {\n'
+               '    System.out.println(e.getMessage());\n    System.out.println("Choose another film");\n}')
+CINEMA_CHECK = """static void checkAge(int age, int rating) throws AgeLimitException {
+    if (age < rating) {
+        throw new AgeLimitException("The film is " + rating + "+, you are " + age);
+    }
+}"""
+CINEMA_CHECKS = checked_class_check("AgeLimitException", "это проверяемое исключение: Java потребует объявить его в throws и обработать") + """Method m = null;
+try { m = Solution.class.getDeclaredMethod("checkAge", int.class, int.class); } catch (NoSuchMethodException e) { }
+need(m != null && Modifier.isStatic(m.getModifiers()), "Добавь в класс Solution метод static void checkAge(int age, int rating) throws AgeLimitException");
+need(Arrays.asList(m.getExceptionTypes()).contains(ex), "Объяви в методе checkAge именно throws AgeLimitException: так тот, кто вызывает метод, знает, какую ошибку обработать");
+m.setAccessible(true);
+boolean thrown = false;
+try { m.invoke(null, 10, 16); } catch (InvocationTargetException e) { thrown = ex.isInstance(e.getCause()); }
+need(thrown, "Если зрителю меньше лет, чем указано в ограничении, метод checkAge должен выбрасывать AgeLimitException через throw");
+try { m.invoke(null, 16, 16); } catch (InvocationTargetException e) { need(false, "Зрителю ровно 16 лет на фильм 16+ можно: при таком возрасте checkAge не должен выбрасывать исключение"); }"""
+
+# ── 5. Промокод ──
+EXPIRED = exception_class("ExpiredCodeException")
+UNKNOWN = exception_class("UnknownCodeException")
+PROMO_MAIN = ('try {\n    System.out.println("To pay: " + applyCode(price, code) + " rub");\n'
+              '} catch (ExpiredCodeException e) {\n    System.out.println(e.getMessage());\n'
+              '    System.out.println("To pay: " + price + " rub");\n'
+              '} catch (UnknownCodeException e) {\n    System.out.println(e.getMessage());\n'
+              '    System.out.println("Check the code and try again");\n}')
+PROMO_METHOD = """static int applyCode(int price, String code) throws ExpiredCodeException, UnknownCodeException {
+    if (code.equals("SALE20")) {
+        return price - price * 20 / 100;
+    }
+    if (code.equals("SPRING")) {
+        throw new ExpiredCodeException("Code SPRING has expired");
+    }
+    throw new UnknownCodeException("Unknown code: " + code);
+}"""
+PROMO_CHECKS = """Class<?> expired = cls("ExpiredCodeException");
+Class<?> unknown = cls("UnknownCodeException");
+need(expired != null && unknown != null && Exception.class.isAssignableFrom(expired) && Exception.class.isAssignableFrom(unknown) && !RuntimeException.class.isAssignableFrom(expired) && !RuntimeException.class.isAssignableFrom(unknown), "Создай два класса, ExpiredCodeException extends Exception и UnknownCodeException extends Exception, — это проверяемые исключения для двух разных отказов");
+Method m = null;
+try { m = Solution.class.getDeclaredMethod("applyCode", int.class, String.class); } catch (NoSuchMethodException e) { }
+need(m != null && Modifier.isStatic(m.getModifiers()) && m.getReturnType() == int.class, "Добавь в класс Solution метод static int applyCode(int price, String code): он возвращает цену после промокода");
+need(Arrays.asList(m.getExceptionTypes()).containsAll(Arrays.asList(expired, unknown)), "Объяви в методе applyCode оба исключения: throws ExpiredCodeException, UnknownCodeException");
+m.setAccessible(true);
+boolean thrown = false;
+try { m.invoke(null, 1000, "SPRING"); } catch (InvocationTargetException e) { thrown = expired.isInstance(e.getCause()); }
+need(thrown, "Для кода SPRING метод applyCode должен выбрасывать ExpiredCodeException через throw");
+thrown = false;
+try { m.invoke(null, 1000, "HELLO"); } catch (InvocationTargetException e) { thrown = unknown.isInstance(e.getCause()); }
+need(thrown, "Для незнакомого кода метод applyCode должен выбрасывать UnknownCodeException через throw");"""
+
+# ── 6. Библиотека ──
+NOT_AVAILABLE = exception_class("NotAvailableException")
+LIBRARY = """class Library {
+    private List<String> shelf;
+
+    Library(List<String> books) {
+        shelf = new ArrayList<>(books);
+    }
+
+    void borrow(String title) throws NotAvailableException {
+        if (!shelf.contains(title)) {
+            throw new NotAvailableException("No free copy of " + title);
+        }
+        shelf.remove(title);
+    }
+
+    int left() {
+        return shelf.size();
+    }
+}"""
+LIBRARY_MAIN = ('Library library = new Library(books);\ntry {\n    for (String title : wishlist) {\n'
+                '        library.borrow(title);\n        System.out.println("Borrowed: " + title);\n    }\n'
+                '    System.out.println("Got the whole list");\n} catch (NotAvailableException e) {\n'
+                '    System.out.println("Stopped: " + e.getMessage());\n}\n'
+                'System.out.println("Left on the shelf: " + library.left());')
+LIBRARY_CHECKS = checked_class_check("NotAvailableException", "это проверяемое исключение для книги, которой нет на полке") + """Class<?> c = cls("Library");
+need(c != null, "Создай класс Library: он хранит книги на полке и выдаёт их");
+Method borrow = null;
+try { borrow = c.getDeclaredMethod("borrow", String.class); } catch (NoSuchMethodException e) { }
+need(borrow != null && Arrays.asList(borrow.getExceptionTypes()).contains(ex), "Объяви в классе Library метод void borrow(String title) throws NotAvailableException: так main узнает, что отказ нужно обработать");
+boolean closed = false;
+try { closed = Modifier.isPrivate(c.getDeclaredField("shelf").getModifiers()); } catch (NoSuchFieldException e) { }
+need(closed, "Сделай поле shelf в классе Library приватным: книги с полки берут только через borrow");
+Object library = null;
+try { Constructor<?> k = c.getDeclaredConstructor(List.class); k.setAccessible(true); library = k.newInstance(new ArrayList<>(List.of("Dune"))); } catch (NoSuchMethodException | InvocationTargetException e) { }
+need(library != null, "Добавь в класс Library конструктор Library(List<String> books)");
+borrow.setAccessible(true);
+try { borrow.invoke(library, "Dune"); } catch (InvocationTargetException e) { need(false, "Книгу, которая есть на полке, метод borrow должен выдавать без исключения"); }
+boolean thrown = false;
+try { borrow.invoke(library, "Dune"); } catch (InvocationTargetException e) { thrown = ex.isInstance(e.getCause()); }
+need(thrown, "Если книги на полке не осталось, метод borrow должен выбрасывать NotAvailableException через throw — и убирать выданную книгу с полки");"""
+
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-throws-lift-overload", title="Перегрузка лифта",
@@ -199,5 +292,109 @@ TASKS = [
                 CARD_MAIN.replace('"On the card: " + card.getBalance()', '"On the card: " + balance'))],
         constructs=["try", "class"],
         checks=CARD_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-throws-cinema-age", title="Фильм с возрастным ограничением",
+        given=[("int", "age"), ("int", "rating")],
+        variants=[{"age": "12", "rating": "16"}, {"age": "18", "rating": "12"}, {"age": "15", "rating": "18"}],
+        hidden=[{"age": "16", "rating": "16"}, {"age": "6", "rating": "0"}, {"age": "11", "rating": "12"},
+                {"age": "40", "rating": "18"}],
+        intro="Кинотеатр продаёт билет, только если зрителю не меньше лет, чем указано в возрастном ограничении фильма. "
+              "Возраст зрителя записан в `age`, ограничение — в `rating` (например, 16 означает «16+»). Отказ — ожидаемая "
+              "ситуация, которую нельзя забыть обработать, поэтому для неё нужно своё проверяемое исключение.",
+        steps=["Создай класс `AgeLimitException`, унаследованный от `Exception`, с конструктором "
+               "`AgeLimitException(String message)`, который передаёт текст в `super(message)`.",
+               "Добавь в класс `Solution` метод `static void checkAge(int age, int rating) throws AgeLimitException`. "
+               "Если `age` меньше `rating`, он выбрасывает `AgeLimitException` с сообщением вида "
+               "`The film is 16+, you are 12`.",
+               "В `main` в блоке `try` вызови `checkAge(age, rating)` и выведи `Enjoy the film`.",
+               "В `catch (AgeLimitException e)` выведи сообщение исключения, а следующей строкой — `Choose another film`."],
+        hint="Слово `throws` в заголовке метода предупреждает всех, кто его вызывает: «я могу выбросить такое "
+             "исключение». Для проверяемого исключения Java без этого объявления метод не скомпилирует.",
+        solution=with_methods(CINEMA_MAIN, CINEMA_CHECK),
+        classes=AGE_LIMIT,
+        wrong=[("проверяет через <= — зрителю ровно нужного возраста отказывают",
+                with_methods(CINEMA_MAIN, CINEMA_CHECK.replace("age < rating", "age <= rating"))),
+               ("«Choose another film» стоит после try/catch — печатается и тогда, когда билет продан",
+                with_methods('try {\n    checkAge(age, rating);\n    System.out.println("Enjoy the film");\n'
+                             '} catch (AgeLimitException e) {\n    System.out.println(e.getMessage());\n}\n'
+                             'System.out.println("Choose another film");', CINEMA_CHECK))],
+        constructs=["try", "function", "class"],
+        checks=CINEMA_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-throws-promo-code", title="Промокод в интернет-магазине",
+        given=[("int", "price"), ("String", "code")],
+        variants=[{"price": "1500", "code": '"SALE20"'}, {"price": "2400", "code": '"SPRING"'},
+                  {"price": "990", "code": '"FREE"'}],
+        hidden=[{"price": "1000", "code": '"sale20"'}, {"price": "50", "code": '"SALE20"'}, {"price": "700", "code": '"SPRING"'},
+                {"price": "3333", "code": '""'}],
+        intro="Интернет-магазин принимает промокоды. Покупка стоит `price` руб., покупатель ввёл код `code`. Код `SALE20` "
+              "даёт скидку 20%, у кода `SPRING` закончился срок, а любой другой код магазину незнаком. Для двух "
+              "отказов нужны два разных проверяемых исключения, потому что реагировать на них надо по-разному.",
+        steps=["Создай два класса исключений, унаследованных от `Exception`: `ExpiredCodeException` и "
+               "`UnknownCodeException`, — у каждого конструктор с `String message`, который передаёт текст в `super(message)`.",
+               "Добавь в класс `Solution` метод `static int applyCode(int price, String code) throws ExpiredCodeException, "
+               "UnknownCodeException`. Для кода `SALE20` он возвращает `price - price * 20 / 100`; для `SPRING` "
+               "выбрасывает `ExpiredCodeException` с сообщением `Code SPRING has expired`; для любого другого кода — "
+               "`UnknownCodeException` с сообщением вида `Unknown code: FREE`. Строки сравнивай через `equals`.",
+               "В `main` в блоке `try` выведи строку вида `To pay: 1200 rub` с результатом `applyCode(price, code)`.",
+               "В `catch (ExpiredCodeException e)` выведи сообщение исключения и строку вида `To pay: 2400 rub` — "
+               "полную цену. В `catch (UnknownCodeException e)` выведи сообщение исключения и "
+               "`Check the code and try again`."],
+        hint="Если метод может выбросить несколько проверяемых исключений, в `throws` их перечисляют через запятую, "
+             "а в `main` для каждого пишут свой `catch` со своей реакцией.",
+        solution=with_methods(PROMO_MAIN, PROMO_METHOD),
+        classes=EXPIRED + "\n\n" + UNKNOWN,
+        wrong=[("один общий catch (Exception e) — на просроченный код не показывает полную цену",
+                with_methods('try {\n    System.out.println("To pay: " + applyCode(price, code) + " rub");\n'
+                             '} catch (Exception e) {\n    System.out.println(e.getMessage());\n'
+                             '    System.out.println("Check the code and try again");\n}', PROMO_METHOD)),
+               ("возвращает размер скидки, а не цену после скидки",
+                with_methods(PROMO_MAIN, PROMO_METHOD.replace("return price - price * 20 / 100;", "return price * 20 / 100;")))],
+        constructs=["try", "function", "class", "if"],
+        checks=PROMO_CHECKS,
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-throws-library-list", title="Книги по списку",
+        given=[("List<String>", "books"), ("List<String>", "wishlist")],
+        variants=[{"books": 'new ArrayList<>(List.of("Dune", "Emma", "Dune", "Ulysses"))',
+                   "wishlist": 'new ArrayList<>(List.of("Dune", "Emma", "Dune"))'},
+                  {"books": 'new ArrayList<>(List.of("Hamlet", "Faust", "Ivanhoe"))',
+                   "wishlist": 'new ArrayList<>(List.of("Faust", "Faust", "Hamlet"))'},
+                  {"books": 'new ArrayList<>(List.of("Robinson Crusoe", "Oliver Twist"))',
+                   "wishlist": 'new ArrayList<>(List.of("Oliver Twist", "Moby Dick", "Robinson Crusoe"))'}],
+        hidden=[{"books": 'new ArrayList<>(List.of("Odyssey"))', "wishlist": "new ArrayList<>()"},
+                {"books": "new ArrayList<>()", "wishlist": 'new ArrayList<>(List.of("Iliad"))'},
+                {"books": 'new ArrayList<>(List.of("Beowulf", "Beowulf"))', "wishlist": 'new ArrayList<>(List.of("Beowulf", "Beowulf", "Beowulf"))'},
+                {"books": 'new ArrayList<>(List.of("Candide", "Walden", "Oblomov"))', "wishlist": 'new ArrayList<>(List.of("Walden", "Oblomov"))'}],
+        intro="Школьник пришёл в библиотеку со списком книг `wishlist` для доклада. На полке стоят книги `books` "
+              "(некоторых — по несколько экземпляров). Ему нужен весь список целиком: если какой-то книги не нашлось, "
+              "он перестаёт брать остальные и идёт искать её в другую библиотеку.",
+        steps=["Создай класс `NotAvailableException`, унаследованный от `Exception`, с конструктором "
+               "`NotAvailableException(String message)`, который передаёт текст в `super(message)`.",
+               "Создай класс `Library` с приватным полем `List<String> shelf`, конструктором `Library(List<String> books)`, "
+               "который кладёт на полку копию списка (`new ArrayList<>(books)`), и методом `int left()` — сколько книг "
+               "осталось на полке.",
+               "Добавь в него метод `void borrow(String title) throws NotAvailableException`: если на полке нет такой "
+               "книги, он выбрасывает исключение с сообщением вида `No free copy of Dune`, иначе убирает один "
+               "экземпляр с полки методом `shelf.remove(title)`.",
+               "В `main` создай библиотеку из `books`. Поставь `try` вокруг всего цикла по `wishlist`: для каждой книги "
+               "вызови `borrow` и выведи строку вида `Borrowed: Dune`, а после цикла, ещё внутри `try`, выведи "
+               "`Got the whole list`. В `catch` выведи `Stopped: ` и сообщение исключения.",
+               "Последней строкой, после `try`/`catch`, выведи строку вида `Left on the shelf: 2`."],
+        hint="Здесь `try` специально стоит вокруг цикла, а не внутри него: исключение из `borrow` прерывает весь "
+             "цикл сразу, и следующие книги уже не берутся — именно это и нужно.",
+        solution=LIBRARY_MAIN,
+        classes=NOT_AVAILABLE + "\n\n" + LIBRARY,
+        wrong=[("try внутри цикла — после ненайденной книги школьник продолжает брать остальные",
+                'Library library = new Library(books);\nfor (String title : wishlist) {\n    try {\n'
+                '        library.borrow(title);\n        System.out.println("Borrowed: " + title);\n'
+                '    } catch (NotAvailableException e) {\n        System.out.println("Stopped: " + e.getMessage());\n    }\n}\n'
+                'System.out.println("Left on the shelf: " + library.left());'),
+               ("не убирает книгу с полки — один экземпляр выдаётся сколько угодно раз",
+                LIBRARY_MAIN, NOT_AVAILABLE + "\n\n" + LIBRARY.replace("        shelf.remove(title);\n", ""))],
+        constructs=["try", "class", "for"],
+        checks=LIBRARY_CHECKS,
     ),
 ]

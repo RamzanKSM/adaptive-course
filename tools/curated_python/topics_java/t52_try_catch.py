@@ -94,4 +94,101 @@ TASKS = [
                 'System.out.println("Total: " + total + " rub");')],
         constructs=["try", "for"],
     ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=1, slug="java-try-candy-bag", title="Конфеты поровну",
+        given=[("int", "candies"), ("int", "kids")],
+        variants=[{"candies": "26", "kids": "4"}, {"candies": "15", "kids": "0"}, {"candies": "40", "kids": "6"}],
+        hidden=[{"candies": "30", "kids": "0"}, {"candies": "12", "kids": "3"}, {"candies": "5", "kids": "7"},
+                {"candies": "0", "kids": "2"}],
+        intro="Мама принесла пакет с `candies` конфетами и делит их поровну между `kids` детьми, а то, что не "
+              "делится, остаётся в пакете. Если детей нет, деление на ноль выбрасывает `ArithmeticException` — "
+              "программа должна не падать, а сказать об этом.",
+        steps=["В блоке `try` выведи строку вида `Each kid gets: 6 candies` — сколько конфет достанется каждому "
+               "(целое деление `/`).",
+               "Там же, следующей строкой, выведи строку вида `Left in the bag: 2` — остаток от деления `%`.",
+               "Добавь блок `catch (ArithmeticException e)` и выведи в нём `No kids, the candies stay in the bag`."],
+        hint="И `/`, и `%` на ноль выбрасывают одно и то же исключение. Если обе строки стоят внутри `try`, при нуле "
+             "детей не напечатается ни одна из них — только сообщение из `catch`.",
+        solution='try {\n    System.out.println("Each kid gets: " + candies / kids + " candies");\n'
+                 '    System.out.println("Left in the bag: " + candies % kids);\n} catch (ArithmeticException e) {\n'
+                 '    System.out.println("No kids, the candies stay in the bag");\n}',
+        wrong=[("печатает остаток после try/catch — когда детей нет, появляется лишняя строка",
+                'int left = candies;\ntry {\n    System.out.println("Each kid gets: " + candies / kids + " candies");\n'
+                '    left = candies % kids;\n} catch (ArithmeticException e) {\n'
+                '    System.out.println("No kids, the candies stay in the bag");\n}\n'
+                'System.out.println("Left in the bag: " + left);'),
+               ("перепутал / и % — каждому достаётся остаток, а в пакете остаётся частное",
+                'try {\n    System.out.println("Each kid gets: " + candies % kids + " candies");\n'
+                '    System.out.println("Left in the bag: " + candies / kids);\n} catch (ArithmeticException e) {\n'
+                '    System.out.println("No kids, the candies stay in the bag");\n}')],
+        constructs=["try"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=2, slug="java-try-split-bill", title="Счёт в ресторане",
+        given=[("int", "bill"), ("String", "people")],
+        variants=[{"bill": "2400", "people": '"4"'}, {"bill": "1800", "people": '"0"'}, {"bill": "999", "people": '"three"'}],
+        hidden=[{"bill": "500", "people": '"1"'}, {"bill": "3000", "people": '""'}, {"bill": "1000", "people": '"0"'},
+                {"bill": "7700", "people": '"12"'}, {"bill": "600", "people": '"2 people"'}],
+        intro="Компания делит счёт `bill` руб. поровну. Сколько человек платит, официант вводит в планшет, и эта строка "
+              "попадает в `people`. Тут может пойти не так две вещи: в строке не число — или число 0.",
+        steps=["В блоке `try` преврати `people` в целое число через `Integer.parseInt` и выведи строку вида "
+               "`Each pays: 600 rub` — `bill`, делённый нацело на число людей.",
+               "Добавь `catch (NumberFormatException e)` — строка не число — и выведи в нём "
+               "`Enter the number of people in digits`.",
+               "Добавь второй блок `catch (ArithmeticException e)` — людей 0 — и выведи в нём "
+               "`Nobody to split the bill with`."],
+        hint="К одному `try` можно приписать несколько `catch` подряд: Java выберет тот, чей тип совпадает с "
+             "выброшенным исключением. Так каждая ошибка получает своё сообщение.",
+        solution='try {\n    int n = Integer.parseInt(people);\n    System.out.println("Each pays: " + bill / n + " rub");\n'
+                 '} catch (NumberFormatException e) {\n    System.out.println("Enter the number of people in digits");\n'
+                 '} catch (ArithmeticException e) {\n    System.out.println("Nobody to split the bill with");\n}',
+        wrong=[("перепутал сообщения в двух catch",
+                'try {\n    int n = Integer.parseInt(people);\n    System.out.println("Each pays: " + bill / n + " rub");\n'
+                '} catch (NumberFormatException e) {\n    System.out.println("Nobody to split the bill with");\n'
+                '} catch (ArithmeticException e) {\n    System.out.println("Enter the number of people in digits");\n}'),
+               ("один общий catch (Exception e) — на ноль людей печатает не ту причину",
+                'try {\n    int n = Integer.parseInt(people);\n    System.out.println("Each pays: " + bill / n + " rub");\n'
+                '} catch (Exception e) {\n    System.out.println("Enter the number of people in digits");\n}')],
+        constructs=["try"],
+    ),
+    JavaOutputTask(
+        skill=SKILL, difficulty=3, slug="java-try-sleep-survey", title="Опрос про сон",
+        given=[("String[]", "answers")],
+        variants=[{"answers": '{"8", "7", "nine", "6", "?"}'}, {"answers": '{"ten", "lots"}'},
+                  {"answers": '{"9", "8", "10", "7"}'}],
+        hidden=[{"answers": "{}"}, {"answers": '{"6"}'}, {"answers": '{"x", "5", "y", "9"}'},
+                {"answers": '{"7", "7", "", "8", "8 h"}'}],
+        intro="Школьный психолог провёл опрос: сколько часов ты спишь. Ответы пришли строками в массив `answers`, "
+              "и кое-кто написал словами или поставил знак вопроса. Такие ответы нужно пропустить, а по остальным "
+              "посчитать средний сон.",
+        steps=["Заведи три счётчика: сумму часов, число принятых ответов и число пропущенных.",
+               "Пройди по массиву `answers`. Для каждого ответа в блоке `try` преврати его в число через "
+               "`Integer.parseInt`, прибавь к сумме и только потом увеличь число принятых. В "
+               "`catch (NumberFormatException e)` увеличь число пропущенных.",
+               "После цикла выведи строку вида `Skipped: 2`.",
+               "Затем во втором блоке `try` выведи строку вида `Average: 7 h` — сумму, делённую нацело на число "
+               "принятых ответов. Если принятых ответов нет, деление на ноль попадёт в `catch (ArithmeticException e)` — "
+               "выведи там `No valid answers`."],
+        hint="Если поставить увеличение счётчика перед `Integer.parseInt`, он увеличится и для плохого ответа: "
+             "исключение случится уже после него. Всё, что должно сработать только для удачного числа, ставь после "
+             "превращения.",
+        solution='int total = 0;\nint count = 0;\nint skipped = 0;\nfor (String answer : answers) {\n    try {\n'
+                 '        total += Integer.parseInt(answer);\n        count++;\n    } catch (NumberFormatException e) {\n'
+                 '        skipped++;\n    }\n}\nSystem.out.println("Skipped: " + skipped);\ntry {\n'
+                 '    System.out.println("Average: " + total / count + " h");\n} catch (ArithmeticException e) {\n'
+                 '    System.out.println("No valid answers");\n}',
+        wrong=[("увеличивает число принятых до parseInt — плохие ответы тоже попадают в среднее",
+                'int total = 0;\nint count = 0;\nint skipped = 0;\nfor (String answer : answers) {\n    try {\n'
+                '        count++;\n        total += Integer.parseInt(answer);\n    } catch (NumberFormatException e) {\n'
+                '        skipped++;\n    }\n}\nSystem.out.println("Skipped: " + skipped);\ntry {\n'
+                '    System.out.println("Average: " + total / count + " h");\n} catch (ArithmeticException e) {\n'
+                '    System.out.println("No valid answers");\n}'),
+               ("try вокруг всего цикла — после первого плохого ответа остальные не читаются",
+                'int total = 0;\nint count = 0;\nint skipped = 0;\ntry {\n    for (String answer : answers) {\n'
+                '        total += Integer.parseInt(answer);\n        count++;\n    }\n} catch (NumberFormatException e) {\n'
+                '    skipped++;\n}\nSystem.out.println("Skipped: " + skipped);\ntry {\n'
+                '    System.out.println("Average: " + total / count + " h");\n} catch (ArithmeticException e) {\n'
+                '    System.out.println("No valid answers");\n}')],
+        constructs=["try", "for"],
+    ),
 ]
