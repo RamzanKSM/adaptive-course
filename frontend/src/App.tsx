@@ -903,15 +903,20 @@ function TeacherPage({ request }: { request: Request }) {
     if (!inGroup(groupFilter, student.group)) setGroupFilter('')
     setSelected(student); setView('students'); window.scrollTo({ top: 0 })
   }, [students, groupFilter, setGroupFilter])
+  /** From a student's card: the progress tab opens on that student (course, group, panel). */
+  const [progressFocus, setProgressFocus] = useState<{ id: Id; nonce: number } | null>(null)
+  const openProgress = useCallback((id: Id) => {
+    setProgressFocus(focus => ({ id, nonce: (focus?.nonce ?? 0) + 1 })); setView('progress'); window.scrollTo({ top: 0 })
+  }, [])
   const configDisabled = globalLlm?.reason === 'DISABLED_BY_CONFIGURATION'
   const tabs = <nav className="segmented admin-tabs four" role="tablist" style={{ '--active': ['students', 'progress', 'llm', 'settings'].indexOf(view) } as CSSProperties}>
     <span className="segmented-thumb" aria-hidden="true" />
     <button role="tab" aria-selected={view === 'students'} className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}><Icon name="user" size={16} /> Студенты</button>
-    <button role="tab" aria-selected={view === 'progress'} className={view === 'progress' ? 'active' : ''} onClick={() => setView('progress')}><Icon name="target" size={16} /> Прогресс</button>
+    <button role="tab" aria-selected={view === 'progress'} className={view === 'progress' ? 'active' : ''} onClick={() => { setProgressFocus(null); setView('progress') }}><Icon name="target" size={16} /> Прогресс</button>
     <button role="tab" aria-selected={view === 'llm'} className={view === 'llm' ? 'active' : ''} onClick={() => setView('llm')}><Icon name="chart" size={16} /> Аналитика LLM</button>
     <button role="tab" aria-selected={view === 'settings'} className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}><Icon name="sparkle" size={16} /> Настройки LLM</button>
   </nav>
-  if (view === 'progress') return <>{tabs}<ProgressAnalytics request={request} onOpenStudent={openStudent} /></>
+  if (view === 'progress') return <>{tabs}<ProgressAnalytics request={request} onOpenStudent={openStudent} focus={progressFocus} /></>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
   if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
   const counts = groupCounts(students ?? [], s => s.group)
@@ -957,7 +962,7 @@ function TeacherPage({ request }: { request: Request }) {
         </button>)
         : <p className="muted list-note">{students.length ? 'В этой группе студентов нет.' : 'Студентов пока нет. Создай первую учётную запись выше.'}</p>}</div>
     </div>
-    {selected ? <StudentDetail key={selected.id} student={selected} groups={groupNames} request={request} toggle={() => toggle(selected)} onLlmStatus={onLlmStatus} onUpdated={onUpdated} onDeleted={() => { setStudents(xs => xs && xs.filter(x => x.id !== selected.id)); setSelected(null) }} />
+    {selected ? <StudentDetail key={selected.id} student={selected} groups={groupNames} request={request} toggle={() => toggle(selected)} onOpenProgress={() => openProgress(selected.id)} onLlmStatus={onLlmStatus} onUpdated={onUpdated} onDeleted={() => { setStudents(xs => xs && xs.filter(x => x.id !== selected.id)); setSelected(null) }} />
       : <aside className="card student-detail placeholder"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">Выбери студента, чтобы увидеть его уроки, решения и переписку с помощником.</p></aside>}
   </section></>
 }
@@ -1086,7 +1091,7 @@ function EditStudent({ student, groups, request, onUpdated }: { student: Student
   </form>
 }
 
-function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdated, onDeleted }: { student: Student; groups: string[]; request: Request; toggle: () => void; onLlmStatus: (llm: LlmStatus) => void; onUpdated: (student: Student) => void; onDeleted: () => void }) {
+function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlmStatus, onUpdated, onDeleted }: { student: Student; groups: string[]; request: Request; toggle: () => void; onOpenProgress?: () => void; onLlmStatus: (llm: LlmStatus) => void; onUpdated: (student: Student) => void; onDeleted: () => void }) {
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
   const [hardCourses, setHardCourses] = useState<Student['hardModeCourses']>(student.hardModeCourses)
@@ -1140,7 +1145,8 @@ function StudentDetail({ student, groups, request, toggle, onLlmStatus, onUpdate
   return <aside className="card student-detail enter-side">
     <div className="detail-head">
       <span className="avatar big" aria-hidden="true">{initials(student.displayName)}</span>
-      <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}{student.group && <span className="group-tag">{student.group}</span>}</p></div>
+      <div><h2 className="title">{student.displayName}</h2><p className="muted small">{student.login}{student.group && <span className="group-tag">{student.group}</span>}</p>
+        {onOpenProgress && <button type="button" className="ghost small-button detail-link" onClick={onOpenProgress}><Icon name="target" size={15} /> Прогресс</button>}</div>
       <div className="detail-switches">
         <label className="switch-label"><span className="muted small">LLM</span><Switch checked={!!student.llmEnabled} onChange={toggle} label={`LLM для ${student.displayName}`} /></label>
         <label className="switch-label hard" title="Допуск к hard mode: студент сам включает алгоритмические задачи"><span className="muted small"><Icon name="flame" size={13} /> Hard</span><Switch checked={!!student.hardModeAllowed} onChange={toggleHard} label={`Допуск к hard mode для ${student.displayName}`} /></label>

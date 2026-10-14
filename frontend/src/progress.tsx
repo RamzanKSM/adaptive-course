@@ -110,7 +110,8 @@ function storedLanguage(): CourseLanguage {
 }
 
 /** Teacher: growth of a group, forecast to the session per student, comparison of groups, and the classroom screen. */
-export function ProgressAnalytics({ request, onOpenStudent }: { request: Request; onOpenStudent?: (id: Id) => void }) {
+/** focus: a student to show (from their card) — the page switches to their course and group and opens their panel. */
+export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: Request; onOpenStudent?: (id: Id) => void; focus?: { id: Id; nonce: number } | null }) {
   const [language, setLanguageState] = useState<CourseLanguage>(storedLanguage)
   const setLanguage = (value: CourseLanguage) => { setLanguageState(value); try { localStorage.setItem(LANGUAGE_KEY, value) } catch { /* private mode */ } }
   const [range, setRange] = useState<Range>({ kind: 'days', days: 30 })
@@ -124,6 +125,10 @@ export function ProgressAnalytics({ request, onOpenStudent }: { request: Request
   const [selectedId, setSelectedId] = useState<Id | null>(null)
   const [classroom, setClassroom] = useState<string | null>(null)
   const [group, setGroup] = useGroupFilter('rmzn-progress-group', report ? [...new Set(report.students.map(s => s.group).filter((g): g is string => !!g))] : null)
+  const toast = useToast()
+  /** The student from `focus` and the courses already looked at for them. */
+  const [pending, setPending] = useState<{ id: Id; tried: CourseLanguage[] } | null>(null)
+  useEffect(() => { if (focus) setPending({ id: focus.id, tried: [] }) }, [focus?.id, focus?.nonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = todayUtc()
   const query = range.kind === 'days' ? { from: dayString(dayNumber(today) - (range.days - 1)), to: today }
@@ -144,6 +149,21 @@ export function ProgressAnalytics({ request, onOpenStudent }: { request: Request
     })
     return () => { alive = false }
   }, [language, query.from, query.to, validRange, reload, request])
+
+  // Shows the focused student in their session course (or the course where they have data), in their group, panel open.
+  useEffect(() => {
+    if (!pending || !report || loading || report.language !== language) return
+    const student = report.students.find(s => s.id === pending.id)
+    const tried = [...pending.tried, report.language]
+    if (student && (!student.sessionCourse || tried.includes(student.sessionCourse))) {
+      if (!student.member) setShowOthers(true)
+      setGroup(student.group ?? NO_GROUP); setSelectedId(student.id); setPending(null)
+      return
+    }
+    const next = student?.sessionCourse ?? COURSES.map(c => c[0]).find(c => !tried.includes(c))
+    if (next && !tried.includes(next)) { setPending({ id: pending.id, tried }); setLanguage(next) }
+    else { setPending(null); toast({ tone: 'info', icon: 'user', title: 'Прогресса пока нет', text: 'Студент ещё не прошёл диагностику ни в одном курсе.' }) }
+  }, [pending, report, loading, language]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ctx = useMemo<Context | null>(() => report && { report, dayNums: report.days.map(dayNumber), startIdx: Math.max(0, report.days.indexOf(report.from)) }, [report])
   const scope = useMemo(() => {

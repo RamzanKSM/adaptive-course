@@ -422,6 +422,7 @@ html { overflow-x: clip; scroll-padding-top: calc(var(--topbar-h, 84px) + 12px);
 .detail-head { display: flex; align-items: center; gap: 14px; }
 .detail-head .title { margin: 0; }
 .detail-head .muted { margin: 0; }
+.detail-head .detail-link { margin-top: 8px; white-space: nowrap; }
 .mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 18px; }
 .mini-stats span { display: grid; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
 .mini-stats b { font-family: var(--font-display); font-size: 20px; }
