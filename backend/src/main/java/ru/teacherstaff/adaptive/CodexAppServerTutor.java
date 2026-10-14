@@ -498,6 +498,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         .append(python ? pythonTaskRules(b) : javaTaskRules(b))
         .append("Keep the checks aligned with the statement: every checked case must follow from what the statement asks. ")
         .append(GOAL_RULES)
+        .append(ENGLISH_CODE_RULE)
         .append(notTaughtRules(b))
         .append("skillCode must be '").append(b.skillCode()).append("'; targetSkillCodes must contain only '").append(b.skillCode()).append("'; prerequisiteSkillCodes must be an empty array.");
     return prompt.toString();
@@ -529,6 +530,7 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
         .append("referenceSolutionSource is a correct full solution (same starter reading code) used only for server validation; it must use only constructs from the passed topics. ")
         .append("Keep the checks aligned with the statement: every case must satisfy the stated input format and limits. ")
         .append(GOAL_RULES)
+        .append(ENGLISH_CODE_RULE)
         .append("For this task goal.kind must be IO_BEHAVIOR. ")
         .append("skillCode must be '").append(b.skillCode()).append("'; targetSkillCodes must contain only '").append(b.skillCode()).append("'; prerequisiteSkillCodes must be an empty array.");
     return prompt.toString();
@@ -554,6 +556,11 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
   }
 
   /** What the task teaches and how it can be cheated; the platform enforces the first and runs the second. */
+  /** Students type the program text: Russian strings there make them switch the keyboard layout all the time. */
+  static final String ENGLISH_CODE_RULE = "Text inside the program is English: every string the student types or the program prints — string literals, printed messages, "
+      + "names and other data values, expectedOutput, testInputs and their answers — is simple English using only ASCII characters (no Cyrillic, no «» or em dashes), "
+      + "so the student never has to switch the keyboard layout. The statement itself stays Russian, but every output example and every value it quotes (in backticks or "
+      + "code blocks) must be exactly these English strings. Comments in starterCode may stay Russian; the Russian messages of the checks stay Russian. ";
   static final String GOAL_RULES = """
 
       Also return `goal` — what this task teaches, so the platform can enforce it — and `wrongSolutions`.

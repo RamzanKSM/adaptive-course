@@ -30,9 +30,9 @@ class Shelf:
 
 first = Shelf(topic1, books1)
 second = Shelf(topic2, books2)
-print(f"Вместимость каждой полки: {Shelf.capacity}")
-print(f"{first.topic}: свободных мест {first.free_places()}")
-print(f"{second.topic}: свободных мест {second.free_places()}")
+print(f"Each shelf holds: {Shelf.capacity}")
+print(f"{first.topic}: {first.free_places()} free places")
+print(f"{second.topic}: {second.free_places()} free places")
 """
 
 MONSTER = """\
@@ -47,8 +47,8 @@ class Monster:
 
 for name in names:
     monster = Monster(name)
-    print(f"Монстр №{monster.number}: {monster.name}")
-print(f"Всего монстров: {Monster.count}")
+    print(f"Monster {monster.number}: {monster.name}")
+print(f"Total monsters: {Monster.count}")
 """
 
 TRIP = """\
@@ -66,23 +66,23 @@ trips = []
 for km in distances:
     trips.append(Trip(km))
 for trip in trips:
-    print(f"{trip.km} км: {trip.cost()} руб.")
+    print(f"{trip.km} km: {trip.cost()} rub")
 Trip.rate = new_rate
-print(f"Новый тариф: {Trip.rate} руб. за км")
+print(f"New rate: {Trip.rate} rub per km")
 for trip in trips:
-    print(f"{trip.km} км: {trip.cost()} руб.")
+    print(f"{trip.km} km: {trip.cost()} rub")
 """
 
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-clsattr-library-shelves", title="Полки в библиотеке",
         given=["topic1", "books1", "topic2", "books2"],
-        variants=[{"topic1": '"Фантастика"', "books1": "18", "topic2": '"Детективы"', "books2": "25"},
-                  {"topic1": '"Сказки"', "books1": "7", "topic2": '"Поэзия"', "books2": "30"},
-                  {"topic1": '"История"', "books1": "29", "topic2": '"Наука"', "books2": "11"}],
-        hidden=[{"topic1": '"Комиксы"', "books1": "0", "topic2": '"Словари"', "books2": "30"},
-                {"topic1": '"Спорт"', "books1": "15", "topic2": '"Музыка"', "books2": "15"},
-                {"topic1": '"Кулинария"', "books1": "3", "topic2": '"Путешествия"', "books2": "22"}],
+        variants=[{"topic1": '"Sci-fi"', "books1": "18", "topic2": '"Crime"', "books2": "25"},
+                  {"topic1": '"Fairy tales"', "books1": "7", "topic2": '"Poems"', "books2": "30"},
+                  {"topic1": '"History"', "books1": "29", "topic2": '"Science"', "books2": "11"}],
+        hidden=[{"topic1": '"Comics"', "books1": "0", "topic2": '"Dictionaries"', "books2": "30"},
+                {"topic1": '"Sport"', "books1": "15", "topic2": '"Music"', "books2": "15"},
+                {"topic1": '"Cooking"', "books1": "3", "topic2": '"Travel"', "books2": "22"}],
         intro="В школьной библиотеке все полки одинаковые: на любую помещается 30 книг. Это общее свойство всех полок, "
               "поэтому его удобно записать один раз — в самом классе, а не в каждом объекте. "
               "А тема полки и число книг на ней у каждой полки свои.",
@@ -92,8 +92,8 @@ TASKS = [
                "Добавь метод `free_places(self)`, который возвращает, сколько ещё книг поместится на полку: "
                "вместимость минус количество книг.",
                "Создай две полки: `first = Shelf(topic1, books1)` и `second = Shelf(topic2, books2)`.",
-               "Выведи строку `Вместимость каждой полки: 30` — число возьми из `Shelf.capacity`. Потом выведи "
-               "по строке для первой и для второй полки в виде `Фантастика: свободных мест 12`."],
+               "Выведи строку `Each shelf holds: 30` — число возьми из `Shelf.capacity`. Потом выведи "
+               "по строке для первой и для второй полки в виде `Sci-fi: 12 free places`."],
         hint="Атрибут класса записывают в теле класса без `self`. Прочитать его можно и через класс — `Shelf.capacity`, "
              "и через объект — `self.capacity`: если у объекта нет своего атрибута с таким именем, Python возьмёт его у класса. "
              "А вот количество книг у каждой полки своё — его бери из `self.books`.",
@@ -110,12 +110,12 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=2, slug="py-clsattr-monster-counter", title="Счётчик монстров",
         given=["names"],
-        variants=[{"names": '["Гоблин", "Тролль", "Орк"]'},
-                  {"names": '["Дракон", "Скелет"]'},
-                  {"names": '["Слизень", "Паук", "Волк", "Призрак"]'}],
-        hidden=[{"names": '["Зомби"]'},
-                {"names": '["Минотавр", "Циклоп", "Гарпия", "Гидра", "Кентавр"]'},
-                {"names": '["Тролль", "Тролль"]'}],
+        variants=[{"names": '["Goblin", "Troll", "Orc"]'},
+                  {"names": '["Dragon", "Skeleton"]'},
+                  {"names": '["Slime", "Spider", "Wolf", "Ghost"]'}],
+        hidden=[{"names": '["Zombie"]'},
+                {"names": '["Minotaur", "Cyclops", "Harpy", "Hydra", "Centaur"]'},
+                {"names": '["Troll", "Troll"]'}],
         intro="В игре на уровне по очереди появляются монстры из списка `names`. Игра даёт каждому монстру "
               "порядковый номер и помнит, сколько монстров создано всего. Счётчик один на всех монстров — "
               "значит, это атрибут класса.",
@@ -123,8 +123,8 @@ TASKS = [
                "В `__init__(self, name)` сохрани имя в `self.name`, затем увеличь общий счётчик `Monster.count` на 1 "
                "и сохрани его новое значение в `self.number` — это порядковый номер монстра.",
                "Пройди циклом по списку `names` и для каждого имени создай монстра. Сразу после создания выведи "
-               "строку вида `Монстр №1: Гоблин` — номер и имя бери из атрибутов объекта.",
-               "После цикла выведи строку вида `Всего монстров: 3` — число возьми из `Monster.count`."],
+               "строку вида `Monster 1: Goblin` — номер и имя бери из атрибутов объекта.",
+               "После цикла выведи строку вида `Total monsters: 3` — число возьми из `Monster.count`."],
         hint="Меняй общий счётчик через имя класса, а не через `self`. Запись `self.count += 1` создаст у объекта "
              "его собственную копию счётчика, а общий счётчик класса так и останется нулём.",
         solution=MONSTER,
@@ -157,9 +157,9 @@ TASKS = [
                "В `__init__(self, km)` сохрани длину поездки в `self.km`.",
                "Добавь метод `cost(self)`, который возвращает стоимость поездки: километры, умноженные на тариф.",
                "Для каждого числа из `distances` создай объект `Trip` и сложи эти объекты в список `trips`. "
-               "Выведи стоимость каждой поездки строкой вида `5 км: 125 руб.`",
+               "Выведи стоимость каждой поездки строкой вида `5 km: 125 rub`",
                "Поменяй тариф один раз сразу для всех поездок: `Trip.rate = new_rate`. Затем выведи строку вида "
-               "`Новый тариф: 30 руб. за км` — число возьми из `Trip.rate`.",
+               "`New rate: 30 rub per km` — число возьми из `Trip.rate`.",
                "Снова выведи стоимость каждой поездки в том же виде, уже по новому тарифу. "
                "Новые объекты не создавай — пройди по тому же списку `trips`."],
         hint="Если у объекта нет своего атрибута `rate`, Python берёт его у класса. Поэтому достаточно один раз "

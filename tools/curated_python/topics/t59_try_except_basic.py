@@ -16,18 +16,18 @@ TASKS = [
               "записано в `kids`. Если детей нет, деление на ноль вызывает ошибку `ZeroDivisionError`, "
               "и программа останавливается. Нужно, чтобы вместо этого она спокойно сообщила, в чём дело.",
         steps=["В блоке `try` раздели `candies` на `kids` нацело (через `//`) и выведи результат в виде "
-               "`Каждому: 3 шт.` — после двоеточия пробел, число, пробел и `шт.`",
-               "Добавь блок `except ZeroDivisionError:` и выведи в нём `Некому раздавать конфеты`."],
+               "`Each gets: 3 pcs` — после двоеточия пробел, число, пробел и `pcs`.",
+               "Добавь блок `except ZeroDivisionError:` и выведи в нём `No kids to share with`."],
         hint="Код, который может сломаться, ставь внутрь `try`. Если там случится деление на ноль, Python не остановит "
              "программу, а сразу перейдёт в блок `except` — и строки, стоящие в `try` после ошибки, уже не выполнятся.",
-        solution='try:\n    print(f"Каждому: {candies // kids} шт.")\n'
-                 'except ZeroDivisionError:\n    print("Некому раздавать конфеты")',
-        wrong=[("печатает результат после try/except — когда детей нет, появляется лишняя строка «Каждому: 0 шт.»",
+        solution='try:\n    print(f"Each gets: {candies // kids} pcs")\n'
+                 'except ZeroDivisionError:\n    print("No kids to share with")',
+        wrong=[("печатает результат после try/except — когда детей нет, появляется лишняя строка «Each gets: 0 pcs»",
                 'share = 0\ntry:\n    share = candies // kids\nexcept ZeroDivisionError:\n'
-                '    print("Некому раздавать конфеты")\nprint(f"Каждому: {share} шт.")'),
+                '    print("No kids to share with")\nprint(f"Each gets: {share} pcs")'),
                ("делит через / вместо // — получается дробное число",
-                'try:\n    print(f"Каждому: {candies / kids} шт.")\n'
-                'except ZeroDivisionError:\n    print("Некому раздавать конфеты")')],
+                'try:\n    print(f"Each gets: {candies / kids} pcs")\n'
+                'except ZeroDivisionError:\n    print("No kids to share with")')],
         constructs=["try"],
         must_use=[("re:except\\s+ZeroDivisionError",
                    "Перехвати именно ошибку деления на ноль: напиши `except ZeroDivisionError:`. "
@@ -36,31 +36,31 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=2, slug="py-try-double-bonus", title="Двойные бонусы",
         given=["bonuses"],
-        variants=[{"bonuses": '{"Аня": "120", "Борис": "нет карты", "Вика": "75"}'},
-                  {"bonuses": '{"Гоша": "40", "Дина": "300", "Егор": "15", "Жанна": "?"}'},
-                  {"bonuses": '{"Зоя": "50", "Илья": "", "Катя": "сбой", "Лёва": "210"}'}],
-        hidden=[{"bonuses": '{"Миша": "сбой", "Нина": "10"}'},
-                {"bonuses": '{"Олег": "5", "Петя": "0", "Рита": "x", "Саша": "1000"}'},
-                {"bonuses": '{"Тимур": "77"}'},
-                {"bonuses": '{"Уля": "-", "Фёдор": "нет"}'}],
+        variants=[{"bonuses": '{"Anya": "120", "Boris": "no card", "Vika": "75"}'},
+                  {"bonuses": '{"Gosha": "40", "Dina": "300", "Egor": "15", "Zhanna": "?"}'},
+                  {"bonuses": '{"Zoya": "50", "Ilya": "", "Katya": "error", "Lyova": "210"}'}],
+        hidden=[{"bonuses": '{"Misha": "error", "Nina": "10"}'},
+                {"bonuses": '{"Oleg": "5", "Petya": "0", "Rita": "x", "Sasha": "1000"}'},
+                {"bonuses": '{"Timur": "77"}'},
+                {"bonuses": '{"Ulya": "-", "Fedor": "none"}'}],
         intro="В пятницу магазин удваивает бонусы на картах покупателей. Бонусы выгрузили из старой базы в словарь "
               "`bonuses` (имя покупателя → бонусы строкой), и у некоторых покупателей там вместо числа оказалась ерунда.",
         steps=["Перебери пары «имя — бонусы» из словаря `bonuses` через `.items()`.",
                "Для каждого покупателя в блоке `try` преврати бонусы в целое число, удвой их и выведи имя, "
-               "двоеточие, пробел и удвоенное число — например, `Оля: 80`.",
+               "двоеточие, пробел и удвоенное число — например, `Olya: 80`.",
                "Если бонусы записаны не числом, `int()` вызовет `ValueError`. Перехвати её и выведи имя и слова "
-               "`ошибка в данных` — например, `Оля: ошибка в данных`.",
+               "`bad data` — например, `Olya: bad data`.",
                "Покупатели после испорченной записи тоже должны получить свои бонусы."],
         hint="Поставь `try` внутрь цикла, а не вокруг него: тогда ошибка у одного покупателя прервёт только его шаг, "
              "и цикл спокойно перейдёт к следующему.",
         solution='for name, text in bonuses.items():\n    try:\n        print(f"{name}: {int(text) * 2}")\n'
-                 '    except ValueError:\n        print(f"{name}: ошибка в данных")',
+                 '    except ValueError:\n        print(f"{name}: bad data")',
         wrong=[("try вокруг всего цикла — после первой испорченной записи остальные покупатели не обрабатываются",
                 'try:\n    for name, text in bonuses.items():\n        print(f"{name}: {int(text) * 2}")\n'
-                'except ValueError:\n    print(f"{name}: ошибка в данных")'),
+                'except ValueError:\n    print(f"{name}: bad data")'),
                ("печатает бонусы после try/except — у испорченной записи выводится ещё и старое число",
                 'for name, text in bonuses.items():\n    try:\n        points = int(text)\n'
-                '    except ValueError:\n        print(f"{name}: ошибка в данных")\n'
+                '    except ValueError:\n        print(f"{name}: bad data")\n'
                 '    print(f"{name}: {points * 2}")')],
         constructs=["try", "for"],
         must_use=[("re:except\\s+ValueError",
@@ -70,43 +70,43 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=3, slug="py-try-average-mark", title="Средний балл в журнале",
         given=["marks"],
-        variants=[{"marks": '["5", "4", "н", "3", "5", "4"]'},
-                  {"marks": '["н", "н"]'},
-                  {"marks": '["3", "5", "болел", "5"]'}],
+        variants=[{"marks": '["5", "4", "abs", "3", "5", "4"]'},
+                  {"marks": '["abs", "abs"]'},
+                  {"marks": '["3", "5", "sick", "5"]'}],
         hidden=[{"marks": '["4", "4", "4"]'},
                 {"marks": '["2", "x", "5", ""]'},
                 {"marks": '[]'},
-                {"marks": '["5", "н", "5", "4", "н"]'}],
+                {"marks": '["5", "abs", "5", "4", "abs"]'}],
         intro="В электронном журнале оценки ученика хранятся строками в списке `marks`. Если ученик пропустил урок, "
-              "вместо оценки стоит «н» или другая пометка. Нужно посчитать средний балл только по настоящим оценкам.",
+              "вместо оценки стоит `abs` или другая пометка. Нужно посчитать средний балл только по настоящим оценкам.",
         steps=["Заведи две переменные — для суммы и для количества оценок — и присвой обеим `0`. Перебери строки "
                "из `marks` и в блоке `try` преврати каждую в целое число.",
                "Если превращение удалось, прибавь оценку к сумме и увеличь количество на 1. Если возникла "
                "`ValueError`, пропусти эту запись (в блоке `except` можно написать `pass`).",
-               "После цикла выведи `Учтено оценок: 3` — со своим количеством.",
+               "После цикла выведи `Marks counted: 3` — со своим количеством.",
                "Затем во втором блоке `try` раздели сумму на количество, округли через `round(..., 1)` "
-               "и выведи в виде `Средний балл: 4.5`.",
+               "и выведи в виде `Average mark: 4.5`.",
                "Если настоящих оценок нет, деление на ноль вызовет `ZeroDivisionError` — перехвати её и выведи "
-               "`Оценок пока нет` вместо среднего балла."],
+               "`No marks yet` вместо среднего балла."],
         hint="Порядок строк внутри `try` важен: как только `int()` вызвал ошибку, остальные строки блока `try` "
              "не выполняются. Поэтому увеличивай счётчик после успешного превращения, а не до него.",
         solution='total = 0\ncount = 0\nfor mark in marks:\n    try:\n        total += int(mark)\n        count += 1\n'
-                 '    except ValueError:\n        pass\nprint(f"Учтено оценок: {count}")\n'
-                 'try:\n    print(f"Средний балл: {round(total / count, 1)}")\n'
-                 'except ZeroDivisionError:\n    print("Оценок пока нет")',
+                 '    except ValueError:\n        pass\nprint(f"Marks counted: {count}")\n'
+                 'try:\n    print(f"Average mark: {round(total / count, 1)}")\n'
+                 'except ZeroDivisionError:\n    print("No marks yet")',
         wrong=[("увеличивает счётчик до int() — пропуски тоже считаются оценками",
                 'total = 0\ncount = 0\nfor mark in marks:\n    try:\n        count += 1\n        total += int(mark)\n'
-                '    except ValueError:\n        pass\nprint(f"Учтено оценок: {count}")\n'
-                'try:\n    print(f"Средний балл: {round(total / count, 1)}")\n'
-                'except ZeroDivisionError:\n    print("Оценок пока нет")'),
+                '    except ValueError:\n        pass\nprint(f"Marks counted: {count}")\n'
+                'try:\n    print(f"Average mark: {round(total / count, 1)}")\n'
+                'except ZeroDivisionError:\n    print("No marks yet")'),
                ("try вокруг всего цикла — оценки после первого пропуска не учитываются",
                 'total = 0\ncount = 0\ntry:\n    for mark in marks:\n        total += int(mark)\n        count += 1\n'
-                'except ValueError:\n    pass\nprint(f"Учтено оценок: {count}")\n'
-                'try:\n    print(f"Средний балл: {round(total / count, 1)}")\n'
-                'except ZeroDivisionError:\n    print("Оценок пока нет")')],
+                'except ValueError:\n    pass\nprint(f"Marks counted: {count}")\n'
+                'try:\n    print(f"Average mark: {round(total / count, 1)}")\n'
+                'except ZeroDivisionError:\n    print("No marks yet")')],
         constructs=["try", "for"],
         must_use=[("re:except\\s+ValueError",
-                   "Пропуски вроде «н» нужно отсеять, перехватив ошибку превращения в число: `except ValueError:`."),
+                   "Пропуски вроде «abs» нужно отсеять, перехватив ошибку превращения в число: `except ValueError:`."),
                   ("re:except\\s+ZeroDivisionError",
                    "Случай, когда оценок нет, обработай вторым блоком `try` с `except ZeroDivisionError:` — "
                    "так ты потренируешься ловить и эту ошибку.")],

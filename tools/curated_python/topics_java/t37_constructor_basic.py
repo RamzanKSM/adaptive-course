@@ -55,9 +55,9 @@ MEMBERSHIP = '''class Membership {
 }'''
 
 MEMBERSHIP_MAIN = '''Membership card = new Membership(owner, months);
-System.out.println("Абонемент: " + card.owner);
-System.out.println("Срок: " + card.months + " мес.");
-System.out.println("Посещений: " + card.visits);'''
+System.out.println("Membership: " + card.owner);
+System.out.println("Term: " + card.months + " months");
+System.out.println("Visits: " + card.visits);'''
 
 MEMBERSHIP_PARAMS = ["String ownerName", "int monthCount"]
 
@@ -75,10 +75,10 @@ PRICE_TAG = '''class PriceTag {
     }
 }'''
 
-PRICE_TAG_MAIN = '''System.out.println("Скидка " + discount + "%");
+PRICE_TAG_MAIN = '''System.out.println("Sale " + discount + "%");
 for (int i = 0; i < names.length; i++) {
     PriceTag tag = new PriceTag(names[i], prices[i], discount);
-    System.out.println(tag.name + ": было " + tag.price + " руб., стало " + tag.salePrice + " руб.");
+    System.out.println(tag.name + ": was " + tag.price + " rub, now " + tag.salePrice + " rub");
 }'''
 
 PRICE_TAG_PARAMS = ["String productName", "int fullPrice", "int percent"]
@@ -108,17 +108,17 @@ for (int i = 0; i < names.length; i++) {
     } else {
         runner = new Runner(names[i], distances[i]);
     }
-    System.out.println(runner.name + ": " + runner.km + " км");
+    System.out.println(runner.name + ": " + runner.km + " km");
     total += runner.km;
 }
-System.out.println("Всего километров: " + total);'''
+System.out.println("Total km: " + total);'''
 
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-ctor-pool-membership", title="Абонемент в бассейн",
         given=[("String", "owner"), ("int", "months")],
-        variants=[{"owner": '"Аня"', "months": "3"}, {"owner": '"Кирилл"', "months": "6"}, {"owner": '"Оля"', "months": "1"}],
-        hidden=[{"owner": '"Тимур"', "months": "12"}, {"owner": '"Зоя"', "months": "2"}, {"owner": '"Марат"', "months": "9"}],
+        variants=[{"owner": '"Anya"', "months": "3"}, {"owner": '"Kirill"', "months": "6"}, {"owner": '"Olya"', "months": "1"}],
+        hidden=[{"owner": '"Timur"', "months": "12"}, {"owner": '"Zoya"', "months": "2"}, {"owner": '"Marat"', "months": "9"}],
         intro="Бассейн продаёт абонементы на несколько месяцев, и в каждом месяце по абонементу можно прийти 8 раз. "
               "Когда абонемент оформляют, в нём сразу записывают владельца, срок и число посещений — для этого "
               "в классе делают конструктор. Имя владельца — в поле `owner`, срок в месяцах — в поле `months`.",
@@ -126,7 +126,7 @@ TASKS = [
                "Добавь в класс конструктор `Membership(String ownerName, int monthCount)`. Он сохраняет имя в поле `owner`, "
                "срок — в поле `months`, а в поле `visits` записывает число посещений: по 8 на каждый месяц.",
                "В `main` создай абонемент одной строкой: `Membership card = new Membership(owner, months);`.",
-               "Выведи три строки вида `Абонемент: Аня`, `Срок: 3 мес.` и `Посещений: 24` — значения бери из полей объекта `card`."],
+               "Выведи три строки вида `Membership: Anya`, `Term: 3 months` и `Visits: 24` — значения бери из полей объекта `card`."],
         hint="Конструктор пишется как метод без типа результата, а его имя совпадает с именем класса. Внутри не объявляй "
              "переменные заново: строка `int visits = …` создаст новую переменную внутри конструктора, а поле объекта "
              "так и останется нулём.",
@@ -142,28 +142,28 @@ TASKS = [
                + need_field("Membership", "months", "int", "срок абонемента в месяцах")
                + need_field("Membership", "visits", "int", "сколько раз можно прийти в бассейн")
                + need_constructor("Membership", MEMBERSHIP_PARAMS, "он заполняет поля, когда создаётся объект")
-               + need_built(MEMBERSHIP_PARAMS, '"Тест", 2', {"owner": '"Тест"', "months": "2", "visits": "16"},
+               + need_built(MEMBERSHIP_PARAMS, '"Test", 2', {"owner": '"Test"', "months": "2", "visits": "16"},
                             "Конструктор Membership должен сам заполнить поля owner, months и visits — по 8 посещений на каждый месяц"),
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-ctor-sale-price-tags", title="Ценники на распродаже",
         given=[("String[]", "names"), ("int[]", "prices"), ("int", "discount")],
-        variants=[{"names": '{"Чай", "Мёд", "Сыр"}', "prices": "{200, 450, 600}", "discount": "10"},
-                  {"names": '{"Кофе", "Печенье"}', "prices": "{500, 120}", "discount": "25"},
-                  {"names": '{"Хлеб", "Масло", "Молоко", "Яйца"}', "prices": "{60, 240, 90, 130}", "discount": "20"}],
-        hidden=[{"names": '{"Рис"}', "prices": "{100}", "discount": "5"},
-                {"names": '{"Сок", "Каша", "Шоколад"}', "prices": "{150, 80, 95}", "discount": "20"},
-                {"names": '{"Торт", "Конфеты"}', "prices": "{1000, 300}", "discount": "50"},
-                {"names": '{"Вода"}', "prices": "{40}", "discount": "0"}],
+        variants=[{"names": '{"Tea", "Honey", "Cheese"}', "prices": "{200, 450, 600}", "discount": "10"},
+                  {"names": '{"Coffee", "Cookies"}', "prices": "{500, 120}", "discount": "25"},
+                  {"names": '{"Bread", "Butter", "Milk", "Eggs"}', "prices": "{60, 240, 90, 130}", "discount": "20"}],
+        hidden=[{"names": '{"Rice"}', "prices": "{100}", "discount": "5"},
+                {"names": '{"Juice", "Porridge", "Chocolate"}', "prices": "{150, 80, 95}", "discount": "20"},
+                {"names": '{"Cake", "Candy"}', "prices": "{1000, 300}", "discount": "50"},
+                {"names": '{"Water"}', "prices": "{40}", "discount": "0"}],
         intro="В магазине распродажа: на все товары скидка `discount` процентов, и для каждого товара нужно напечатать "
               "новый ценник. Названия товаров — в массиве `names`, обычные цены — в массиве `prices` под теми же номерами.",
         steps=["Ниже класса `Solution` создай класс `PriceTag` (без `public`) с полями `String name`, `int price` и `int salePrice`.",
                "Добавь конструктор `PriceTag(String productName, int fullPrice, int percent)`. Он сохраняет название и обычную "
                "цену, а в `salePrice` записывает цену со скидкой. Скидка в рублях — это `fullPrice * percent / 100` "
                "(дробная часть отбрасывается).",
-               "Первой строкой выведи строку вида `Скидка 10%` с числом из `discount`.",
+               "Первой строкой выведи строку вида `Sale 10%` с числом из `discount`.",
                "Потом в цикле для каждого товара создай ценник `new PriceTag(names[i], prices[i], discount)` и выведи "
-               "строку вида `Чай: было 200 руб., стало 180 руб.` — с полями этого ценника."],
+               "строку вида `Tea: was 200 rub, now 180 rub` — с полями этого ценника."],
         hint="Порядок действий важен: `fullPrice * percent / 100` сначала умножает, потом делит. Если сначала разделить "
              "`percent / 100`, целочисленное деление даст 0 — и скидка пропадёт.",
         solution=PRICE_TAG_MAIN,
@@ -178,19 +178,19 @@ TASKS = [
                + need_field("PriceTag", "price", "int", "обычная цена")
                + need_field("PriceTag", "salePrice", "int", "цена со скидкой")
                + need_constructor("PriceTag", PRICE_TAG_PARAMS, "он заполняет ценник, когда создаётся объект")
-               + need_built(PRICE_TAG_PARAMS, '"Тест", 200, 10', {"name": '"Тест"', "price": "200", "salePrice": "180"},
+               + need_built(PRICE_TAG_PARAMS, '"Test", 200, 10', {"name": '"Test"', "price": "200", "salePrice": "180"},
                             "Конструктор PriceTag должен сам заполнить поля name, price и salePrice — цена со скидкой равна fullPrice - fullPrice * percent / 100"),
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-ctor-marathon-signup", title="Запись на марафон",
         given=[("String[]", "names"), ("int[]", "distances")],
-        variants=[{"names": '{"Аня", "Борис", "Вика"}', "distances": "{10, 0, 21}"},
-                  {"names": '{"Глеб", "Дина"}', "distances": "{0, 42}"},
-                  {"names": '{"Егор", "Жанна", "Захар", "Ира"}', "distances": "{5, 10, 0, 0}"}],
-        hidden=[{"names": '{"Кира"}', "distances": "{0}"},
-                {"names": '{"Лена", "Марк"}', "distances": "{42, 21}"},
-                {"names": '{"Нил", "Оля", "Петя"}', "distances": "{0, 0, 10}"},
-                {"names": '{"Рита", "Саша", "Тая", "Уля", "Федя"}', "distances": "{3, 0, 15, 0, 1}"}],
+        variants=[{"names": '{"Anya", "Boris", "Vika"}', "distances": "{10, 0, 21}"},
+                  {"names": '{"Gleb", "Dina"}', "distances": "{0, 42}"},
+                  {"names": '{"Egor", "Zhanna", "Zakhar", "Ira"}', "distances": "{5, 10, 0, 0}"}],
+        hidden=[{"names": '{"Kira"}', "distances": "{0}"},
+                {"names": '{"Lena", "Mark"}', "distances": "{42, 21}"},
+                {"names": '{"Nil", "Olya", "Petya"}', "distances": "{0, 0, 10}"},
+                {"names": '{"Rita", "Sasha", "Taya", "Ulya", "Fedya"}', "distances": "{3, 0, 15, 0, 1}"}],
         intro="На городской марафон можно записаться на любую дистанцию, а кто дистанцию не выбрал, бежит 5 км. "
               "Имена участников — в массиве `names`, выбранные дистанции в километрах — в массиве `distances` "
               "под теми же номерами; 0 значит, что дистанцию не выбрали.",
@@ -198,8 +198,8 @@ TASKS = [
                "Сделай в классе два конструктора. `Runner(String runnerName)` сохраняет имя и ставит дистанцию 5 км. "
                "`Runner(String runnerName, int distance)` сохраняет имя и переданную дистанцию.",
                "В `main` пройди циклом по участникам и создай для каждого объект: если в `distances` стоит 0 — конструктором "
-               "с одним параметром, иначе — конструктором с двумя. Для каждого участника выведи строку вида `Аня: 10 км`.",
-               "Последней строкой выведи строку вида `Всего километров: 36` — сумму полей `km` всех участников."],
+               "с одним параметром, иначе — конструктором с двумя. Для каждого участника выведи строку вида `Anya: 10 km`.",
+               "Последней строкой выведи строку вида `Total km: 36` — сумму полей `km` всех участников."],
         hint="В классе может быть несколько конструкторов, если у них разные параметры. Java сама выберет нужный по тому, "
              "сколько аргументов и каких типов ты передал в `new Runner(...)`.",
         solution=RUNNER_MAIN,
@@ -214,9 +214,9 @@ TASKS = [
                + need_field("Runner", "km", "int", "дистанция в километрах")
                + need_constructor("Runner", ["String runnerName"], "для тех, кто не выбрал дистанцию: он ставит 5 км")
                + need_constructor("Runner", ["String runnerName", "int distance"], "для тех, кто выбрал дистанцию")
-               + need_built(["String runnerName"], '"Тест"', {"name": '"Тест"', "km": "5"},
+               + need_built(["String runnerName"], '"Test"', {"name": '"Test"', "km": "5"},
                             "Конструктор Runner(String runnerName) должен сохранить имя и сам поставить дистанцию 5 км")
-               + need_built(["String runnerName", "int distance"], '"Тест", 21', {"name": '"Тест"', "km": "21"},
+               + need_built(["String runnerName", "int distance"], '"Test", 21', {"name": '"Test"', "km": "21"},
                             "Конструктор Runner(String runnerName, int distance) должен сохранить имя и переданную дистанцию"),
     ),
 ]

@@ -22,18 +22,18 @@ TASKS = [
                "список не меняется.",
                "Добавь оценку `retake` в конец списка.",
                "Выведи список `marks` командой `System.out.println(marks);`.",
-               "Проверь методом `contains`, остались ли в списке двойки, и выведи `Двойки ещё есть` или `Двоек больше нет`."],
+               "Проверь методом `contains`, остались ли в списке двойки, и выведи `Still has twos` или `No more twos`."],
         hint="У списка два метода `remove`: по номеру — `remove(int index)` и по значению — `remove(Object o)`. "
              "Для `List<Integer>` вызов `marks.remove(2)` удалит элемент с номером 2. Чтобы Java выбрала удаление "
              "по значению, передай ей не число `int`, а объект `Integer`.",
         solution='marks.remove(Integer.valueOf(2));\nmarks.add(retake);\nSystem.out.println(marks);\nif (marks.contains(2)) {\n'
-                 '    System.out.println("Двойки ещё есть");\n} else {\n    System.out.println("Двоек больше нет");\n}',
+                 '    System.out.println("Still has twos");\n} else {\n    System.out.println("No more twos");\n}',
         wrong=[("marks.remove(2) удаляет элемент с номером 2, а не оценку 2",
                 'marks.remove(2);\nmarks.add(retake);\nSystem.out.println(marks);\nif (marks.contains(2)) {\n'
-                '    System.out.println("Двойки ещё есть");\n} else {\n    System.out.println("Двоек больше нет");\n}'),
+                '    System.out.println("Still has twos");\n} else {\n    System.out.println("No more twos");\n}'),
                ("записывает новую оценку на место двойки, а не в конец списка",
                 'marks.set(marks.indexOf(2), retake);\nSystem.out.println(marks);\nif (marks.contains(2)) {\n'
-                '    System.out.println("Двойки ещё есть");\n} else {\n    System.out.println("Двоек больше нет");\n}')],
+                '    System.out.println("Still has twos");\n} else {\n    System.out.println("No more twos");\n}')],
         constructs=["if"],
     ),
     JavaOutputTask(
@@ -53,20 +53,20 @@ TASKS = [
                "`Collections.sort(sorted);`. Выведи `sorted` через `System.out.println`.",
                "Методом `subList` возьми из `sorted` все оценки, кроме первой (самой низкой) и последней (самой высокой), "
                "и выведи эту часть списка.",
-               "Выведи строку вида `Итог: 25` — сумму оценок из этой части."],
+               "Выведи строку вида `Score: 25` — сумму оценок из этой части."],
         hint="`subList(from, to)` берёт элементы с номерами от `from` включительно до `to` НЕ включительно. "
              "У последнего элемента номер `sorted.size() - 1` — его и нужно не включить.",
         solution="List<Integer> sorted = new ArrayList<>(scores);\nCollections.sort(sorted);\nSystem.out.println(sorted);\n"
                  "List<Integer> middle = sorted.subList(1, sorted.size() - 1);\nSystem.out.println(middle);\n"
-                 'int total = 0;\nfor (int s : middle) {\n    total += s;\n}\nSystem.out.println("Итог: " + total);',
+                 'int total = 0;\nfor (int s : middle) {\n    total += s;\n}\nSystem.out.println("Score: " + total);',
         wrong=[("берёт subList из исходного списка — отбрасывает первого и последнего судью, а не крайние оценки",
                 "List<Integer> sorted = new ArrayList<>(scores);\nCollections.sort(sorted);\nSystem.out.println(sorted);\n"
                 "List<Integer> middle = scores.subList(1, scores.size() - 1);\nSystem.out.println(middle);\n"
-                'int total = 0;\nfor (int s : middle) {\n    total += s;\n}\nSystem.out.println("Итог: " + total);'),
+                'int total = 0;\nfor (int s : middle) {\n    total += s;\n}\nSystem.out.println("Score: " + total);'),
                ("считает конец subList включительно — отбрасывает ещё и предпоследнюю оценку",
                 "List<Integer> sorted = new ArrayList<>(scores);\nCollections.sort(sorted);\nSystem.out.println(sorted);\n"
                 "List<Integer> middle = sorted.subList(1, sorted.size() - 2);\nSystem.out.println(middle);\n"
-                'int total = 0;\nfor (int s : middle) {\n    total += s;\n}\nSystem.out.println("Итог: " + total);')],
+                'int total = 0;\nfor (int s : middle) {\n    total += s;\n}\nSystem.out.println("Score: " + total);')],
         constructs=["for"],
     ),
     JavaFunctionTask(
@@ -79,7 +79,7 @@ TASKS = [
         steps=["Напиши метод `static List<String> letAhead(List<String> queue, String name)`, который возвращает "
                "очередь после того, как покупатель `name` перешёл на {places} вперёд.",
                "Найди место покупателя методом `indexOf`. Если его нет в очереди, верни очередь без изменений.",
-               "Убери покупателя с его места и вставь на {k} позиции ближе к началу методом `add(номер, name)`. "
+               "Убери покупателя с его места и вставь на {k} позиции ближе к началу методом `add(index, name)`. "
                "Если перед ним меньше {k} человек, он становится первым.",
                "Остальные люди сохраняют свой порядок друг относительно друга."],
         hint="После `remove` все, кто стоял за покупателем, сдвигаются на одно место к началу, а после `add` — на одно "
@@ -91,14 +91,14 @@ TASKS = [
                  "    static List<String> letAhead(List<String> queue, String name) {{\n"
                  "        int i = queue.indexOf(name);\n        if (i == -1) {{\n            return queue;\n        }}\n"
                  "        queue.remove(i);\n        queue.add(Math.max(0, i - {k}), name);\n        return queue;\n    }}\n}}\n",
-        inputs=['new ArrayList<>(List.of("Аня", "Борис", "Вика", "Гоша", "Даша")), "Гоша"',
-                'new ArrayList<>(List.of("Ульяна", "Фёдор", "Чулпан", "Шамиль", "Эля", "Юра", "Яна")), "Юра"',
-                'new ArrayList<>(List.of("Егор", "Женя", "Зина")), "Зина"',
-                'new ArrayList<>(List.of("Ира", "Кирилл", "Лена", "Марк")), "Кирилл"',
-                'new ArrayList<>(List.of("Нина", "Олег")), "Нина"',
-                'new ArrayList<>(List.of("Петя", "Рита", "Саша")), "Таня"',
-                'new ArrayList<>(List.of("Вера")), "Вера"',
-                'new ArrayList<>(List.of("Арсений", "Белла", "Влад", "Галя", "Дан", "Ева")), "Ева"'],
+        inputs=['new ArrayList<>(List.of("Anya", "Boris", "Vika", "Gosha", "Dasha")), "Gosha"',
+                'new ArrayList<>(List.of("Ulyana", "Fedor", "Chulpan", "Shamil", "Elya", "Yura", "Yana")), "Yura"',
+                'new ArrayList<>(List.of("Egor", "Zhenya", "Zina")), "Zina"',
+                'new ArrayList<>(List.of("Ira", "Kirill", "Lena", "Mark")), "Kirill"',
+                'new ArrayList<>(List.of("Nina", "Oleg")), "Nina"',
+                'new ArrayList<>(List.of("Petya", "Rita", "Sasha")), "Tanya"',
+                'new ArrayList<>(List.of("Vera")), "Vera"',
+                'new ArrayList<>(List.of("Arseny", "Bella", "Vlad", "Galya", "Dan", "Eva")), "Eva"'],
         wrong=[("сначала вставляет, потом удаляет по старому номеру — номера уже сдвинулись, и из очереди уходит другой человек",
                 "import java.util.*;\n\npublic class Solution {{\n"
                 "    static List<String> letAhead(List<String> queue, String name) {{\n"

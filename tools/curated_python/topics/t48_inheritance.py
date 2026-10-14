@@ -43,9 +43,9 @@ class Dog(Pet):
 
 cat = Cat(cat_name, cat_weight)
 dog = Dog(dog_name, dog_weight)
-print(f"{cat.name}: {cat.daily_food()} г корма в день")
-print(f"{dog.name}: {dog.daily_food()} г корма в день")
-print(f"{dog.name} гуляет {dog.walk_minutes()} минут")
+print(f"{cat.name}: {cat.daily_food()} g of food a day")
+print(f"{dog.name}: {dog.daily_food()} g of food a day")
+print(f"{dog.name} walks {dog.walk_minutes()} minutes")
 """
 
 ACCOUNT = """\
@@ -58,7 +58,7 @@ class Account:
         self.balance += amount
 
     def show(self):
-        print(f"{self.owner}: {self.balance} руб.")
+        print(f"{self.owner}: {self.balance} rub")
 
 
 class SavingsAccount(Account):
@@ -93,25 +93,25 @@ class FragileParcel(Parcel):
 total = 0
 for weight in regular:
     parcel = Parcel(weight)
-    print(f"Обычная посылка {parcel.weight} кг: {parcel.price()} руб.")
+    print(f"Regular parcel {parcel.weight} kg: {parcel.price()} rub")
     total += parcel.price()
 for weight in fragile:
     parcel = FragileParcel(weight)
-    print(f"Хрупкая посылка {parcel.weight} кг: {parcel.safe_price()} руб.")
+    print(f"Fragile parcel {parcel.weight} kg: {parcel.safe_price()} rub")
     total += parcel.safe_price()
-print(f"Всего: {total} руб.")
+print(f"Total: {total} rub")
 """
 
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-inh-pet-food", title="Корм для питомцев",
         given=["cat_name", "cat_weight", "dog_name", "dog_weight"],
-        variants=[{"cat_name": '"Мурка"', "cat_weight": "4", "dog_name": '"Рекс"', "dog_weight": "12"},
-                  {"cat_name": '"Барсик"', "cat_weight": "6", "dog_name": '"Шарик"', "dog_weight": "20"},
-                  {"cat_name": '"Снежок"', "cat_weight": "3", "dog_name": '"Бим"', "dog_weight": "8"}],
-        hidden=[{"cat_name": '"Пушок"', "cat_weight": "5", "dog_name": '"Тузик"', "dog_weight": "5"},
-                {"cat_name": '"Луна"', "cat_weight": "2", "dog_name": '"Джек"', "dog_weight": "31"},
-                {"cat_name": '"Соня"', "cat_weight": "7", "dog_name": '"Граф"', "dog_weight": "15"}],
+        variants=[{"cat_name": '"Murka"', "cat_weight": "4", "dog_name": '"Rex"', "dog_weight": "12"},
+                  {"cat_name": '"Barsik"', "cat_weight": "6", "dog_name": '"Sharik"', "dog_weight": "20"},
+                  {"cat_name": '"Snezhok"', "cat_weight": "3", "dog_name": '"Bim"', "dog_weight": "8"}],
+        hidden=[{"cat_name": '"Pushok"', "cat_weight": "5", "dog_name": '"Tuzik"', "dog_weight": "5"},
+                {"cat_name": '"Luna"', "cat_weight": "2", "dog_name": '"Jack"', "dog_weight": "31"},
+                {"cat_name": '"Sonya"', "cat_weight": "7", "dog_name": '"Graf"', "dog_weight": "15"}],
         intro="Ветеринар составляет памятку для хозяев кошки и собаки. И кошка, и собака — питомцы: у каждого есть "
               "имя и вес, и корм для обоих считают одинаково. А вот гулять нужно только с собакой.",
         steps=["Создай класс `Pet`. В `__init__(self, name, weight)` сохрани имя и вес питомца в килограммах "
@@ -122,8 +122,8 @@ TASKS = [
                "Создай класс `Dog` — тоже наследник `Pet`. Добавь в него один новый метод `walk_minutes(self)`: "
                "сколько минут гулять с собакой — по 5 минут на каждый килограмм веса.",
                "Создай `cat = Cat(cat_name, cat_weight)` и `dog = Dog(dog_name, dog_weight)`. Выведи три строки: "
-               "корм кошки, корм собаки и прогулку собаки — в виде `Мурка: 120 г корма в день`, "
-               "`Рекс: 360 г корма в день` и `Рекс гуляет 60 минут`."],
+               "корм кошки, корм собаки и прогулку собаки — в виде `Murka: 120 g of food a day`, "
+               "`Rex: 360 g of food a day` и `Rex walks 60 minutes`."],
         hint="Запись `class Cat(Pet):` значит «кошка — это питомец»: объект `Cat` сразу получает `__init__` "
              "и `daily_food` из класса `Pet`, хотя в самом `Cat` их нет. В наследнике пишут только то, "
              "чего нет у родителя.",
@@ -138,19 +138,19 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=2, slug="py-inh-savings-account", title="Накопительный счёт",
         given=["owner", "start", "percent", "extra"],
-        variants=[{"owner": '"Анна"', "start": "1000", "percent": "5", "extra": "500"},
-                  {"owner": '"Игорь"', "start": "2000", "percent": "10", "extra": "300"},
-                  {"owner": '"Света"', "start": "800", "percent": "3", "extra": "1200"}],
-        hidden=[{"owner": '"Пётр"', "start": "100", "percent": "50", "extra": "0"},
-                {"owner": '"Оля"', "start": "5000", "percent": "1", "extra": "250"},
-                {"owner": '"Миша"', "start": "0", "percent": "7", "extra": "1000"}],
+        variants=[{"owner": '"Anna"', "start": "1000", "percent": "5", "extra": "500"},
+                  {"owner": '"Igor"', "start": "2000", "percent": "10", "extra": "300"},
+                  {"owner": '"Sveta"', "start": "800", "percent": "3", "extra": "1200"}],
+        hidden=[{"owner": '"Pyotr"', "start": "100", "percent": "50", "extra": "0"},
+                {"owner": '"Olya"', "start": "5000", "percent": "1", "extra": "250"},
+                {"owner": '"Misha"', "start": "0", "percent": "7", "extra": "1000"}],
         intro="Банк открыл клиенту накопительный счёт. Это обычный счёт, на который можно класть деньги, "
               "но банк ещё и начисляет на него проценты. Всё, что умеет обычный счёт, накопительный получает "
               "по наследству — дописать нужно только новое умение.",
         steps=["Создай класс `Account`. В `__init__(self, owner, balance)` сохрани владельца и сумму на счёте "
                "в атрибуты `self.owner` и `self.balance`.",
                "Добавь в `Account` метод `deposit(self, amount)`, который прибавляет `amount` к балансу, "
-               "и метод `show(self)`, который печатает строку вида `Анна: 1000 руб.`",
+               "и метод `show(self)`, который печатает строку вида `Anna: 1000 rub`",
                "Создай класс `SavingsAccount` — наследник `Account`. Напиши в нём только один новый метод "
                "`add_interest(self, percent)`: он считает проценты — баланс, умноженный на `percent` "
                "и целочисленно делённый на 100 через `//`, — и зачисляет их на счёт через унаследованный метод `self.deposit(...)`.",
@@ -188,10 +188,10 @@ TASKS = [
                "`price(self)`: доставка стоит 100 руб. плюс 20 руб. за каждый килограмм.",
                "Создай класс `FragileParcel` — наследник `Parcel`. Свой `__init__` ему не нужен. Добавь только "
                "новый метод `safe_price(self)`: цена доставки из унаследованного `self.price()` плюс 150 руб. за упаковку.",
-               "Для каждого веса из `regular` создай `Parcel` и выведи строку вида `Обычная посылка 2 кг: 140 руб.`",
+               "Для каждого веса из `regular` создай `Parcel` и выведи строку вида `Regular parcel 2 kg: 140 rub`",
                "Для каждого веса из `fragile` создай `FragileParcel` и выведи строку вида "
-               "`Хрупкая посылка 3 кг: 310 руб.` — с ценой из `safe_price()`.",
-               "Последней строкой выведи строку вида `Всего: 650 руб.` — сумму за все посылки (за хрупкие — вместе с упаковкой)."],
+               "`Fragile parcel 3 kg: 310 rub` — с ценой из `safe_price()`.",
+               "Последней строкой выведи строку вида `Total: 650 rub` — сумму за все посылки (за хрупкие — вместе с упаковкой)."],
         hint="Не считай цену доставки в `safe_price` заново — вызови `self.price()`: хрупкая посылка тоже посылка, "
              "и этот метод у неё уже есть от родителя. Если потом тариф доставки изменится, править его придётся "
              "только в одном месте.",

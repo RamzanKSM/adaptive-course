@@ -27,11 +27,11 @@ def checked_class_check(name: str, why: str) -> str:
 
 # ── 1. Лифт ──
 OVERLOAD = exception_class("OverloadException")
-LIFT_MAIN = ('try {\n    checkLoad(load);\n    System.out.println("Лифт поехал");\n} catch (OverloadException e) {\n'
-             '    System.out.println(e.getMessage());\n    System.out.println("Снимите часть груза");\n}')
+LIFT_MAIN = ('try {\n    checkLoad(load);\n    System.out.println("The lift is going up");\n} catch (OverloadException e) {\n'
+             '    System.out.println(e.getMessage());\n    System.out.println("Take off some of the load");\n}')
 LIFT_CHECK = '''static void checkLoad(int load) throws OverloadException {
     if (load > 400) {
-        throw new OverloadException("Перегрузка на " + (load - 400) + " кг");
+        throw new OverloadException("Overload by " + (load - 400) + " kg");
     }
 }'''
 LIFT_CHECKS = checked_class_check("OverloadException", "это проверяемое исключение: Java потребует объявить его в throws и обработать") + '''Method m = null;
@@ -47,17 +47,17 @@ try { m.invoke(null, 400); } catch (InvocationTargetException e) { need(false, "
 # ── 2. Дроны ──
 TOO_HEAVY = exception_class("TooHeavyException")
 DRONE_MAIN = ('int sent = 0;\nfor (int grams : parcels) {\n    try {\n        launch(grams);\n        sent++;\n'
-              '    } catch (TooHeavyException e) {\n        System.out.println("Отказ: " + e.getMessage());\n    }\n}\n'
-              'System.out.println("Отправлено посылок: " + sent);')
+              '    } catch (TooHeavyException e) {\n        System.out.println("Refused: " + e.getMessage());\n    }\n}\n'
+              'System.out.println("Parcels sent: " + sent);')
 DRONE_METHODS = '''static void checkWeight(int grams) throws TooHeavyException {
     if (grams > 2000) {
-        throw new TooHeavyException("Посылка " + grams + " г тяжелее 2000 г");
+        throw new TooHeavyException("Parcel of " + grams + " g is heavier than 2000 g");
     }
 }
 
 static void launch(int grams) throws TooHeavyException {
     checkWeight(grams);
-    System.out.println("Дрон взлетел, груз " + grams + " г");
+    System.out.println("Drone took off, load " + grams + " g");
 }'''
 DRONE_CHECKS = checked_class_check("TooHeavyException", "это проверяемое исключение для слишком тяжёлой посылки") + '''for (String name : new String[]{"checkWeight", "launch"}) {
   Method m = null;
@@ -87,15 +87,15 @@ CARD = '''class TransportCard {
 
     void pay(int fare) throws LowBalanceException {
         if (fare > balance) {
-            throw new LowBalanceException("Не хватает " + (fare - balance) + " руб.");
+            throw new LowBalanceException("Not enough money: " + (fare - balance) + " rub short");
         }
         balance -= fare;
     }
 }'''
 CARD_MAIN = ('TransportCard card = new TransportCard(balance);\nfor (int fare : fares) {\n    try {\n'
-             '        card.pay(fare);\n        System.out.println("Проход, осталось " + card.getBalance() + " руб.");\n'
-             '    } catch (LowBalanceException e) {\n        System.out.println("Отказ: " + e.getMessage());\n    }\n}\n'
-             'System.out.println("На карте: " + card.getBalance() + " руб.");')
+             '        card.pay(fare);\n        System.out.println("Go ahead, left " + card.getBalance() + " rub");\n'
+             '    } catch (LowBalanceException e) {\n        System.out.println("Refused: " + e.getMessage());\n    }\n}\n'
+             'System.out.println("On the card: " + card.getBalance() + " rub");')
 CARD_CHECKS = checked_class_check("LowBalanceException", "это проверяемое исключение для нехватки денег на карте") + '''Class<?> c = cls("TransportCard");
 need(c != null, "Создай класс TransportCard: он хранит баланс и списывает плату за поездку");
 Method pay = null;
@@ -123,18 +123,18 @@ TASKS = [
         steps=["Создай класс `OverloadException`, унаследованный от `Exception`, с конструктором "
                "`OverloadException(String message)`, который передаёт текст в `super(message)`.",
                "Добавь в класс `Solution` метод `static void checkLoad(int load) throws OverloadException`. Если `load` "
-               "больше 400, он выбрасывает `OverloadException` с сообщением `Перегрузка на 50 кг` — на сколько вес "
+               "больше 400, он выбрасывает `OverloadException` с сообщением `Overload by 50 kg` — на сколько вес "
                "больше 400.",
-               "В `main` в блоке `try` вызови `checkLoad(load)` и выведи `Лифт поехал`.",
-               "В `catch (OverloadException e)` выведи сообщение исключения, а следующей строкой — `Снимите часть груза`."],
+               "В `main` в блоке `try` вызови `checkLoad(load)` и выведи `The lift is going up`.",
+               "В `catch (OverloadException e)` выведи сообщение исключения, а следующей строкой — `Take off some of the load`."],
         hint="Исключение, унаследованное от `Exception`, — проверяемое: Java не скомпилирует метод, который его "
              "выбрасывает, без `throws OverloadException` в объявлении, и не даст вызвать такой метод без `try`/`catch`.",
         solution=with_methods(LIFT_MAIN, LIFT_CHECK),
         classes=OVERLOAD,
-        wrong=[("«Снимите часть груза» стоит после try/catch — печатается и тогда, когда лифт поехал",
-                with_methods('try {\n    checkLoad(load);\n    System.out.println("Лифт поехал");\n'
+        wrong=[("«Take off some of the load» стоит после try/catch — печатается и тогда, когда лифт поехал",
+                with_methods('try {\n    checkLoad(load);\n    System.out.println("The lift is going up");\n'
                              '} catch (OverloadException e) {\n    System.out.println(e.getMessage());\n}\n'
-                             'System.out.println("Снимите часть груза");', LIFT_CHECK)),
+                             'System.out.println("Take off some of the load");', LIFT_CHECK)),
                ("в сообщение кладёт весь вес груза, а не превышение над 400 кг",
                 with_methods(LIFT_MAIN, LIFT_CHECK.replace("(load - 400)", "load")))],
         constructs=["try", "function", "class"],
@@ -150,11 +150,11 @@ TASKS = [
         steps=["Создай класс `TooHeavyException`, унаследованный от `Exception`, с конструктором "
                "`TooHeavyException(String message)`, который передаёт текст в `super(message)`.",
                "Добавь в класс `Solution` метод `static void checkWeight(int grams) throws TooHeavyException`: если "
-               "`grams` больше 2000, он выбрасывает исключение с сообщением `Посылка 2500 г тяжелее 2000 г` (с весом посылки).",
+               "`grams` больше 2000, он выбрасывает исключение с сообщением `Parcel of 2500 g is heavier than 2000 g` (с весом посылки).",
                "Добавь метод `static void launch(int grams) throws TooHeavyException`: он вызывает `checkWeight(grams)`, "
-               "а затем выводит `Дрон взлетел, груз 800 г`. Сам он исключение не ловит — только объявляет в `throws`.",
-               "В `main` для каждой посылки вызови `launch` в блоке `try`, а в `catch` выведи `Отказ: ` и сообщение "
-               "исключения. После цикла выведи `Отправлено посылок: 2`."],
+               "а затем выводит `Drone took off, load 800 g`. Сам он исключение не ловит — только объявляет в `throws`.",
+               "В `main` для каждой посылки вызови `launch` в блоке `try`, а в `catch` выведи `Refused: ` и сообщение "
+               "исключения. После цикла выведи `Parcels sent: 2`."],
         hint="Счётчик отправленных увеличивай в `try` сразу после вызова `launch`: если посылка слишком тяжёлая, "
              "исключение пролетит из `checkWeight` через `launch` прямо в `catch` в `main`, и эта строка не выполнится.",
         solution=with_methods(DRONE_MAIN, DRONE_METHODS),
@@ -182,10 +182,10 @@ TASKS = [
                "Создай класс `TransportCard` с приватным полем `balance`, конструктором `TransportCard(int balance)` "
                "и методом `int getBalance()`.",
                "Добавь в него метод `void pay(int fare) throws LowBalanceException`: если `fare` больше баланса, он "
-               "выбрасывает исключение с сообщением `Не хватает 24 руб.` (сколько не хватает), иначе списывает `fare` с баланса.",
+               "выбрасывает исключение с сообщением `Not enough money: 24 rub short` (сколько не хватает), иначе списывает `fare` с баланса.",
                "В `main` создай карту с `balance` и для каждой поездки в блоке `try` вызови `pay` и выведи "
-               "`Проход, осталось 38 руб.`, а в `catch` выведи `Отказ: ` и сообщение исключения.",
-               "После всех поездок выведи `На карте: 8 руб.` — баланс карты."],
+               "`Go ahead, left 38 rub`, а в `catch` выведи `Refused: ` и сообщение исключения.",
+               "После всех поездок выведи `On the card: 8 rub` — баланс карты."],
         hint="Метод `pay` только сообщает о проблеме через `throw` и не решает, что делать дальше, — это решает `main` "
              "в своём `catch`. Поэтому `throws` пишется у `pay`, а `try`/`catch` — там, где его вызывают.",
         solution=CARD_MAIN,
@@ -193,10 +193,10 @@ TASKS = [
         wrong=[("списывает деньги до проверки — после отказа баланс уходит в минус",
                 CARD_MAIN,
                 LOW_BALANCE + "\n\n" + CARD.replace(
-                    '        if (fare > balance) {\n            throw new LowBalanceException("Не хватает " + (fare - balance) + " руб.");\n        }\n        balance -= fare;\n',
-                    '        balance -= fare;\n        if (balance < 0) {\n            throw new LowBalanceException("Не хватает " + (-balance) + " руб.");\n        }\n')),
+                    '        if (fare > balance) {\n            throw new LowBalanceException("Not enough money: " + (fare - balance) + " rub short");\n        }\n        balance -= fare;\n',
+                    '        balance -= fare;\n        if (balance < 0) {\n            throw new LowBalanceException("Not enough money: " + (-balance) + " rub short");\n        }\n')),
                ("в конце печатает поле balance из Solution, а не баланс карты — там всё ещё начальная сумма",
-                CARD_MAIN.replace('"На карте: " + card.getBalance()', '"На карте: " + balance'))],
+                CARD_MAIN.replace('"On the card: " + card.getBalance()', '"On the card: " + balance'))],
         constructs=["try", "class"],
         checks=CARD_CHECKS,
     ),

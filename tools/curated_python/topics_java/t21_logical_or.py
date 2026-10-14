@@ -14,19 +14,19 @@ TASKS = [
         hidden=[{"temp": "10"}, {"temp": "30"}, {"temp": "9"}, {"temp": "31"}, {"temp": "20"}, {"temp": "-3"}],
         intro="В теплице с помидорами стоит датчик. Он поднимает тревогу, если там холоднее 10 °C или жарче 30 °C. "
               "Текущая температура записана в поле `temp`.",
-        steps=["Если `temp` меньше 10 **или** больше 30, выведи `Тревога: проверь теплицу`.",
-               "Иначе выведи `Всё в порядке`.",
+        steps=["Если `temp` меньше 10 **или** больше 30, выведи `Alarm: check the greenhouse`.",
+               "Иначе выведи `All is OK`.",
                "Запиши обе проверки в одном условии через `||`."],
         hint="Условие с `||` истинно, если верна хотя бы одна его часть. Ровно 10 °C и ровно 30 °C — ещё нормальная "
              "температура, тревога не нужна.",
-        solution='if (temp < 10 || temp > 30) {\n    System.out.println("Тревога: проверь теплицу");\n} else {\n'
-                 '    System.out.println("Всё в порядке");\n}',
+        solution='if (temp < 10 || temp > 30) {\n    System.out.println("Alarm: check the greenhouse");\n} else {\n'
+                 '    System.out.println("All is OK");\n}',
         wrong=[("&& вместо ||: температура не бывает сразу ниже 10 и выше 30, тревоги нет никогда",
-                'if (temp < 10 && temp > 30) {\n    System.out.println("Тревога: проверь теплицу");\n} else {\n'
-                '    System.out.println("Всё в порядке");\n}'),
+                'if (temp < 10 && temp > 30) {\n    System.out.println("Alarm: check the greenhouse");\n} else {\n'
+                '    System.out.println("All is OK");\n}'),
                ("<= и >=: ровно 10 и ровно 30 °C вызывают тревогу",
-                'if (temp <= 10 || temp >= 30) {\n    System.out.println("Тревога: проверь теплицу");\n} else {\n'
-                '    System.out.println("Всё в порядке");\n}')],
+                'if (temp <= 10 || temp >= 30) {\n    System.out.println("Alarm: check the greenhouse");\n} else {\n'
+                '    System.out.println("All is OK");\n}')],
         constructs=["if"],
     ),
     JavaOutputTask(
@@ -37,19 +37,19 @@ TASKS = [
                 {"storm": "false", "fueled": "false"}, {"storm": "true", "fueled": "false"}],
         intro="Диспетчер в аэропорту решает, можно ли начинать посадку. Идёт ли над аэропортом гроза, записано в поле "
               "`storm`, заправлен ли самолёт — в поле `fueled` (оба поля — `true` или `false`).",
-        steps=["Если идёт гроза **или** самолёт **не** заправлен, выведи `Рейс задерживается`.",
-               "Иначе выведи `Посадка на рейс открыта`.",
+        steps=["Если идёт гроза **или** самолёт **не** заправлен, выведи `The flight is delayed`.",
+               "Иначе выведи `Boarding is open`.",
                "Запиши обе проверки в одном условии с помощью `||` и `!`."],
         hint="`!` переворачивает логическое значение: `!true` — это `false`, а `!false` — это `true`. "
              "Подумай, как с его помощью записать «самолёт не заправлен».",
-        solution='if (storm || !fueled) {\n    System.out.println("Рейс задерживается");\n} else {\n'
-                 '    System.out.println("Посадка на рейс открыта");\n}',
+        solution='if (storm || !fueled) {\n    System.out.println("The flight is delayed");\n} else {\n'
+                 '    System.out.println("Boarding is open");\n}',
         wrong=[("забыт !: задерживает как раз заправленный самолёт",
-                'if (storm || fueled) {\n    System.out.println("Рейс задерживается");\n} else {\n'
-                '    System.out.println("Посадка на рейс открыта");\n}'),
+                'if (storm || fueled) {\n    System.out.println("The flight is delayed");\n} else {\n'
+                '    System.out.println("Boarding is open");\n}'),
                ("&& вместо ||: задерживает рейс, только когда и гроза, и самолёт не заправлен",
-                'if (storm && !fueled) {\n    System.out.println("Рейс задерживается");\n} else {\n'
-                '    System.out.println("Посадка на рейс открыта");\n}')],
+                'if (storm && !fueled) {\n    System.out.println("The flight is delayed");\n} else {\n'
+                '    System.out.println("Boarding is open");\n}')],
         constructs=["if"],
     ),
     JavaOutputTask(
@@ -60,21 +60,21 @@ TASKS = [
         intro="Год високосный, если он делится на 4, но не делится на 100. Исключение — годы, которые делятся на 400: "
               "они тоже високосные. Поэтому 2000 год был високосным, а 1900 — нет. Год записан в поле `year`.",
         steps=["Составь одно условие: год делится на 4 **и** не делится на 100, **или** год делится на 400.",
-               "Если условие верно, выведи строку `Год … високосный: 366 дней`, подставив значение `year`.",
-               "Иначе выведи `Год … обычный: 365 дней`."],
+               "Если условие верно, выведи строку `Year … is a leap year: 366 days`, подставив значение `year`.",
+               "Иначе выведи `Year … is a common year: 365 days`."],
         hint="«Делится на 100» — это `year % 100 == 0`, а «не делится» — `year % 100 != 0`. "
              "Возьми часть с `&&` в скобки: так сразу видно, какие проверки связаны между собой.",
         solution='if ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0) {\n'
-                 '    System.out.println("Год " + year + " високосный: 366 дней");\n} else {\n'
-                 '    System.out.println("Год " + year + " обычный: 365 дней");\n}',
+                 '    System.out.println("Year " + year + " is a leap year: 366 days");\n} else {\n'
+                 '    System.out.println("Year " + year + " is a common year: 365 days");\n}',
         wrong=[("проверяет только деление на 4: 1900 и 2100 становятся високосными",
                 'if (year % 4 == 0) {\n'
-                '    System.out.println("Год " + year + " високосный: 366 дней");\n} else {\n'
-                '    System.out.println("Год " + year + " обычный: 365 дней");\n}'),
+                '    System.out.println("Year " + year + " is a leap year: 366 days");\n} else {\n'
+                '    System.out.println("Year " + year + " is a common year: 365 days");\n}'),
                ("забыто исключение для 400: 2000 год получается обычным",
                 'if (year % 4 == 0 && year % 100 != 0) {\n'
-                '    System.out.println("Год " + year + " високосный: 366 дней");\n} else {\n'
-                '    System.out.println("Год " + year + " обычный: 365 дней");\n}')],
+                '    System.out.println("Year " + year + " is a leap year: 366 days");\n} else {\n'
+                '    System.out.println("Year " + year + " is a common year: 365 days");\n}')],
         constructs=["if"],
     ),
 ]

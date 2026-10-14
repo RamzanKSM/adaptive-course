@@ -9,27 +9,27 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-lo-doctor-queue", title="Очередь к врачу",
         given=["queue", "urgent"],
-        variants=[{"queue": '["Иванов", "Петрова", "Сидоров", "Козлова"]', "urgent": '"Морозов"'},
-                  {"queue": '["Смирнова", "Орлов", "Белова", "Зайцев", "Ким"]', "urgent": '"Лебедева"'},
-                  {"queue": '["Волков", "Новикова", "Попов"]', "urgent": '"Егорова"'}],
-        hidden=[{"queue": '["Соколов", "Фёдорова"]', "urgent": '"Павлов"'},
-                {"queue": '["Титов", "Медведева", "Жуков", "Ершова", "Гусев", "Кузьмина"]', "urgent": '"Носов"'},
-                {"queue": '["Белкин", "Яковлева", "Лосев"]', "urgent": '"Сорокина"'}],
+        variants=[{"queue": '["Ivanov", "Petrova", "Sidorov", "Kozlova"]', "urgent": '"Morozov"'},
+                  {"queue": '["Smirnova", "Orlov", "Belova", "Zaitsev", "Kim"]', "urgent": '"Lebedeva"'},
+                  {"queue": '["Volkov", "Novikova", "Popov"]', "urgent": '"Egorova"'}],
+        hidden=[{"queue": '["Sokolov", "Fedorova"]', "urgent": '"Pavlov"'},
+                {"queue": '["Titov", "Medvedeva", "Zhukov", "Ershova", "Gusev", "Kuzmina"]', "urgent": '"Nosov"'},
+                {"queue": '["Belkin", "Yakovleva", "Losev"]', "urgent": '"Sorokina"'}],
         intro="В поликлинике пациенты ждут приёма. Их фамилии записаны в список `queue` в порядке очереди: "
               "первым в списке стоит тот, кто зайдёт к врачу следующим. А ещё пришёл пациент `urgent` с сильной болью — "
               "его пропустят без очереди.",
         steps=["Врач приглашает первого пациента: убери его из списка `queue` методом `.pop(0)` и сохрани в переменную. "
-               "Выведи строку вида `Заходит: Орехов` — с фамилией этого пациента.",
+               "Выведи строку вида `Next patient: Orekhov` — с фамилией этого пациента.",
                "Поставь пациента `urgent` в самое начало списка `queue` методом `.insert()`.",
                "Выведи очередь после этих изменений командой `print(queue)`."],
         hint="`.pop()` без аргумента убирает последний элемент списка, а с индексом — элемент на этом месте, и при этом "
              "возвращает его, так что его можно сохранить в переменную. `.append()` всегда добавляет в конец, "
              "а `.insert()` ставит элемент на место с нужным индексом и сдвигает остальные вправо.",
-        solution='first = queue.pop(0)\nprint(f"Заходит: {first}")\nqueue.insert(0, urgent)\nprint(queue)',
+        solution='first = queue.pop(0)\nprint(f"Next patient: {first}")\nqueue.insert(0, urgent)\nprint(queue)',
         wrong=[("pop() без индекса — к врачу заходит последний в очереди",
-                'first = queue.pop()\nprint(f"Заходит: {first}")\nqueue.insert(0, urgent)\nprint(queue)'),
+                'first = queue.pop()\nprint(f"Next patient: {first}")\nqueue.insert(0, urgent)\nprint(queue)'),
                ("append вместо insert — срочный пациент оказывается в конце очереди",
-                'first = queue.pop(0)\nprint(f"Заходит: {first}")\nqueue.append(urgent)\nprint(queue)')],
+                'first = queue.pop(0)\nprint(f"Next patient: {first}")\nqueue.append(urgent)\nprint(queue)')],
         constructs=["list"],
         must_use=[("re:\\.pop\\(", "Достань первого пациента методом .pop(0): он убирает элемент из списка и сразу возвращает его."),
                   ("re:\\.insert\\(", "Поставь срочного пациента в начало методом .insert(): append умеет добавлять только в конец.")],
@@ -48,16 +48,16 @@ TASKS = [
         steps=["Получи новый список результатов, отсортированный от большего к меньшему: функция `sorted()` с аргументом "
                "`reverse=True`. Сам список `jumps` не меняй — исходный порядок попыток ещё понадобится.",
                "Возьми срезом первые три элемента отсортированного списка — три лучших результата — и выведи этот срез через `print`.",
-               "Следующей строкой выведи номер попытки с лучшим прыжком в виде `Лучшая попытка: 2`. Найди место лучшего "
+               "Следующей строкой выведи номер попытки с лучшим прыжком в виде `Best try: 2`. Найди место лучшего "
                "результата в исходном списке `jumps` методом `.index()`. Помни, что попытки нумеруются с 1, а индексы — с 0."],
         hint="Метод `.sort()` переставляет элементы в самом списке, и прежний порядок теряется. А функция `sorted()` "
              "возвращает новый отсортированный список и не трогает старый. Срез `[:3]` берёт элементы с индексами 0, 1 и 2.",
         solution='ranked = sorted(jumps, reverse=True)\nprint(ranked[:3])\nbest = ranked[0]\n'
-                 'print(f"Лучшая попытка: {jumps.index(best) + 1}")',
+                 'print(f"Best try: {jumps.index(best) + 1}")',
         wrong=[("сортирует сам список через .sort() — исходный порядок теряется, и лучшей всегда оказывается первая попытка",
-                'jumps.sort(reverse=True)\nprint(jumps[:3])\nbest = jumps[0]\nprint(f"Лучшая попытка: {jumps.index(best) + 1}")'),
+                'jumps.sort(reverse=True)\nprint(jumps[:3])\nbest = jumps[0]\nprint(f"Best try: {jumps.index(best) + 1}")'),
                ("забыл reverse=True — сортирует по возрастанию и выводит три худших прыжка",
-                'ranked = sorted(jumps)\nprint(ranked[:3])\nbest = ranked[0]\nprint(f"Лучшая попытка: {jumps.index(best) + 1}")')],
+                'ranked = sorted(jumps)\nprint(ranked[:3])\nbest = ranked[0]\nprint(f"Best try: {jumps.index(best) + 1}")')],
         constructs=["list"],
         must_use=[("re:\\bsorted\\(", "Получи отсортированную копию через sorted(): метод .sort() переставил бы сам список jumps, "
                                       "и номер лучшей попытки потерялся бы."),
@@ -66,27 +66,27 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=3, slug="py-lo-guest-duplicates", title="Лишние записи в списке гостей",
         given=["guests", "name"],
-        variants=[{"guests": '["Аня", "Олег", "Олег", "Вика", "Дима", "Олег"]', "name": '"Олег"'},
-                  {"guests": '["Лена", "Лена", "Петя", "Соня", "Лена", "Рома"]', "name": '"Лена"'},
-                  {"guests": '["Миша", "Катя", "Таня", "Таня", "Гриша"]', "name": '"Таня"'}],
-        hidden=[{"guests": '["Ира", "Глеб", "Зоя"]', "name": '"Глеб"'},
-                {"guests": '["Юра", "Юра", "Юра", "Юра", "Эля"]', "name": '"Юра"'},
-                {"guests": '["Ася", "Вова", "Нина"]', "name": '"Петя"'},
-                {"guests": '["Кира", "Лев", "Кира", "Лев", "Кира"]', "name": '"Лев"'}],
+        variants=[{"guests": '["Anya", "Oleg", "Oleg", "Vika", "Dima", "Oleg"]', "name": '"Oleg"'},
+                  {"guests": '["Lena", "Lena", "Petya", "Sonya", "Lena", "Roma"]', "name": '"Lena"'},
+                  {"guests": '["Misha", "Katya", "Tanya", "Tanya", "Grisha"]', "name": '"Tanya"'}],
+        hidden=[{"guests": '["Ira", "Gleb", "Zoya"]', "name": '"Gleb"'},
+                {"guests": '["Yura", "Yura", "Yura", "Yura", "Elya"]', "name": '"Yura"'},
+                {"guests": '["Asya", "Vova", "Nina"]', "name": '"Petya"'},
+                {"guests": '["Kira", "Lev", "Kira", "Lev", "Kira"]', "name": '"Lev"'}],
         intro="Организатор праздника собирал список гостей из нескольких чатов, поэтому некоторые имена попали в список "
               "`guests` по несколько раз. Гость `name` написал, что прийти не сможет, — все его записи нужно убрать.",
-        steps=["Посчитай методом `.count()`, сколько раз `name` встречается в списке `guests`, и выведи строку вида `Записей: 5`.",
+        steps=["Посчитай методом `.count()`, сколько раз `name` встречается в списке `guests`, и выведи строку вида `Entries: 5`.",
                "Убери из списка `guests` все записи `name`. Помни: метод `.remove()` за один вызов убирает только первое "
                "совпадение. Если `name` в списке нет, ничего удалять не нужно. Остальные гости должны остаться в прежнем порядке.",
                "Выведи список после удаления командой `print(guests)`."],
         hint="Ты уже знаешь, сколько раз имя встречается в списке, — значит, знаешь, сколько раз нужно вызвать `.remove()`. "
              "А вот удалять элементы прямо внутри `for` по этому же списку опасно: элементы сдвигаются, "
              "и цикл перескакивает через соседний.",
-        solution='times = guests.count(name)\nprint(f"Записей: {times}")\nfor i in range(times):\n    guests.remove(name)\nprint(guests)',
+        solution='times = guests.count(name)\nprint(f"Entries: {times}")\nfor i in range(times):\n    guests.remove(name)\nprint(guests)',
         wrong=[("вызывает .remove() один раз — убирается только первая запись",
-                'print(f"Записей: {guests.count(name)}")\nguests.remove(name)\nprint(guests)'),
+                'print(f"Entries: {guests.count(name)}")\nguests.remove(name)\nprint(guests)'),
                ("удаляет элементы внутри for по тому же списку — соседняя запись пропускается",
-                'print(f"Записей: {guests.count(name)}")\nfor guest in guests:\n    if guest == name:\n'
+                'print(f"Entries: {guests.count(name)}")\nfor guest in guests:\n    if guest == name:\n'
                 '        guests.remove(guest)\nprint(guests)')],
         constructs=["list"],
         must_use=[("re:\\.count\\(", "Посчитай записи методом .count() — он сразу говорит, сколько раз элемент встречается в списке."),

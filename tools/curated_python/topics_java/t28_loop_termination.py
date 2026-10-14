@@ -17,19 +17,19 @@ TASKS = [
               "а в каждом следующем — на {less} меньше (поле `less`). Подходы продолжаются, пока в подходе "
               "остаётся хотя бы одно отжимание.",
         steps=["Напиши цикл `while`, который работает, пока `reps` больше 0.",
-               "В цикле сначала выведи строку с числом отжиманий в подходе — первая будет `Отжиманий в подходе: {reps}`, — "
+               "В цикле сначала выведи строку с числом отжиманий в подходе — первая будет `Push-ups in this set: {reps}`, — "
                "а потом уменьши `reps` на `less`.",
-               "Когда цикл закончится, выведи `Тренировка окончена`."],
+               "Когда цикл закончится, выведи `Workout is over`."],
         hint="Цикл `while` останавливается, только когда его условие становится ложным. Если внутри цикла не менять "
              "`reps`, условие `reps > 0` будет верным всегда, и цикл никогда не закончится.",
-        solution='while (reps > 0) {\n    System.out.println("Отжиманий в подходе: " + reps);\n    reps -= less;\n}\n'
-                 'System.out.println("Тренировка окончена");',
+        solution='while (reps > 0) {\n    System.out.println("Push-ups in this set: " + reps);\n    reps -= less;\n}\n'
+                 'System.out.println("Workout is over");',
         wrong=[("условие >= 0: когда отжимания кончаются ровно на нуле, печатается лишний подход из 0 отжиманий",
-                'while (reps >= 0) {\n    System.out.println("Отжиманий в подходе: " + reps);\n    reps -= less;\n}\n'
-                'System.out.println("Тренировка окончена");'),
+                'while (reps >= 0) {\n    System.out.println("Push-ups in this set: " + reps);\n    reps -= less;\n}\n'
+                'System.out.println("Workout is over");'),
                ("уменьшает число до вывода: первый подход теряется, а в конце бывает минус",
-                'while (reps > 0) {\n    reps -= less;\n    System.out.println("Отжиманий в подходе: " + reps);\n}\n'
-                'System.out.println("Тренировка окончена");')],
+                'while (reps > 0) {\n    reps -= less;\n    System.out.println("Push-ups in this set: " + reps);\n}\n'
+                'System.out.println("Workout is over");')],
         constructs=["while"],
     ),
     JavaOutputTask(
@@ -44,21 +44,21 @@ TASKS = [
         steps=["Заведи переменную `bus` — через сколько минут после 8:00 уходит автобус. Сначала она равна 0: это первый автобус.",
                "Напиши цикл `while`: пока `bus` меньше `arrive`, этот автобус уже ушёл — прибавляй к `bus` значение "
                "`interval`, чтобы перейти к следующему. Если ты пришёл ровно к отправлению, ты на этот автобус успеваешь.",
-               "После цикла выведи две строки в формате `Твой автобус: через 30 мин. после 8:00` и `Ждать: 4 мин.` — "
+               "После цикла выведи две строки в формате `Your bus: 30 min after 8:00` и `Wait: 4 min` — "
                "во второй строке столько минут, сколько пройдёт от твоего прихода до отправления."],
         hint="Каждый повтор цикла увеличивает `bus`, поэтому рано или поздно `bus` догонит `arrive` и цикл закончится. "
              "Подумай о знаке сравнения: когда `bus` равно `arrive`, автобус ещё стоит на остановке.",
         solution='int bus = 0;\nwhile (bus < arrive) {\n    bus += interval;\n}\n'
-                 'System.out.println("Твой автобус: через " + bus + " мин. после 8:00");\n'
-                 'System.out.println("Ждать: " + (bus - arrive) + " мин.");',
+                 'System.out.println("Your bus: " + bus + " min after 8:00");\n'
+                 'System.out.println("Wait: " + (bus - arrive) + " min");',
         wrong=[("условие <=: если пришёл ровно к отправлению, ждёт следующий автобус",
                 'int bus = 0;\nwhile (bus <= arrive) {\n    bus += interval;\n}\n'
-                'System.out.println("Твой автобус: через " + bus + " мин. после 8:00");\n'
-                'System.out.println("Ждать: " + (bus - arrive) + " мин.");'),
+                'System.out.println("Your bus: " + bus + " min after 8:00");\n'
+                'System.out.println("Wait: " + (bus - arrive) + " min");'),
                ("вычитает в обратном порядке: время ожидания получается отрицательным",
                 'int bus = 0;\nwhile (bus < arrive) {\n    bus += interval;\n}\n'
-                'System.out.println("Твой автобус: через " + bus + " мин. после 8:00");\n'
-                'System.out.println("Ждать: " + (arrive - bus) + " мин.");')],
+                'System.out.println("Your bus: " + bus + " min after 8:00");\n'
+                'System.out.println("Wait: " + (arrive - bus) + " min");')],
         constructs=["while"],
     ),
     JavaOutputTask(
@@ -75,28 +75,28 @@ TASKS = [
                "Напиши цикл `while`, который работает, пока `km` меньше `distance`. В начале каждого повтора проверь: "
                "если `charge` меньше `perKm`, на следующий километр заряда не хватит — выйди из цикла командой `break`. "
                "Иначе уменьши `charge` на `perKm` и увеличь `km` на 1.",
-               "После цикла: если `km` равно `distance`, выведи `Доехал до школы! Заряд: 15%`. Иначе выведи "
-               "`Самокат разрядился после 7 км`, а следующей строкой — `Пешком осталось: 1 км`. "
+               "После цикла: если `km` равно `distance`, выведи `Made it to school! Charge: 15%`. Иначе выведи "
+               "`The scooter died after 7 km`, а следующей строкой — `Left to walk: 1 km`. "
                "Числа в этих строках подставь из своего расчёта."],
         hint="У этого цикла два выхода: условие `km < distance` становится ложным, когда ты доехал, а `break` срабатывает, "
              "когда кончился заряд. Поэтому после цикла по значению `km` можно понять, каким из выходов он закончился.",
         solution='int km = 0;\nwhile (km < distance) {\n    if (charge < perKm) {\n        break;\n    }\n'
                  '    charge -= perKm;\n    km++;\n}\nif (km == distance) {\n'
-                 '    System.out.println("Доехал до школы! Заряд: " + charge + "%");\n} else {\n'
-                 '    System.out.println("Самокат разрядился после " + km + " км");\n'
-                 '    System.out.println("Пешком осталось: " + (distance - km) + " км");\n}',
+                 '    System.out.println("Made it to school! Charge: " + charge + "%");\n} else {\n'
+                 '    System.out.println("The scooter died after " + km + " km");\n'
+                 '    System.out.println("Left to walk: " + (distance - km) + " km");\n}',
         wrong=[("сравнивает через <=: останавливается, даже когда заряда ровно на один километр",
                 'int km = 0;\nwhile (km < distance) {\n    if (charge <= perKm) {\n        break;\n    }\n'
                 '    charge -= perKm;\n    km++;\n}\nif (km == distance) {\n'
-                '    System.out.println("Доехал до школы! Заряд: " + charge + "%");\n} else {\n'
-                '    System.out.println("Самокат разрядился после " + km + " км");\n'
-                '    System.out.println("Пешком осталось: " + (distance - km) + " км");\n}'),
+                '    System.out.println("Made it to school! Charge: " + charge + "%");\n} else {\n'
+                '    System.out.println("The scooter died after " + km + " km");\n'
+                '    System.out.println("Left to walk: " + (distance - km) + " km");\n}'),
                ("после цикла решает по заряду (charge > 0), а не по пройденным километрам",
                 'int km = 0;\nwhile (km < distance) {\n    if (charge < perKm) {\n        break;\n    }\n'
                 '    charge -= perKm;\n    km++;\n}\nif (charge > 0) {\n'
-                '    System.out.println("Доехал до школы! Заряд: " + charge + "%");\n} else {\n'
-                '    System.out.println("Самокат разрядился после " + km + " км");\n'
-                '    System.out.println("Пешком осталось: " + (distance - km) + " км");\n}')],
+                '    System.out.println("Made it to school! Charge: " + charge + "%");\n} else {\n'
+                '    System.out.println("The scooter died after " + km + " km");\n'
+                '    System.out.println("Left to walk: " + (distance - km) + " km");\n}')],
         constructs=["while", "if"],
     ),
 ]

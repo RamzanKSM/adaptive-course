@@ -16,19 +16,19 @@ TASKS = [
         intro="Телефон работает без зарядки. Сейчас его заряд — `charge` процентов, и каждый час он уменьшается "
               "на `drain` процентов.",
         steps=["Заведи переменную `level` и положи в неё значение `charge`.",
-               "С помощью цикла `while` повторяй, пока `level` больше 0: выведи строку `Заряд: …%` с текущим "
+               "С помощью цикла `while` повторяй, пока `level` больше 0: выведи строку `Charge: …%` с текущим "
                "значением `level`, а потом уменьши `level` на `drain`.",
-               "После цикла выведи `Телефон выключился`."],
+               "После цикла выведи `The phone is off`."],
         hint="Условие `while` проверяется перед каждым повтором. Когда заряд дошёл до нуля или ниже, телефон уже "
              "выключен — такой заряд выводить не нужно.",
-        solution='int level = charge;\nwhile (level > 0) {\n    System.out.println("Заряд: " + level + "%");\n    level -= drain;\n}\n'
-                 'System.out.println("Телефон выключился");',
-        wrong=[(">= вместо >: выводится лишняя строка «Заряд: 0%»",
-                'int level = charge;\nwhile (level >= 0) {\n    System.out.println("Заряд: " + level + "%");\n    level -= drain;\n}\n'
-                'System.out.println("Телефон выключился");'),
+        solution='int level = charge;\nwhile (level > 0) {\n    System.out.println("Charge: " + level + "%");\n    level -= drain;\n}\n'
+                 'System.out.println("The phone is off");',
+        wrong=[(">= вместо >: выводится лишняя строка «Charge: 0%»",
+                'int level = charge;\nwhile (level >= 0) {\n    System.out.println("Charge: " + level + "%");\n    level -= drain;\n}\n'
+                'System.out.println("The phone is off");'),
                ("заряд уменьшается до вывода: первая строка показывает заряд уже через час",
-                'int level = charge;\nwhile (level > 0) {\n    level -= drain;\n    System.out.println("Заряд: " + level + "%");\n}\n'
-                'System.out.println("Телефон выключился");')],
+                'int level = charge;\nwhile (level > 0) {\n    level -= drain;\n    System.out.println("Charge: " + level + "%");\n}\n'
+                'System.out.println("The phone is off");')],
         constructs=["while"],
     ),
     JavaOutputTask(
@@ -42,17 +42,17 @@ TASKS = [
         steps=["Заведи две переменные со значением 0: сколько накоплено и сколько прошло недель.",
                "С помощью цикла `while` повторяй, пока накоплено меньше `price`: добавь `weekly` к накоплениям "
                "и увеличь число недель на 1.",
-               "После цикла выведи две строки: `Недель: …` и `Накоплено: … руб.`"],
+               "После цикла выведи две строки: `Weeks: …` и `Saved: … rub`"],
         hint="Заранее неизвестно, сколько недель понадобится, — поэтому здесь `while`, а не `for`. "
              "Если накоплено ровно столько, сколько стоит самокат, копить дальше уже не нужно.",
         solution='int saved = 0;\nint weeks = 0;\nwhile (saved < price) {\n    saved += weekly;\n    weeks++;\n}\n'
-                 'System.out.println("Недель: " + weeks);\nSystem.out.println("Накоплено: " + saved + " руб.");',
+                 'System.out.println("Weeks: " + weeks);\nSystem.out.println("Saved: " + saved + " rub");',
         wrong=[("<= вместо <: при точном совпадении копит лишнюю неделю",
                 'int saved = 0;\nint weeks = 0;\nwhile (saved <= price) {\n    saved += weekly;\n    weeks++;\n}\n'
-                'System.out.println("Недель: " + weeks);\nSystem.out.println("Накоплено: " + saved + " руб.");'),
+                'System.out.println("Weeks: " + weeks);\nSystem.out.println("Saved: " + saved + " rub");'),
                ("счётчик недель начинается с 1: недель на одну больше",
                 'int saved = 0;\nint weeks = 1;\nwhile (saved < price) {\n    saved += weekly;\n    weeks++;\n}\n'
-                'System.out.println("Недель: " + weeks);\nSystem.out.println("Накоплено: " + saved + " руб.");')],
+                'System.out.println("Weeks: " + weeks);\nSystem.out.println("Saved: " + saved + " rub");')],
         constructs=["while"],
     ),
     JavaOutputTask(
@@ -66,17 +66,17 @@ TASKS = [
                "и для количества цифр.",
                "С помощью цикла `while` повторяй, пока `rest` больше 0: прибавь к сумме последнюю цифру `rest`, "
                "увеличь количество цифр на 1 и отбрось последнюю цифру у `rest`.",
-               "После цикла выведи одну строку вида `Число 507: цифр 3, сумма 12` со своими значениями."],
+               "После цикла выведи одну строку вида `Number 507: digits 3, sum 12` со своими значениями."],
         hint="Последнюю цифру даёт остаток от деления на 10, а целочисленное деление на 10 её отбрасывает: "
              "`4096 % 10` — это 6, а `4096 / 10` — это 409.",
         solution='int rest = number;\nint sum = 0;\nint count = 0;\nwhile (rest > 0) {\n    sum += rest % 10;\n    count++;\n'
-                 '    rest /= 10;\n}\nSystem.out.println("Число " + number + ": цифр " + count + ", сумма " + sum);',
+                 '    rest /= 10;\n}\nSystem.out.println("Number " + number + ": digits " + count + ", sum " + sum);',
         wrong=[("rest > 9: самая первая цифра числа теряется",
                 'int rest = number;\nint sum = 0;\nint count = 0;\nwhile (rest > 9) {\n    sum += rest % 10;\n    count++;\n'
-                '    rest /= 10;\n}\nSystem.out.println("Число " + number + ": цифр " + count + ", сумма " + sum);'),
+                '    rest /= 10;\n}\nSystem.out.println("Number " + number + ": digits " + count + ", sum " + sum);'),
                ("цифра отбрасывается раньше, чем прибавляется: последняя цифра не попадает в сумму",
                 'int rest = number;\nint sum = 0;\nint count = 0;\nwhile (rest > 0) {\n    rest /= 10;\n    sum += rest % 10;\n'
-                '    count++;\n}\nSystem.out.println("Число " + number + ": цифр " + count + ", сумма " + sum);')],
+                '    count++;\n}\nSystem.out.println("Number " + number + ": digits " + count + ", sum " + sum);')],
         constructs=["while"],
     ),
 ]

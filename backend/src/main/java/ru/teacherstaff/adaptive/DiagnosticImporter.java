@@ -287,16 +287,19 @@ class DiagnosticImporter implements ApplicationRunner {
   private void seedTasks() {
     retireLegacyReadingTasks();
     // Three tasks per difficulty step so each of the three iterations can go easy → medium → harder.
-    addOutputTask("Консоль: приветствие", 1, "Напечатай в консоль слово «Привет» без переноса строки.", "Привет");
+    addOutputTask("Консоль: приветствие", 1, "Напечатай в консоль слово Hello без переноса строки.", "Hello");
     addOutputTask("Консоль: число", 1, "Напечатай число 7 и заверши строку переводом строки.", "7\n");
     addOutputTask("Консоль: символ", 1, "Напечатай символ A без перевода строки.", "A");
-    addOutputTask("Консоль: две строки", 2, "Напечатай «Раз» и «Два» на двух разных строках.", "Раз\nДва\n");
+    addOutputTask("Консоль: две строки", 2, "Напечатай One и Two на двух разных строках.", "One\nTwo\n");
     addOutputTask("Консоль: логическое значение", 2, "Напечатай логическое значение true и заверши строку переводом строки.", "true\n");
     addOutputTask("Консоль: знак Java", 2, "Напечатай Java и сразу после него восклицательный знак, без пробела и переноса строки.", "Java!");
-    addOutputTask("Консоль: пустая строка", 3, "Сначала напечатай пустую строку, затем на следующей строке напечатай «готово» без переноса после него.", "\nготово");
-    addOutputTask("Консоль: кота", 3, "Напечатай 3, затем пробел и слово «кота», после чего перейди на новую строку.", "3 кота\n");
+    addOutputTask("Консоль: пустая строка", 3, "Сначала напечатай пустую строку, затем на следующей строке напечатай done без переноса после него.", "\ndone");
+    renameSeed("Консоль: кота", "Консоль: число и слово");
+    addOutputTask("Консоль: число и слово", 3, "Напечатай 3, затем пробел и слово cats, после чего перейди на новую строку.", "3 cats\n");
     addOutputTask("Консоль: три значения", 3, "Напечатай подряд символ X, затем Y с переводом строки, затем false без перевода после него.", "XY\nfalse");
   }
+  /** A seed whose title changed keeps its row (and the students' submissions and credit): the update then finds it by the new title. */
+  private void renameSeed(String from,String to) { if(db.queryForObject("select count(*) from tasks where title=?",Integer.class,to)==0) db.update("update tasks set title=? where title=? and source='SEED'",to,from); }
   private void retireLegacyReadingTasks() {
     for(String title:List.of("Вывод строки","Две строки","Число","Символ","Логическое значение","Склеенный вывод","Пустая строка","Число и текст","Три вывода"))
       db.update("update tasks set active=0 where title=? and test_source like '%Solution.answer()%'", title);
@@ -361,14 +364,15 @@ class DiagnosticImporter implements ApplicationRunner {
 
   private void seedPythonTasks() {
     if (db.queryForObject("select count(*) from skills where code='PY_BASIC_CODE_READING'", Integer.class) == 0) return;
-    addPythonOutputTask("Python: приветствие", 1, "Напечатай в консоль слово «Привет» без перевода строки в конце.", "Привет");
+    addPythonOutputTask("Python: приветствие", 1, "Напечатай в консоль слово Hello без перевода строки в конце.", "Hello");
     addPythonOutputTask("Python: число", 1, "Напечатай число 7. Обычный `print` сам добавит перевод строки в конце — так и нужно.", "7\n");
     addPythonOutputTask("Python: символ", 1, "Напечатай букву A без перевода строки в конце.", "A");
-    addPythonOutputTask("Python: две строки", 2, "Напечатай «Раз» и «Два» на двух разных строках.", "Раз\nДва\n");
+    addPythonOutputTask("Python: две строки", 2, "Напечатай One и Two на двух разных строках.", "One\nTwo\n");
     addPythonOutputTask("Python: логическое значение", 2, "Напечатай логическое значение True и заверши строку переводом строки.", "True\n");
     addPythonOutputTask("Python: знак Python", 2, "Напечатай Python и сразу после него восклицательный знак — без пробела и без перевода строки.", "Python!");
-    addPythonOutputTask("Python: пустая строка", 3, "Сначала напечатай пустую строку, затем на следующей строке напечатай «готово» без перевода строки после него.", "\nготово");
-    addPythonOutputTask("Python: кота", 3, "Напечатай 3, затем пробел и слово «кота», после чего перейди на новую строку.", "3 кота\n");
+    addPythonOutputTask("Python: пустая строка", 3, "Сначала напечатай пустую строку, затем на следующей строке напечатай done без перевода строки после него.", "\ndone");
+    renameSeed("Python: кота", "Python: число и слово");
+    addPythonOutputTask("Python: число и слово", 3, "Напечатай 3, затем пробел и слово cats, после чего перейди на новую строку.", "3 cats\n");
     addPythonOutputTask("Python: три значения", 3, "Напечатай подряд X, затем Y с переводом строки, затем False без перевода строки после него.", "XY\nFalse");
   }
   private void addPythonOutputTask(String title,int difficulty,String action,String expected) {

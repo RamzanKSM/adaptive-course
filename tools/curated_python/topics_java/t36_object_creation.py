@@ -32,9 +32,9 @@ first.kg = kg1;
 Suitcase second = new Suitcase();
 second.owner = owner2;
 second.kg = kg2;
-System.out.println(first.owner + ": " + first.kg + " кг");
-System.out.println(second.owner + ": " + second.kg + " кг");
-System.out.println("Вместе: " + (first.kg + second.kg) + " кг");'''
+System.out.println(first.owner + ": " + first.kg + " kg");
+System.out.println(second.owner + ": " + second.kg + " kg");
+System.out.println("Together: " + (first.kg + second.kg) + " kg");'''
 
 # ───────── Cafe orders ─────────
 
@@ -54,10 +54,10 @@ for (int i = 0; i < dishes.length; i++) {
 }
 int total = 0;
 for (int i = 0; i < orders.length; i++) {
-    System.out.println("Заказ №" + orders[i].number + ": " + orders[i].dish + ", " + orders[i].price + " руб.");
+    System.out.println("Order #" + orders[i].number + ": " + orders[i].dish + ", " + orders[i].price + " rub");
     total += orders[i].price;
 }
-System.out.println("Итого: " + total + " руб.");'''
+System.out.println("Total: " + total + " rub");'''
 
 ORDER_ONE_OBJECT = '''Order[] orders = new Order[dishes.length];
 Order order = new Order();
@@ -69,10 +69,10 @@ for (int i = 0; i < dishes.length; i++) {
 }
 int total = 0;
 for (int i = 0; i < orders.length; i++) {
-    System.out.println("Заказ №" + orders[i].number + ": " + orders[i].dish + ", " + orders[i].price + " руб.");
+    System.out.println("Order #" + orders[i].number + ": " + orders[i].dish + ", " + orders[i].price + " rub");
     total += orders[i].price;
 }
-System.out.println("Итого: " + total + " руб.");'''
+System.out.println("Total: " + total + " rub");'''
 
 # ───────── Elections ─────────
 
@@ -92,34 +92,34 @@ for (int i = 0; i < ballots.length; i++) {
         second.votes++;
     }
 }
-System.out.println(first.name + ", голосов: " + first.votes);
-System.out.println(second.name + ", голосов: " + second.votes);
+System.out.println(first.name + ", votes: " + first.votes);
+System.out.println(second.name + ", votes: " + second.votes);
 if (first.votes > second.votes) {
-    System.out.println("Староста: " + first.name);
+    System.out.println("Leader: " + first.name);
 } else if (second.votes > first.votes) {
-    System.out.println("Староста: " + second.name);
+    System.out.println("Leader: " + second.name);
 } else {
-    System.out.println("Ничья");
+    System.out.println("Draw");
 }'''
 
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-obj-two-suitcases", title="Два чемодана",
         given=[("String", "owner1"), ("int", "kg1"), ("String", "owner2"), ("int", "kg2")],
-        variants=[{"owner1": '"Аня"', "kg1": "12", "owner2": '"Борис"', "kg2": "18"},
-                  {"owner1": '"Олег"', "kg1": "20", "owner2": '"Ира"', "kg2": "9"},
-                  {"owner1": '"Маша"', "kg1": "15", "owner2": '"Дима"', "kg2": "16"}],
-        hidden=[{"owner1": '"Катя"', "kg1": "7", "owner2": '"Миша"', "kg2": "23"},
-                {"owner1": '"Павел"', "kg1": "25", "owner2": '"Лена"', "kg2": "4"},
-                {"owner1": '"Ник"', "kg1": "10", "owner2": '"Ева"', "kg2": "10"}],
+        variants=[{"owner1": '"Anya"', "kg1": "12", "owner2": '"Boris"', "kg2": "18"},
+                  {"owner1": '"Oleg"', "kg1": "20", "owner2": '"Ira"', "kg2": "9"},
+                  {"owner1": '"Masha"', "kg1": "15", "owner2": '"Dima"', "kg2": "16"}],
+        hidden=[{"owner1": '"Katya"', "kg1": "7", "owner2": '"Misha"', "kg2": "23"},
+                {"owner1": '"Pavel"', "kg1": "25", "owner2": '"Lena"', "kg2": "4"},
+                {"owner1": '"Nik"', "kg1": "10", "owner2": '"Eva"', "kg2": "10"}],
         intro="Двое друзей летят в отпуск, и у каждого свой чемодан. Владельцы и вес чемоданов в килограммах записаны "
               "в полях `owner1`, `kg1`, `owner2` и `kg2`. Чемоданы устроены одинаково, но у каждого свой владелец и свой вес — "
               "это два разных объекта одного класса.",
         steps=["Ниже класса `Solution` создай класс `Suitcase` (без `public`) с полями `String owner` и `int kg`.",
                "В `main` создай два отдельных объекта: `Suitcase first = new Suitcase();` и `Suitcase second = new Suitcase();`. "
                "Заполни поля первого из `owner1` и `kg1`, а второго — из `owner2` и `kg2`.",
-               "Выведи три строки: строку вида `Аня: 12 кг` для первого чемодана, такую же для второго и строку вида "
-               "`Вместе: 30 кг` с суммой весов. Все значения бери из полей объектов `first` и `second`."],
+               "Выведи три строки: строку вида `Anya: 12 kg` для первого чемодана, такую же для второго и строку вида "
+               "`Together: 30 kg` с суммой весов. Все значения бери из полей объектов `first` и `second`."],
         hint="Каждый вызов `new Suitcase()` создаёт новый, отдельный объект со своими полями. Поэтому `first.kg` и "
              "`second.kg` хранят разные значения, хотя класс у них один.",
         solution=SUITCASE_MAIN,
@@ -136,20 +136,20 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-obj-cafe-orders", title="Заказы в кафе",
         given=[("String[]", "dishes"), ("int[]", "prices")],
-        variants=[{"dishes": '{"Суп", "Плов", "Компот"}', "prices": "{250, 400, 90}"},
-                  {"dishes": '{"Блины", "Чай"}', "prices": "{180, 60}"},
-                  {"dishes": '{"Салат", "Борщ", "Котлета", "Морс"}', "prices": "{220, 280, 310, 100}"}],
-        hidden=[{"dishes": '{"Пицца"}', "prices": "{550}"},
-                {"dishes": '{"Омлет", "Кофе", "Сырники"}', "prices": "{200, 150, 260}"},
-                {"dishes": '{"Паста", "Лимонад", "Торт", "Чай", "Хлеб"}', "prices": "{390, 120, 210, 50, 30}"}],
+        variants=[{"dishes": '{"Soup", "Pilaf", "Juice"}', "prices": "{250, 400, 90}"},
+                  {"dishes": '{"Pancakes", "Tea"}', "prices": "{180, 60}"},
+                  {"dishes": '{"Salad", "Borsch", "Cutlet", "Juice"}', "prices": "{220, 280, 310, 100}"}],
+        hidden=[{"dishes": '{"Pizza"}', "prices": "{550}"},
+                {"dishes": '{"Omelet", "Coffee", "Toast"}', "prices": "{200, 150, 260}"},
+                {"dishes": '{"Pasta", "Lemonade", "Cake", "Tea", "Bread"}', "prices": "{390, 120, 210, 50, 30}"}],
         intro="Официант принимает заказ за столиком: блюда записаны по порядку в массиве `dishes`, а их цены — "
               "в массиве `prices` под теми же номерами. Для кухни каждое блюдо — отдельный заказ со своим номером.",
         steps=["Ниже класса `Solution` создай класс `Order` (без `public`) с полями `int number`, `String dish` и `int price`.",
                "В `main` создай массив `Order[] orders = new Order[dishes.length];`. В цикле для каждого блюда создай "
                "новый объект `new Order()`, запиши в него номер (первое блюдо — заказ №1, дальше по порядку), блюдо и цену "
                "и положи объект в массив.",
-               "Вторым циклом пройди по массиву `orders` и для каждого заказа выведи строку вида `Заказ №1: Суп, 250 руб.`.",
-               "Последней строкой выведи строку вида `Итого: 740 руб.` — сумму цен всех заказов из массива `orders`."],
+               "Вторым циклом пройди по массиву `orders` и для каждого заказа выведи строку вида `Order #1: Soup, 250 rub`.",
+               "Последней строкой выведи строку вида `Total: 740 rub` — сумму цен всех заказов из массива `orders`."],
         hint="Объект нужно создавать внутри цикла: каждое `new Order()` — это новый заказ. Если создать один объект "
              "до цикла и класть в массив его, все ячейки массива будут указывать на один и тот же заказ — последний.",
         solution=ORDER_MAIN,
@@ -165,13 +165,13 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-obj-class-election", title="Выборы старосты",
         given=[("String", "name1"), ("String", "name2"), ("String[]", "ballots")],
-        variants=[{"name1": '"Аня"', "name2": '"Борис"', "ballots": '{"Аня", "Борис", "Аня", "Аня", "Борис"}'},
-                  {"name1": '"Глеб"', "name2": '"Нина"', "ballots": '{"Нина", "Нина", "Глеб", "Нина"}'},
-                  {"name1": '"Света"', "name2": '"Артём"', "ballots": '{"Артём", "Света", "Света", "Артём"}'}],
-        hidden=[{"name1": '"Даша"', "name2": '"Егор"', "ballots": '{"Егор"}'},
-                {"name1": '"Кира"', "name2": '"Лёша"', "ballots": '{"Кира", "Кира", "Кира"}'},
-                {"name1": '"Рома"', "name2": '"Юля"', "ballots": "{}"},
-                {"name1": '"Ваня"', "name2": '"Таня"', "ballots": '{"Таня", "Ваня", "Ваня", "Таня", "Таня", "Ваня", "Таня"}'}],
+        variants=[{"name1": '"Anya"', "name2": '"Boris"', "ballots": '{"Anya", "Boris", "Anya", "Anya", "Boris"}'},
+                  {"name1": '"Gleb"', "name2": '"Nina"', "ballots": '{"Nina", "Nina", "Gleb", "Nina"}'},
+                  {"name1": '"Sveta"', "name2": '"Artem"', "ballots": '{"Artem", "Sveta", "Sveta", "Artem"}'}],
+        hidden=[{"name1": '"Dasha"', "name2": '"Egor"', "ballots": '{"Egor"}'},
+                {"name1": '"Kira"', "name2": '"Lesha"', "ballots": '{"Kira", "Kira", "Kira"}'},
+                {"name1": '"Roma"', "name2": '"Yulya"', "ballots": "{}"},
+                {"name1": '"Vanya"', "name2": '"Tanya"', "ballots": '{"Tanya", "Vanya", "Vanya", "Tanya", "Tanya", "Vanya", "Tanya"}'}],
         intro="В классе выбирают старосту из двух кандидатов — `name1` и `name2`. Каждый ученик написал на бюллетене "
               "имя одного из них; все бюллетени по порядку записаны в массиве `ballots`. У каждого кандидата свой "
               "счёт голосов, поэтому кандидаты — два отдельных объекта.",
@@ -180,8 +180,8 @@ TASKS = [
                "Голосов у нового объекта сначала 0 — поле `int` само начинается с нуля.",
                "Пройди по массиву `ballots`: если в бюллетене имя первого кандидата, прибавь 1 к `first.votes`, иначе — "
                "к `second.votes`. Строки сравнивай методом `equals`.",
-               "Выведи две строки вида `Аня, голосов: 3` — сначала для первого кандидата, потом для второго. Третьей строкой "
-               "выведи `Староста: Аня` с именем того, у кого голосов больше, а если голосов поровну — `Ничья`."],
+               "Выведи две строки вида `Anya, votes: 3` — сначала для первого кандидата, потом для второго. Третьей строкой "
+               "выведи `Leader: Anya` с именем того, у кого голосов больше, а если голосов поровну — `Draw`."],
         hint="Голоса копятся в полях объектов: `first.votes++` меняет счёт только первого кандидата, потому что `first` и "
              "`second` — два разных объекта, созданных двумя вызовами `new`.",
         solution=ELECTION_MAIN,

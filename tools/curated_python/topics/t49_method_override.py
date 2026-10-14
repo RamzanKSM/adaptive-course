@@ -33,8 +33,8 @@ class StudentSubscription(Subscription):
 
 usual = Subscription()
 student = StudentSubscription()
-print(f"Обычная подписка на {months} мес.: {usual.price(months)} руб.")
-print(f"Студенческая подписка на {months} мес.: {student.price(months)} руб.")
+print(f"Regular plan for {months} months: {usual.price(months)} rub")
+print(f"Student plan for {months} months: {student.price(months)} rub")
 """
 
 BONUS = """\
@@ -57,8 +57,8 @@ class Manager(Employee):
 
 worker = Employee(worker_name, worker_salary)
 boss = Manager(manager_name, manager_salary)
-print(f"{worker.name}: премия {worker.bonus()}, всего {worker.total()} руб.")
-print(f"{boss.name}: премия {boss.bonus()}, всего {boss.total()} руб.")
+print(f"{worker.name}: bonus {worker.bonus()}, total {worker.total()} rub")
+print(f"{boss.name}: bonus {boss.bonus()}, total {boss.total()} rub")
 """
 
 KNIGHT = """\
@@ -80,8 +80,8 @@ class Knight(Character):
             self.health = 0
 
 
-archer = Character("Лучник", health)
-knight = Knight("Рыцарь", health)
+archer = Character("Archer", health)
+knight = Knight("Knight", health)
 for hit in hits:
     archer.take_damage(hit)
     knight.take_damage(hit)
@@ -102,8 +102,8 @@ TASKS = [
                "Создай класс `StudentSubscription` — наследник `Subscription`. Переопредели в нём метод "
                "`price(self, months)`: студенческая подписка стоит 149 руб. за месяц.",
                "Создай объекты `usual = Subscription()` и `student = StudentSubscription()`.",
-               "Выведи две строки вида `Обычная подписка на 3 мес.: 897 руб.` и "
-               "`Студенческая подписка на 3 мес.: 447 руб.` — цены возьми из методов `price` этих объектов."],
+               "Выведи две строки вида `Regular plan for 3 months: 897 rub` и "
+               "`Student plan for 3 months: 447 rub` — цены возьми из методов `price` этих объектов."],
         hint="Переопределить метод — значит написать в наследнике метод с точно таким же именем. "
              "Когда ты вызываешь `student.price(...)`, Python сначала ищет `price` в классе `StudentSubscription` "
              "и, найдя его там, до версии родителя уже не доходит.",
@@ -120,12 +120,12 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=2, slug="py-ovr-manager-bonus", title="Премия менеджера",
         given=["worker_name", "worker_salary", "manager_name", "manager_salary"],
-        variants=[{"worker_name": '"Ольга"', "worker_salary": "40000", "manager_name": '"Павел"', "manager_salary": "60000"},
-                  {"worker_name": '"Дима"', "worker_salary": "35000", "manager_name": '"Ирина"', "manager_salary": "80000"},
-                  {"worker_name": '"Катя"', "worker_salary": "52000", "manager_name": '"Сергей"', "manager_salary": "70000"}],
-        hidden=[{"worker_name": '"Нина"', "worker_salary": "10000", "manager_name": '"Олег"', "manager_salary": "10000"},
-                {"worker_name": '"Тимур"', "worker_salary": "45500", "manager_name": '"Алла"', "manager_salary": "99999"},
-                {"worker_name": '"Ян"', "worker_salary": "0", "manager_name": '"Ева"', "manager_salary": "1000"}],
+        variants=[{"worker_name": '"Olga"', "worker_salary": "40000", "manager_name": '"Pavel"', "manager_salary": "60000"},
+                  {"worker_name": '"Dima"', "worker_salary": "35000", "manager_name": '"Irina"', "manager_salary": "80000"},
+                  {"worker_name": '"Katya"', "worker_salary": "52000", "manager_name": '"Sergey"', "manager_salary": "70000"}],
+        hidden=[{"worker_name": '"Nina"', "worker_salary": "10000", "manager_name": '"Oleg"', "manager_salary": "10000"},
+                {"worker_name": '"Timur"', "worker_salary": "45500", "manager_name": '"Alla"', "manager_salary": "99999"},
+                {"worker_name": '"Yan"', "worker_salary": "0", "manager_name": '"Eva"', "manager_salary": "1000"}],
         intro="В конце года каждый сотрудник получает премию: обычный сотрудник — десятую часть зарплаты, "
               "а менеджер — четверть. Выплата считается одинаково для всех: зарплата плюс премия. "
               "Значит, в классе менеджера нужно поменять только расчёт премии.",
@@ -137,7 +137,7 @@ TASKS = [
                "Создай класс `Manager` — наследник `Employee` — и переопредели в нём только метод `bonus(self)`: "
                "премия менеджера — зарплата, целочисленно делённая на 4. Метод `total` в `Manager` не пиши.",
                "Создай `worker = Employee(worker_name, worker_salary)` и `boss = Manager(manager_name, manager_salary)`. "
-               "Для каждого выведи строку вида `Ольга: премия 4000, всего 44000 руб.`"],
+               "Для каждого выведи строку вида `Olga: bonus 4000, total 44000 rub`"],
         hint="Метод `total` написан один раз в `Employee`, но вызывает `self.bonus()`. Когда `total` работает "
              "для менеджера, `self` — это менеджер, и Python возьмёт его версию `bonus`. Поэтому важно не "
              "считать премию в `total` вручную, а вызывать метод.",
@@ -168,9 +168,9 @@ TASKS = [
                "если получилось отрицательное число, здоровье становится 0.",
                "Создай класс `Knight` — наследник `Character` — и переопредели в нём `take_damage(self, amount)`: "
                "рыцарь теряет только `amount // 2` здоровья, и его здоровье тоже не бывает меньше 0.",
-               "Создай `archer = Character(\"Лучник\", health)` и `knight = Knight(\"Рыцарь\", health)`.",
+               "Создай `archer = Character(\"Archer\", health)` и `knight = Knight(\"Knight\", health)`.",
                "Пройди циклом по списку `hits`: каждый удар получают и лучник, и рыцарь. После каждого удара "
-               "выведи строку вида `Лучник: 70, Рыцарь: 85`."],
+               "выведи строку вида `Archer: 70, Knight: 85`."],
         hint="Переопределённый метод полностью заменяет метод родителя, поэтому в версии `Knight` проверку "
              "«не меньше нуля» нужно написать заново — сама она из `Character` не перейдёт.",
         solution=KNIGHT,

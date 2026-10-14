@@ -66,7 +66,7 @@ METRO_MAIN = '''MetroCard card = new MetroCard();
 for (int i = 0; i < amounts.length; i++) {
     card.topUp(amounts[i]);
 }
-System.out.println("Баланс карты: " + card.getBalance() + " руб.");'''
+System.out.println("Card balance: " + card.getBalance() + " rub");'''
 
 # ───────── Elevator ─────────
 
@@ -95,12 +95,12 @@ ELEVATOR = '''class Elevator {
 ELEVATOR_MAIN = '''Elevator elevator = new Elevator(top);
 for (int i = 0; i < requests.length; i++) {
     if (elevator.goTo(requests[i])) {
-        System.out.println("Едем на " + requests[i] + " этаж");
+        System.out.println("Going to floor " + requests[i]);
     } else {
-        System.out.println("Этажа " + requests[i] + " нет");
+        System.out.println("No floor " + requests[i]);
     }
 }
-System.out.println("Лифт на " + elevator.getFloor() + " этаже");'''
+System.out.println("Elevator on floor " + elevator.getFloor());'''
 
 # ───────── Hero's health ─────────
 
@@ -133,12 +133,12 @@ for (int i = 0; i < events.length; i++) {
     } else {
         hero.damage(-events[i]);
     }
-    System.out.println("Здоровье: " + hero.getHealth());
+    System.out.println("Health: " + hero.getHealth());
 }
 if (hero.getHealth() == 0) {
-    System.out.println("Герой выбыл");
+    System.out.println("Hero is out");
 } else {
-    System.out.println("Герой в строю");
+    System.out.println("Hero is still in");
 }'''
 
 TASKS = [
@@ -157,7 +157,7 @@ TASKS = [
                "включительно. Иначе баланс не меняется.",
                "Добавь метод `int getBalance()`, который возвращает баланс.",
                "В `main` создай карту, по очереди передай методу `topUp` все суммы из `amounts` и выведи строку вида "
-               "`Баланс карты: 3750 руб.` — число получи через `getBalance()`."],
+               "`Card balance: 3750 rub` — число получи через `getBalance()`."],
         hint="Раз поле `private`, из `main` нельзя написать `card.balance += amount` — Java не скомпилирует такую строку. "
              "Менять баланс можно только через `topUp`, а значит, каждая сумма обязательно пройдёт проверку.",
         solution=METRO_MAIN,
@@ -197,8 +197,8 @@ TASKS = [
                "перемещает лифт туда и возвращает `true`, иначе лифт остаётся на месте и метод возвращает `false`. "
                "Ещё добавь метод `int getFloor()`, который возвращает текущий этаж.",
                "В `main` создай лифт для дома из `top` этажей и для каждого номера из `requests` вызови `goTo`. Если вызов "
-               "вернул `true`, выведи строку вида `Едем на 5 этаж`, иначе — `Этажа 12 нет`. В конце выведи строку вида "
-               "`Лифт на 9 этаже` — номер получи через `getFloor()`."],
+               "вернул `true`, выведи строку вида `Going to floor 5`, иначе — `No floor 12`. В конце выведи строку вида "
+               "`Elevator on floor 9` — номер получи через `getFloor()`."],
         hint="Поля закрыты, поэтому `main` не может сам поставить лифт на этаж: `elevator.floor = 12` не скомпилируется. "
              "Единственный путь — метод `goTo`, и проверка в нём сработает при каждом вызове.",
         solution=ELEVATOR_MAIN,
@@ -233,8 +233,8 @@ TASKS = [
                "вычитает. После изменения каждый метод следит за границами: больше 100 становится 100, меньше 0 становится 0.",
                "Добавь метод `int getHealth()`, который возвращает здоровье.",
                "В `main` создай героя и пройди по `events`: для положительного числа вызови `heal`, для отрицательного — "
-               "`damage` с этим числом без минуса. После каждого события выведи строку вида `Здоровье: 70`.",
-               "В конце выведи `Герой выбыл`, если здоровье равно 0, иначе — `Герой в строю`."],
+               "`damage` с этим числом без минуса. После каждого события выведи строку вида `Health: 70`.",
+               "В конце выведи `Hero is out`, если здоровье равно 0, иначе — `Hero is still in`."],
         hint="Число без минуса — это `-events[i]`: минус перед отрицательным числом делает его положительным. А границы "
              "проверяй внутри методов: тогда никакой код снаружи класса не сможет сделать здоровье, например, 130.",
         solution=HERO_MAIN,

@@ -10,29 +10,29 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-ab-class-list", title="Список класса",
         given=[("String[]", "students")],
-        variants=[{"students": '{"Алиев", "Белова", "Воронин", "Галкина", "Дьяков"}'},
-                  {"students": '{"Андреева", "Борисов", "Ершова", "Жуков", "Зайцев", "Ильина"}'},
-                  {"students": '{"Карпов", "Лебедева", "Морозов", "Носова"}'}],
-        hidden=[{"students": '{"Орлов", "Петрова", "Руднев"}'},
-                {"students": '{"Агеев", "Быкова", "Власов", "Гусева", "Егоров", "Жарова", "Зотов", "Исаева"}'},
-                {"students": '{"Яковлев"}'},
-                {"students": '{"Сидорова", "Титов"}'}],
+        variants=[{"students": '{"Aliev", "Belova", "Dyakov", "Galkina", "Voronin"}'},
+                  {"students": '{"Andreeva", "Borisov", "Ershova", "Ilina", "Zaytsev", "Zhukov"}'},
+                  {"students": '{"Karpov", "Lebedeva", "Morozov", "Nosova"}'}],
+        hidden=[{"students": '{"Orlov", "Petrova", "Rudnev"}'},
+                {"students": '{"Ageev", "Bykova", "Egorov", "Guseva", "Isaeva", "Vlasov", "Zharova", "Zotov"}'},
+                {"students": '{"Yakovlev"}'},
+                {"students": '{"Sidorova", "Titov"}'}],
         intro="Классный руководитель записал фамилии учеников по алфавиту в массив `students`. Ему нужно узнать, "
               "сколько в классе учеников и кто стоит в списке последним.",
-        steps=["Выведи строку `Учеников в списке: …` — сколько элементов в массиве `students`.",
-               "Следующей строкой выведи `Последний по списку: …` — последний элемент массива.",
+        steps=["Выведи строку `Students on the list: …` — сколько элементов в массиве `students`.",
+               "Следующей строкой выведи `Last on the list: …` — последний элемент массива.",
                "Учеников может быть больше или меньше, чем в заготовке, поэтому не считай их вручную: и количество, "
                "и индекс последнего элемента получи из длины массива."],
         hint="Длину массива даёт `students.length` (без скобок: это не метод). Индексы начинаются с 0, "
              "поэтому у последнего элемента индекс на единицу меньше длины.",
-        solution='System.out.println("Учеников в списке: " + students.length);\n'
-                 'System.out.println("Последний по списку: " + students[students.length - 1]);',
+        solution='System.out.println("Students on the list: " + students.length);\n'
+                 'System.out.println("Last on the list: " + students[students.length - 1]);',
         wrong=[("путает количество элементов с последним индексом: учеников получается на одного меньше",
-                'System.out.println("Учеников в списке: " + (students.length - 1));\n'
-                'System.out.println("Последний по списку: " + students[students.length - 1]);'),
+                'System.out.println("Students on the list: " + (students.length - 1));\n'
+                'System.out.println("Last on the list: " + students[students.length - 1]);'),
                ("посчитал учеников в примере вручную и вывел готовое число",
-                'System.out.println("Учеников в списке: 5");\n'
-                'System.out.println("Последний по списку: " + students[students.length - 1]);')],
+                'System.out.println("Students on the list: 5");\n'
+                'System.out.println("Last on the list: " + students[students.length - 1]);')],
         constructs=["list"],
     ),
     JavaOutputTask(
@@ -46,35 +46,35 @@ TASKS = [
         steps=["Создай массив `int[] totals` длиной `max` — по одному элементу на каждую строку таблички.",
                "Заполни его циклом `for`: в элемент с индексом `i` запиши, сколько стоят `i + 1` порций.",
                "Вторым циклом `for` пройди по массиву `totals` и для каждого элемента выведи строку вида "
-               "`1 шт.: {price} руб.` — сначала число порций, потом их цена."],
+               "`1 pcs: {price} rub` — сначала число порций, потом их цена."],
         hint="Новый массив создают так: `new int[max]` — сразу после создания все его элементы равны 0. "
              "В элементе с индексом 0 хранится цена одной порции, с индексом 1 — двух: число порций на 1 больше индекса.",
         solution='int[] totals = new int[max];\nfor (int i = 0; i < totals.length; i++) {\n    totals[i] = price * (i + 1);\n}\n'
-                 'for (int i = 0; i < totals.length; i++) {\n    System.out.println((i + 1) + " шт.: " + totals[i] + " руб.");\n}',
+                 'for (int i = 0; i < totals.length; i++) {\n    System.out.println((i + 1) + " pcs: " + totals[i] + " rub");\n}',
         wrong=[("забыл прибавить 1: в первой строке оказывается цена нуля порций",
                 'int[] totals = new int[max];\nfor (int i = 0; i < totals.length; i++) {\n    totals[i] = price * i;\n}\n'
-                'for (int i = 0; i < totals.length; i++) {\n    System.out.println((i + 1) + " шт.: " + totals[i] + " руб.");\n}'),
+                'for (int i = 0; i < totals.length; i++) {\n    System.out.println((i + 1) + " pcs: " + totals[i] + " rub");\n}'),
                ("второй цикл идёт до length - 1: последняя строка таблички пропадает",
                 'int[] totals = new int[max];\nfor (int i = 0; i < totals.length; i++) {\n    totals[i] = price * (i + 1);\n}\n'
-                'for (int i = 0; i < totals.length - 1; i++) {\n    System.out.println((i + 1) + " шт.: " + totals[i] + " руб.");\n}')],
+                'for (int i = 0; i < totals.length - 1; i++) {\n    System.out.println((i + 1) + " pcs: " + totals[i] + " rub");\n}')],
         constructs=["list", "for"],
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-ab-book-stack", title="Стопка учебников",
         given=[("String[]", "books")],
-        variants=[{"books": '{"Алгебра", "Физика", "История", "Биология"}'},
-                  {"books": '{"Литература", "Химия", "География", "Английский язык", "Геометрия"}'},
-                  {"books": '{"Русский язык", "Информатика", "Обществознание"}'}],
-        hidden=[{"books": '{"Музыка", "ИЗО"}'},
-                {"books": '{"Атлас", "Словарь", "Задачник", "Сборник диктантов", "Хрестоматия", "Справочник"}'},
-                {"books": '{"Энциклопедия"}'}],
+        variants=[{"books": '{"Algebra", "Physics", "History", "Biology"}'},
+                  {"books": '{"Literature", "Chemistry", "Geography", "English", "Geometry"}'},
+                  {"books": '{"Russian", "Computer Science", "Social Studies"}'}],
+        hidden=[{"books": '{"Music", "Art"}'},
+                {"books": '{"Atlas", "Dictionary", "Problem Book", "Dictation Book", "Reader", "Handbook"}'},
+                {"books": '{"Encyclopedia"}'}],
         intro="Ты складывал учебники в стопку по одному в том порядке, в каком они записаны в массиве `books`: "
               "первый оказался в самом низу. Снимать учебники будут сверху, то есть в обратном порядке.",
         steps=["Создай новый массив `String[] order` такой же длины, как `books`.",
                "Заполни его циклом `for`: в `order[0]` должен попасть последний учебник из `books`, в `order[1]` — "
                "предпоследний и так далее.",
                "Вторым циклом выведи элементы `order` по одному в строке: номер (начиная с 1), точка, пробел и название, "
-               "например `1. Физика`"],
+               "например `1. Physics`"],
         hint="Посмотри на пары индексов: `order[0]` берёт учебник с индексом `books.length - 1`, `order[1]` — "
              "с индексом `books.length - 2`. Как индекс в `books` зависит от `i`?",
         solution='String[] order = new String[books.length];\nfor (int i = 0; i < books.length; i++) {\n'

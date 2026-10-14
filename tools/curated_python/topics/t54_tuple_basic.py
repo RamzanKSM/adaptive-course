@@ -15,22 +15,22 @@ TASKS = [
               "Размер картинки не должен случайно поменяться, поэтому для него и выбран кортеж.",
         steps=["Распакуй кортеж `size` одной строкой в две переменные: сначала ширина `width`, потом высота `height` — "
                "в кортеже они стоят именно в таком порядке.",
-               "Выведи строку вида `Размер: 500 на 300` — сначала ширина, потом высота.",
-               "Следующей строкой выведи `Фото горизонтальное`, если ширина больше высоты, `Фото вертикальное`, "
-               "если меньше, и `Фото квадратное`, если они равны."],
+               "Выведи строку вида `Size: 500 x 300` — сначала ширина, потом высота.",
+               "Следующей строкой выведи `Landscape photo`, если ширина больше высоты, `Portrait photo`, "
+               "если меньше, и `Square photo`, если они равны."],
         hint="Распаковка раскладывает элементы кортежа по переменным по порядку: после `a, b = (5, 9)` в `a` окажется 5, "
              "а в `b` — 9. Переменных слева должно быть ровно столько, сколько элементов в кортеже.",
-        solution='width, height = size\nprint(f"Размер: {width} на {height}")\nif width > height:\n'
-                 '    print("Фото горизонтальное")\nelif width < height:\n    print("Фото вертикальное")\nelse:\n'
-                 '    print("Фото квадратное")',
+        solution='width, height = size\nprint(f"Size: {width} x {height}")\nif width > height:\n'
+                 '    print("Landscape photo")\nelif width < height:\n    print("Portrait photo")\nelse:\n'
+                 '    print("Square photo")',
         wrong=[("распаковывает в обратном порядке — ширина и высота путаются",
-                'height, width = size\nprint(f"Размер: {width} на {height}")\nif width > height:\n'
-                '    print("Фото горизонтальное")\nelif width < height:\n    print("Фото вертикальное")\nelse:\n'
-                '    print("Фото квадратное")'),
+                'height, width = size\nprint(f"Size: {width} x {height}")\nif width > height:\n'
+                '    print("Landscape photo")\nelif width < height:\n    print("Portrait photo")\nelse:\n'
+                '    print("Square photo")'),
                ("печатает кортеж целиком вместо ширины и высоты",
-                'width, height = size\nprint(f"Размер: {size}")\nif width > height:\n'
-                '    print("Фото горизонтальное")\nelif width < height:\n    print("Фото вертикальное")\nelse:\n'
-                '    print("Фото квадратное")')],
+                'width, height = size\nprint(f"Size: {size}")\nif width > height:\n'
+                '    print("Landscape photo")\nelif width < height:\n    print("Portrait photo")\nelse:\n'
+                '    print("Square photo")')],
         must_use=[("re:(?m)^\\s*\\(?\\s*\\w+\\s*,\\s*\\w+\\s*\\)?\\s*=[^=]",
                    "Достань ширину и высоту распаковкой кортежа — одной строкой вида a, b = кортеж, без обращения по индексам.")],
     ),
@@ -63,29 +63,29 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=3, slug="py-tup-receipt", title="Чек из магазина",
         given=["cart"],
-        variants=[{"cart": '[("хлеб", 45, 2), ("молоко", 89, 1), ("яблоки", 120, 3)]'},
-                  {"cart": '[("тетрадь", 30, 5), ("ручка", 25, 4)]'},
-                  {"cart": '[("сок", 110, 2), ("печенье", 75, 1), ("бананы", 95, 2), ("вода", 40, 6)]'}],
-        hidden=[{"cart": '[("сыр", 300, 1)]'},
-                {"cart": '[("мыло", 60, 3), ("паста", 150, 2), ("губка", 20, 10), ("шампунь", 280, 1), ("крем", 199, 2)]'},
-                {"cart": '[("арбуз", 250, 1), ("дыня", 180, 2), ("вишня", 400, 1)]'}],
+        variants=[{"cart": '[("bread", 45, 2), ("milk", 89, 1), ("apples", 120, 3)]'},
+                  {"cart": '[("notebook", 30, 5), ("pen", 25, 4)]'},
+                  {"cart": '[("juice", 110, 2), ("cookies", 75, 1), ("bananas", 95, 2), ("water", 40, 6)]'}],
+        hidden=[{"cart": '[("cheese", 300, 1)]'},
+                {"cart": '[("soap", 60, 3), ("toothpaste", 150, 2), ("sponge", 20, 10), ("shampoo", 280, 1), ("cream", 199, 2)]'},
+                {"cart": '[("watermelon", 250, 1), ("melon", 180, 2), ("cherries", 400, 1)]'}],
         intro="Касса пробила покупки и записала их в список `cart`. Каждая покупка — кортеж из трёх значений: "
               "название товара, цена за одну штуку и количество. Нужно напечатать чек.",
         steps=["Пройди циклом `for` по списку `cart`. Каждый кортеж распакуй прямо в заголовке цикла в три переменные — "
                "в том же порядке, в котором значения стоят в кортеже.",
-               "Для каждой покупки выведи строку вида `чай: 2 шт., 600 руб.` — название, количество и стоимость покупки "
+               "Для каждой покупки выведи строку вида `tea: 2 pcs, 600 rub` — название, количество и стоимость покупки "
                "(цена за штуку, умноженная на количество).",
-               "После цикла выведи строку вида `Итого: 1000 руб.` с общей стоимостью всех покупок."],
+               "После цикла выведи строку вида `Total: 1000 rub` с общей стоимостью всех покупок."],
         hint="Распаковка работает и в заголовке цикла: `for a, b in [(1, 2), (3, 4)]:` на каждом шаге раскладывает "
              "очередной кортеж по переменным `a` и `b`. Общую сумму удобно копить в переменной, которая до цикла равна 0.",
         solution='total = 0\nfor name, price, count in cart:\n    cost = price * count\n'
-                 '    print(f"{name}: {count} шт., {cost} руб.")\n    total += cost\nprint(f"Итого: {total} руб.")',
+                 '    print(f"{name}: {count} pcs, {cost} rub")\n    total += cost\nprint(f"Total: {total} rub")',
         wrong=[("путает порядок при распаковке — цена и количество меняются местами",
                 'total = 0\nfor name, count, price in cart:\n    cost = price * count\n'
-                '    print(f"{name}: {count} шт., {cost} руб.")\n    total += cost\nprint(f"Итого: {total} руб.")'),
+                '    print(f"{name}: {count} pcs, {cost} rub")\n    total += cost\nprint(f"Total: {total} rub")'),
                ("в итог складывает цены за штуку и забывает про количество",
                 'total = 0\nfor name, price, count in cart:\n    cost = price * count\n'
-                '    print(f"{name}: {count} шт., {cost} руб.")\n    total += price\nprint(f"Итого: {total} руб.")')],
+                '    print(f"{name}: {count} pcs, {cost} rub")\n    total += price\nprint(f"Total: {total} rub")')],
         constructs=["for"],
         must_use=[("re:(?m)^\\s*(?:for\\s+)?\\(?\\s*\\w+\\s*,\\s*\\w+\\s*,\\s*\\w+\\s*\\)?\\s*(?:=[^=]|in\\b)",
                    "Распакуй каждый кортеж в три переменные — например, прямо в заголовке цикла: "

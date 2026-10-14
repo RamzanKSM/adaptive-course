@@ -15,11 +15,11 @@ def with_methods(main: str, methods: str) -> str:
 
 
 # ── 1. Бронь столика ──
-TABLE_MAIN = ('try {\n    checkGuests(guests);\n    System.out.println("Столик забронирован, гостей: " + guests);\n'
-              '} catch (IllegalArgumentException e) {\n    System.out.println("Отказ: " + e.getMessage());\n}')
+TABLE_MAIN = ('try {\n    checkGuests(guests);\n    System.out.println("Table booked, guests: " + guests);\n'
+              '} catch (IllegalArgumentException e) {\n    System.out.println("Refused: " + e.getMessage());\n}')
 TABLE_CHECK = '''static void checkGuests(int guests) {
     if (guests < 1 || guests > 8) {
-        throw new IllegalArgumentException("Столик бронируется на компанию от 1 до 8 человек");
+        throw new IllegalArgumentException("Tables are for groups of 1 to 8 people");
     }
 }'''
 TABLE_CHECKS = '''Method m = null;
@@ -35,14 +35,14 @@ try { m.invoke(null, 4); } catch (InvocationTargetException e) { need(false, "Д
 
 # ── 2. Отгрузка со склада ──
 SHIP_MAIN = ('try {\n    int left = ship(stock, order);\n'
-             '    System.out.println("Отгружено: " + order + " шт., осталось: " + left + " шт.");\n'
-             '} catch (IllegalArgumentException e) {\n    System.out.println("Отказ: " + e.getMessage());\n}')
+             '    System.out.println("Shipped: " + order + " pcs, left: " + left + " pcs");\n'
+             '} catch (IllegalArgumentException e) {\n    System.out.println("Refused: " + e.getMessage());\n}')
 SHIP_METHOD = '''static int ship(int stock, int order) {
     if (order < 1) {
-        throw new IllegalArgumentException("В заказе должна быть хотя бы одна штука");
+        throw new IllegalArgumentException("An order needs at least one item");
     }
     if (order > stock) {
-        throw new IllegalArgumentException("На складе только " + stock + " шт.");
+        throw new IllegalArgumentException("Only " + stock + " pcs in stock");
     }
     return stock - order;
 }'''
@@ -69,15 +69,15 @@ THERMOSTAT = '''class Thermostat {
 
     void setTemperature(int value) {
         if (value < 10 || value > 30) {
-            throw new IllegalArgumentException("Нельзя поставить " + value + ": допустимо от 10 до 30");
+            throw new IllegalArgumentException("Cannot set " + value + ": allowed from 10 to 30");
         }
         temperature = value;
     }
 }'''
 THERMO_MAIN = ('Thermostat thermostat = new Thermostat();\nfor (int value : requests) {\n    try {\n'
-               '        thermostat.setTemperature(value);\n        System.out.println("Новая температура: " + value);\n'
+               '        thermostat.setTemperature(value);\n        System.out.println("New temperature: " + value);\n'
                '    } catch (IllegalArgumentException e) {\n        System.out.println(e.getMessage());\n    }\n}\n'
-               'System.out.println("Итоговая температура: " + thermostat.getTemperature());')
+               'System.out.println("Final temperature: " + thermostat.getTemperature());')
 THERMO_CHECKS = '''Class<?> c = cls("Thermostat");
 need(c != null, "Создай класс Thermostat: он хранит температуру и сам проверяет новые значения");
 Method set = null;
@@ -103,10 +103,10 @@ TASKS = [
         intro="Кафе бронирует столики на компанию от 1 до 8 человек. Сколько гостей придёт, записано в поле `guests`. "
               "Проверку вынеси в отдельный метод: если число не подходит, он должен сообщить об этом исключением.",
         steps=["Добавь в класс `Solution` метод `static void checkGuests(int guests)`. Если гостей меньше 1 или больше 8, "
-               "он выбрасывает исключение: `throw new IllegalArgumentException(\"Столик бронируется на компанию от 1 до 8 человек\");`",
+               "он выбрасывает исключение: `throw new IllegalArgumentException(\"Tables are for groups of 1 to 8 people\");`",
                "В `main` в блоке `try` вызови `checkGuests(guests)`, а следующей строкой выведи "
-               "`Столик забронирован, гостей: 4` (число из `guests`).",
-               "В блоке `catch (IllegalArgumentException e)` выведи `Отказ: ` и текст исключения — его возвращает "
+               "`Table booked, guests: 4` (число из `guests`).",
+               "В блоке `catch (IllegalArgumentException e)` выведи `Refused: ` и текст исключения — его возвращает "
                "`e.getMessage()`."],
         hint="`throw` прерывает метод так же, как ошибка: строки после вызова `checkGuests` в `try` пропускаются, "
              "и Java переходит в `catch`. Текст, который ты передал в `new IllegalArgumentException(...)`, "
@@ -115,9 +115,9 @@ TASKS = [
         wrong=[("строгая граница guests >= 8 — компании ровно из 8 человек отказывают",
                 with_methods(TABLE_MAIN, TABLE_CHECK.replace("guests > 8", "guests >= 8"))),
                ("печатает подтверждение до проверки — при отказе выводятся обе строки",
-                with_methods('try {\n    System.out.println("Столик забронирован, гостей: " + guests);\n'
+                with_methods('try {\n    System.out.println("Table booked, guests: " + guests);\n'
                              '    checkGuests(guests);\n} catch (IllegalArgumentException e) {\n'
-                             '    System.out.println("Отказ: " + e.getMessage());\n}', TABLE_CHECK))],
+                             '    System.out.println("Refused: " + e.getMessage());\n}', TABLE_CHECK))],
         constructs=["try", "function", "if"],
         checks=TABLE_CHECKS,
     ),
@@ -132,18 +132,18 @@ TASKS = [
         steps=["Добавь в класс `Solution` метод `static int ship(int stock, int order)`, который возвращает, сколько "
                "штук останется на складе после отгрузки.",
                "Если `order` меньше 1, метод выбрасывает `IllegalArgumentException` с сообщением "
-               "`В заказе должна быть хотя бы одна штука`.",
+               "`An order needs at least one item`.",
                "Если `order` больше `stock`, метод выбрасывает `IllegalArgumentException` с сообщением "
-               "`На складе только 12 шт.` — с числом из `stock`.",
-               "В `main` в блоке `try` вызови `ship(stock, order)` и выведи `Отгружено: 15 шт., осталось: 25 шт.`, "
-               "а в `catch` выведи `Отказ: ` и сообщение исключения."],
+               "`Only 12 pcs in stock` — с числом из `stock`.",
+               "В `main` в блоке `try` вызови `ship(stock, order)` и выведи `Shipped: 15 pcs, left: 25 pcs`, "
+               "а в `catch` выведи `Refused: ` и сообщение исключения."],
         hint="Сообщение исключения собирается так же, как строка для `println`, — из текста и чисел через `+`, "
              "а в `catch` его отдаёт `e.getMessage()`. Так одна строка `catch` напечатает правильную причину для обоих отказов.",
         solution=with_methods(SHIP_MAIN, SHIP_METHOD),
         wrong=[("строгая граница order >= stock — нельзя забрать всё до последней штуки",
                 with_methods(SHIP_MAIN, SHIP_METHOD.replace("order > stock", "order >= stock"))),
                ("в catch печатает одну и ту же фразу вместо e.getMessage() — причина отказа теряется",
-                with_methods(SHIP_MAIN.replace('"Отказ: " + e.getMessage()', '"Отказ: На складе только " + stock + " шт."'),
+                with_methods(SHIP_MAIN.replace('"Refused: " + e.getMessage()', '"Refused: Only " + stock + " pcs in stock"'),
                              SHIP_METHOD))],
         constructs=["try", "function", "if"],
         checks=SHIP_CHECKS,
@@ -157,11 +157,11 @@ TASKS = [
               "в массиве `requests`, но термостат умеет держать температуру только от 10 до 30 градусов.",
         steps=["Создай класс `Thermostat` с приватным полем `temperature`, равным `20`, и методом `int getTemperature()`.",
                "Добавь в него метод `void setTemperature(int value)`: если `value` меньше 10 или больше 30, он выбрасывает "
-               "`IllegalArgumentException` с сообщением `Нельзя поставить 35: допустимо от 10 до 30` (с числом из `value`), "
+               "`IllegalArgumentException` с сообщением `Cannot set 35: allowed from 10 to 30` (с числом из `value`), "
                "а иначе запоминает новую температуру.",
                "В `main` создай один термостат и для каждой команды из `requests` в блоке `try` вызови `setTemperature` "
-               "и выведи `Новая температура: 22`; в `catch` выведи только сообщение исключения.",
-               "После всех команд выведи `Итоговая температура: 18` — температуру, которую держит термостат."],
+               "и выведи `New temperature: 22`; в `catch` выведи только сообщение исключения.",
+               "После всех команд выведи `Final temperature: 18` — температуру, которую держит термостат."],
         hint="Проверяй значение до того, как записать его в поле: `throw` сразу прерывает метод, и неподходящая "
              "температура так и не попадёт в термостат.",
         solution=THERMO_MAIN,
@@ -173,9 +173,9 @@ TASKS = [
                     "        }\n        temperature = value;\n    }", "        }\n    }")),
                ("try вокруг всего цикла — после первой неподходящей команды остальные не выполняются",
                 'Thermostat thermostat = new Thermostat();\ntry {\n    for (int value : requests) {\n'
-                '        thermostat.setTemperature(value);\n        System.out.println("Новая температура: " + value);\n'
+                '        thermostat.setTemperature(value);\n        System.out.println("New temperature: " + value);\n'
                 '    }\n} catch (IllegalArgumentException e) {\n    System.out.println(e.getMessage());\n}\n'
-                'System.out.println("Итоговая температура: " + thermostat.getTemperature());')],
+                'System.out.println("Final temperature: " + thermostat.getTemperature());')],
         constructs=["try", "class"],
         checks=THERMO_CHECKS,
     ),

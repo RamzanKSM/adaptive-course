@@ -14,46 +14,46 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-init-new-hero", title="Новый герой",
         given=["name", "health"],
-        variants=[{"name": '"Лина"', "health": "80"}, {"name": '"Гром"', "health": "120"}, {"name": '"Искра"', "health": "95"}],
-        hidden=[{"name": '"Тень"', "health": "60"}, {"name": '"Буря"', "health": "150"}, {"name": '"Ёж"', "health": "100"}],
+        variants=[{"name": '"Lina"', "health": "80"}, {"name": '"Grom"', "health": "120"}, {"name": '"Iskra"', "health": "95"}],
+        hidden=[{"name": '"Shadow"', "health": "60"}, {"name": '"Storm"', "health": "150"}, {"name": '"Hedgehog"', "health": "100"}],
         intro="В игре при создании персонажа игрок выбирает имя и здоровье, а уровень и золото у всех новичков одинаковые: "
               "первый уровень и пустой кошелёк. Всё это должен подготовить метод `__init__`.",
         steps=["Создай класс `Hero` с методом `__init__(self, name, health)`. Сохрани имя и здоровье в атрибуты "
                "`self.name` и `self.health`, а ещё задай стартовые значения, которые при создании не передаются: "
                "`self.level = 1` и `self.gold = 0`.",
-               "Последней строкой внутри `__init__` выведи строку вида `Герой Лина готов к игре` — только вместо «Лина» "
+               "Последней строкой внутри `__init__` выведи строку вида `Hero Lina is ready` — только вместо «Lina» "
                "имя из параметра `name`.",
                "Создай героя: `hero = Hero(name, health)`. Отдельно вызывать `__init__` не нужно.",
-               "Выведи строку вида `Лина: уровень 1, здоровье 80, золото 0` — все значения бери из атрибутов объекта `hero`."],
+               "Выведи строку вида `Lina: level 1, health 80, gold 0` — все значения бери из атрибутов объекта `hero`."],
         hint="`__init__` срабатывает сам в момент `Hero(name, health)`: Python создаёт пустой объект, передаёт его "
              "в `__init__` как `self`, а остальные аргументы — по порядку в `name` и `health`. "
              "Если вызвать `__init__` ещё раз вручную, он выполнится второй раз.",
         solution='class Hero:\n    def __init__(self, name, health):\n        self.name = name\n        self.health = health\n'
-                 '        self.level = 1\n        self.gold = 0\n        print(f"Герой {name} готов к игре")\n\n\n'
+                 '        self.level = 1\n        self.gold = 0\n        print(f"Hero {name} is ready")\n\n\n'
                  'hero = Hero(name, health)\n'
-                 'print(f"{hero.name}: уровень {hero.level}, здоровье {hero.health}, золото {hero.gold}")',
+                 'print(f"{hero.name}: level {hero.level}, health {hero.health}, gold {hero.gold}")',
         wrong=[("вызывает __init__ ещё раз вручную — приветствие печатается дважды",
                 'class Hero:\n    def __init__(self, name, health):\n        self.name = name\n        self.health = health\n'
-                '        self.level = 1\n        self.gold = 0\n        print(f"Герой {name} готов к игре")\n\n\n'
+                '        self.level = 1\n        self.gold = 0\n        print(f"Hero {name} is ready")\n\n\n'
                 'hero = Hero(name, health)\nhero.__init__(name, health)\n'
-                'print(f"{hero.name}: уровень {hero.level}, здоровье {hero.health}, золото {hero.gold}")'),
+                'print(f"{hero.name}: level {hero.level}, health {hero.health}, gold {hero.gold}")'),
                ("записывает здоровье числом 100 вместо параметра health — у всех героев одинаковое здоровье",
                 'class Hero:\n    def __init__(self, name, health):\n        self.name = name\n        self.health = 100\n'
-                '        self.level = 1\n        self.gold = 0\n        print(f"Герой {name} готов к игре")\n\n\n'
+                '        self.level = 1\n        self.gold = 0\n        print(f"Hero {name} is ready")\n\n\n'
                 'hero = Hero(name, health)\n'
-                'print(f"{hero.name}: уровень {hero.level}, здоровье {hero.health}, золото {hero.gold}")')],
+                'print(f"{hero.name}: level {hero.level}, health {hero.health}, gold {hero.gold}")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_INIT],
     ),
     OutputTask(
         skill=SKILL, difficulty=2, slug="py-init-table-booking", title="Бронь столика",
         given=["name1", "name2", "guests2"],
-        variants=[{"name1": '"Анна"', "name2": '"Игорь"', "guests2": "5"},
-                  {"name1": '"Марат"', "name2": '"Ольга"', "guests2": "4"},
-                  {"name1": '"Света"', "name2": '"Пётр"', "guests2": "8"}],
-        hidden=[{"name1": '"Юля"', "name2": '"Денис"', "guests2": "3"},
-                {"name1": '"Ахмед"', "name2": '"Нина"', "guests2": "1"},
-                {"name1": '"Лев"', "name2": '"Кира"', "guests2": "6"}],
+        variants=[{"name1": '"Anna"', "name2": '"Igor"', "guests2": "5"},
+                  {"name1": '"Marat"', "name2": '"Olga"', "guests2": "4"},
+                  {"name1": '"Sveta"', "name2": '"Pyotr"', "guests2": "8"}],
+        hidden=[{"name1": '"Yulya"', "name2": '"Denis"', "guests2": "3"},
+                {"name1": '"Akhmed"', "name2": '"Nina"', "guests2": "1"},
+                {"name1": '"Lev"', "name2": '"Kira"', "guests2": "6"}],
         intro="В ресторане чаще всего бронируют столик на двоих, поэтому при брони число гостей можно не называть — "
               "тогда их считается 2. Сегодня позвонили два человека: `name1` не назвал число гостей, "
               "а `name2` сказал, что их будет `guests2`.",
@@ -62,24 +62,24 @@ TASKS = [
                "в атрибуты `self.name` и `self.guests`.",
                "Создай первую бронь, передав только имя: `booking1 = Booking(name1)`. Вторую — с именем и числом гостей: "
                "`booking2 = Booking(name2, guests2)`.",
-               "Для каждой брони выведи строку вида `Бронь на имя Анна: гостей 2` — сначала для первой, потом для второй."],
+               "Для каждой брони выведи строку вида `Booking for Anna, guests: 2` — сначала для первой, потом для второй."],
         hint="Значения по умолчанию у `__init__` работают так же, как у обычной функции: если аргумент не передали, "
              "параметр получает значение по умолчанию, а если передали — то, что передали. Сохранять в атрибут "
              "нужно именно параметр `guests`, а не число 2.",
         solution='class Booking:\n    def __init__(self, name, guests=2):\n        self.name = name\n        self.guests = guests\n\n\n'
                  'booking1 = Booking(name1)\nbooking2 = Booking(name2, guests2)\n'
-                 'print(f"Бронь на имя {booking1.name}: гостей {booking1.guests}")\n'
-                 'print(f"Бронь на имя {booking2.name}: гостей {booking2.guests}")',
+                 'print(f"Booking for {booking1.name}, guests: {booking1.guests}")\n'
+                 'print(f"Booking for {booking2.name}, guests: {booking2.guests}")',
         wrong=[("в __init__ всегда записывает 2 гостя, не глядя на параметр",
                 'class Booking:\n    def __init__(self, name, guests=2):\n        self.name = name\n        self.guests = 2\n\n\n'
                 'booking1 = Booking(name1)\nbooking2 = Booking(name2, guests2)\n'
-                'print(f"Бронь на имя {booking1.name}: гостей {booking1.guests}")\n'
-                'print(f"Бронь на имя {booking2.name}: гостей {booking2.guests}")'),
+                'print(f"Booking for {booking1.name}, guests: {booking1.guests}")\n'
+                'print(f"Booking for {booking2.name}, guests: {booking2.guests}")'),
                ("поставил значением по умолчанию 1 гостя вместо 2",
                 'class Booking:\n    def __init__(self, name, guests=1):\n        self.name = name\n        self.guests = guests\n\n\n'
                 'booking1 = Booking(name1)\nbooking2 = Booking(name2, guests2)\n'
-                'print(f"Бронь на имя {booking1.name}: гостей {booking1.guests}")\n'
-                'print(f"Бронь на имя {booking2.name}: гостей {booking2.guests}")')],
+                'print(f"Booking for {booking1.name}, guests: {booking1.guests}")\n'
+                'print(f"Booking for {booking2.name}, guests: {booking2.guests}")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_INIT,
                   ("re:def __init__\\([^)]*guests\\s*=\\s*2",
@@ -96,21 +96,21 @@ TASKS = [
                "раскладывает его на два атрибута: `self.minutes` — сколько полных минут, "
                "`self.seconds` — сколько секунд остаётся сверх полных минут.",
                "Пройди циклом по списку `durations` и для каждого числа создай объект `Timer`.",
-               "Для каждого таймера выведи строку вида `Таймер 1: 2 мин 5 сек` — номер таймера по порядку, начиная с 1, "
+               "Для каждого таймера выведи строку вида `Timer 1: 2 min 5 sec` — номер таймера по порядку, начиная с 1, "
                "а потом минуты и секунды из атрибутов объекта."],
         hint="В `__init__` можно не только сохранять параметры, но и вычислять из них новые атрибуты. "
              "Полные минуты даёт целочисленное деление `total // 60`, а остаток секунд — `total % 60`.",
         solution='class Timer:\n    def __init__(self, total):\n        self.minutes = total // 60\n        self.seconds = total % 60\n\n\n'
                  'number = 1\nfor total in durations:\n    timer = Timer(total)\n'
-                 '    print(f"Таймер {number}: {timer.minutes} мин {timer.seconds} сек")\n    number += 1',
+                 '    print(f"Timer {number}: {timer.minutes} min {timer.seconds} sec")\n    number += 1',
         wrong=[("сохраняет в seconds всё время целиком, а не остаток",
                 'class Timer:\n    def __init__(self, total):\n        self.minutes = total // 60\n        self.seconds = total\n\n\n'
                 'number = 1\nfor total in durations:\n    timer = Timer(total)\n'
-                '    print(f"Таймер {number}: {timer.minutes} мин {timer.seconds} сек")\n    number += 1'),
+                '    print(f"Timer {number}: {timer.minutes} min {timer.seconds} sec")\n    number += 1'),
                ("делит обычным делением — минуты получаются дробными",
                 'class Timer:\n    def __init__(self, total):\n        self.minutes = total / 60\n        self.seconds = total % 60\n\n\n'
                 'number = 1\nfor total in durations:\n    timer = Timer(total)\n'
-                '    print(f"Таймер {number}: {timer.minutes} мин {timer.seconds} сек")\n    number += 1')],
+                '    print(f"Timer {number}: {timer.minutes} min {timer.seconds} sec")\n    number += 1')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_INIT],
     ),

@@ -73,62 +73,62 @@ TASKS = [
         hidden=[{"day": "1"}, {"day": "2"}, {"day": "4"}, {"day": "7"}],
         intro="После уроков в школе работают кружки, и у каждого дня недели — свой. "
               "Номер дня недели (1 — понедельник, 7 — воскресенье) записан в поле `day`.",
-        steps=["Сделай `switch` по `day` и выведи название кружка: 1 — `Шахматы`, 2 — `Рисование`, 3 — `Плавание`, "
-               "4 — `Робототехника`, 5 — `Футбол`.",
-               "Для любого другого номера (ветка `default`) выведи `Кружков нет, отдыхаем`.",
+        steps=["Сделай `switch` по `day` и выведи название кружка: 1 — `Chess`, 2 — `Drawing`, 3 — `Swimming`, "
+               "4 — `Robotics`, 5 — `Football`.",
+               "Для любого другого номера (ветка `default`) выведи `No clubs, rest day`.",
                "Программа должна выводить ровно одну строку."],
         hint="Заканчивай каждую ветку `case` командой `break`: без неё Java продолжит выполнять следующие ветки "
              "и выведет лишние строки.",
         solution="""switch (day) {
     case 1:
-        System.out.println("Шахматы");
+        System.out.println("Chess");
         break;
     case 2:
-        System.out.println("Рисование");
+        System.out.println("Drawing");
         break;
     case 3:
-        System.out.println("Плавание");
+        System.out.println("Swimming");
         break;
     case 4:
-        System.out.println("Робототехника");
+        System.out.println("Robotics");
         break;
     case 5:
-        System.out.println("Футбол");
+        System.out.println("Football");
         break;
     default:
-        System.out.println("Кружков нет, отдыхаем");
+        System.out.println("No clubs, rest day");
 }""",
         wrong=[("нет break: после нужного кружка печатаются все следующие",
                 """switch (day) {
     case 1:
-        System.out.println("Шахматы");
+        System.out.println("Chess");
     case 2:
-        System.out.println("Рисование");
+        System.out.println("Drawing");
     case 3:
-        System.out.println("Плавание");
+        System.out.println("Swimming");
     case 4:
-        System.out.println("Робототехника");
+        System.out.println("Robotics");
     case 5:
-        System.out.println("Футбол");
+        System.out.println("Football");
     default:
-        System.out.println("Кружков нет, отдыхаем");
+        System.out.println("No clubs, rest day");
 }"""),
                ("нет ветки default: в выходные ничего не выводится",
                 """switch (day) {
     case 1:
-        System.out.println("Шахматы");
+        System.out.println("Chess");
         break;
     case 2:
-        System.out.println("Рисование");
+        System.out.println("Drawing");
         break;
     case 3:
-        System.out.println("Плавание");
+        System.out.println("Swimming");
         break;
     case 4:
-        System.out.println("Робототехника");
+        System.out.println("Robotics");
         break;
     case 5:
-        System.out.println("Футбол");
+        System.out.println("Football");
         break;
 }""")],
         checks=uses_switch("day"),
@@ -141,60 +141,60 @@ TASKS = [
                 {"month": "9"}, {"month": "11"}, {"month": "13"}, {"month": "0"}],
         intro="Приложение-календарь показывает время года по номеру месяца. Номер месяца записан в поле `month`: "
               "1 — январь, 12 — декабрь.",
-        steps=["Сделай `switch` по `month` и выведи время года: для 12, 1 и 2 — `Зима`, для 3, 4 и 5 — `Весна`, "
-               "для 6, 7 и 8 — `Лето`, для 9, 10 и 11 — `Осень`.",
-               "Если месяца с таким номером нет (ветка `default`), выведи `Нет месяца с номером …`, подставив `month`.",
+        steps=["Сделай `switch` по `month` и выведи время года: для 12, 1 и 2 — `Winter`, для 3, 4 и 5 — `Spring`, "
+               "для 6, 7 и 8 — `Summer`, для 9, 10 и 11 — `Autumn`.",
+               "Если месяца с таким номером нет (ветка `default`), выведи `No month number …`, подставив `month`.",
                "Программа должна выводить ровно одну строку."],
         hint="Несколько значений могут вести в одну ветку: их можно перечислить через запятую — `case 3, 4, 5:`. "
              "Тогда каждое время года — это одна ветка со своим `break`.",
         solution="""switch (month) {
     case 12, 1, 2:
-        System.out.println("Зима");
+        System.out.println("Winter");
         break;
     case 3, 4, 5:
-        System.out.println("Весна");
+        System.out.println("Spring");
         break;
     case 6, 7, 8:
-        System.out.println("Лето");
+        System.out.println("Summer");
         break;
     case 9, 10, 11:
-        System.out.println("Осень");
+        System.out.println("Autumn");
         break;
     default:
-        System.out.println("Нет месяца с номером " + month);
+        System.out.println("No month number " + month);
 }""",
         wrong=[("декабрь забыт: для 12 выводится, что такого месяца нет",
                 """switch (month) {
     case 1, 2:
-        System.out.println("Зима");
+        System.out.println("Winter");
         break;
     case 3, 4, 5:
-        System.out.println("Весна");
+        System.out.println("Spring");
         break;
     case 6, 7, 8:
-        System.out.println("Лето");
+        System.out.println("Summer");
         break;
     case 9, 10, 11:
-        System.out.println("Осень");
+        System.out.println("Autumn");
         break;
     default:
-        System.out.println("Нет месяца с номером " + month);
+        System.out.println("No month number " + month);
 }"""),
-               ("нет break после «Лето»: летние месяцы печатают ещё и «Осень»",
+               ("нет break после «Summer»: летние месяцы печатают ещё и «Autumn»",
                 """switch (month) {
     case 12, 1, 2:
-        System.out.println("Зима");
+        System.out.println("Winter");
         break;
     case 3, 4, 5:
-        System.out.println("Весна");
+        System.out.println("Spring");
         break;
     case 6, 7, 8:
-        System.out.println("Лето");
+        System.out.println("Summer");
     case 9, 10, 11:
-        System.out.println("Осень");
+        System.out.println("Autumn");
         break;
     default:
-        System.out.println("Нет месяца с номером " + month);
+        System.out.println("No month number " + month);
 }""")],
         checks=uses_switch("month"),
     ),
@@ -208,8 +208,8 @@ TASKS = [
               "`'+'`, `'-'`, `'*'` или `'/'`.",
         steps=["Сделай `switch` по `op` и для каждого из четырёх знаков выведи пример с ответом: число `a`, пробел, "
                "знак, пробел, число `b`, затем знак `=` с пробелами по бокам и результат, например `7 * 3 = 21`.",
-               "Деление целочисленное: `a / b`. Но если делить нужно на 0, вместо примера выведи `На ноль делить нельзя`.",
-               "Для любого другого знака (ветка `default`) выведи `Неизвестное действие`."],
+               "Деление целочисленное: `a / b`. Но если делить нужно на 0, вместо примера выведи `You cannot divide by zero`.",
+               "Для любого другого знака (ветка `default`) выведи `Unknown operation`."],
         hint="Внутри ветки `case '/'` можно написать обычный `if`. А чтобы числа в ответе сложились, а не склеились "
              "в строку, возьми действие в скобки: `\" = \" + (a + b)`.",
         solution="""switch (op) {
@@ -224,13 +224,13 @@ TASKS = [
         break;
     case '/':
         if (b == 0) {
-            System.out.println("На ноль делить нельзя");
+            System.out.println("You cannot divide by zero");
         } else {
             System.out.println(a + " / " + b + " = " + (a / b));
         }
         break;
     default:
-        System.out.println("Неизвестное действие");
+        System.out.println("Unknown operation");
 }""",
         wrong=[("нет break после '*': при умножении выводится ещё и деление",
                 """switch (op) {
@@ -244,13 +244,13 @@ TASKS = [
         System.out.println(a + " * " + b + " = " + (a * b));
     case '/':
         if (b == 0) {
-            System.out.println("На ноль делить нельзя");
+            System.out.println("You cannot divide by zero");
         } else {
             System.out.println(a + " / " + b + " = " + (a / b));
         }
         break;
     default:
-        System.out.println("Неизвестное действие");
+        System.out.println("Unknown operation");
 }"""),
                ("сумма без скобок: числа склеиваются в строку (4 + 5 = 45)",
                 """switch (op) {
@@ -265,13 +265,13 @@ TASKS = [
         break;
     case '/':
         if (b == 0) {
-            System.out.println("На ноль делить нельзя");
+            System.out.println("You cannot divide by zero");
         } else {
             System.out.println(a + " / " + b + " = " + (a / b));
         }
         break;
     default:
-        System.out.println("Неизвестное действие");
+        System.out.println("Unknown operation");
 }""")],
         checks=uses_switch("op"),
     ),

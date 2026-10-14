@@ -53,7 +53,7 @@ TEMPERATURE = '''class Temperature {
 }'''
 
 TEMPERATURE_MAIN = '''for (int i = 0; i < celsius.length; i++) {
-    System.out.println(celsius[i] + " по Цельсию = " + Temperature.toFahrenheit(celsius[i]) + " по Фаренгейту");
+    System.out.println(celsius[i] + " C = " + Temperature.toFahrenheit(celsius[i]) + " F");
 }'''
 
 # ───────── Exhibition visitors ─────────
@@ -72,25 +72,25 @@ VISITOR = '''class Visitor {
 
 VISITOR_MAIN = '''for (int i = 0; i < names.length; i++) {
     Visitor visitor = new Visitor(names[i]);
-    System.out.println("Посетитель №" + visitor.number + ": " + visitor.name);
+    System.out.println("Visitor #" + visitor.number + ": " + visitor.name);
 }
-System.out.println("Всего посетителей: " + Visitor.count);'''
+System.out.println("Total visitors: " + Visitor.count);'''
 
 VISITOR_OWN_COUNTER = '''int total = 0;
 for (int i = 0; i < names.length; i++) {
     Visitor visitor = new Visitor(names[i]);
-    System.out.println("Посетитель №" + visitor.number + ": " + visitor.name);
+    System.out.println("Visitor #" + visitor.number + ": " + visitor.name);
     total = visitor.count;
 }
-System.out.println("Всего посетителей: " + total);'''
+System.out.println("Total visitors: " + total);'''
 
 VISITOR_BEHAVIOUR = '''{ setStatic("Visitor", "count", 0);
   Constructor<?> k = c.getDeclaredConstructor(String.class); k.setAccessible(true);
-  Object a = null, b = null; try { a = k.newInstance("А"); b = k.newInstance("Б"); } catch (Exception e) { }
+  Object a = null, b = null; try { a = k.newInstance("A"); b = k.newInstance("B"); } catch (Exception e) { }
   Field fc = c.getDeclaredField("count"); fc.setAccessible(true);
   Field fnum = c.getDeclaredField("number"); fnum.setAccessible(true);
   Field fname = c.getDeclaredField("name"); fname.setAccessible(true);
-  need(b != null && Objects.equals(fc.get(null), 2) && Objects.equals(fnum.get(a), 1) && Objects.equals(fnum.get(b), 2) && Objects.equals(fname.get(b), "Б"),
+  need(b != null && Objects.equals(fc.get(null), 2) && Objects.equals(fnum.get(a), 1) && Objects.equals(fnum.get(b), 2) && Objects.equals(fname.get(b), "B"),
        "Конструктор Visitor должен увеличивать общий счётчик count на 1, записывать его новое значение в number и сохранять имя");
   setStatic("Visitor", "count", 0); }
 '''
@@ -116,26 +116,26 @@ EXAM_MAIN = '''Exam[] exams = new Exam[names.length];
 for (int i = 0; i < names.length; i++) {
     exams[i] = new Exam(names[i], scores[i]);
 }
-System.out.println("Порог: " + Exam.passScore);
+System.out.println("Pass mark: " + Exam.passScore);
 int passed = 0;
 for (int i = 0; i < exams.length; i++) {
     if (exams[i].passed()) {
-        System.out.println(exams[i].student + ": " + exams[i].score + ", зачёт");
+        System.out.println(exams[i].student + ": " + exams[i].score + ", pass");
         passed++;
     } else {
-        System.out.println(exams[i].student + ": " + exams[i].score + ", незачёт");
+        System.out.println(exams[i].student + ": " + exams[i].score + ", fail");
     }
 }
-System.out.println("Сдали: " + passed);
+System.out.println("Passed: " + passed);
 Exam.passScore = newPass;
-System.out.println("Новый порог: " + Exam.passScore);
+System.out.println("New pass mark: " + Exam.passScore);
 passed = 0;
 for (int i = 0; i < exams.length; i++) {
     if (exams[i].passed()) {
         passed++;
     }
 }
-System.out.println("Сдали: " + passed);'''
+System.out.println("Passed: " + passed);'''
 
 TASKS = [
     JavaOutputTask(
@@ -150,7 +150,7 @@ TASKS = [
                "`static int toFahrenheit(int celsius)`. Он возвращает `celsius * 9 / 5 + 32` — все температуры в задаче "
                "делятся на 5, поэтому результат получается целым.",
                "В `main` не создавай объект `Temperature`: вызывай метод через имя класса — `Temperature.toFahrenheit(...)`.",
-               "Для каждой температуры из массива `celsius` выведи строку вида `20 по Цельсию = 68 по Фаренгейту`."],
+               "Для каждой температуры из массива `celsius` выведи строку вида `20 C = 68 F`."],
         hint="Методы класса `Solution` ты уже вызывал без всякого объекта — потому что они `static`. С методом другого "
              "класса всё так же, только перед именем метода пишут имя класса и точку.",
         solution=TEMPERATURE_MAIN,
@@ -167,10 +167,10 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-static-visitor-counter", title="Браслеты на выставке",
         given=[("String[]", "names")],
-        variants=[{"names": '{"Аня", "Борис", "Вика"}'},
-                  {"names": '{"Глеб", "Дина"}'},
-                  {"names": '{"Егор", "Жанна", "Захар", "Ира", "Кира"}'}],
-        hidden=[{"names": '{"Лена"}'}, {"names": "{}"}, {"names": '{"Марк", "Нина", "Олег", "Поля"}'}],
+        variants=[{"names": '{"Anya", "Boris", "Vika"}'},
+                  {"names": '{"Gleb", "Dina"}'},
+                  {"names": '{"Egor", "Zhanna", "Zakhar", "Ira", "Kira"}'}],
+        hidden=[{"names": '{"Lena"}'}, {"names": "{}"}, {"names": '{"Mark", "Nina", "Oleg", "Polya"}'}],
         intro="На входе на выставку каждому гостю выдают браслет с номером: первый гость получает №1, второй — №2 и так далее. "
               "Номер берётся из общего счётчика, который один на всех гостей, — такое поле делают статическим. Имена гостей "
               "в порядке прихода записаны в массиве `names`.",
@@ -178,9 +178,9 @@ TASKS = [
                "и статическим полем `static int count = 0` — общим счётчиком гостей.",
                "Добавь конструктор `Visitor(String name)`: он увеличивает `count` на 1, записывает новое значение счётчика "
                "в поле `number` этого гостя и сохраняет имя.",
-               "В `main` для каждого имени из `names` создай `new Visitor(...)` и выведи строку вида `Посетитель №1: Аня` — "
+               "В `main` для каждого имени из `names` создай `new Visitor(...)` и выведи строку вида `Visitor #1: Anya` — "
                "с полями этого объекта.",
-               "Последней строкой выведи строку вида `Всего посетителей: 3` со значением счётчика, прочитанным через имя "
+               "Последней строкой выведи строку вида `Total visitors: 3` со значением счётчика, прочитанным через имя "
                "класса: `Visitor.count`."],
         hint="Обычное поле у каждого объекта своё, а статическое — одно на весь класс. Поэтому `count` не начинается "
              "заново с каждым новым гостем, а продолжает расти, и следующий гость получает следующий номер.",
@@ -202,32 +202,32 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-static-pass-score", title="Проходной балл",
         given=[("String[]", "names"), ("int[]", "scores"), ("int", "newPass")],
-        variants=[{"names": '{"Аня", "Борис", "Вика"}', "scores": "{72, 55, 60}", "newPass": "70"},
-                  {"names": '{"Глеб", "Дина", "Егор", "Женя"}', "scores": "{90, 64, 59, 75}", "newPass": "50"},
-                  {"names": '{"Зоя", "Илья"}', "scores": "{80, 65}", "newPass": "65"}],
-        hidden=[{"names": '{"Кира"}', "scores": "{59}", "newPass": "59"},
-                {"names": '{"Лев", "Мия", "Ной"}', "scores": "{100, 61, 70}", "newPass": "100"},
-                {"names": '{"Ося", "Пётр", "Рая", "Сеня", "Тома"}', "scores": "{30, 60, 45, 61, 99}", "newPass": "45"},
-                {"names": '{"Уна", "Фёдор"}', "scores": "{0, 100}", "newPass": "60"}],
+        variants=[{"names": '{"Anya", "Boris", "Vika"}', "scores": "{72, 55, 60}", "newPass": "70"},
+                  {"names": '{"Gleb", "Dina", "Egor", "Zhenya"}', "scores": "{90, 64, 59, 75}", "newPass": "50"},
+                  {"names": '{"Zoya", "Ilya"}', "scores": "{80, 65}", "newPass": "65"}],
+        hidden=[{"names": '{"Kira"}', "scores": "{59}", "newPass": "59"},
+                {"names": '{"Lev", "Mia", "Noy"}', "scores": "{100, 61, 70}", "newPass": "100"},
+                {"names": '{"Osya", "Petr", "Raya", "Senya", "Toma"}', "scores": "{30, 60, 45, 61, 99}", "newPass": "45"},
+                {"names": '{"Una", "Fedor"}', "scores": "{0, 100}", "newPass": "60"}],
         intro="Учитель проверил контрольную: зачёт ставят тем, кто набрал не меньше проходного балла. Проходной балл один "
               "для всех учеников — сначала он 60, но потом комиссия меняет его на `newPass`. Имена учеников записаны "
               "в массиве `names`, их баллы — в массиве `scores` под теми же номерами.",
         steps=["Ниже класса `Solution` создай класс `Exam` (без `public`) со статическим полем `static int passScore = 60`, "
                "обычными полями `String student` и `int score` и конструктором `Exam(String student, int score)`.",
                "Добавь метод `boolean passed()`: он возвращает `true`, если `score` не меньше `passScore`.",
-               "В `main` создай массив объектов `Exam` для всех учеников. Выведи строку вида `Порог: 60` (значение `Exam.passScore`), "
-               "потом для каждого ученика строку вида `Аня: 72, зачёт` или `Борис: 55, незачёт`, а затем строку вида "
-               "`Сдали: 2` — сколько учеников получили зачёт.",
-               "Поменяй порог один раз для всех: `Exam.passScore = newPass;`. Выведи строку вида `Новый порог: 70` и снова "
-               "`Сдали: …` — посчитай зачёты заново тем же методом `passed()` у тех же объектов, новых не создавай."],
+               "В `main` создай массив объектов `Exam` для всех учеников. Выведи строку вида `Pass mark: 60` (значение `Exam.passScore`), "
+               "потом для каждого ученика строку вида `Anya: 72, pass` или `Boris: 55, fail`, а затем строку вида "
+               "`Passed: 2` — сколько учеников получили зачёт.",
+               "Поменяй порог один раз для всех: `Exam.passScore = newPass;`. Выведи строку вида `New pass mark: 70` и снова "
+               "`Passed: …` — посчитай зачёты заново тем же методом `passed()` у тех же объектов, новых не создавай."],
         hint="Статическое поле хранится в классе, а не в каждом объекте, поэтому одна строка `Exam.passScore = newPass;` "
              "меняет порог сразу для всех: метод `passed()` у каждого объекта прочитает уже новое значение.",
         solution=EXAM_MAIN,
         classes=EXAM,
         wrong=[("порог — обычное поле, и новый порог получил только первый ученик",
                 EXAM_MAIN.replace("Exam.passScore = newPass;", "exams[0].passScore = newPass;")
-                         .replace('"Порог: " + Exam.passScore', '"Порог: " + exams[0].passScore')
-                         .replace('"Новый порог: " + Exam.passScore', '"Новый порог: " + exams[0].passScore'),
+                         .replace('"Pass mark: " + Exam.passScore', '"Pass mark: " + exams[0].passScore')
+                         .replace('"New pass mark: " + Exam.passScore', '"New pass mark: " + exams[0].passScore'),
                 EXAM.replace("    static int passScore = 60;", "    int passScore = 60;")),
                ("строгое сравнение: ровно проходной балл не даёт зачёта",
                 EXAM_MAIN, EXAM.replace("score >= passScore", "score > passScore"))],

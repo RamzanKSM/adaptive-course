@@ -18,8 +18,8 @@ def with_method(main: str, method: str) -> str:
     return main.rstrip() + "\n}\n\n" + method[:-1].rstrip()
 
 
-BADGE = ('static void printBadge(String name) {{\n    System.out.println("Шахматный турнир");\n'
-         '    System.out.println("Участник: " + {who});\n}}')
+BADGE = ('static void printBadge(String name) {{\n    System.out.println("Chess tournament");\n'
+         '    System.out.println("Player: " + {who});\n}}')
 BADGE_CHECKS = (
     'try {\n'
     '    Method m = Solution.class.getDeclaredMethod("printBadge", String.class);\n'
@@ -42,21 +42,21 @@ TO_MINUTES_CHECKS = (
     '    need(false, "Создай в классе Solution, рядом с main, метод static int toMinutes(int hours, int minutes) и вызывай его из main");\n'
     '}')
 FILM_MAIN = ('int first = toMinutes(hours1, minutes1);\nint second = toMinutes(hours2, minutes2);\n'
-             'System.out.println("Первый фильм: " + first + " мин.");\nSystem.out.println("Второй фильм: " + second + " мин.");\n')
+             'System.out.println("First film: " + first + " min");\nSystem.out.println("Second film: " + second + " min");\n')
 
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-mb-chess-badge", title="Бейджи для турнира",
         given=[("String", "player1"), ("String", "player2")],
-        variants=[{"player1": '"Аня"', "player2": '"Борис"'}, {"player1": '"Тимур"', "player2": '"Вера"'},
-                  {"player1": '"Олег"', "player2": '"Зарина"'}],
-        hidden=[{"player1": '"Ян"', "player2": '"Мила"'}, {"player1": '"Глеб"', "player2": '"Соня"'},
-                {"player1": '"Ульяна"', "player2": '"Ростислав"'}],
+        variants=[{"player1": '"Anya"', "player2": '"Boris"'}, {"player1": '"Timur"', "player2": '"Vera"'},
+                  {"player1": '"Oleg"', "player2": '"Zarina"'}],
+        hidden=[{"player1": '"Yan"', "player2": '"Mila"'}, {"player1": '"Gleb"', "player2": '"Sonya"'},
+                {"player1": '"Ulyana"', "player2": '"Rostislav"'}],
         intro="Ты печатаешь бейджи для шахматного турнира. Все бейджи одинаковые, отличается только имя участника, — "
               "поэтому печать бейджа удобно один раз описать в методе и вызывать его для каждого участника. "
               "Имена участников записаны в поля `player1` и `player2`.",
         steps=["Создай в классе `Solution` рядом с методом `main` (но не внутри него) метод `static void printBadge(String name)`.",
-               "Метод печатает бейдж из двух строк: `Шахматный турнир` и `Участник: …` — вместо многоточия имя "
+               "Метод печатает бейдж из двух строк: `Chess tournament` и `Player: …` — вместо многоточия имя "
                "из параметра `name`.",
                "В `main` вызови `printBadge` два раза: сначала для `player1`, потом для `player2`."],
         hint="Сам по себе метод ничего не делает: его код выполнится, только когда ты его вызовешь — напишешь имя метода "
@@ -85,17 +85,17 @@ TASKS = [
               "(поля `hours2` и `minutes2`). Удобнее перевести всё в минуты.",
         steps=["Создай в классе `Solution` рядом с `main` метод `static int toMinutes(int hours, int minutes)`. "
                "Он **возвращает** через `return` длительность в минутах: часы, умноженные на 60, плюс минуты.",
-               "В `main` вызови `toMinutes` для каждого фильма и выведи две строки: `Первый фильм: … мин.` "
-               "и `Второй фильм: … мин.`",
-               "Третьей строкой выведи `Всего: … мин.` — сколько минут идут оба фильма вместе."],
+               "В `main` вызови `toMinutes` для каждого фильма и выведи две строки: `First film: … min` "
+               "и `Second film: … min`",
+               "Третьей строкой выведи `Total: … min` — сколько минут идут оба фильма вместе."],
         hint="Вызов `toMinutes(...)` превращается в число, которое вернул метод. Его можно сохранить в переменную "
              "типа `int` и дальше работать с ней, как с любым числом.",
-        solution=with_method(FILM_MAIN + 'System.out.println("Всего: " + (first + second) + " мин.");', TO_MINUTES),
+        solution=with_method(FILM_MAIN + 'System.out.println("Total: " + (first + second) + " min");', TO_MINUTES),
         wrong=[("склеивает два числа как строки в последней строке",
-                with_method(FILM_MAIN + 'System.out.println("Всего: " + first + second + " мин.");', TO_MINUTES)),
+                with_method(FILM_MAIN + 'System.out.println("Total: " + first + second + " min");', TO_MINUTES)),
                ("дважды считает первый фильм: во втором вызове те же аргументы",
                 with_method(FILM_MAIN.replace("toMinutes(hours2, minutes2)", "toMinutes(hours1, minutes1)")
-                            + 'System.out.println("Всего: " + (first + second) + " мин.");', TO_MINUTES))],
+                            + 'System.out.println("Total: " + (first + second) + " min");', TO_MINUTES))],
         constructs=["function", "return"],
         checks=TO_MINUTES_CHECKS,
     ),

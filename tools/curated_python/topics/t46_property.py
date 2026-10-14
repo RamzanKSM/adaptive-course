@@ -14,12 +14,12 @@ TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-prop-name-badge", title="Бейдж участника",
         given=["first_name", "last_name"],
-        variants=[{"first_name": '"Анна"', "last_name": '"Петрова"'},
-                  {"first_name": '"Тимур"', "last_name": '"Алиев"'},
-                  {"first_name": '"Вера"', "last_name": '"Смирнова"'}],
-        hidden=[{"first_name": '"Олег"', "last_name": '"Ким"'},
-                {"first_name": '"Зарина"', "last_name": '"Юсупова"'},
-                {"first_name": '"Ян"', "last_name": '"Орлов"'}],
+        variants=[{"first_name": '"Anna"', "last_name": '"Petrova"'},
+                  {"first_name": '"Timur"', "last_name": '"Aliev"'},
+                  {"first_name": '"Vera"', "last_name": '"Smirnova"'}],
+        hidden=[{"first_name": '"Oleg"', "last_name": '"Kim"'},
+                {"first_name": '"Zarina"', "last_name": '"Yusupova"'},
+                {"first_name": '"Yan"', "last_name": '"Orlov"'}],
         intro="На олимпиаде каждому участнику печатают бейдж. Имя и фамилия хранятся отдельно, а на бейдже нужны "
               "полное имя и короткая подпись. Их удобно сделать свойствами: читаются как обычные атрибуты, "
               "а вычисляются из имени и фамилии.",
@@ -27,9 +27,9 @@ TASKS = [
                "`self.first_name` и `self.last_name`.",
                "Добавь свойство `full_name` — метод с `@property` над ним, который возвращает имя и фамилию через пробел.",
                "Добавь свойство `short_name`, которое возвращает первую букву имени, точку, пробел и фамилию: "
-               "для Анны Петровой это `А. Петрова`.",
-               "Создай объект `person = Person(first_name, last_name)` и выведи две строки: `Полное имя: …` "
-               "со значением `person.full_name` и `Коротко: …` со значением `person.short_name`. Свойства читай без скобок."],
+               "для Anna Petrova это `A. Petrova`.",
+               "Создай объект `person = Person(first_name, last_name)` и выведи две строки: `Full name: …` "
+               "со значением `person.full_name` и `Short: …` со значением `person.short_name`. Свойства читай без скобок."],
         hint="`@property` пишется на отдельной строке прямо над `def`. После этого `person.full_name` вызывает метод сам, "
              "без скобок. Без `@property` запись без скобок вернула бы сам метод, а не строку. "
              "Первая буква строки — `self.first_name[0]`.",
@@ -37,19 +37,19 @@ TASKS = [
                  '        self.last_name = last_name\n\n    @property\n    def full_name(self):\n'
                  '        return self.first_name + " " + self.last_name\n\n    @property\n    def short_name(self):\n'
                  '        return self.first_name[0] + ". " + self.last_name\n\n\nperson = Person(first_name, last_name)\n'
-                 'print(f"Полное имя: {person.full_name}")\nprint(f"Коротко: {person.short_name}")',
+                 'print(f"Full name: {person.full_name}")\nprint(f"Short: {person.short_name}")',
         wrong=[("забыл @property у short_name — без скобок печатается описание метода, а не подпись",
                 'class Person:\n    def __init__(self, first_name, last_name):\n        self.first_name = first_name\n'
                 '        self.last_name = last_name\n\n    @property\n    def full_name(self):\n'
                 '        return self.first_name + " " + self.last_name\n\n    def short_name(self):\n'
                 '        return self.first_name[0] + ". " + self.last_name\n\n\nperson = Person(first_name, last_name)\n'
-                'print(f"Полное имя: {person.full_name}")\nprint(f"Коротко: {person.short_name}")'),
+                'print(f"Full name: {person.full_name}")\nprint(f"Short: {person.short_name}")'),
                ("берёт первую букву фамилии вместо имени",
                 'class Person:\n    def __init__(self, first_name, last_name):\n        self.first_name = first_name\n'
                 '        self.last_name = last_name\n\n    @property\n    def full_name(self):\n'
                 '        return self.first_name + " " + self.last_name\n\n    @property\n    def short_name(self):\n'
                 '        return self.last_name[0] + ". " + self.last_name\n\n\nperson = Person(first_name, last_name)\n'
-                'print(f"Полное имя: {person.full_name}")\nprint(f"Коротко: {person.short_name}")')],
+                'print(f"Full name: {person.full_name}")\nprint(f"Short: {person.short_name}")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PROPERTY],
     ),
@@ -70,7 +70,7 @@ TASKS = [
                "`self.pizzas` и `self.drinks`.",
                "Добавь свойство `total` (метод с `@property`), которое возвращает стоимость заказа: "
                "500 руб. за каждую пиццу и 100 руб. за каждый напиток.",
-               "Создай заказ `order = Order(pizzas, drinks)` и выведи строку вида `Сумма: 1200 руб.` — со значением `order.total`, "
+               "Создай заказ `order = Order(pizzas, drinks)` и выведи строку вида `Total: 1200 rub` — со значением `order.total`, "
                "прочитанным без скобок.",
                "Увеличь атрибут `order.pizzas` на `extra` и снова выведи строку того же вида с `order.total`."],
         hint="Свойство вычисляется заново при каждом чтении `order.total`, поэтому оно всегда учитывает текущие атрибуты. "
@@ -78,18 +78,18 @@ TASKS = [
              "И добавлять пиццы нужно в атрибут объекта `order.pizzas`, а не в переменную `pizzas`.",
         solution='class Order:\n    def __init__(self, pizzas, drinks):\n        self.pizzas = pizzas\n        self.drinks = drinks\n\n'
                  '    @property\n    def total(self):\n        return self.pizzas * 500 + self.drinks * 100\n\n\n'
-                 'order = Order(pizzas, drinks)\nprint(f"Сумма: {order.total} руб.")\norder.pizzas += extra\n'
-                 'print(f"Сумма: {order.total} руб.")',
+                 'order = Order(pizzas, drinks)\nprint(f"Total: {order.total} rub")\norder.pizzas += extra\n'
+                 'print(f"Total: {order.total} rub")',
         wrong=[("считает сумму один раз в __init__ — после добавления пицц она не меняется",
                 'class Order:\n    def __init__(self, pizzas, drinks):\n        self.pizzas = pizzas\n        self.drinks = drinks\n'
                 '        self.total = pizzas * 500 + drinks * 100\n\n\n'
-                'order = Order(pizzas, drinks)\nprint(f"Сумма: {order.total} руб.")\norder.pizzas += extra\n'
-                'print(f"Сумма: {order.total} руб.")'),
+                'order = Order(pizzas, drinks)\nprint(f"Total: {order.total} rub")\norder.pizzas += extra\n'
+                'print(f"Total: {order.total} rub")'),
                ("добавляет пиццы в переменную pizzas, а не в атрибут заказа",
                 'class Order:\n    def __init__(self, pizzas, drinks):\n        self.pizzas = pizzas\n        self.drinks = drinks\n\n'
                 '    @property\n    def total(self):\n        return self.pizzas * 500 + self.drinks * 100\n\n\n'
-                'order = Order(pizzas, drinks)\nprint(f"Сумма: {order.total} руб.")\npizzas += extra\n'
-                'print(f"Сумма: {order.total} руб.")')],
+                'order = Order(pizzas, drinks)\nprint(f"Total: {order.total} rub")\npizzas += extra\n'
+                'print(f"Total: {order.total} rub")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PROPERTY],
     ),
@@ -106,7 +106,7 @@ TASKS = [
                "Добавь три свойства с `@property`: `xp` возвращает опыт, `level` — уровень, а `to_next` — сколько очков "
                "осталось набрать до следующего уровня. Например, при 140 очках уровень 2 и до следующего 60.",
                "Создай игрока и пройди циклом по `rewards`: передай каждую награду в `add_xp`, а после неё выведи строку "
-               "вида `Опыт: 140, уровень: 2, до следующего: 60` со значениями `player.xp`, `player.level` "
+               "вида `XP: 140, level: 2, to next: 60` со значениями `player.xp`, `player.level` "
                "и `player.to_next` — без скобок."],
         hint="Уровень и остаток можно вычислять прямо в свойствах из `self._xp`: число полных сотен даёт `// 100`, "
              "а сколько очков набрано сверх них — `% 100`. Не забудь, что при 0 очках уровень уже первый.",
@@ -115,21 +115,21 @@ TASKS = [
                  '    @property\n    def level(self):\n        return self._xp // 100 + 1\n\n'
                  '    @property\n    def to_next(self):\n        return 100 - self._xp % 100\n\n\n'
                  'player = Player()\nfor reward in rewards:\n    player.add_xp(reward)\n'
-                 '    print(f"Опыт: {player.xp}, уровень: {player.level}, до следующего: {player.to_next}")',
+                 '    print(f"XP: {player.xp}, level: {player.level}, to next: {player.to_next}")',
         wrong=[("считает уровень без +1 — новичок оказывается на нулевом уровне",
                 'class Player:\n    def __init__(self):\n        self._xp = 0\n\n    def add_xp(self, amount):\n'
                 '        if amount > 0:\n            self._xp += amount\n\n    @property\n    def xp(self):\n        return self._xp\n\n'
                 '    @property\n    def level(self):\n        return self._xp // 100\n\n'
                 '    @property\n    def to_next(self):\n        return 100 - self._xp % 100\n\n\n'
                 'player = Player()\nfor reward in rewards:\n    player.add_xp(reward)\n'
-                '    print(f"Опыт: {player.xp}, уровень: {player.level}, до следующего: {player.to_next}")'),
+                '    print(f"XP: {player.xp}, level: {player.level}, to next: {player.to_next}")'),
                ("забыл @property у to_next — без скобок печатается описание метода, а не число",
                 'class Player:\n    def __init__(self):\n        self._xp = 0\n\n    def add_xp(self, amount):\n'
                 '        if amount > 0:\n            self._xp += amount\n\n    @property\n    def xp(self):\n        return self._xp\n\n'
                 '    @property\n    def level(self):\n        return self._xp // 100 + 1\n\n'
                 '    def to_next(self):\n        return 100 - self._xp % 100\n\n\n'
                 'player = Player()\nfor reward in rewards:\n    player.add_xp(reward)\n'
-                '    print(f"Опыт: {player.xp}, уровень: {player.level}, до следующего: {player.to_next}")')],
+                '    print(f"XP: {player.xp}, level: {player.level}, to next: {player.to_next}")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PROPERTY],
     ),

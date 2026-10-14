@@ -17,17 +17,17 @@ TASKS = [
         steps=["До цикла заведи переменную `total` со значением 0.",
                "Циклом `for` перебери дни от 1 до `days` включительно и на каждом шаге добавляй к `total` номер дня "
                "с помощью `+=`.",
-               "После цикла выведи две строки: `Дней копила: …` и `В копилке: … руб.`"],
+               "После цикла выведи две строки: `Days saved: …` и `In the piggy bank: … rub`"],
         hint="Если создать `total` внутри цикла, она будет начинаться с нуля на каждом шаге. Сумма копится в переменной, "
              "созданной до цикла, а печатается после него — когда все дни уже добавлены.",
         solution='int total = 0;\nfor (int day = 1; day <= days; day++) {\n    total += day;\n}\n'
-                 'System.out.println("Дней копила: " + days);\nSystem.out.println("В копилке: " + total + " руб.");',
+                 'System.out.println("Days saved: " + days);\nSystem.out.println("In the piggy bank: " + total + " rub");',
         wrong=[("= вместо +=: в копилке оказывается только последний взнос",
                 'int total = 0;\nfor (int day = 1; day <= days; day++) {\n    total = day;\n}\n'
-                'System.out.println("Дней копила: " + days);\nSystem.out.println("В копилке: " + total + " руб.");'),
+                'System.out.println("Days saved: " + days);\nSystem.out.println("In the piggy bank: " + total + " rub");'),
                ("< вместо <=: последний день не учтён",
                 'int total = 0;\nfor (int day = 1; day < days; day++) {\n    total += day;\n}\n'
-                'System.out.println("Дней копила: " + days);\nSystem.out.println("В копилке: " + total + " руб.");')],
+                'System.out.println("Days saved: " + days);\nSystem.out.println("In the piggy bank: " + total + " rub");')],
         constructs=["for", "augmented_assignment"],
     ),
     JavaOutputTask(
@@ -42,20 +42,20 @@ TASKS = [
                "Перебери циклом `for` номера чашек от 1 до `cups` включительно.",
                "Если номер чашки делится на 5 без остатка, увеличь число бесплатных чашек на 1, "
                "иначе добавь к сумме `price`.",
-               "После цикла выведи две строки: `Бесплатных чашек: …` и `К оплате: … руб.`"],
+               "После цикла выведи две строки: `Free cups: …` и `Total: … rub`"],
         hint="Счётчик — это тоже накопление: он растёт на 1 только тогда, когда выполнено условие. "
              "А в сумму попадают только те чашки, за которые платят.",
         solution='int free = 0;\nint total = 0;\nfor (int i = 1; i <= cups; i++) {\n    if (i % 5 == 0) {\n        free++;\n'
-                 '    } else {\n        total += price;\n    }\n}\nSystem.out.println("Бесплатных чашек: " + free);\n'
-                 'System.out.println("К оплате: " + total + " руб.");',
+                 '    } else {\n        total += price;\n    }\n}\nSystem.out.println("Free cups: " + free);\n'
+                 'System.out.println("Total: " + total + " rub");',
         wrong=[("цикл с нуля: чашка с номером 0 считается бесплатной, а последняя не учтена",
                 'int free = 0;\nint total = 0;\nfor (int i = 0; i < cups; i++) {\n    if (i % 5 == 0) {\n        free++;\n'
-                '    } else {\n        total += price;\n    }\n}\nSystem.out.println("Бесплатных чашек: " + free);\n'
-                'System.out.println("К оплате: " + total + " руб.");'),
+                '    } else {\n        total += price;\n    }\n}\nSystem.out.println("Free cups: " + free);\n'
+                'System.out.println("Total: " + total + " rub");'),
                ("цена добавляется за каждую чашку, в том числе за бесплатные",
                 'int free = 0;\nint total = 0;\nfor (int i = 1; i <= cups; i++) {\n    if (i % 5 == 0) {\n        free++;\n'
-                '    }\n    total += price;\n}\nSystem.out.println("Бесплатных чашек: " + free);\n'
-                'System.out.println("К оплате: " + total + " руб.");')],
+                '    }\n    total += price;\n}\nSystem.out.println("Free cups: " + free);\n'
+                'System.out.println("Total: " + total + " rub");')],
         constructs=["for", "if", "augmented_assignment"],
     ),
     JavaOutputTask(
@@ -70,21 +70,21 @@ TASKS = [
         steps=["Заведи переменную `balance` и положи в неё начальную сумму `money`.",
                "Циклом `for` повтори расчёт для каждого года: посчитай проценты за год — `percent` процентов от "
                "`balance` нацело (сначала умножь на `percent`, потом раздели на 100) — и добавь их к `balance` через `+=`.",
-               "Каждый год после начисления выводи строку `Год …: … руб.` — номер года и сумму на вкладе.",
-               "После цикла выведи `Прибыль: … руб.` — на сколько `balance` стал больше начальной суммы `money`."],
+               "Каждый год после начисления выводи строку `Year …: … rub` — номер года и сумму на вкладе.",
+               "После цикла выведи `Profit: … rub` — на сколько `balance` стал больше начальной суммы `money`."],
         hint="Проценты каждый год считаются от текущего `balance`, а не от начальной суммы `money`: "
              "поэтому с каждым годом прибавка становится чуть больше.",
         solution='int balance = money;\nfor (int year = 1; year <= years; year++) {\n    balance += balance * percent / 100;\n'
-                 '    System.out.println("Год " + year + ": " + balance + " руб.");\n}\n'
-                 'System.out.println("Прибыль: " + (balance - money) + " руб.");',
+                 '    System.out.println("Year " + year + ": " + balance + " rub");\n}\n'
+                 'System.out.println("Profit: " + (balance - money) + " rub");',
         wrong=[("проценты каждый год от начальной суммы, а не от текущей",
                 'int balance = money;\nfor (int year = 1; year <= years; year++) {\n    balance += money * percent / 100;\n'
-                '    System.out.println("Год " + year + ": " + balance + " руб.");\n}\n'
-                'System.out.println("Прибыль: " + (balance - money) + " руб.");'),
+                '    System.out.println("Year " + year + ": " + balance + " rub");\n}\n'
+                'System.out.println("Profit: " + (balance - money) + " rub");'),
                ("percent / 100 нацело даёт 0: вклад не растёт",
                 'int balance = money;\nfor (int year = 1; year <= years; year++) {\n    balance += balance * (percent / 100);\n'
-                '    System.out.println("Год " + year + ": " + balance + " руб.");\n}\n'
-                'System.out.println("Прибыль: " + (balance - money) + " руб.");')],
+                '    System.out.println("Year " + year + ": " + balance + " rub");\n}\n'
+                'System.out.println("Profit: " + (balance - money) + " rub");')],
         constructs=["for", "augmented_assignment"],
     ),
 ]

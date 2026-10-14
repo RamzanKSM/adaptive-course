@@ -15,15 +15,15 @@ TASKS = [
         intro="В новом кинотеатре нужно подписать кресла в ряду номерами, начиная с 1. "
               "Сколько кресел в ряду, записано в поле `seats`.",
         steps=["Напиши цикл `for`, который перебирает числа от 1 до `seats` включительно.",
-               "На каждом шаге выведи отдельной строкой надпись `Место 1`, `Место 2` и так далее: слово `Место`, "
+               "На каждом шаге выведи отдельной строкой надпись `Seat 1`, `Seat 2` и так далее: слово `Seat`, "
                "пробел и номер."],
         hint="Условие в заголовке `for` проверяется перед каждым шагом, и цикл идёт, пока оно верно. "
              "Подумай, какой знак сравнения нужен, чтобы последним было место с номером `seats`.",
-        solution='for (int i = 1; i <= seats; i++) {\n    System.out.println("Место " + i);\n}',
+        solution='for (int i = 1; i <= seats; i++) {\n    System.out.println("Seat " + i);\n}',
         wrong=[("< вместо <=: последнее место не подписано",
-                'for (int i = 1; i < seats; i++) {\n    System.out.println("Место " + i);\n}'),
-               ("отсчёт с нуля: появляется «Место 0», а последнего места нет",
-                'for (int i = 0; i < seats; i++) {\n    System.out.println("Место " + i);\n}')],
+                'for (int i = 1; i < seats; i++) {\n    System.out.println("Seat " + i);\n}'),
+               ("отсчёт с нуля: появляется «Seat 0», а последнего места нет",
+                'for (int i = 0; i < seats; i++) {\n    System.out.println("Seat " + i);\n}')],
         constructs=["for"],
     ),
     JavaOutputTask(
@@ -36,14 +36,14 @@ TASKS = [
               "а дальше раз в `every` дней. Нужно составить для соседки список дней полива.",
         steps=["Напиши цикл `for`, который начинается с дня 1 и на каждом шаге увеличивает номер дня на `every`.",
                "Цикл должен идти, пока номер дня не больше `days`.",
-               "На каждом шаге выведи строку `Полить в день …` с номером дня."],
+               "На каждом шаге выведи строку `Water on day …` с номером дня."],
         hint="Третья часть заголовка `for` не обязана быть `i++`: там можно написать, например, `day += 2` — "
              "тогда номер дня будет расти на 2.",
-        solution='for (int day = 1; day <= days; day += every) {\n    System.out.println("Полить в день " + day);\n}',
+        solution='for (int day = 1; day <= days; day += every) {\n    System.out.println("Water on day " + day);\n}',
         wrong=[("< вместо <=: полив в последний день отпуска пропадает",
-                'for (int day = 1; day < days; day += every) {\n    System.out.println("Полить в день " + day);\n}'),
+                'for (int day = 1; day < days; day += every) {\n    System.out.println("Water on day " + day);\n}'),
                ("начинает с every, а не с 1: в первый день кактус не полит",
-                'for (int day = every; day <= days; day += every) {\n    System.out.println("Полить в день " + day);\n}')],
+                'for (int day = every; day <= days; day += every) {\n    System.out.println("Water on day " + day);\n}')],
         constructs=["for"],
     ),
     JavaOutputTask(
@@ -55,22 +55,22 @@ TASKS = [
         intro="Тренер расписывает пробежку по минутам. Тренировка длится `minutes` минут: первые `warmup` минут — "
               "разминка, последняя минута — заминка, а всё остальное время — бег.",
         steps=["Перебери циклом `for` номера минут от 1 до `minutes` включительно.",
-               "Если это последняя минута тренировки, выведи `Минута …: заминка`.",
-               "Иначе, если номер минуты не больше `warmup`, выведи `Минута …: разминка`.",
-               "Во всех остальных случаях выведи `Минута …: бег`. Вместо многоточия — номер минуты."],
+               "Если это последняя минута тренировки, выведи `Minute …: cool-down`.",
+               "Иначе, если номер минуты не больше `warmup`, выведи `Minute …: warm-up`.",
+               "Во всех остальных случаях выведи `Minute …: run`. Вместо многоточия — номер минуты."],
         hint="Внутри цикла можно писать `if`, `else if` и `else`. Порядок проверок важен: последняя минута — всегда "
              "заминка, даже если разминка длится до самого конца.",
-        solution='for (int i = 1; i <= minutes; i++) {\n    if (i == minutes) {\n        System.out.println("Минута " + i + ": заминка");\n'
-                 '    } else if (i <= warmup) {\n        System.out.println("Минута " + i + ": разминка");\n    } else {\n'
-                 '        System.out.println("Минута " + i + ": бег");\n    }\n}',
+        solution='for (int i = 1; i <= minutes; i++) {\n    if (i == minutes) {\n        System.out.println("Minute " + i + ": cool-down");\n'
+                 '    } else if (i <= warmup) {\n        System.out.println("Minute " + i + ": warm-up");\n    } else {\n'
+                 '        System.out.println("Minute " + i + ": run");\n    }\n}',
         wrong=[("< вместо <= для разминки: разминка на минуту короче",
-                'for (int i = 1; i <= minutes; i++) {\n    if (i == minutes) {\n        System.out.println("Минута " + i + ": заминка");\n'
-                '    } else if (i < warmup) {\n        System.out.println("Минута " + i + ": разминка");\n    } else {\n'
-                '        System.out.println("Минута " + i + ": бег");\n    }\n}'),
+                'for (int i = 1; i <= minutes; i++) {\n    if (i == minutes) {\n        System.out.println("Minute " + i + ": cool-down");\n'
+                '    } else if (i < warmup) {\n        System.out.println("Minute " + i + ": warm-up");\n    } else {\n'
+                '        System.out.println("Minute " + i + ": run");\n    }\n}'),
                ("разминка проверяется первой: если она длится до конца, заминки нет",
-                'for (int i = 1; i <= minutes; i++) {\n    if (i <= warmup) {\n        System.out.println("Минута " + i + ": разминка");\n'
-                '    } else if (i == minutes) {\n        System.out.println("Минута " + i + ": заминка");\n    } else {\n'
-                '        System.out.println("Минута " + i + ": бег");\n    }\n}')],
+                'for (int i = 1; i <= minutes; i++) {\n    if (i <= warmup) {\n        System.out.println("Minute " + i + ": warm-up");\n'
+                '    } else if (i == minutes) {\n        System.out.println("Minute " + i + ": cool-down");\n    } else {\n'
+                '        System.out.println("Minute " + i + ": run");\n    }\n}')],
         constructs=["for", "if"],
     ),
 ]

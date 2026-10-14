@@ -35,16 +35,16 @@ TASKS = [
               "Команды должны быть как можно меньше, но в каждой — хотя бы 2 человека.",
         steps=["Перебирай размер команды циклом `for` от 2 до `n` включительно "
                "(размер `n` тоже подходит: тогда все будут в одной команде).",
-               "Как только нашёлся размер, на который `n` делится без остатка, выведи его в формате `В команде: 4` "
+               "Как только нашёлся размер, на который `n` делится без остатка, выведи его в формате `Team size: 4` "
                "и сразу останови цикл командой `break`.",
                "Программа должна вывести ровно одну строку."],
         hint="Без `break` цикл продолжит перебор и выведет все подходящие размеры. "
              "`break` выходит из цикла сразу, поэтому выведется только первый найденный — самый маленький — размер.",
-        solution='for size in range(2, n + 1):\n    if n % size == 0:\n        print(f"В команде: {size}")\n        break',
+        solution='for size in range(2, n + 1):\n    if n % size == 0:\n        print(f"Team size: {size}")\n        break',
         wrong=[("нет break: выводятся все подходящие размеры",
-                'for size in range(2, n + 1):\n    if n % size == 0:\n        print(f"В команде: {size}")'),
+                'for size in range(2, n + 1):\n    if n % size == 0:\n        print(f"Team size: {size}")'),
                ("перебор с 1: на 1 делится любое число",
-                'for size in range(1, n + 1):\n    if n % size == 0:\n        print(f"В команде: {size}")\n        break')],
+                'for size in range(1, n + 1):\n    if n % size == 0:\n        print(f"Team size: {size}")\n        break')],
         constructs=["for"],
         must_use=[("Break", "Используй break, чтобы остановить перебор, когда размер найден")],
     ),
@@ -58,22 +58,22 @@ TASKS = [
               "а каждую неделю Маша кладёт в неё `weekly = {weekly}` руб.",
         steps=["Заведи две переменные: номер недели и сумму в копилке. Обе сначала равны 0.",
                "Запусти цикл `while True:`. В нём увеличь номер недели на 1, добавь к сумме `weekly` "
-               "и выведи строку вида `Неделя 5: 900 руб.`",
+               "и выведи строку вида `Week 5: 900 rub`",
                "Сразу после этого, если сумма стала не меньше `goal`, останови цикл командой `break`.",
-               "После цикла выведи `Хватает на покупку!`"],
+               "После цикла выведи `Enough money!`"],
         hint="`while True` сам по себе никогда не закончится — выйти из него можно только через `break`. "
              "«Не меньше» значит «больше или равно»: если сумма ровно равна цене, денег уже хватает.",
         solution='week = 0\ntotal = 0\nwhile True:\n    week += 1\n    total += weekly\n'
-                 '    print(f"Неделя {week}: {total} руб.")\n    if total >= goal:\n        break\n'
-                 'print("Хватает на покупку!")',
+                 '    print(f"Week {week}: {total} rub")\n    if total >= goal:\n        break\n'
+                 'print("Enough money!")',
         wrong=[("строгое сравнение: при сумме ровно goal копит лишнюю неделю",
                 'week = 0\ntotal = 0\nwhile True:\n    week += 1\n    total += weekly\n'
-                '    print(f"Неделя {week}: {total} руб.")\n    if total > goal:\n        break\n'
-                'print("Хватает на покупку!")'),
+                '    print(f"Week {week}: {total} rub")\n    if total > goal:\n        break\n'
+                'print("Enough money!")'),
                ("проверка стоит перед print: последняя неделя не выводится",
                 'week = 0\ntotal = 0\nwhile True:\n    week += 1\n    total += weekly\n'
-                '    if total >= goal:\n        break\n    print(f"Неделя {week}: {total} руб.")\n'
-                'print("Хватает на покупку!")')],
+                '    if total >= goal:\n        break\n    print(f"Week {week}: {total} rub")\n'
+                'print("Enough money!")')],
         constructs=["while"],
         must_use=[("Break", "Используй break, чтобы выйти из цикла while True")],
     ),

@@ -73,9 +73,9 @@ class Rectangle implements Shape {
 GARDEN_MAIN = """\
 Shape bed = new Square(side);
 Shape lawn = new Rectangle(width, length);
-System.out.println("Грядка: " + bed.area() + " кв. м");
-System.out.println("Газон: " + lawn.area() + " кв. м");
-System.out.println("Всего: " + (bed.area() + lawn.area()) + " кв. м");"""
+System.out.println("Bed: " + bed.area() + " sq m");
+System.out.println("Lawn: " + lawn.area() + " sq m");
+System.out.println("Total: " + (bed.area() + lawn.area()) + " sq m");"""
 
 # A beginner who knows inheritance makes Shape a class with a dummy method: the output is the same.
 GARDEN_AS_CLASS = (GARDEN.replace("interface Shape {\n    int area();\n}",
@@ -92,7 +92,7 @@ interface Tariff {
 class Economy implements Tariff {
     @Override
     public String name() {
-        return "Эконом";
+        return "Economy";
     }
 
     @Override
@@ -104,7 +104,7 @@ class Economy implements Tariff {
 class Mini implements Tariff {
     @Override
     public String name() {
-        return "Мини";
+        return "Mini";
     }
 
     @Override
@@ -116,7 +116,7 @@ class Mini implements Tariff {
 class Flat implements Tariff {
     @Override
     public String name() {
-        return "Фикс";
+        return "Flat";
     }
 
     @Override
@@ -129,12 +129,12 @@ TAXI_MAIN = """\
 Tariff[] tariffs = {new Economy(), new Mini(), new Flat()};
 Tariff best = tariffs[0];
 for (Tariff tariff : tariffs) {
-    System.out.println(tariff.name() + ": " + tariff.cost(km) + " руб.");
+    System.out.println(tariff.name() + ": " + tariff.cost(km) + " rub");
     if (tariff.cost(km) < best.cost(km)) {
         best = tariff;
     }
 }
-System.out.println("Дешевле всего: " + best.name());"""
+System.out.println("Cheapest: " + best.name());"""
 
 POND = """\
 interface Swimmer {
@@ -173,7 +173,7 @@ class Pigeon implements Flyer {
 
 POND_MAIN = """\
 Duck duck = new Duck();
-System.out.println("Утка: " + duck.swim(waterMinutes) + " м по воде и " + duck.fly(airMinutes) + " м по воздуху");
+System.out.println("Duck: " + duck.swim(waterMinutes) + " m on water and " + duck.fly(airMinutes) + " m in the air");
 Swimmer[] swimmers = {duck, new Fish()};
 Flyer[] flyers = {duck, new Pigeon()};
 int water = 0;
@@ -184,8 +184,8 @@ int air = 0;
 for (Flyer flyer : flyers) {
     air += flyer.fly(airMinutes);
 }
-System.out.println("По воде всего: " + water + " м");
-System.out.println("По воздуху всего: " + air + " м");"""
+System.out.println("On water in total: " + water + " m");
+System.out.println("In the air in total: " + air + " m");"""
 
 TASKS = [
     JavaOutputTask(
@@ -208,13 +208,13 @@ TASKS = [
                "Так же опиши класс `Rectangle implements Shape` с конструктором `Rectangle(int width, int length)` и "
                "методом `public int area()` — площадь прямоугольника.",
                "В `main` создай `Shape bed = new Square(side);` и `Shape lawn = new Rectangle(width, length);` и выведи "
-               "три строки вида `Грядка: 16 кв. м`, `Газон: 24 кв. м` и `Всего: 40 кв. м` — площади возьми из `area()`."],
+               "три строки вида `Bed: 16 sq m`, `Lawn: 24 sq m` и `Total: 40 sq m` — площади возьми из `area()`."],
         hint="Интерфейс — это обещание: каждый класс, который его реализует, обязан написать все его методы. Методы "
              "интерфейса всегда открытые, поэтому в классах их пишут с `public` — без него программа не скомпилируется.",
         solution=GARDEN_MAIN, classes=GARDEN,
         wrong=[("склеивает площади как строки в итоговой сумме — вместо 40 получается 1624",
-                GARDEN_MAIN.replace('"Всего: " + (bed.area() + lawn.area()) + " кв. м"',
-                                    '"Всего: " + bed.area() + lawn.area() + " кв. м"')),
+                GARDEN_MAIN.replace('"Total: " + (bed.area() + lawn.area()) + " sq m"',
+                                    '"Total: " + bed.area() + lawn.area() + " sq m"')),
                ("сделал Shape обычным классом-родителем вместо интерфейса",
                 GARDEN_MAIN, GARDEN_AS_CLASS)],
         constructs=["class"],
@@ -233,12 +233,12 @@ TASKS = [
         steps=["Ниже класса `Solution` опиши интерфейс `Tariff` (без `public` перед ним) с двумя методами без тела: `String name();` и "
                "`int cost(int km);`.",
                "Опиши три класса, которые реализуют `Tariff` (например, `class Economy implements Tariff`), и напиши в "
-               "каждом оба метода с `public`: `Economy` — название `Эконом`, цена — 100 руб. за посадку плюс 20 руб. "
-               "за километр; `Mini` — `Мини`, 30 руб. за километр; `Flat` — `Фикс`, 450 руб. за любую поездку.",
+               "каждом оба метода с `public`: `Economy` — название `Economy`, цена — 100 руб. за посадку плюс 20 руб. "
+               "за километр; `Mini` — `Mini`, 30 руб. за километр; `Flat` — `Flat`, 450 руб. за любую поездку.",
                "В `main` создай массив `Tariff[] tariffs = {{new Economy(), new Mini(), new Flat()}};` и одним циклом "
-               "выведи для каждого тарифа строку вида `Эконом: 160 руб.` — цену поездки на `km` километров.",
+               "выведи для каждого тарифа строку вида `Economy: 160 rub` — цену поездки на `km` километров.",
                "В том же цикле найди самый дешёвый тариф; если несколько тарифов стоят одинаково, выбери тот, что "
-               "в массиве раньше. Последней строкой выведи строку вида `Дешевле всего: Мини` — с названием этого тарифа."],
+               "в массиве раньше. Последней строкой выведи строку вида `Cheapest: Mini` — с названием этого тарифа."],
         hint="Заведи переменную `Tariff best = tariffs[0];` и в цикле заменяй её, только если текущий тариф строго "
              "дешевле. Тип переменной — интерфейс: в неё можно положить объект любого класса, который его реализует.",
         solution=TAXI_MAIN, classes=TAXI,
@@ -272,11 +272,11 @@ TASKS = [
                "Опиши класс `Fish implements Swimmer` — рыба проплывает 60 метров в минуту — и класс "
                "`Pigeon implements Flyer` — голубь пролетает 1000 метров в минуту. Методы интерфейсов пиши с `public`.",
                "В `main` создай одну утку `Duck duck = new Duck();` и выведи строку вида "
-               "`Утка: 100 м по воде и 2700 м по воздуху` — утка плавает `waterMinutes` минут, а летает `airMinutes` минут.",
+               "`Duck: 100 m on water and 2700 m in the air` — утка плавает `waterMinutes` минут, а летает `airMinutes` минут.",
                "Создай массивы `Swimmer[] swimmers = {{duck, new Fish()}};` и `Flyer[] flyers = {{duck, new Pigeon()}};`. "
                "Циклами посчитай, сколько метров все пловцы проплывут за `waterMinutes` минут и сколько все летуны "
-               "пролетят за `airMinutes` минут, и выведи две строки вида `По воде всего: 400 м` и "
-               "`По воздуху всего: 5700 м`."],
+               "пролетят за `airMinutes` минут, и выведи две строки вида `On water in total: 400 m` и "
+               "`In the air in total: 5700 m`."],
         hint="Одна и та же утка лежит в обоих массивах: для массива `Swimmer[]` она пловец, а для `Flyer[]` — летун. "
              "Родительский класс у класса может быть только один, а интерфейсов он может реализовать сколько угодно.",
         solution=POND_MAIN, classes=POND,

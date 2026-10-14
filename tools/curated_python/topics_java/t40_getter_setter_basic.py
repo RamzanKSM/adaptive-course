@@ -85,10 +85,10 @@ USER = '''class User {
 USER_MAIN = '''User user = new User();
 user.setName(name);
 user.setAge(age);
-System.out.println("Имя: " + user.getName());
-System.out.println("Возраст: " + user.getAge());
+System.out.println("Name: " + user.getName());
+System.out.println("Age: " + user.getAge());
 user.setAge(newAge);
-System.out.println("Возраст после изменения: " + user.getAge());'''
+System.out.println("Age after change: " + user.getAge());'''
 
 # ───────── Product discount ─────────
 
@@ -126,10 +126,10 @@ PRODUCT = '''class Product {
 }'''
 
 PRODUCT_MAIN = '''Product product = new Product(title, price);
-System.out.println(product.getTitle() + ": " + product.getPrice() + " руб.");
+System.out.println(product.getTitle() + ": " + product.getPrice() + " rub");
 for (int i = 0; i < discounts.length; i++) {
     product.setDiscount(discounts[i]);
-    System.out.println("Скидка " + product.getDiscount() + "%: " + product.getFinalPrice() + " руб.");
+    System.out.println("Sale " + product.getDiscount() + "%: " + product.getFinalPrice() + " rub");
 }'''
 
 # ───────── Playlist ─────────
@@ -176,19 +176,19 @@ for (int i = 0; i < tracks.length; i++) {
     System.out.println(tracks[i].getTitle() + " (" + tracks[i].getDuration() + ")");
     total += tracks[i].getSeconds();
 }
-System.out.println("Всего: " + total / 60 + " мин " + total % 60 + " сек");'''
+System.out.println("Total: " + total / 60 + " min " + total % 60 + " sec");'''
 
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-getset-user-age", title="Профиль пользователя",
         given=[("String", "name"), ("int", "age"), ("int", "newAge")],
-        variants=[{"name": '"Аня"', "age": "12", "newAge": "13"},
-                  {"name": '"Игорь"', "age": "35", "newAge": "150"},
-                  {"name": '"Мила"', "age": "8", "newAge": "0"}],
-        hidden=[{"name": '"Ян"', "age": "40", "newAge": "120"},
-                {"name": '"Ксюша"', "age": "20", "newAge": "121"},
-                {"name": '"Боря"', "age": "70", "newAge": "1"},
-                {"name": '"Ева"', "age": "15", "newAge": "-5"}],
+        variants=[{"name": '"Anya"', "age": "12", "newAge": "13"},
+                  {"name": '"Igor"', "age": "35", "newAge": "150"},
+                  {"name": '"Mila"', "age": "8", "newAge": "0"}],
+        hidden=[{"name": '"Yan"', "age": "40", "newAge": "120"},
+                {"name": '"Ksusha"', "age": "20", "newAge": "121"},
+                {"name": '"Borya"', "age": "70", "newAge": "1"},
+                {"name": '"Eva"', "age": "15", "newAge": "-5"}],
         intro="На сайте у каждого пользователя есть профиль с именем и возрастом. Поля профиля закрыты, а читать и менять "
               "их можно только через специальные методы — геттеры и сеттеры. Возраст должен быть от 1 до 120 лет: "
               "другое число — явная опечатка, и сайт её не сохраняет. Имя и возраст записаны в полях `name` и `age`, "
@@ -198,7 +198,7 @@ TASKS = [
                "Геттер просто возвращает значение поля, сеттер записывает в поле новое значение.",
                "В `setAge` добавь проверку: возраст записывается, только если он от 1 до 120 включительно, иначе остаётся прежним.",
                "В `main` создай `new User()`, задай имя и возраст сеттерами из `name` и `age` и выведи через геттеры строки вида "
-               "`Имя: Аня` и `Возраст: 12`. Потом вызови `setAge(newAge)` и выведи строку вида `Возраст после изменения: 13`."],
+               "`Name: Anya` и `Age: 12`. Потом вызови `setAge(newAge)` и выведи строку вида `Age after change: 13`."],
         hint="Параметр сеттера обычно называют так же, как поле, поэтому внутри пиши `this.age = age;`. А проверку ставь "
              "перед присваиванием: если число не подходит, сеттер просто ничего не записывает.",
         solution=USER_MAIN,
@@ -224,13 +224,13 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-getset-product-discount", title="Скидка на товар",
         given=[("String", "title"), ("int", "price"), ("int[]", "discounts")],
-        variants=[{"title": '"Наушники"', "price": "2000", "discounts": "{10, 70, 25}"},
-                  {"title": '"Рюкзак"', "price": "3000", "discounts": "{60, 50, 5}"},
-                  {"title": '"Кроссовки"', "price": "4500", "discounts": "{20, -10, 0}"}],
-        hidden=[{"title": '"Мяч"', "price": "800", "discounts": "{50}"},
-                {"title": '"Шлем"', "price": "1500", "discounts": "{51, 49}"},
-                {"title": '"Коньки"', "price": "6000", "discounts": "{}"},
-                {"title": '"Самокат"', "price": "9900", "discounts": "{33, -1, 100}"}],
+        variants=[{"title": '"Headphones"', "price": "2000", "discounts": "{10, 70, 25}"},
+                  {"title": '"Backpack"', "price": "3000", "discounts": "{60, 50, 5}"},
+                  {"title": '"Sneakers"', "price": "4500", "discounts": "{20, -10, 0}"}],
+        hidden=[{"title": '"Ball"', "price": "800", "discounts": "{50}"},
+                {"title": '"Helmet"', "price": "1500", "discounts": "{51, 49}"},
+                {"title": '"Skates"', "price": "6000", "discounts": "{}"},
+                {"title": '"Scooter"', "price": "9900", "discounts": "{33, -1, 100}"}],
         intro="Менеджер интернет-магазина подбирает скидку для товара `title` с ценой `price` руб. и по очереди пробует "
               "значения из массива `discounts`. Скидка может быть только от 0 до 50 процентов: другое значение магазин "
               "не принимает, и остаётся прежняя скидка.",
@@ -241,8 +241,8 @@ TASKS = [
                "который записывает значение, только если оно от 0 до 50 включительно.",
                "Добавь метод `int getFinalPrice()`, который возвращает цену со скидкой: `price - price * discount / 100`. "
                "Это тоже геттер, только значение он не хранит в поле, а вычисляет.",
-               "В `main` создай товар и выведи строку вида `Наушники: 2000 руб.`. Затем для каждого числа из `discounts` вызови "
-               "`setDiscount` и выведи строку вида `Скидка 10%: 1800 руб.` — с текущей скидкой и ценой, полученными через геттеры."],
+               "В `main` создай товар и выведи строку вида `Headphones: 2000 rub`. Затем для каждого числа из `discounts` вызови "
+               "`setDiscount` и выведи строку вида `Sale 10%: 1800 rub` — с текущей скидкой и ценой, полученными через геттеры."],
         hint="Сеттер — единственная дверь к полю `discount`, поэтому проверка в нём защищает от любой неправильной скидки. "
              "Если число не подходит, сеттер ничего не меняет — и геттер вернёт прежнюю скидку.",
         solution=PRODUCT_MAIN,
@@ -263,32 +263,32 @@ TASKS = [
                + need_getter("Product", "int", "discount")
                + need_setter("Product", "int", "discount", ", и в нём живёт проверка от 0 до 50")
                + need_method("Product", "int", "getFinalPrice", [], "он вычисляет цену со скидкой")
-               + need_after_calls("String.class, int.class", '"Тест", 1000', [("setDiscount", "int", "20")], "discount", "20",
+               + need_after_calls("String.class, int.class", '"Test", 1000', [("setDiscount", "int", "20")], "discount", "20",
                                   "Сеттер setDiscount должен записывать подходящую скидку в поле объекта: this.discount = discount;")
-               + need_after_calls("String.class, int.class", '"Тест", 1000', [("setDiscount", "int", "20"), ("setDiscount", "int", "70"), ("setDiscount", "int", "-5")],
+               + need_after_calls("String.class, int.class", '"Test", 1000', [("setDiscount", "int", "20"), ("setDiscount", "int", "70"), ("setDiscount", "int", "-5")],
                                   "discount", "20", "Проверка скидки должна быть внутри setDiscount: число меньше 0 или больше 50 сеттер не записывает, и остаётся прежняя скидка"),
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-getset-playlist", title="Плейлист",
         given=[("String[]", "titles"), ("int[]", "seconds")],
-        variants=[{"titles": '{"Утро", "Дорога", "Закат"}', "seconds": "{185, 242, 300}"},
-                  {"titles": '{"Ритм", "Эхо"}', "seconds": "{59, -20}"},
-                  {"titles": '{"Шторм", "Тишина", "Полёт", "Финал"}', "seconds": "{600, 0, 61, 3599}"}],
-        hidden=[{"titles": '{"Один"}', "seconds": "{9}"},
-                {"titles": '{"Альфа", "Бета", "Гамма"}', "seconds": "{60, 120, 3600}"},
-                {"titles": '{"Сон", "Дождь"}', "seconds": "{-5, 125}"},
-                {"titles": '{"Ноты"}', "seconds": "{610}"}],
+        variants=[{"titles": '{"Morning", "Road", "Sunset"}', "seconds": "{185, 242, 300}"},
+                  {"titles": '{"Rhythm", "Echo"}', "seconds": "{59, -20}"},
+                  {"titles": '{"Storm", "Silence", "Flight", "Final"}', "seconds": "{600, 0, 61, 3599}"}],
+        hidden=[{"titles": '{"One"}', "seconds": "{9}"},
+                {"titles": '{"Alpha", "Beta", "Gamma"}', "seconds": "{60, 120, 3600}"},
+                {"titles": '{"Dream", "Rain"}', "seconds": "{-5, 125}"},
+                {"titles": '{"Notes"}', "seconds": "{610}"}],
         intro="Ты собираешь плейлист. Названия треков записаны в массиве `titles`, их длина в секундах — в массиве `seconds` "
               "под теми же номерами. Иногда длина записана с ошибкой (0 или меньше): такую длину трек не принимает "
               "и остаётся с нулевой длиной.",
         steps=["Ниже класса `Solution` создай класс `Track` (без `public`) с закрытыми полями `private String title` и `private int seconds`.",
                "Добавь геттеры и сеттеры: `getTitle()` и `setTitle(String title)`, `getSeconds()` и `setSeconds(int seconds)`. "
                "Сеттер длины записывает значение, только если оно больше 0.",
-               "Добавь метод `String getDuration()`, который возвращает длину в виде `минуты:секунды`, где секунды всегда "
+               "Добавь метод `String getDuration()`, который возвращает длину в виде «минуты:секунды», где секунды всегда "
                "из двух цифр: 185 секунд — это `3:05`, 600 секунд — `10:00`.",
                "В `main` создай массив треков: для каждого названия — `new Track()` и два сеттера. Потом для каждого трека "
-               "выведи строку вида `Утро (3:05)`.",
-               "Последней строкой выведи строку вида `Всего: 12 мин 7 сек` — общую длину всех треков (сумму `getSeconds()`), "
+               "выведи строку вида `Morning (3:05)`.",
+               "Последней строкой выведи строку вида `Total: 12 min 7 sec` — общую длину всех треков (сумму `getSeconds()`), "
                "разделённую на минуты и секунды."],
         hint="Минуты — это `seconds / 60`, секунды — `seconds % 60`. Если секунд меньше 10, перед ними нужно дописать `0`, "
              "иначе вместо `3:05` получится `3:5`.",

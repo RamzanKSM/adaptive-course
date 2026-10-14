@@ -16,17 +16,17 @@ TASKS = [
               "Нужно посчитать, сколько всего придётся заплатить.",
         steps=["Заведи переменную для суммы, сначала она равна 0.",
                "Пройди по массиву `prices` циклом `for (int price : prices)` и прибавь к сумме каждую цену.",
-               "После цикла выведи две строки: `Товаров: …` — сколько цен в массиве — и `Итого: … руб.` — общую сумму."],
+               "После цикла выведи две строки: `Items: …` — сколько цен в массиве — и `Total: … rub` — общую сумму."],
         hint="В цикле `for (int price : prices)` переменная `price` по очереди принимает каждое значение из массива. "
              "Сумму объяви до цикла: если объявить её внутри, она будет заново становиться нулём на каждом шаге.",
         solution='int sum = 0;\nfor (int price : prices) {\n    sum += price;\n}\n'
-                 'System.out.println("Товаров: " + prices.length);\nSystem.out.println("Итого: " + sum + " руб.");',
+                 'System.out.println("Items: " + prices.length);\nSystem.out.println("Total: " + sum + " rub");',
         wrong=[("присваивает вместо прибавления: в сумме оказывается только последняя цена",
                 'int sum = 0;\nfor (int price : prices) {\n    sum = price;\n}\n'
-                'System.out.println("Товаров: " + prices.length);\nSystem.out.println("Итого: " + sum + " руб.");'),
+                'System.out.println("Items: " + prices.length);\nSystem.out.println("Total: " + sum + " rub");'),
                ("начинает цикл с индекса 1: первая цена не попадает в сумму",
                 'int sum = 0;\nfor (int i = 1; i < prices.length; i++) {\n    sum += prices[i];\n}\n'
-                'System.out.println("Товаров: " + prices.length);\nSystem.out.println("Итого: " + sum + " руб.");')],
+                'System.out.println("Items: " + prices.length);\nSystem.out.println("Total: " + sum + " rub");')],
         constructs=["list", "for"],
     ),
     JavaOutputTask(
@@ -42,23 +42,23 @@ TASKS = [
         intro="Шагомер записал, сколько шагов ты проходил каждый день: массив `steps`, по одному числу на день. "
               "Твоя цель — не меньше {goal} шагов в день (поле `goal`).",
         steps=["Пройди по массиву циклом с индексом. Для каждого дня, когда цель выполнена (шагов `goal` или больше), "
-               "выведи строку вида `День 2: 10450` — номер дня и число шагов. Дни нумеруются с 1.",
-               "Заодно посчитай такие дни. После цикла выведи строку вида `Цель выполнена в 2 дн. из 5`, "
+               "выведи строку вида `Day 2: 10450` — номер дня и число шагов. Дни нумеруются с 1.",
+               "Заодно посчитай такие дни. После цикла выведи строку вида `Goal reached on 2 of 5 days`, "
                "где второе число — сколько всего дней в массиве.",
                "Если цель не выполнена ни разу, программа выводит только последнюю строку."],
         hint="Номер дня нужен в выводе, поэтому здесь удобен цикл с индексом: `for (int i = 0; i < steps.length; i++)`. "
              "Номер дня на 1 больше индекса.",
         solution='int count = 0;\nfor (int i = 0; i < steps.length; i++) {\n    if (steps[i] >= goal) {\n'
-                 '        System.out.println("День " + (i + 1) + ": " + steps[i]);\n        count++;\n    }\n}\n'
-                 'System.out.println("Цель выполнена в " + count + " дн. из " + steps.length);',
+                 '        System.out.println("Day " + (i + 1) + ": " + steps[i]);\n        count++;\n    }\n}\n'
+                 'System.out.println("Goal reached on " + count + " of " + steps.length + " days");',
         wrong=[("строгое сравнение: день ровно с goal шагов не засчитывается",
                 'int count = 0;\nfor (int i = 0; i < steps.length; i++) {\n    if (steps[i] > goal) {\n'
-                '        System.out.println("День " + (i + 1) + ": " + steps[i]);\n        count++;\n    }\n}\n'
-                'System.out.println("Цель выполнена в " + count + " дн. из " + steps.length);'),
+                '        System.out.println("Day " + (i + 1) + ": " + steps[i]);\n        count++;\n    }\n}\n'
+                'System.out.println("Goal reached on " + count + " of " + steps.length + " days");'),
                ("нумерует дни с нуля",
                 'int count = 0;\nfor (int i = 0; i < steps.length; i++) {\n    if (steps[i] >= goal) {\n'
-                '        System.out.println("День " + i + ": " + steps[i]);\n        count++;\n    }\n}\n'
-                'System.out.println("Цель выполнена в " + count + " дн. из " + steps.length);')],
+                '        System.out.println("Day " + i + ": " + steps[i]);\n        count++;\n    }\n}\n'
+                'System.out.println("Goal reached on " + count + " of " + steps.length + " days");')],
         constructs=["list", "for", "if"],
     ),
     JavaOutputTask(
@@ -73,21 +73,21 @@ TASKS = [
                "а в переменную для номера дня — 1.",
                "Пройди циклом по остальным дням. Если в какой-то день температура ниже найденной, запомни её и номер "
                "этого дня (дни нумеруются с 1). Если самых холодных дней несколько, нужен самый первый из них.",
-               "После цикла выведи две строки: `Самый холодный день: …` с номером дня и `Температура: …` "
+               "После цикла выведи две строки: `Coldest day: …` с номером дня и `Temperature: …` "
                "с температурой в этот день."],
         hint="Не начинай поиск с нуля: если все дни тёплые, ноль окажется ниже любой температуры из массива, "
              "и ответ будет неверным. Первый элемент массива — надёжное начальное значение.",
         solution='int min = temps[0];\nint day = 1;\nfor (int i = 1; i < temps.length; i++) {\n    if (temps[i] < min) {\n'
                  '        min = temps[i];\n        day = i + 1;\n    }\n}\n'
-                 'System.out.println("Самый холодный день: " + day);\nSystem.out.println("Температура: " + min);',
+                 'System.out.println("Coldest day: " + day);\nSystem.out.println("Temperature: " + min);',
         wrong=[("начинает поиск с нуля: если все дни тёплые, находит несуществующие 0 градусов",
                 'int min = 0;\nint day = 1;\nfor (int i = 0; i < temps.length; i++) {\n    if (temps[i] < min) {\n'
                 '        min = temps[i];\n        day = i + 1;\n    }\n}\n'
-                'System.out.println("Самый холодный день: " + day);\nSystem.out.println("Температура: " + min);'),
+                'System.out.println("Coldest day: " + day);\nSystem.out.println("Temperature: " + min);'),
                ("сравнивает через <=: из одинаково холодных дней выбирает последний",
                 'int min = temps[0];\nint day = 1;\nfor (int i = 1; i < temps.length; i++) {\n    if (temps[i] <= min) {\n'
                 '        min = temps[i];\n        day = i + 1;\n    }\n}\n'
-                'System.out.println("Самый холодный день: " + day);\nSystem.out.println("Температура: " + min);')],
+                'System.out.println("Coldest day: " + day);\nSystem.out.println("Temperature: " + min);')],
         constructs=["list", "for", "if"],
     ),
 ]

@@ -39,7 +39,7 @@ TASKS = [
         steps=["Допиши метод `testResult(String name, int correct, int total)`: `name` — имя ученика, `correct` — "
                "сколько верных ответов, `total` — сколько всего было вопросов (всегда больше 0).",
                "Посчитай процент правильных ответов целым числом, дробную часть отбрось: например, 7 верных из 9 — это 77%.",
-               "Если процент {pass} или больше, верни строку вида `Аня: зачёт (80%)`, иначе — `Аня: незачёт (40%)`, "
+               "Если процент {pass} или больше, верни строку вида `Anya: pass (80%)`, иначе — `Anya: fail (40%)`, "
                "с именем и процентом этого ученика."],
         hint="Следи за порядком действий: при делении целых чисел дробная часть отбрасывается сразу, поэтому "
              "`7 / 10 * 100` даёт 0, а `7 * 100 / 10` — 70.",
@@ -47,20 +47,20 @@ TASKS = [
                 "        // Напиши решение здесь\n        return \"\";\n    }}\n}}\n",
         solution="public class Solution {{\n    static String testResult(String name, int correct, int total) {{\n"
                  "        int percent = correct * 100 / total;\n        if (percent >= {pass}) {{\n"
-                 "            return name + \": зачёт (\" + percent + \"%)\";\n        }}\n"
-                 "        return name + \": незачёт (\" + percent + \"%)\";\n    }}\n}}\n",
-        inputs=['"Аня", 8, 10', '"Борис", 4, 10', '"Вика", 3, 5', '"Гоша", 7, 10', '"Даша", 1, 2', '"Егор", 7, 9',
-                '"Жанна", 0, 12', '"Зоя", 20, 20', '"Ира", 2, 3'],
+                 "            return name + \": pass (\" + percent + \"%)\";\n        }}\n"
+                 "        return name + \": fail (\" + percent + \"%)\";\n    }}\n}}\n",
+        inputs=['"Anya", 8, 10', '"Boris", 4, 10', '"Vika", 3, 5', '"Gosha", 7, 10', '"Dasha", 1, 2', '"Egor", 7, 9',
+                '"Zhanna", 0, 12', '"Zoya", 20, 20', '"Ira", 2, 3'],
         wrong=[("делит раньше, чем умножает: из-за целочисленного деления процент почти всегда 0",
                 "public class Solution {{\n    static String testResult(String name, int correct, int total) {{\n"
                 "        int percent = correct / total * 100;\n        if (percent >= {pass}) {{\n"
-                "            return name + \": зачёт (\" + percent + \"%)\";\n        }}\n"
-                "        return name + \": незачёт (\" + percent + \"%)\";\n    }}\n}}\n"),
+                "            return name + \": pass (\" + percent + \"%)\";\n        }}\n"
+                "        return name + \": fail (\" + percent + \"%)\";\n    }}\n}}\n"),
                ("строгое сравнение: ровно проходной процент не засчитывается",
                 "public class Solution {{\n    static String testResult(String name, int correct, int total) {{\n"
                 "        int percent = correct * 100 / total;\n        if (percent > {pass}) {{\n"
-                "            return name + \": зачёт (\" + percent + \"%)\";\n        }}\n"
-                "        return name + \": незачёт (\" + percent + \"%)\";\n    }}\n}}\n")],
+                "            return name + \": pass (\" + percent + \"%)\";\n        }}\n"
+                "        return name + \": fail (\" + percent + \"%)\";\n    }}\n}}\n")],
     ),
     JavaFunctionTask(
         skill=SKILL, difficulty=3, slug="java-mp-taxi-fare", title="Цена поездки на такси",

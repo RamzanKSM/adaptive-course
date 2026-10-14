@@ -26,20 +26,20 @@ TASKS = [
                "Ноль и отрицательные суммы метод пропускает.",
                "Добавь метод `get_money(self)`, который возвращает, сколько денег в копилке.",
                "Создай копилку, положи в неё по очереди все суммы из списка `coins` через метод `put` "
-               "и выведи строку вида `В копилке: 80 руб.` — с суммой, которую вернул `get_money()`."],
+               "и выведи строку вида `Piggy bank: 80 rub` — с суммой, которую вернул `get_money()`."],
         hint="Вся проверка живёт внутри метода `put`, поэтому деньги нужно класть только через него. "
              "Если написать снаружи `bank._money += coin`, проверка не сработает и копилка примет даже отрицательную сумму.",
         solution='class PiggyBank:\n    def __init__(self):\n        self._money = 0\n\n    def put(self, amount):\n'
                  '        if amount > 0:\n            self._money += amount\n\n    def get_money(self):\n        return self._money\n\n\n'
-                 'bank = PiggyBank()\nfor coin in coins:\n    bank.put(coin)\nprint(f"В копилке: {bank.get_money()} руб.")',
+                 'bank = PiggyBank()\nfor coin in coins:\n    bank.put(coin)\nprint(f"Piggy bank: {bank.get_money()} rub")',
         wrong=[("метод put не проверяет сумму — отрицательные числа уменьшают копилку",
                 'class PiggyBank:\n    def __init__(self):\n        self._money = 0\n\n    def put(self, amount):\n'
                 '        self._money += amount\n\n    def get_money(self):\n        return self._money\n\n\n'
-                'bank = PiggyBank()\nfor coin in coins:\n    bank.put(coin)\nprint(f"В копилке: {bank.get_money()} руб.")'),
+                'bank = PiggyBank()\nfor coin in coins:\n    bank.put(coin)\nprint(f"Piggy bank: {bank.get_money()} rub")'),
                ("кладёт деньги в обход метода, меняя bank._money напрямую, — проверка не срабатывает",
                 'class PiggyBank:\n    def __init__(self):\n        self._money = 0\n\n    def put(self, amount):\n'
                 '        if amount > 0:\n            self._money += amount\n\n    def get_money(self):\n        return self._money\n\n\n'
-                'bank = PiggyBank()\nfor coin in coins:\n    bank._money += coin\nprint(f"В копилке: {bank.get_money()} руб.")')],
+                'bank = PiggyBank()\nfor coin in coins:\n    bank._money += coin\nprint(f"Piggy bank: {bank.get_money()} rub")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PRIVATE],
     ),
@@ -58,30 +58,30 @@ TASKS = [
               "просили поставить температуры из списка `requests`.",
         steps=["Создай класс `Thermostat`. В `__init__(self, temp)` сохрани температуру во внутренний атрибут `self._temp`.",
                "Добавь метод `set_temp(self, value)`. Если `value` от 16 до 28 включительно, он сохраняет её в `self._temp` "
-               "и выводит строку вида `Установлено: 22`. Иначе он выводит строку вида `Нельзя: 35` и температуру не меняет.",
+               "и выводит строку вида `Set: 22`. Иначе он выводит строку вида `Not allowed: 35` и температуру не меняет.",
                "Добавь метод `get_temp(self)`, который возвращает текущую температуру.",
                "Создай термостат с температурой `start` и передай в `set_temp` по очереди каждое значение из `requests`.",
-               "В конце выведи строку вида `Температура: 18` — со значением, которое вернул `get_temp()`."],
+               "В конце выведи строку вида `Temperature: 18` — со значением, которое вернул `get_temp()`."],
         hint="Сохранять новое значение нужно только внутри ветки `if`, где проверка прошла. Проверку диапазона "
              "удобно записать двойным сравнением: `16 <= value <= 28` — так границы 16 и 28 тоже разрешены.",
         solution='class Thermostat:\n    def __init__(self, temp):\n        self._temp = temp\n\n    def set_temp(self, value):\n'
-                 '        if 16 <= value <= 28:\n            self._temp = value\n            print(f"Установлено: {value}")\n'
-                 '        else:\n            print(f"Нельзя: {value}")\n\n    def get_temp(self):\n        return self._temp\n\n\n'
+                 '        if 16 <= value <= 28:\n            self._temp = value\n            print(f"Set: {value}")\n'
+                 '        else:\n            print(f"Not allowed: {value}")\n\n    def get_temp(self):\n        return self._temp\n\n\n'
                  'thermostat = Thermostat(start)\nfor value in requests:\n    thermostat.set_temp(value)\n'
-                 'print(f"Температура: {thermostat.get_temp()}")',
+                 'print(f"Temperature: {thermostat.get_temp()}")',
         wrong=[("строгие сравнения — границы 16 и 28 отклоняются",
                 'class Thermostat:\n    def __init__(self, temp):\n        self._temp = temp\n\n    def set_temp(self, value):\n'
-                '        if 16 < value < 28:\n            self._temp = value\n            print(f"Установлено: {value}")\n'
-                '        else:\n            print(f"Нельзя: {value}")\n\n    def get_temp(self):\n        return self._temp\n\n\n'
+                '        if 16 < value < 28:\n            self._temp = value\n            print(f"Set: {value}")\n'
+                '        else:\n            print(f"Not allowed: {value}")\n\n    def get_temp(self):\n        return self._temp\n\n\n'
                 'thermostat = Thermostat(start)\nfor value in requests:\n    thermostat.set_temp(value)\n'
-                'print(f"Температура: {thermostat.get_temp()}")'),
+                'print(f"Temperature: {thermostat.get_temp()}")'),
                ("сохраняет значение после проверки, вне if, — запрещённая температура всё равно ставится",
                 'class Thermostat:\n    def __init__(self, temp):\n        self._temp = temp\n\n    def set_temp(self, value):\n'
-                '        if 16 <= value <= 28:\n            print(f"Установлено: {value}")\n'
-                '        else:\n            print(f"Нельзя: {value}")\n        self._temp = value\n\n'
+                '        if 16 <= value <= 28:\n            print(f"Set: {value}")\n'
+                '        else:\n            print(f"Not allowed: {value}")\n        self._temp = value\n\n'
                 '    def get_temp(self):\n        return self._temp\n\n\n'
                 'thermostat = Thermostat(start)\nfor value in requests:\n    thermostat.set_temp(value)\n'
-                'print(f"Температура: {thermostat.get_temp()}")')],
+                'print(f"Temperature: {thermostat.get_temp()}")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PRIVATE],
     ),
@@ -106,8 +106,8 @@ TASKS = [
                "Добавь метод `use(self, amount)`: он отнимает `amount` от заряда, но если получилось меньше 0, "
                "заряд становится ровно 0. И метод `get_level(self)`, который возвращает заряд.",
                "Создай батарею с зарядом `start` и пройди циклом по `events`: положительное число передай в `charge`, "
-               "отрицательное — в `use`, но уже без минуса. После каждого события выведи строку вида `Заряд: 80%`.",
-               "Последней строкой выведи `Телефон выключился`, если заряд равен 0, а иначе — `Телефон работает`."],
+               "отрицательное — в `use`, но уже без минуса. После каждого события выведи строку вида `Battery: 80%`.",
+               "Последней строкой выведи `Phone is off`, если заряд равен 0, а иначе — `Phone is on`."],
         hint="Сначала измени заряд, а потом поправь его, если он вышел за границы: например, после прибавления проверь "
              "`if self.__level > 100` и поставь ровно 100. Чтобы превратить отрицательное событие в положительное "
              "число, поставь перед ним минус: `-event`.",
@@ -116,24 +116,24 @@ TASKS = [
                  '    def use(self, amount):\n        self.__level -= amount\n        if self.__level < 0:\n            self.__level = 0\n\n'
                  '    def get_level(self):\n        return self.__level\n\n\nbattery = Battery(start)\nfor event in events:\n'
                  '    if event > 0:\n        battery.charge(event)\n    else:\n        battery.use(-event)\n'
-                 '    print(f"Заряд: {battery.get_level()}%")\n\nif battery.get_level() == 0:\n    print("Телефон выключился")\n'
-                 'else:\n    print("Телефон работает")',
+                 '    print(f"Battery: {battery.get_level()}%")\n\nif battery.get_level() == 0:\n    print("Phone is off")\n'
+                 'else:\n    print("Phone is on")',
         wrong=[("charge не ограничивает заряд сверху — получается больше 100 %",
                 'class Battery:\n    def __init__(self, level):\n        self.__level = level\n\n    def charge(self, amount):\n'
                 '        self.__level += amount\n\n'
                 '    def use(self, amount):\n        self.__level -= amount\n        if self.__level < 0:\n            self.__level = 0\n\n'
                 '    def get_level(self):\n        return self.__level\n\n\nbattery = Battery(start)\nfor event in events:\n'
                 '    if event > 0:\n        battery.charge(event)\n    else:\n        battery.use(-event)\n'
-                '    print(f"Заряд: {battery.get_level()}%")\n\nif battery.get_level() == 0:\n    print("Телефон выключился")\n'
-                'else:\n    print("Телефон работает")'),
+                '    print(f"Battery: {battery.get_level()}%")\n\nif battery.get_level() == 0:\n    print("Phone is off")\n'
+                'else:\n    print("Phone is on")'),
                ("use не ограничивает заряд снизу — заряд уходит в минус, и телефон «работает»",
                 'class Battery:\n    def __init__(self, level):\n        self.__level = level\n\n    def charge(self, amount):\n'
                 '        self.__level += amount\n        if self.__level > 100:\n            self.__level = 100\n\n'
                 '    def use(self, amount):\n        self.__level -= amount\n\n'
                 '    def get_level(self):\n        return self.__level\n\n\nbattery = Battery(start)\nfor event in events:\n'
                 '    if event > 0:\n        battery.charge(event)\n    else:\n        battery.use(-event)\n'
-                '    print(f"Заряд: {battery.get_level()}%")\n\nif battery.get_level() == 0:\n    print("Телефон выключился")\n'
-                'else:\n    print("Телефон работает")')],
+                '    print(f"Battery: {battery.get_level()}%")\n\nif battery.get_level() == 0:\n    print("Phone is off")\n'
+                'else:\n    print("Phone is on")')],
         constructs=["class"],
         must_use=[NEED_CLASS, NEED_PRIVATE],
     ),

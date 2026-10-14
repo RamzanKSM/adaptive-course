@@ -50,8 +50,8 @@ class StudentSubscription extends Subscription {
 SUBSCRIPTION_MAIN = """\
 Subscription usual = new Subscription();
 StudentSubscription student = new StudentSubscription();
-System.out.println("Обычная подписка на " + months + " мес.: " + usual.price(months) + " руб.");
-System.out.println("Студенческая подписка на " + months + " мес.: " + student.price(months) + " руб.");"""
+System.out.println("Regular plan for " + months + " months: " + usual.price(months) + " rub");
+System.out.println("Student plan for " + months + " months: " + student.price(months) + " rub");"""
 
 BONUS = """\
 class Employee {
@@ -81,8 +81,8 @@ worker.salary = workerSalary;
 Manager boss = new Manager();
 boss.name = managerName;
 boss.salary = managerSalary;
-System.out.println(worker.name + ": премия " + worker.bonus() + ", всего " + worker.total() + " руб.");
-System.out.println(boss.name + ": премия " + boss.bonus() + ", всего " + boss.total() + " руб.");"""
+System.out.println(worker.name + ": bonus " + worker.bonus() + ", total " + worker.total() + " rub");
+System.out.println(boss.name + ": bonus " + boss.bonus() + ", total " + boss.total() + " rub");"""
 
 KNIGHT = """\
 class Fighter {
@@ -114,7 +114,7 @@ knight.health = health;
 for (int hit : hits) {
     archer.takeDamage(hit);
     knight.takeDamage(hit);
-    System.out.println("Лучник: " + archer.health + ", Рыцарь: " + knight.health);
+    System.out.println("Archer: " + archer.health + ", Knight: " + knight.health);
 }"""
 
 TASKS = [
@@ -132,8 +132,8 @@ TASKS = [
                "`int price(int months)`: студенческая подписка стоит 149 руб. за месяц. Над методом напиши `@Override`.",
                "В `main` создай `Subscription usual = new Subscription();` и "
                "`StudentSubscription student = new StudentSubscription();`.",
-               "Выведи две строки вида `Обычная подписка на 3 мес.: 897 руб.` и "
-               "`Студенческая подписка на 3 мес.: 447 руб.` — цены возьми из методов `price` этих объектов."],
+               "Выведи две строки вида `Regular plan for 3 months: 897 rub` и "
+               "`Student plan for 3 months: 447 rub` — цены возьми из методов `price` этих объектов."],
         hint="Переопределить метод — значит написать в наследнике метод с точно таким же именем и параметрами. "
              "Пометка `@Override` просит Java проверить это: если в имени опечатка, программа не скомпилируется, "
              "и ошибку будет сразу видно.",
@@ -152,12 +152,12 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-ovr-manager-bonus", title="Премия менеджера",
         given=[("String", "workerName"), ("int", "workerSalary"), ("String", "managerName"), ("int", "managerSalary")],
-        variants=[{"workerName": '"Ольга"', "workerSalary": "40000", "managerName": '"Павел"', "managerSalary": "60000"},
-                  {"workerName": '"Дима"', "workerSalary": "35000", "managerName": '"Ирина"', "managerSalary": "80000"},
-                  {"workerName": '"Катя"', "workerSalary": "52000", "managerName": '"Сергей"', "managerSalary": "70000"}],
-        hidden=[{"workerName": '"Нина"', "workerSalary": "10000", "managerName": '"Олег"', "managerSalary": "10000"},
-                {"workerName": '"Тимур"', "workerSalary": "45500", "managerName": '"Алла"', "managerSalary": "99999"},
-                {"workerName": '"Ян"', "workerSalary": "0", "managerName": '"Ева"', "managerSalary": "1000"}],
+        variants=[{"workerName": '"Olga"', "workerSalary": "40000", "managerName": '"Pavel"', "managerSalary": "60000"},
+                  {"workerName": '"Dima"', "workerSalary": "35000", "managerName": '"Irina"', "managerSalary": "80000"},
+                  {"workerName": '"Katya"', "workerSalary": "52000", "managerName": '"Sergey"', "managerSalary": "70000"}],
+        hidden=[{"workerName": '"Nina"', "workerSalary": "10000", "managerName": '"Oleg"', "managerSalary": "10000"},
+                {"workerName": '"Timur"', "workerSalary": "45500", "managerName": '"Alla"', "managerSalary": "99999"},
+                {"workerName": '"Yan"', "workerSalary": "0", "managerName": '"Eva"', "managerSalary": "1000"}],
         intro="В конце года каждый сотрудник получает премию: обычный сотрудник — десятую часть зарплаты, а менеджер — "
               "четверть. Выплату считают одинаково для всех: зарплата плюс премия. Значит, в классе менеджера нужно "
               "поменять только расчёт премии.",
@@ -168,7 +168,7 @@ TASKS = [
                "(с `@Override`): премия менеджера — зарплата, делённая на 4. Метод `total` в `Manager` не пиши.",
                "В `main` создай `Employee worker = new Employee();` и `Manager boss = new Manager();` и заполни их поля "
                "`name` и `salary` значениями из `workerName`, `workerSalary`, `managerName` и `managerSalary`.",
-               "Для каждого выведи строку вида `Ольга: премия 4000, всего 44000 руб.`"],
+               "Для каждого выведи строку вида `Olga: bonus 4000, total 44000 rub`"],
         hint="Метод `total` написан один раз в `Employee`, но вызывает `bonus()`. Когда `total` работает для менеджера, "
              "Java возьмёт версию `bonus` из `Manager`. Поэтому важно не считать премию в `total` вручную, а вызывать метод.",
         solution=BONUS_MAIN, classes=BONUS,
@@ -203,7 +203,7 @@ TASKS = [
                "В `main` создай `Fighter archer = new Fighter();` и `Knight knight = new Knight();` и запиши каждому "
                "из них начальное здоровье: `archer.health = health;` и так же для рыцаря.",
                "Пройди циклом по массиву `hits`: каждый удар получают и лучник, и рыцарь. После каждого удара выведи "
-               "строку вида `Лучник: 70, Рыцарь: 85`."],
+               "строку вида `Archer: 70, Knight: 85`."],
         hint="Переопределённый метод полностью заменяет метод родителя, поэтому в версии `Knight` проверку «не меньше "
              "нуля» нужно написать заново — из `Fighter` она сама не перейдёт.",
         solution=KNIGHT_MAIN, classes=KNIGHT,

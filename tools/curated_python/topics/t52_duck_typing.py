@@ -25,7 +25,7 @@ class Book:
         self.pages = pages
 
     def describe(self):
-        return f"книга «{self.title}», {self.pages} стр."
+        return f'book "{self.title}", {self.pages} pages'
 
 
 class Phone:
@@ -34,11 +34,11 @@ class Phone:
         self.battery = battery
 
     def describe(self):
-        return f"телефон {self.model}, заряд {self.battery}%"
+        return f"phone {self.model}, battery {self.battery}%"
 
 
 def show(item):
-    print(f"В рюкзаке: {item.describe()}")
+    print(f"In the backpack: {item.describe()}")
 
 
 book = Book(title, pages)
@@ -49,7 +49,7 @@ show(phone)
 
 HIKE = """\
 class Tent:
-    name = "Палатка"
+    name = "Tent"
 
     def __init__(self, grams):
         self.grams = grams
@@ -59,7 +59,7 @@ class Tent:
 
 
 class Food:
-    name = "Еда"
+    name = "Food"
 
     def __init__(self, portions):
         self.portions = portions
@@ -69,7 +69,7 @@ class Food:
 
 
 class Water:
-    name = "Вода"
+    name = "Water"
 
     def __init__(self, liters):
         self.liters = liters
@@ -81,13 +81,13 @@ class Water:
 def pack(items, limit):
     total = 0
     for item in items:
-        print(f"{item.name}: {item.weight()} г")
+        print(f"{item.name}: {item.weight()} g")
         total += item.weight()
-    print(f"Итого: {total} г")
+    print(f"Total: {total} g")
     if total > limit:
-        print("Слишком тяжело")
+        print("Too heavy")
     else:
-        print("Можно идти в поход")
+        print("Ready for the hike")
 
 
 pack([Tent(tent), Food(portions), Water(liters)], limit)
@@ -95,7 +95,7 @@ pack([Tent(tent), Food(portions), Water(liters)], limit)
 
 CHECKOUT = """\
 class Card:
-    way = "картой"
+    way = "by card"
 
     def __init__(self, balance):
         self.balance = balance
@@ -108,7 +108,7 @@ class Card:
 
 
 class Coupon:
-    way = "купоном"
+    way = "by coupon"
 
     def __init__(self, value):
         self.value = value
@@ -123,37 +123,37 @@ class Coupon:
 def pay_for(price, payers):
     for payer in payers:
         if payer.pay(price):
-            print(f"{price} руб.: оплачено {payer.way}")
+            print(f"{price} rub: paid {payer.way}")
             return
-    print(f"{price} руб.: не хватает денег")
+    print(f"{price} rub: not enough money")
 
 
 card = Card(balance)
 coupon = Coupon(coupon_value)
 for price in prices:
     pay_for(price, [coupon, card])
-print(f"На карте осталось: {card.balance} руб.")
+print(f"Left on card: {card.balance} rub")
 """
 
 TASKS = [
     OutputTask(
         skill=SKILL, difficulty=1, slug="py-duck-backpack", title="Что лежит в рюкзаке",
         given=["title", "pages", "model", "battery"],
-        variants=[{"title": '"Дюна"', "pages": "412", "model": '"Nokia"', "battery": "80"},
-                  {"title": '"Гарри Поттер"', "pages": "320", "model": '"Pixel"', "battery": "15"},
-                  {"title": '"Маленький принц"', "pages": "96", "model": '"iPhone"', "battery": "100"}],
-        hidden=[{"title": '"Онегин"', "pages": "240", "model": '"Galaxy"', "battery": "5"},
-                {"title": '"Хоббит"', "pages": "310", "model": '"Redmi"', "battery": "57"},
-                {"title": '"Муму"', "pages": "48", "model": '"Xperia"', "battery": "99"}],
+        variants=[{"title": '"Dune"', "pages": "412", "model": '"Nokia"', "battery": "80"},
+                  {"title": '"Harry Potter"', "pages": "320", "model": '"Pixel"', "battery": "15"},
+                  {"title": '"The Little Prince"', "pages": "96", "model": '"iPhone"', "battery": "100"}],
+        hidden=[{"title": '"Onegin"', "pages": "240", "model": '"Galaxy"', "battery": "5"},
+                {"title": '"The Hobbit"', "pages": "310", "model": '"Redmi"', "battery": "57"},
+                {"title": '"Mumu"', "pages": "48", "model": '"Xperia"', "battery": "99"}],
         intro="Ты собираешь рюкзак, и программа перечисляет, что в нём лежит. Книга и телефон — совсем разные "
               "классы без общего родителя, но оба умеют описать себя методом `describe()`. "
               "Функции, которая выводит содержимое рюкзака, этого достаточно.",
         steps=["Создай класс `Book`. В `__init__(self, title, pages)` сохрани название и число страниц. Добавь метод "
-               "`describe(self)`, который возвращает строку вида `книга «Дюна», 412 стр.`",
+               "`describe(self)`, который возвращает строку вида `book \"Dune\", 412 pages`",
                "Создай класс `Phone` — отдельный, без родителя. В `__init__(self, model, battery)` сохрани модель "
                "и заряд в процентах. Добавь метод `describe(self)`, который возвращает строку вида "
-               "`телефон Nokia, заряд 80%`.",
-               "Напиши функцию `show(item)`, которая печатает строку вида `В рюкзаке: книга «Дюна», 412 стр.` — "
+               "`phone Nokia, battery 80%`.",
+               "Напиши функцию `show(item)`, которая печатает строку вида `In the backpack: book \"Dune\", 412 pages` — "
                "после двоеточия и пробела идёт результат `item.describe()`. Проверять, книга это или телефон, не нужно.",
                "Создай `book = Book(title, pages)` и `phone = Phone(model, battery)` и вызови `show` сначала "
                "для книги, потом для телефона."],
@@ -161,12 +161,12 @@ TASKS = [
              "Главное, чтобы `describe` **возвращал** строку через `return`, а не печатал её сам.",
         solution=BACKPACK,
         wrong=[("функция show берёт глобальную переменную book вместо параметра item — книга выводится дважды",
-                BACKPACK.replace('    print(f"В рюкзаке: {item.describe()}")', '    print(f"В рюкзаке: {book.describe()}")')),
+                BACKPACK.replace('    print(f"In the backpack: {item.describe()}")', '    print(f"In the backpack: {book.describe()}")')),
                ("describe печатает описание вместо return — show выводит None",
-                BACKPACK.replace('        return f"книга «{self.title}», {self.pages} стр."',
-                                 '        print(f"книга «{self.title}», {self.pages} стр.")')
-                        .replace('        return f"телефон {self.model}, заряд {self.battery}%"',
-                                 '        print(f"телефон {self.model}, заряд {self.battery}%")'))],
+                BACKPACK.replace('        return f\'book "{self.title}", {self.pages} pages\'',
+                                 '        print(f\'book "{self.title}", {self.pages} pages\')')
+                        .replace('        return f"phone {self.model}, battery {self.battery}%"',
+                                 '        print(f"phone {self.model}, battery {self.battery}%")'))],
         constructs=["class", "function"],
         must_use=[NEED_CLASS, NO_PARENT, need_function("show", "item")],
     ),
@@ -184,13 +184,13 @@ TASKS = [
               "и вес у каждого считается по-своему, но у всех есть метод `weight()`.",
         steps=["Создай три отдельных класса без общего родителя. У каждого — атрибут класса `name` "
                "и метод `weight(self)`, который возвращает вес в граммах.",
-               "`Tent`: `name = \"Палатка\"`, в `__init__(self, grams)` сохраняет вес, `weight` возвращает его.",
-               "`Food`: `name = \"Еда\"`, в `__init__(self, portions)` сохраняет число порций, `weight` возвращает "
-               "по 300 граммов на порцию. `Water`: `name = \"Вода\"`, в `__init__(self, liters)` сохраняет литры, "
+               "`Tent`: `name = \"Tent\"`, в `__init__(self, grams)` сохраняет вес, `weight` возвращает его.",
+               "`Food`: `name = \"Food\"`, в `__init__(self, portions)` сохраняет число порций, `weight` возвращает "
+               "по 300 граммов на порцию. `Water`: `name = \"Water\"`, в `__init__(self, liters)` сохраняет литры, "
                "`weight` возвращает по 1000 граммов на литр.",
                "Напиши функцию `pack(items, limit)`. Для каждого предмета из списка `items` она печатает строку "
-               "вида `Палатка: 2500 г`, потом строку вида `Итого: 5700 г` с общим весом. Если общий вес больше `limit`, "
-               "последней строкой печатает `Слишком тяжело`, иначе — `Можно идти в поход`.",
+               "вида `Tent: 2500 g`, потом строку вида `Total: 5700 g` с общим весом. Если общий вес больше `limit`, "
+               "последней строкой печатает `Too heavy`, иначе — `Ready for the hike`.",
                "Вызови `pack([Tent(tent), Food(portions), Water(liters)], limit)`."],
         hint="Внутри `pack` не нужно выяснять, палатка перед тобой или вода: у любого предмета есть `name` и `weight()`. "
              "Общий вес копи в переменной, которую создаёшь до цикла. И обрати внимание: ровно `limit` граммов "
@@ -216,27 +216,27 @@ TASKS = [
         intro="На кассе покупатель может заплатить картой или подарочным купоном. Карта и купон — совсем разные вещи, "
               "но у обоих есть метод `pay`, и кассе этого достаточно: ей неважно, что ей дали, лишь бы оно умело платить. "
               "На карте `balance` рублей, купон на `coupon_value` рублей, а цены покупок — в списке `prices`.",
-        steps=["Создай класс `Card` с атрибутом класса `way = \"картой\"`. В `__init__(self, balance)` сохрани баланс. "
+        steps=["Создай класс `Card` с атрибутом класса `way = \"by card\"`. В `__init__(self, balance)` сохрани баланс. "
                "Метод `pay(self, price)`: если цена не больше баланса, списывает её с баланса и возвращает `True`, "
                "иначе возвращает `False`.",
-               "Создай отдельный класс `Coupon` (не наследник `Card`) с атрибутом класса `way = \"купоном\"`. "
+               "Создай отдельный класс `Coupon` (не наследник `Card`) с атрибутом класса `way = \"by coupon\"`. "
                "В `__init__(self, value)` сохрани номинал купона. Метод `pay(self, price)`: если цена не больше номинала, "
                "купон сгорает целиком — номинал становится 0 — и метод возвращает `True`, иначе возвращает `False`.",
                "Напиши функцию `pay_for(price, payers)`. Она по очереди пробует заплатить `price` каждым способом "
                "из списка `payers`, вызывая у него `pay(price)`. При первой удачной оплате печатает строку вида "
-               "`300 руб.: оплачено купоном` и сразу завершает работу через `return`. Если не подошёл ни один способ, "
-               "печатает строку вида `1200 руб.: не хватает денег`.",
+               "`300 rub: paid by coupon` и сразу завершает работу через `return`. Если не подошёл ни один способ, "
+               "печатает строку вида `1200 rub: not enough money`.",
                "Создай `card = Card(balance)` и `coupon = Coupon(coupon_value)`. Для каждой цены из `prices` вызови "
                "`pay_for(price, [coupon, card])` — сначала пробуем купон, потом карту.",
-               "Последней строкой выведи остаток на карте в виде `На карте осталось: 250 руб.`"],
+               "Последней строкой выведи остаток на карте в виде `Left on card: 250 rub`"],
         hint="Функции `pay_for` не нужно знать, карта перед ней или купон: она вызывает `payer.pay(price)` и смотрит, "
              "вернулось `True` или `False`. Это и есть утиная типизация: если объект умеет платить, им можно платить.",
         solution=CHECKOUT,
         wrong=[("купон не сгорает после оплаты — им платят снова и снова",
                 CHECKOUT.replace("            self.value = 0\n", "")),
                ("после удачной оплаты не выходит из функции — покупку оплачивают и купоном, и картой",
-                CHECKOUT.replace('            print(f"{price} руб.: оплачено {payer.way}")\n            return\n',
-                                 '            print(f"{price} руб.: оплачено {payer.way}")\n'))],
+                CHECKOUT.replace('            print(f"{price} rub: paid {payer.way}")\n            return\n',
+                                 '            print(f"{price} rub: paid {payer.way}")\n'))],
         constructs=["class", "function", "for"],
         must_use=[NEED_CLASS, NO_PARENT, need_function("pay_for", "price, payers")],
     ),

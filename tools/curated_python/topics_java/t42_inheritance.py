@@ -52,9 +52,9 @@ cat.weight = catWeight;
 Dog dog = new Dog();
 dog.name = dogName;
 dog.weight = dogWeight;
-System.out.println(cat.name + ": " + cat.dailyFood() + " г корма в день");
-System.out.println(dog.name + ": " + dog.dailyFood() + " г корма в день");
-System.out.println(dog.name + " гуляет " + dog.walkMinutes() + " минут");"""
+System.out.println(cat.name + ": " + cat.dailyFood() + " g of food a day");
+System.out.println(dog.name + ": " + dog.dailyFood() + " g of food a day");
+System.out.println(dog.name + " walks " + dog.walkMinutes() + " minutes");"""
 
 ACCOUNT = """\
 class Account {
@@ -78,13 +78,13 @@ class SavingsAccount extends Account {
 ACCOUNT_MAIN = """\
 SavingsAccount account = new SavingsAccount();
 account.deposit(start);
-System.out.println("Открыт счёт: " + account.getBalance() + " руб.");
+System.out.println("Account opened: " + account.getBalance() + " rub");
 account.addInterest(percent);
-System.out.println("После процентов: " + account.getBalance() + " руб.");
+System.out.println("After interest: " + account.getBalance() + " rub");
 account.deposit(extra);
-System.out.println("После пополнения: " + account.getBalance() + " руб.");
+System.out.println("After deposit: " + account.getBalance() + " rub");
 account.addInterest(percent);
-System.out.println("После процентов: " + account.getBalance() + " руб.");"""
+System.out.println("After interest: " + account.getBalance() + " rub");"""
 
 # A beginner's way round inheritance: a separate class with a copy of everything — the output is the same.
 ACCOUNT_COPIED = ACCOUNT.replace("""class SavingsAccount extends Account {
@@ -121,27 +121,27 @@ int total = 0;
 for (int w : regular) {
     Parcel parcel = new Parcel();
     parcel.weight = w;
-    System.out.println("Обычная посылка " + parcel.weight + " кг: " + parcel.price() + " руб.");
+    System.out.println("Regular parcel " + parcel.weight + " kg: " + parcel.price() + " rub");
     total += parcel.price();
 }
 for (int w : fragile) {
     FragileParcel parcel = new FragileParcel();
     parcel.weight = w;
-    System.out.println("Хрупкая посылка " + parcel.weight + " кг: " + parcel.safePrice() + " руб.");
+    System.out.println("Fragile parcel " + parcel.weight + " kg: " + parcel.safePrice() + " rub");
     total += parcel.safePrice();
 }
-System.out.println("Всего: " + total + " руб.");"""
+System.out.println("Total: " + total + " rub");"""
 
 TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-inh-pet-food", title="Корм для питомцев",
         given=[("String", "catName"), ("int", "catWeight"), ("String", "dogName"), ("int", "dogWeight")],
-        variants=[{"catName": '"Мурка"', "catWeight": "4", "dogName": '"Рекс"', "dogWeight": "12"},
-                  {"catName": '"Барсик"', "catWeight": "6", "dogName": '"Шарик"', "dogWeight": "20"},
-                  {"catName": '"Снежок"', "catWeight": "3", "dogName": '"Бим"', "dogWeight": "8"}],
-        hidden=[{"catName": '"Пушок"', "catWeight": "5", "dogName": '"Тузик"', "dogWeight": "5"},
-                {"catName": '"Луна"', "catWeight": "2", "dogName": '"Джек"', "dogWeight": "31"},
-                {"catName": '"Соня"', "catWeight": "7", "dogName": '"Граф"', "dogWeight": "15"}],
+        variants=[{"catName": '"Murka"', "catWeight": "4", "dogName": '"Rex"', "dogWeight": "12"},
+                  {"catName": '"Barsik"', "catWeight": "6", "dogName": '"Sharik"', "dogWeight": "20"},
+                  {"catName": '"Snowball"', "catWeight": "3", "dogName": '"Bim"', "dogWeight": "8"}],
+        hidden=[{"catName": '"Fluffy"', "catWeight": "5", "dogName": '"Tuzik"', "dogWeight": "5"},
+                {"catName": '"Luna"', "catWeight": "2", "dogName": '"Jack"', "dogWeight": "31"},
+                {"catName": '"Sonya"', "catWeight": "7", "dogName": '"Graf"', "dogWeight": "15"}],
         intro="Ветеринар составляет памятку для хозяев кошки и собаки. И кошка, и собака — питомцы: у каждого есть "
               "имя и вес, и корм обоим считают одинаково. А вот гулять нужно только с собакой.",
         steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Pet` без слова `public`, с полями `String name` и "
@@ -153,8 +153,8 @@ TASKS = [
                "сколько минут гулять с собакой — по 5 минут на каждый килограмм веса.",
                "В `main` создай `Cat cat = new Cat();` и `Dog dog = new Dog();` и заполни их поля `name` и `weight` "
                "значениями из `catName`, `catWeight`, `dogName` и `dogWeight`.",
-               "Выведи три строки: корм кошки, корм собаки и прогулку собаки — в виде `Мурка: 120 г корма в день`, "
-               "`Рекс: 360 г корма в день` и `Рекс гуляет 60 минут`."],
+               "Выведи три строки: корм кошки, корм собаки и прогулку собаки — в виде `Murka: 120 g of food a day`, "
+               "`Rex: 360 g of food a day` и `Rex walks 60 minutes`."],
         hint="Запись `class Cat extends Pet` значит «кошка — это питомец»: объект `Cat` сразу получает поля `name`, "
              "`weight` и метод `dailyFood()` из `Pet`, хотя в самом `Cat` их нет. В наследнике пишут только то, "
              "чего нет у родителя.",
@@ -196,9 +196,9 @@ TASKS = [
                "на 100, — и зачисляет их на счёт. Баланс узнай через унаследованный `getBalance()`, а деньги положи "
                "через унаследованный `deposit(...)`.",
                "В `main` создай `SavingsAccount account = new SavingsAccount();`, положи на него `start` рублей и выведи "
-               "строку вида `Открыт счёт: 1000 руб.` — с текущим балансом.",
-               "Затем по очереди: начисли проценты `percent` и выведи `После процентов: … руб.`; положи на счёт `extra` "
-               "рублей и выведи `После пополнения: … руб.`; ещё раз начисли проценты и выведи `После процентов: … руб.` "
+               "строку вида `Account opened: 1000 rub` — с текущим балансом.",
+               "Затем по очереди: начисли проценты `percent` и выведи `After interest: … rub`; положи на счёт `extra` "
+               "рублей и выведи `After deposit: … rub`; ещё раз начисли проценты и выведи `After interest: … rub` "
                "Вместо `…` — текущий баланс."],
         hint="Поле `balance` закрыто (`private`), поэтому даже наследник не может обратиться к нему напрямую. А методы "
              "`deposit` и `getBalance` не закрыты, и наследник получил их от родителя — внутри `addInterest` вызывай их "
@@ -237,10 +237,10 @@ TASKS = [
                "Опиши класс `FragileParcel` — наследник `Parcel`. Добавь в него только новый метод `int safePrice()`: "
                "цена доставки из унаследованного `price()` плюс 150 руб. за упаковку.",
                "Для каждого веса из `regular` создай объект `Parcel`, запиши вес в его поле `weight` и выведи строку вида "
-               "`Обычная посылка 2 кг: 140 руб.`",
+               "`Regular parcel 2 kg: 140 rub`",
                "Для каждого веса из `fragile` создай объект `FragileParcel`, запиши вес в его поле `weight` и выведи строку "
-               "вида `Хрупкая посылка 3 кг: 310 руб.` — с ценой из `safePrice()`.",
-               "Последней строкой выведи `Всего: … руб.` — сумму за все посылки (за хрупкие — вместе с упаковкой)."],
+               "вида `Fragile parcel 3 kg: 310 rub` — с ценой из `safePrice()`.",
+               "Последней строкой выведи `Total: … rub` — сумму за все посылки (за хрупкие — вместе с упаковкой)."],
         hint="Не считай цену доставки в `safePrice` заново — вызови `price()`: хрупкая посылка тоже посылка, и этот метод "
              "у неё уже есть от родителя. Если тариф доставки изменится, править его придётся только в одном месте.",
         solution=PARCELS_MAIN, classes=PARCELS,

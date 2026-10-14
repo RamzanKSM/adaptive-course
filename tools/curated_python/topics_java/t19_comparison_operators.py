@@ -14,23 +14,23 @@ TASKS = [
                 {"online": "100", "store": "9000"}],
         intro="Одни и те же наушники продаются в интернет-магазине и в обычном магазине у дома. "
               "Цена в интернете записана в поле `online`, цена в магазине — в поле `store` (в рублях).",
-        steps=["Выведи `В интернете дешевле: ` и результат сравнения: цена в интернете меньше цены в магазине.",
-               "Выведи `Цены равны: ` и результат сравнения: цены одинаковые.",
-               "Выведи `Цены разные: ` и результат сравнения: цены не равны.",
+        steps=["Выведи `Cheaper online: ` и результат сравнения: цена в интернете меньше цены в магазине.",
+               "Выведи `Same price: ` и результат сравнения: цены одинаковые.",
+               "Выведи `Different prices: ` и результат сравнения: цены не равны.",
                "Результат каждого сравнения Java напечатает сама — словом `true` или `false`."],
         hint="Сравнение само является значением `true` или `false`, его можно сразу прибавить к строке. "
-             "Только возьми его в скобки: `\"Больше: \" + (a > b)`. Без скобок Java попробует сравнить строку с числом.",
-        solution='System.out.println("В интернете дешевле: " + (online < store));\n'
-                 'System.out.println("Цены равны: " + (online == store));\n'
-                 'System.out.println("Цены разные: " + (online != store));',
+             "Только возьми его в скобки: `\"Bigger: \" + (a > b)`. Без скобок Java попробует сравнить строку с числом.",
+        solution='System.out.println("Cheaper online: " + (online < store));\n'
+                 'System.out.println("Same price: " + (online == store));\n'
+                 'System.out.println("Different prices: " + (online != store));',
         wrong=[("<= вместо <: при равных ценах пишет, что в интернете дешевле",
-                'System.out.println("В интернете дешевле: " + (online <= store));\n'
-                'System.out.println("Цены равны: " + (online == store));\n'
-                'System.out.println("Цены разные: " + (online != store));'),
+                'System.out.println("Cheaper online: " + (online <= store));\n'
+                'System.out.println("Same price: " + (online == store));\n'
+                'System.out.println("Different prices: " + (online != store));'),
                ("сравнение в обратную сторону: > вместо <",
-                'System.out.println("В интернете дешевле: " + (online > store));\n'
-                'System.out.println("Цены равны: " + (online == store));\n'
-                'System.out.println("Цены разные: " + (online != store));')],
+                'System.out.println("Cheaper online: " + (online > store));\n'
+                'System.out.println("Same price: " + (online == store));\n'
+                'System.out.println("Different prices: " + (online != store));')],
     ),
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-compare-match-result", title="Итог футбольного матча",
@@ -40,20 +40,20 @@ TASKS = [
                 {"home": "1", "away": "0"}],
         intro="Табло на стадионе после матча показывает счёт и итог игры. Сколько голов забили хозяева поля, записано "
               "в поле `home`, сколько забили гости — в поле `away`.",
-        steps=["Выведи счёт: слово `Счёт`, пробел, голы хозяев, двоеточие и голы гостей, например `Счёт 3:0`.",
-               "Следующей строкой: если хозяева забили больше, чем гости, выведи `Победа хозяев`.",
-               "Если гости забили больше, чем хозяева, выведи `Победа гостей`.",
-               "Если голов поровну, выведи `Ничья`."],
+        steps=["Выведи счёт: слово `Score`, пробел, голы хозяев, двоеточие и голы гостей, например `Score 3:0`.",
+               "Следующей строкой: если хозяева забили больше, чем гости, выведи `Home team wins`.",
+               "Если гости забили больше, чем хозяева, выведи `Away team wins`.",
+               "Если голов поровну, выведи `Draw`."],
         hint="Исходов три, поэтому удобно написать `if`, затем `else if` и в конце `else`. Проверки идут сверху вниз, "
              "и выполняется только первая подходящая ветка — ничья останется для последнего `else`.",
-        solution='System.out.println("Счёт " + home + ":" + away);\nif (home > away) {\n    System.out.println("Победа хозяев");\n'
-                 '} else if (home < away) {\n    System.out.println("Победа гостей");\n} else {\n    System.out.println("Ничья");\n}',
+        solution='System.out.println("Score " + home + ":" + away);\nif (home > away) {\n    System.out.println("Home team wins");\n'
+                 '} else if (home < away) {\n    System.out.println("Away team wins");\n} else {\n    System.out.println("Draw");\n}',
         wrong=[(">= вместо >: при ничьей объявляет победу хозяев",
-                'System.out.println("Счёт " + home + ":" + away);\nif (home >= away) {\n    System.out.println("Победа хозяев");\n'
-                '} else if (home < away) {\n    System.out.println("Победа гостей");\n} else {\n    System.out.println("Ничья");\n}'),
+                'System.out.println("Score " + home + ":" + away);\nif (home >= away) {\n    System.out.println("Home team wins");\n'
+                '} else if (home < away) {\n    System.out.println("Away team wins");\n} else {\n    System.out.println("Draw");\n}'),
                ("только две ветки: ничья считается победой гостей",
-                'System.out.println("Счёт " + home + ":" + away);\nif (home > away) {\n    System.out.println("Победа хозяев");\n'
-                '} else {\n    System.out.println("Победа гостей");\n}')],
+                'System.out.println("Score " + home + ":" + away);\nif (home > away) {\n    System.out.println("Home team wins");\n'
+                '} else {\n    System.out.println("Away team wins");\n}')],
         constructs=["if"],
     ),
     JavaOutputTask(
@@ -64,26 +64,26 @@ TASKS = [
                 {"speed": "81", "limit": "60"}, {"speed": "100", "limit": "60"}, {"speed": "101", "limit": "60"}],
         intro="Камера на дороге измерила скорость машины — поле `speed`, в км/ч. На этом участке можно ехать не быстрее, "
               "чем указано в поле `limit`. Размер штрафа зависит от того, насколько превышена скорость.",
-        steps=["Если `speed` не больше `limit`, выведи одну строку `Скорость в норме`.",
-               "Иначе посчитай превышение (`speed` минус `limit`) и выведи его строкой `Превышение: … км/ч`.",
-               "Затем следующей строкой выведи штраф: если превышение не больше 20 км/ч — `Штрафа нет`, "
-               "если от 21 до 40 км/ч включительно — `Штраф 500 руб.`, если больше 40 км/ч — `Штраф 1000 руб.`"],
+        steps=["Если `speed` не больше `limit`, выведи одну строку `Speed is OK`.",
+               "Иначе посчитай превышение (`speed` минус `limit`) и выведи его строкой `Over by: … km/h`.",
+               "Затем следующей строкой выведи штраф: если превышение не больше 20 км/ч — `No fine`, "
+               "если от 21 до 40 км/ч включительно — `Fine: 500 rub`, если больше 40 км/ч — `Fine: 1000 rub`"],
         hint="Внутри ветки `else` можно написать ещё один `if`. Проверь границы: превышение ровно на 20 км/ч ещё без штрафа, "
              "а ровно на 40 км/ч — штраф 500 руб. Подумай, где нужен `<`, а где `<=`.",
-        solution='if (speed <= limit) {\n    System.out.println("Скорость в норме");\n} else {\n    int excess = speed - limit;\n'
-                 '    System.out.println("Превышение: " + excess + " км/ч");\n    if (excess <= 20) {\n        System.out.println("Штрафа нет");\n'
-                 '    } else if (excess <= 40) {\n        System.out.println("Штраф 500 руб.");\n    } else {\n'
-                 '        System.out.println("Штраф 1000 руб.");\n    }\n}',
+        solution='if (speed <= limit) {\n    System.out.println("Speed is OK");\n} else {\n    int excess = speed - limit;\n'
+                 '    System.out.println("Over by: " + excess + " km/h");\n    if (excess <= 20) {\n        System.out.println("No fine");\n'
+                 '    } else if (excess <= 40) {\n        System.out.println("Fine: 500 rub");\n    } else {\n'
+                 '        System.out.println("Fine: 1000 rub");\n    }\n}',
         wrong=[("строгие сравнения: превышение ровно на 20 или 40 км/ч попадает в следующий штраф",
-                'if (speed <= limit) {\n    System.out.println("Скорость в норме");\n} else {\n    int excess = speed - limit;\n'
-                '    System.out.println("Превышение: " + excess + " км/ч");\n    if (excess < 20) {\n        System.out.println("Штрафа нет");\n'
-                '    } else if (excess < 40) {\n        System.out.println("Штраф 500 руб.");\n    } else {\n'
-                '        System.out.println("Штраф 1000 руб.");\n    }\n}'),
+                'if (speed <= limit) {\n    System.out.println("Speed is OK");\n} else {\n    int excess = speed - limit;\n'
+                '    System.out.println("Over by: " + excess + " km/h");\n    if (excess < 20) {\n        System.out.println("No fine");\n'
+                '    } else if (excess < 40) {\n        System.out.println("Fine: 500 rub");\n    } else {\n'
+                '        System.out.println("Fine: 1000 rub");\n    }\n}'),
                ("< вместо <= в первой проверке: ровно разрешённая скорость считается превышением",
-                'if (speed < limit) {\n    System.out.println("Скорость в норме");\n} else {\n    int excess = speed - limit;\n'
-                '    System.out.println("Превышение: " + excess + " км/ч");\n    if (excess <= 20) {\n        System.out.println("Штрафа нет");\n'
-                '    } else if (excess <= 40) {\n        System.out.println("Штраф 500 руб.");\n    } else {\n'
-                '        System.out.println("Штраф 1000 руб.");\n    }\n}')],
+                'if (speed < limit) {\n    System.out.println("Speed is OK");\n} else {\n    int excess = speed - limit;\n'
+                '    System.out.println("Over by: " + excess + " km/h");\n    if (excess <= 20) {\n        System.out.println("No fine");\n'
+                '    } else if (excess <= 40) {\n        System.out.println("Fine: 500 rub");\n    } else {\n'
+                '        System.out.println("Fine: 1000 rub");\n    }\n}')],
         constructs=["if"],
     ),
 ]

@@ -14,19 +14,19 @@ TASKS = [
         hidden=[{"temp": "24"}, {"temp": "28"}, {"temp": "23"}, {"temp": "29"}, {"temp": "25"}, {"temp": "15"}],
         intro="Рыбкам в аквариуме хорошо, когда вода не холоднее 24 °C и не теплее 28 °C. "
               "Датчик записал температуру воды в поле `temp`.",
-        steps=["Если `temp` не меньше 24 **и** не больше 28, выведи `Рыбкам комфортно`.",
-               "Иначе выведи `Температуру нужно поправить`.",
+        steps=["Если `temp` не меньше 24 **и** не больше 28, выведи `The fish are fine`.",
+               "Иначе выведи `Fix the temperature`.",
                "Запиши обе проверки в одном условии через `&&`."],
         hint="Условие с `&&` истинно, только когда истинны обе его части. Каждая часть — полное сравнение с `temp`: "
              "запись вида `24 <= temp <= 28` в Java не скомпилируется.",
-        solution='if (temp >= 24 && temp <= 28) {\n    System.out.println("Рыбкам комфортно");\n} else {\n'
-                 '    System.out.println("Температуру нужно поправить");\n}',
+        solution='if (temp >= 24 && temp <= 28) {\n    System.out.println("The fish are fine");\n} else {\n'
+                 '    System.out.println("Fix the temperature");\n}',
         wrong=[("строгие сравнения: ровно 24 и ровно 28 °C считаются неподходящими",
-                'if (temp > 24 && temp < 28) {\n    System.out.println("Рыбкам комфортно");\n} else {\n'
-                '    System.out.println("Температуру нужно поправить");\n}'),
+                'if (temp > 24 && temp < 28) {\n    System.out.println("The fish are fine");\n} else {\n'
+                '    System.out.println("Fix the temperature");\n}'),
                ("|| вместо &&: условие верно при любой температуре",
-                'if (temp >= 24 || temp <= 28) {\n    System.out.println("Рыбкам комфортно");\n} else {\n'
-                '    System.out.println("Температуру нужно поправить");\n}')],
+                'if (temp >= 24 || temp <= 28) {\n    System.out.println("The fish are fine");\n} else {\n'
+                '    System.out.println("Fix the temperature");\n}')],
         constructs=["if"],
     ),
     JavaOutputTask(
@@ -40,19 +40,19 @@ TASKS = [
         intro="На экзамен пускают, только если у ученика с собой паспорт и он опоздал не больше чем на 15 минут. "
               "Есть ли паспорт, записано в поле `hasPassport` (`true` или `false`), на сколько минут ученик опоздал — "
               "в поле `minutesLate` (0 — пришёл вовремя).",
-        steps=["Если паспорт есть **и** опоздание не больше 15 минут, выведи `Проходите в аудиторию`.",
-               "Иначе выведи `Вход на экзамен закрыт`.",
+        steps=["Если паспорт есть **и** опоздание не больше 15 минут, выведи `Come in, please`.",
+               "Иначе выведи `Entry is closed`.",
                "Объедини обе проверки в одном условии через `&&`."],
         hint="Переменная типа `boolean` сама уже является условием: `hasPassport && …` читается как «паспорт есть и …». "
              "Ученика, опоздавшего ровно на 15 минут, ещё пускают.",
-        solution='if (hasPassport && minutesLate <= 15) {\n    System.out.println("Проходите в аудиторию");\n} else {\n'
-                 '    System.out.println("Вход на экзамен закрыт");\n}',
+        solution='if (hasPassport && minutesLate <= 15) {\n    System.out.println("Come in, please");\n} else {\n'
+                 '    System.out.println("Entry is closed");\n}',
         wrong=[("|| вместо &&: пускает без паспорта или с большим опозданием",
-                'if (hasPassport || minutesLate <= 15) {\n    System.out.println("Проходите в аудиторию");\n} else {\n'
-                '    System.out.println("Вход на экзамен закрыт");\n}'),
+                'if (hasPassport || minutesLate <= 15) {\n    System.out.println("Come in, please");\n} else {\n'
+                '    System.out.println("Entry is closed");\n}'),
                ("строгое < 15: опоздавшего ровно на 15 минут не пускает",
-                'if (hasPassport && minutesLate < 15) {\n    System.out.println("Проходите в аудиторию");\n} else {\n'
-                '    System.out.println("Вход на экзамен закрыт");\n}')],
+                'if (hasPassport && minutesLate < 15) {\n    System.out.println("Come in, please");\n} else {\n'
+                '    System.out.println("Entry is closed");\n}')],
         constructs=["if"],
     ),
     JavaOutputTask(
@@ -65,22 +65,22 @@ TASKS = [
               "палочка короче, чем две другие вместе.",
         steps=["Составь одно условие из трёх сравнений, соединённых `&&`: `a` меньше `b + c`, `b` меньше `a + c` "
                "и `c` меньше `a + b`.",
-               "Если условие верно, выведи `Треугольник получится`, а следующей строкой — `Периметр: … см` "
+               "Если условие верно, выведи `Triangle: yes`, а следующей строкой — `Perimeter: … cm` "
                "(сумма длин трёх палочек).",
-               "Иначе выведи одну строку `Треугольник не сложить`."],
+               "Иначе выведи одну строку `Triangle: no`."],
         hint="Если одна палочка ровно равна сумме двух других, треугольник «сплющится» в отрезок, поэтому сравнения "
              "строгие. Длинное условие можно перенести на новую строку сразу после `&&`.",
-        solution='if (a < b + c && b < a + c && c < a + b) {\n    System.out.println("Треугольник получится");\n'
-                 '    System.out.println("Периметр: " + (a + b + c) + " см");\n} else {\n'
-                 '    System.out.println("Треугольник не сложить");\n}',
+        solution='if (a < b + c && b < a + c && c < a + b) {\n    System.out.println("Triangle: yes");\n'
+                 '    System.out.println("Perimeter: " + (a + b + c) + " cm");\n} else {\n'
+                 '    System.out.println("Triangle: no");\n}',
         wrong=[("проверяет только c < a + b: не замечает, что слишком длинной может оказаться a или b",
-                'if (c < a + b) {\n    System.out.println("Треугольник получится");\n'
-                '    System.out.println("Периметр: " + (a + b + c) + " см");\n} else {\n'
-                '    System.out.println("Треугольник не сложить");\n}'),
+                'if (c < a + b) {\n    System.out.println("Triangle: yes");\n'
+                '    System.out.println("Perimeter: " + (a + b + c) + " cm");\n} else {\n'
+                '    System.out.println("Triangle: no");\n}'),
                ("<= вместо <: «сплющенный» треугольник считается настоящим",
-                'if (a <= b + c && b <= a + c && c <= a + b) {\n    System.out.println("Треугольник получится");\n'
-                '    System.out.println("Периметр: " + (a + b + c) + " см");\n} else {\n'
-                '    System.out.println("Треугольник не сложить");\n}')],
+                'if (a <= b + c && b <= a + c && c <= a + b) {\n    System.out.println("Triangle: yes");\n'
+                '    System.out.println("Perimeter: " + (a + b + c) + " cm");\n} else {\n'
+                '    System.out.println("Triangle: no");\n}')],
         constructs=["if"],
     ),
 ]

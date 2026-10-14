@@ -26,7 +26,7 @@ def children(parent: str, *kids: str) -> str:
 ROUTE = """\
 class Transport {
     String title() {
-        return "Транспорт";
+        return "Transport";
     }
 
     int minutes(int km) {
@@ -37,7 +37,7 @@ class Transport {
 class Walk extends Transport {
     @Override
     String title() {
-        return "Пешком";
+        return "On foot";
     }
 
     @Override
@@ -49,7 +49,7 @@ class Walk extends Transport {
 class Bike extends Transport {
     @Override
     String title() {
-        return "На велосипеде";
+        return "By bike";
     }
 
     @Override
@@ -61,7 +61,7 @@ class Bike extends Transport {
 class Bus extends Transport {
     @Override
     String title() {
-        return "На автобусе";
+        return "By bus";
     }
 
     @Override
@@ -73,13 +73,13 @@ class Bus extends Transport {
 ROUTE_MAIN = """\
 Transport[] ways = {new Walk(), new Bike(), new Bus()};
 for (Transport way : ways) {
-    System.out.println(way.title() + ": " + way.minutes(km) + " мин.");
+    System.out.println(way.title() + ": " + way.minutes(km) + " min");
 }"""
 
 PAYMENTS = """\
 class Payment {
     String title() {
-        return "Оплата";
+        return "Payment";
     }
 
     int fee(int amount) {
@@ -90,14 +90,14 @@ class Payment {
 class Cash extends Payment {
     @Override
     String title() {
-        return "Наличные";
+        return "Cash";
     }
 }
 
 class Card extends Payment {
     @Override
     String title() {
-        return "Карта";
+        return "Card";
     }
 
     @Override
@@ -109,7 +109,7 @@ class Card extends Payment {
 class Transfer extends Payment {
     @Override
     String title() {
-        return "Перевод";
+        return "Transfer";
     }
 
     @Override
@@ -126,7 +126,7 @@ PAYMENTS_MAIN = """\
 Payment[] payments = {new Cash(), new Card(), new Transfer()};
 for (Payment payment : payments) {
     int fee = payment.fee(amount);
-    System.out.println(payment.title() + ": комиссия " + fee + " руб., к оплате " + (amount + fee) + " руб.");
+    System.out.println(payment.title() + ": fee " + fee + " rub, total " + (amount + fee) + " rub");
 }"""
 
 HEROES = """\
@@ -134,7 +134,7 @@ class Hero {
     int level;
 
     String title() {
-        return "Герой";
+        return "Hero";
     }
 
     int damage() {
@@ -145,7 +145,7 @@ class Hero {
 class Warrior extends Hero {
     @Override
     String title() {
-        return "Воин";
+        return "Warrior";
     }
 
     @Override
@@ -157,7 +157,7 @@ class Warrior extends Hero {
 class Mage extends Hero {
     @Override
     String title() {
-        return "Маг";
+        return "Mage";
     }
 
     @Override
@@ -169,7 +169,7 @@ class Mage extends Hero {
 class Archer extends Hero {
     @Override
     String title() {
-        return "Лучник";
+        return "Archer";
     }
 
     @Override
@@ -181,9 +181,9 @@ class Archer extends Hero {
 HEROES_MAIN = """\
 Hero[] heroes = new Hero[team.length];
 for (int i = 0; i < team.length; i++) {
-    if (team[i].equals("воин")) {
+    if (team[i].equals("warrior")) {
         heroes[i] = new Warrior();
-    } else if (team[i].equals("маг")) {
+    } else if (team[i].equals("mage")) {
         heroes[i] = new Mage();
     } else {
         heroes[i] = new Archer();
@@ -193,10 +193,10 @@ for (int i = 0; i < team.length; i++) {
 int total = 0;
 for (Hero hero : heroes) {
     int hit = hero.damage();
-    System.out.println(hero.title() + ": урон " + hit);
+    System.out.println(hero.title() + ": damage " + hit);
     total += hit;
 }
-System.out.println("Урон отряда: " + total);"""
+System.out.println("Team damage: " + total);"""
 
 TASKS = [
     JavaOutputTask(
@@ -207,19 +207,19 @@ TASKS = [
         intro="До школы `km` километров. Добраться можно пешком, на велосипеде или на автобусе, и время в пути "
               "у каждого способа считается по-своему. Программа должна показать все три варианта одним циклом.",
         steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Transport` без слова `public`, с двумя методами: `String title()` возвращает "
-               "`Транспорт`, а `int minutes(int km)` возвращает `0`.",
+               "`Transport`, а `int minutes(int km)` возвращает `0`.",
                "Опиши трёх наследников `Transport` и переопредели в каждом оба метода (с `@Override`): `Walk` — название "
-               "`Пешком`, 12 минут на каждый километр; `Bike` — `На велосипеде`, 4 минуты на километр; `Bus` — "
-               "`На автобусе`, 10 минут ожидания плюс 2 минуты на километр.",
+               "`On foot`, 12 минут на каждый километр; `Bike` — `By bike`, 4 минуты на километр; `Bus` — "
+               "`By bus`, 10 минут ожидания плюс 2 минуты на километр.",
                "В `main` создай массив родительского типа: `Transport[] ways = {{new Walk(), new Bike(), new Bus()}};`",
-               "Одним циклом `for` пройди по массиву и для каждого способа выведи строку вида `Пешком: 36 мин.` — "
+               "Одним циклом `for` пройди по массиву и для каждого способа выведи строку вида `On foot: 36 min` — "
                "расстояние возьми из `km`. Методы `title()` и `minutes(km)` вызывай только внутри этого цикла."],
         hint="Переменная цикла имеет тип `Transport`, но на самом деле по очереди указывает на пешую прогулку, велосипед "
              "и автобус. Строка `way.minutes(km)` одна и та же, а Java каждый раз вызывает версию метода из класса "
              "текущего объекта.",
         solution=ROUTE_MAIN, classes=ROUTE,
-        wrong=[("в Bike забыл переопределить title — вместо названия печатается «Транспорт»",
-                ROUTE_MAIN, ROUTE.replace('class Bike extends Transport {\n    @Override\n    String title() {\n        return "На велосипеде";\n    }\n\n',
+        wrong=[("в Bike забыл переопределить title — вместо названия печатается `Transport`",
+                ROUTE_MAIN, ROUTE.replace('class Bike extends Transport {\n    @Override\n    String title() {\n        return "By bike";\n    }\n\n',
                                           'class Bike extends Transport {\n')),
                ("опечатка в имени метода у автобуса и нет @Override — автобус едет 0 минут",
                 ROUTE_MAIN, ROUTE.replace("    @Override\n    int minutes(int km) {\n        return 10 + km * 2;",
@@ -235,16 +235,16 @@ TASKS = [
         intro="Интернет-магазин предлагает оплатить заказ на `amount` рублей тремя способами: наличными курьеру, картой "
               "или банковским переводом. Комиссия у каждого способа своя, а показать покупателю все варианты нужно "
               "одинаково — одним циклом.",
-        steps=["Ниже класса `Solution` опиши класс `Payment` (без `public`) с методами `String title()`, который возвращает `Оплата`, "
+        steps=["Ниже класса `Solution` опиши класс `Payment` (без `public`) с методами `String title()`, который возвращает `Payment`, "
                "и `int fee(int amount)`, который возвращает комиссию `0`.",
-               "Опиши класс `Cash` — наследник `Payment` — и переопредели в нём только `title()`: `Наличные`. Метод `fee` "
+               "Опиши класс `Cash` — наследник `Payment` — и переопредели в нём только `title()`: `Cash`. Метод `fee` "
                "в нём не пиши: наличными платят без комиссии.",
-               "Опиши класс `Card` — наследник `Payment`: `title()` возвращает `Карта`, а `fee` — комиссию 1%, то есть "
+               "Опиши класс `Card` — наследник `Payment`: `title()` возвращает `Card`, а `fee` — комиссию 1%, то есть "
                "`amount / 100`.",
-               "Опиши класс `Transfer` — наследник `Payment`: `title()` возвращает `Перевод`, а `fee` — комиссию 2%, "
+               "Опиши класс `Transfer` — наследник `Payment`: `title()` возвращает `Transfer`, а `fee` — комиссию 2%, "
                "то есть `amount * 2 / 100`, но не меньше 30 руб.",
                "В `main` создай массив `Payment[] payments = {{new Cash(), new Card(), new Transfer()}};` и одним циклом "
-               "выведи для каждого способа строку вида `Карта: комиссия 25 руб., к оплате 2525 руб.` Внутри цикла не "
+               "выведи для каждого способа строку вида `Card: fee 25 rub, total 2525 rub` Внутри цикла не "
                "проверяй, какой это способ, — просто вызывай `fee(amount)`."],
         hint="У `Cash` нет своего `fee`, поэтому для него сработает версия из `Payment`, а у `Card` и `Transfer` — их "
              "собственные. Чтобы не вызывать метод дважды, сохрани комиссию в переменную и используй её и для комиссии, "
@@ -252,7 +252,7 @@ TASKS = [
         solution=PAYMENTS_MAIN, classes=PAYMENTS,
         wrong=[("проверяет способ оплаты через if и берёт комиссию только у карты — перевод получается бесплатным",
                 PAYMENTS_MAIN.replace("    int fee = payment.fee(amount);\n",
-                                      '    int fee = 0;\n    if (payment.title().equals("Карта")) {\n'
+                                      '    int fee = 0;\n    if (payment.title().equals("Card")) {\n'
                                       '        fee = payment.fee(amount);\n    }\n')),
                ("забыл про минимальную комиссию перевода — на маленьких суммах она меньше 30 руб.",
                 PAYMENTS_MAIN, PAYMENTS.replace("        if (result < 30) {\n            result = 30;\n        }\n", ""))],
@@ -262,25 +262,25 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-poly-hero-squad", title="Отряд героев",
         given=[("String[]", "team"), ("int", "level")],
-        variants=[{"team": '{"воин", "маг", "лучник"}', "level": "2"},
-                  {"team": '{"маг", "маг", "воин"}', "level": "1"},
-                  {"team": '{"лучник", "воин", "лучник", "маг"}', "level": "3"}],
-        hidden=[{"team": '{"воин"}', "level": "5"},
-                {"team": '{"лучник", "маг"}', "level": "1"},
-                {"team": '{"маг", "воин", "лучник", "воин", "маг"}', "level": "4"}],
+        variants=[{"team": '{"warrior", "mage", "archer"}', "level": "2"},
+                  {"team": '{"mage", "mage", "warrior"}', "level": "1"},
+                  {"team": '{"archer", "warrior", "archer", "mage"}', "level": "3"}],
+        hidden=[{"team": '{"warrior"}', "level": "5"},
+                {"team": '{"archer", "mage"}', "level": "1"},
+                {"team": '{"mage", "warrior", "archer", "warrior", "mage"}', "level": "4"}],
         intro="Ты собираешь отряд для похода. В массиве `team` записано, кто идёт в отряд, а в `level` — уровень всех "
               "героев. Каждый тип героя наносит урон по-своему, а программа должна посчитать урон всего отряда.",
         steps=["Ниже класса `Solution` опиши класс `Hero` (без `public`) с полем `int level` и методами `String title()`, который "
-               "возвращает `Герой`, и `int damage()`, который возвращает `0`.",
-               "Опиши трёх наследников `Hero` и переопредели в каждом оба метода: `Warrior` — `Воин`, урон — уровень, "
-               "умноженный на 10; `Mage` — `Маг`, урон — 25 плюс уровень, умноженный на 5; `Archer` — `Лучник`, урон — "
+               "возвращает `Hero`, и `int damage()`, который возвращает `0`.",
+               "Опиши трёх наследников `Hero` и переопредели в каждом оба метода: `Warrior` — название `Warrior`, урон — уровень, "
+               "умноженный на 10; `Mage` — название `Mage`, урон — 25 плюс уровень, умноженный на 5; `Archer` — название `Archer`, урон — "
                "уровень, умноженный на 15.",
                "В `main` создай массив `Hero[] heroes = new Hero[team.length];`. Пройди по `team` по индексам: для "
-               "строки `воин` положи в `heroes[i]` новый `Warrior`, для `маг` — `Mage`, для `лучник` — `Archer`. "
+               "строки `warrior` положи в `heroes[i]` новый `Warrior`, для `mage` — `Mage`, для `archer` — `Archer`. "
                "Потом запиши в поле `level` этого героя значение из `level`.",
-               "Вторым циклом пройди по `heroes`: для каждого героя выведи строку вида `Воин: урон 20` и прибавь его "
+               "Вторым циклом пройди по `heroes`: для каждого героя выведи строку вида `Warrior: damage 20` и прибавь его "
                "урон к общему. В этом цикле не проверяй, кто есть кто, — просто вызывай `title()` и `damage()`.",
-               "Последней строкой выведи общий урон в виде `Урон отряда: 85`."],
+               "Последней строкой выведи общий урон в виде `Team damage: 85`."],
         hint="Выбирать класс через `if` нужно только один раз — когда создаёшь героев из строк (строки сравнивай через "
              "`equals`). Дальше каждый объект сам знает свой урон и своё название, поэтому во втором цикле хватит "
              "`hero.damage()` и `hero.title()`.",

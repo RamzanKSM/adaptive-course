@@ -51,7 +51,7 @@ class Employee {
     }
 
     String info() {
-        return name + ": " + salary + " руб.";
+        return name + ": " + salary + " rub";
     }
 }
 
@@ -71,7 +71,7 @@ class Courier extends Employee {
 COURIER_MAIN = """\
 Courier courier = new Courier(name, salary, transport);
 System.out.println(courier.info());
-System.out.println("Транспорт: " + courier.getTransport());"""
+System.out.println("Transport: " + courier.getTransport());"""
 
 # A beginner's way round super: an empty parent constructor, open fields, and the child fills them itself.
 COURIER_NO_SUPER = (COURIER.replace("    private String name;\n    private int salary;\n\n    Employee(String name, int salary) {",
@@ -111,8 +111,8 @@ for (String name : players) {
     new Player(name);
 }
 Captain cap = new Captain(captain, number);
-System.out.println("Капитан: " + cap.getName() + ", номер " + cap.getNumber());
-System.out.println("Всего игроков: " + Player.count);"""
+System.out.println("Captain: " + cap.getName() + ", number " + cap.getNumber());
+System.out.println("Total players: " + Player.count);"""
 
 GARAGE = """\
 class Vehicle {
@@ -125,7 +125,7 @@ class Vehicle {
     }
 
     String info() {
-        return name + ", колёс: " + wheels;
+        return name + ", wheels: " + wheels;
     }
 }
 
@@ -139,7 +139,7 @@ class Motorbike extends Vehicle {
 
     @Override
     String info() {
-        return super.info() + ", скорость до " + speed + " км/ч";
+        return super.info() + ", top speed " + speed + " km/h";
     }
 }"""
 
@@ -153,24 +153,24 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=1, slug="java-super-courier", title="Курьер службы доставки",
         given=[("String", "name"), ("int", "salary"), ("String", "transport")],
-        variants=[{"name": '"Олег"', "salary": "45000", "transport": '"велосипед"'},
-                  {"name": '"Марина"', "salary": "52000", "transport": '"самокат"'},
-                  {"name": '"Артём"', "salary": "61000", "transport": '"мотороллер"'}],
-        hidden=[{"name": '"Лиза"', "salary": "38000", "transport": '"скутер"'},
-                {"name": '"Рустам"', "salary": "70500", "transport": '"автомобиль"'},
-                {"name": '"Ксюша"', "salary": "40000", "transport": '"электровелосипед"'}],
+        variants=[{"name": '"Oleg"', "salary": "45000", "transport": '"bike"'},
+                  {"name": '"Masha"', "salary": "52000", "transport": '"scooter"'},
+                  {"name": '"Boris"', "salary": "61000", "transport": '"moped"'}],
+        hidden=[{"name": '"Liza"', "salary": "38000", "transport": '"skateboard"'},
+                {"name": '"Rustam"', "salary": "70500", "transport": '"car"'},
+                {"name": '"Ksyusha"', "salary": "40000", "transport": '"e-bike"'}],
         intro="В службе доставки работают сотрудники: у каждого есть имя и зарплата. Курьер — тоже сотрудник, только "
               "у него есть ещё и транспорт. Имя и зарплату курьера пусть сохраняет класс-родитель, а курьер добавит "
               "только своё.",
         steps=["Ниже класса `Solution` (после его закрывающей скобки) опиши класс `Employee` без слова `public`. Дай ему "
                "закрытые поля `private String name` и `private int salary`, конструктор `Employee(String name, int salary)`, "
-               "который их заполняет, и метод `String info()`, который возвращает строку вида `Олег: 45000 руб.`",
+               "который их заполняет, и метод `String info()`, который возвращает строку вида `Oleg: 45000 rub`",
                "Опиши класс `Courier` — наследник `Employee` — с полем `private String transport` и конструктором "
                "`Courier(String name, int salary, String transport)`. Первой строкой конструктора вызови "
                "`super(name, salary);` — родитель сам заполнит имя и зарплату, — а потом сохрани транспорт.",
                "Добавь в `Courier` геттер `String getTransport()`.",
                "В `main` создай `Courier courier = new Courier(name, salary, transport);` и выведи две строки: результат "
-               "`courier.info()` и строку вида `Транспорт: велосипед`."],
+               "`courier.info()` и строку вида `Transport: bike`."],
         hint="Поля `name` и `salary` закрыты в `Employee`, поэтому `Courier` не может записать их сам. `super(name, salary)` "
              "вызывает конструктор родителя для того же самого объекта — и родитель заполняет свою часть.",
         solution=COURIER_MAIN, classes=COURIER,
@@ -187,12 +187,12 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=2, slug="java-super-team-captain", title="Капитан команды",
         given=[("String[]", "players"), ("String", "captain"), ("int", "number")],
-        variants=[{"players": '{"Аня", "Вика", "Света"}', "captain": '"Лена"', "number": "10"},
-                  {"players": '{"Петя", "Коля"}', "captain": '"Саша"', "number": "7"},
-                  {"players": '{"Даша", "Маша", "Глаша", "Наташа", "Паша"}', "captain": '"Миша"', "number": "1"}],
-        hidden=[{"players": "{}", "captain": '"Гоша"', "number": "9"},
-                {"players": '{"Ира"}', "captain": '"Юля"', "number": "23"},
-                {"players": '{"Лёва", "Тима", "Рома", "Женя"}', "captain": '"Федя"', "number": "4"}],
+        variants=[{"players": '{"Anya", "Vika", "Sveta"}', "captain": '"Lena"', "number": "10"},
+                  {"players": '{"Petya", "Kolya"}', "captain": '"Sasha"', "number": "7"},
+                  {"players": '{"Dasha", "Masha", "Glasha", "Natasha", "Pasha"}', "captain": '"Misha"', "number": "1"}],
+        hidden=[{"players": "{}", "captain": '"Gosha"', "number": "9"},
+                {"players": '{"Ira"}', "captain": '"Yulya"', "number": "23"},
+                {"players": '{"Lyova", "Tima", "Roma", "Zhenya"}', "captain": '"Fedya"', "number": "4"}],
         intro="Школьная футбольная команда записывает игроков. Класс игрока сам считает, сколько игроков создано. "
               "Капитан — тоже игрок, только у него есть ещё номер на капитанской повязке. Важно, чтобы капитан тоже "
               "попал в общий счёт. Имена игроков записаны в массиве `players`, имя капитана — в `captain`, его номер — "
@@ -205,7 +205,7 @@ TASKS = [
                "сохрани номер. Счётчик в `Captain` сам не трогай — это уже делает родитель.",
                "В `main` создай объект `Player` для каждого имени из массива `players`, а потом капитана: "
                "`Captain cap = new Captain(captain, number);`.",
-               "Выведи строку вида `Капитан: Лена, номер 10`, а затем строку вида `Всего игроков: 4` — число возьми "
+               "Выведи строку вида `Captain: Lena, number 10`, а затем строку вида `Total players: 4` — число возьми "
                "из `Player.count`."],
         hint="`super(name)` запускает конструктор `Player` и для капитана — вместе с увеличением счётчика. Поэтому капитан "
              "попадает в общий счёт сам. Если увеличить счётчик ещё и в `Captain`, капитана посчитают дважды.",
@@ -224,30 +224,30 @@ TASKS = [
     JavaOutputTask(
         skill=SKILL, difficulty=3, slug="java-super-motorbike", title="Мотоцикл в гараже",
         given=[("String", "car"), ("String", "bike"), ("int", "speed")],
-        variants=[{"car": '"Лада"', "bike": '"Урал"', "speed": "180"},
-                  {"car": '"Нива"', "bike": '"Ява"', "speed": "120"},
-                  {"car": '"Волга"', "bike": '"Минск"', "speed": "95"}],
-        hidden=[{"car": '"Москвич"', "bike": '"Днепр"', "speed": "150"},
-                {"car": '"Газель"', "bike": '"Сова"', "speed": "60"},
-                {"car": '"Жигули"', "bike": '"Восход"', "speed": "110"}],
+        variants=[{"car": '"Lada"', "bike": '"Ural"', "speed": "180"},
+                  {"car": '"Niva"', "bike": '"Yava"', "speed": "120"},
+                  {"car": '"Volga"', "bike": '"Minsk"', "speed": "95"}],
+        hidden=[{"car": '"Moskvich"', "bike": '"Dnepr"', "speed": "150"},
+                {"car": '"Gazel"', "bike": '"Sova"', "speed": "60"},
+                {"car": '"Zhiguli"', "bike": '"Voskhod"', "speed": "110"}],
         intro="Программа описывает транспорт в гараже: машину `car` и мотоцикл `bike`. У каждого транспорта есть название "
               "и число колёс. Мотоцикл — тоже транспорт, но у него всегда 2 колеса, а в описании нужна ещё и максимальная "
               "скорость `speed`. Описание мотоцикла должно продолжать описание родителя, а не повторять его код.",
         steps=["Ниже класса `Solution` опиши класс `Vehicle` (без `public`) с закрытыми полями `private String name` и "
                "`private int wheels`, конструктором `Vehicle(String name, int wheels)` и методом `String info()`, который "
-               "возвращает строку вида `Лада, колёс: 4`.",
+               "возвращает строку вида `Lada, wheels: 4`.",
                "Опиши класс `Motorbike` — наследник `Vehicle` — с полем `private int speed` и конструктором "
                "`Motorbike(String name, int speed)`: первой строкой вызови `super(name, 2);`, а потом сохрани скорость.",
                "Переопредели в `Motorbike` метод `String info()` (с `@Override`): пусть он берёт строку родителя через "
-               "`super.info()` и дописывает к ней `, скорость до 180 км/ч` — со скоростью из поля `speed`.",
+               "`super.info()` и дописывает к ней `, top speed 180 km/h` — со скоростью из поля `speed`.",
                "В `main` создай массив `Vehicle[] garage = {{new Vehicle(car, 4), new Motorbike(bike, speed)}};` и одним "
                "циклом выведи `info()` каждого транспорта."],
         hint="`super(...)` вызывает конструктор родителя, а `super.info()` — версию метода из родителя, даже если в "
              "наследнике он переопределён. Без `super.` вызов `info()` внутри `info()` вызывал бы сам себя бесконечно.",
         solution=GARAGE_MAIN, classes=GARAGE,
         wrong=[("в info мотоцикла не вызывает super.info() — пропадают название и колёса",
-                GARAGE_MAIN, GARAGE.replace('return super.info() + ", скорость до " + speed + " км/ч";',
-                                            'return "скорость до " + speed + " км/ч";')),
+                GARAGE_MAIN, GARAGE.replace('return super.info() + ", top speed " + speed + " km/h";',
+                                            'return "top speed " + speed + " km/h";')),
                ("передаёт родителю 4 колеса — скопировал вызов из машины",
                 GARAGE_MAIN, GARAGE.replace("super(name, 2);", "super(name, 4);"))],
         constructs=["class", "for"],

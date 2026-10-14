@@ -28,7 +28,7 @@ class DiagnosticImportIntegrationTest {
     assertEquals(44, db.queryForObject("select count(*) from skills where language='JAVA'", Integer.class));
     assertEquals(9, db.queryForObject("select count(*) from tasks where language='JAVA' and mode='NORMAL'", Integer.class), "seed tasks; the hard-mode bank is separate");
     assertEquals(1, db.queryForObject("select count(*) from explanations e join skills s on s.code=e.skill_code where s.language='JAVA'", Integer.class));
-    String harness=db.queryForObject("select test_source from tasks where title='Консоль: кота'",String.class);
+    String harness=db.queryForObject("select test_source from tasks where title='Консоль: число и слово'",String.class);
     assertTrue(harness.contains("class TestHarness"));
     assertTrue(harness.contains("main("));
     assertTrue(harness.contains(PistonCodeRunner.PASS_MARKER_PLACEHOLDER));
