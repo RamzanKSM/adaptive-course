@@ -18,7 +18,7 @@ public class ApiController {
   private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(ApiController.class);
   /** Verification is strict (reference must pass, wrong solutions must fail), so the generator gets three tries. */
   static final int GENERATION_ATTEMPTS=3;
-  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics;
+  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairGrades pairGrades;
   /**
    * Serializes /learning/next per student and course. It replaces what the long transaction never really gave:
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
@@ -26,7 +26,7 @@ public class ApiController {
    */
   private final ConcurrentHashMap<String,Object> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairGrades pairGrades) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairGrades=pairGrades; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled,hard_mode_allowed,hard_mode_on from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
@@ -560,6 +560,22 @@ public class ApiController {
     return view==null?ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error","GROUP_NOT_FOUND","message","В группе нет участников сессии этого курса")):ResponseEntity.ok(view);
   }
 
+  /**
+   * Grades for a class period («пара»): the teacher computes, corrects, saves and publishes them (PairGrades; rules in
+   * README «Оценки за пару»). The student sees only the date and the grade of published pairs.
+   */
+  @GetMapping("/admin/pairs/course") public Map<String,Object> pairCourse(@RequestParam(name="group",required=false) String group,HttpServletRequest r){ admin(r); return pairGrades.course(group); }
+  @PostMapping("/admin/pairs/preview") public Map<String,Object> previewPair(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return pairGrades.preview(b); }
+  @PostMapping("/admin/pairs") @Transactional public Map<String,Object> savePair(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairGrades.save(b,uid(r)); log.info("Pair {} of group {} ({}) saved by admin {}",pair.get("id"),pair.get("group"),pair.get("language"),uid(r)); return pair; }
+  @GetMapping("/admin/pairs") public Map<String,Object> pairs(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return pairGrades.list(group,language); }
+  @GetMapping("/admin/pairs/journal") public Map<String,Object> pairJournal(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return pairGrades.journal(group,language); }
+  @GetMapping("/admin/pairs/{id}") public Map<String,Object> pair(@PathVariable long id,HttpServletRequest r){ admin(r); return pairGrades.pair(id); }
+  @PatchMapping("/admin/pairs/{id}/grades/{userId}") @Transactional public Map<String,Object> setPairGrade(@PathVariable long id,@PathVariable long userId,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairGrades.setGrade(id,userId,b); log.info("Pair {}: grade of student {} set by admin {}",id,userId,uid(r)); return pair; }
+  @PostMapping("/admin/pairs/{id}/recalculate") @Transactional public Map<String,Object> recalculatePair(@PathVariable long id,HttpServletRequest r){ admin(r); var pair=pairGrades.recalculate(id); log.info("Pair {} recalculated by admin {}",id,uid(r)); return pair; }
+  @PostMapping("/admin/pairs/{id}/publish") @Transactional public Map<String,Object> publishPair(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairGrades.publish(id,b); log.info("Pair {} {} by admin {}",id,Boolean.TRUE.equals(pair.get("published"))?"published":"unpublished",uid(r)); return pair; }
+  @DeleteMapping("/admin/pairs/{id}") @Transactional public Map<String,Object> deletePair(@PathVariable long id,HttpServletRequest r){ admin(r); var result=pairGrades.delete(id); log.info("Pair {} deleted by admin {}",id,uid(r)); return result; }
+  @GetMapping("/grades") public Map<String,Object> grades(@RequestParam(name="language",required=false) String language,HttpServletRequest r){ long u=student(r); return pairGrades.studentGrades(u,Language.parse(language)); }
+
   /** Reasoning levels per purpose and LLM rate limits; options come from the model when the App Server can tell. */
   @GetMapping("/admin/llm/settings") public Map<String,Object> llmSettings(HttpServletRequest r){ admin(r); return settingsView(); }
   @PutMapping("/admin/llm/settings") public Map<String,Object> updateLlmSettings(@RequestBody Map<String,Object> body,HttpServletRequest r){
@@ -674,6 +690,7 @@ public class ApiController {
     db.update("delete from skill_iterations where user_id=? or lesson_id in "+lessons,id,id);
     int lessonCount=db.update("delete from lessons where user_id=?",id);
     db.update("update submissions set revoked_by=null where revoked_by=?",id);
+    db.update("delete from pair_grades where user_id=?",id);
     for(String table:List.of("pending_redos","successful_task_credit","student_skills","diagnostic_answers","diagnostic_skill_results","student_languages","sessions"))
       db.update("delete from "+table+" where user_id=?",id);
     int llmCalls=db.update("update llm_calls set user_id=null where user_id=?",id);
@@ -792,5 +809,7 @@ public class ApiController {
   private Map<String,Object> active(long u,Language lang){var x=db.queryForList("select id,language_lesson_number as number,language,started_at as startedAt,last_activity_at as lastActivityAt,finish_reason as finishReason from lessons where user_id=? and language=? and finished_at is null order by id desc",u,lang.name());if(x.isEmpty())return null;x.getFirst().put("idleMinutes",idleMinutes);return x.getFirst();} private Map<String,Object> lesson(long id){var l=db.queryForMap("select id,language_lesson_number as number,language,started_at as startedAt,finished_at as finishedAt,last_activity_at as lastActivityAt,finish_reason as finishReason from lessons where id=?",id);l.put("idleMinutes",idleMinutes);return l;} private boolean diagnosticDone(long u,Language lang){return count("select count(*) from student_languages where user_id=? and language=? and diagnostic_completed_at is not null",u,lang.name())>0;} private void requireDiagnostic(long u,Language lang){if(!diagnosticDone(u,lang))throw bad("DIAGNOSTIC_REQUIRED","Сначала пройдите диагностику");} private int count(String q,Object...p){return db.queryForObject(q,Integer.class,p);} private long uid(HttpServletRequest r){return ((Number)user(r).get("id")).longValue();} @SuppressWarnings("unchecked") private Map<String,Object> user(HttpServletRequest r){return (Map<String,Object>)r.getAttribute("user");} private long student(HttpServletRequest r){if(!"STUDENT".equals(user(r).get("role")))throw bad("FORBIDDEN","Нужна роль STUDENT");return uid(r);} private void admin(HttpServletRequest r){if(!"ADMIN".equals(user(r).get("role")))throw bad("FORBIDDEN","Нужна роль ADMIN");} private Optional<String> cookie(HttpServletRequest r){return r.getCookies()==null?Optional.empty():Arrays.stream(r.getCookies()).filter(c->c.getName().equals("adaptive_session")).map(Cookie::getValue).findFirst();} private String randomToken(){byte[] b=new byte[32];new SecureRandom().nextBytes(b);return Base64.getUrlEncoder().withoutPadding().encodeToString(b);} private Object json(Object value){try{return new com.fasterxml.jackson.databind.ObjectMapper().readValue((String)value,List.class);}catch(Exception e){throw new IllegalStateException(e);}} private Map<String,Object> obj(Object... entries){var m=new LinkedHashMap<String,Object>();for(int i=0;i<entries.length;i+=2)m.put((String)entries[i],entries[i+1]);return m;} private ApiError bad(String c,String m){return new ApiError(c,m);}
 }
 @ResponseStatus(HttpStatus.BAD_REQUEST) class ApiError extends RuntimeException { final String code; ApiError(String c,String m){super(m);code=c;} }
+/** An ApiError answered with 404: an unknown group or pair. */
+class NotFoundError extends ApiError { NotFoundError(String c,String m){super(c,m);} }
 class InvalidGeneratedContentException extends RuntimeException { InvalidGeneratedContentException(String reason){super(reason);} }
-@RestControllerAdvice class Errors { private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(Errors.class); @ExceptionHandler(ApiError.class) ResponseEntity<?> api(ApiError e){log.info("Rejected request: {} ({})",e.code,e.getMessage());return ResponseEntity.badRequest().body(Map.of("error",e.code,"message",e.getMessage()));} }
+@RestControllerAdvice class Errors { private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(Errors.class); @ExceptionHandler(ApiError.class) ResponseEntity<?> api(ApiError e){log.info("Rejected request: {} ({})",e.code,e.getMessage());return ResponseEntity.status(e instanceof NotFoundError?HttpStatus.NOT_FOUND:HttpStatus.BAD_REQUEST).body(Map.of("error",e.code,"message",e.getMessage()));} }

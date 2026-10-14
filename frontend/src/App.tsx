@@ -8,6 +8,7 @@ import { achievements, commonAchievements, experience, skillState, type SkillSta
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
 import { ProgressAnalytics } from './progress'
+import { PairGrades, StudentPairGrades } from './grades'
 import { StudentSessionCard } from './session'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
@@ -805,6 +806,7 @@ function ProgressView({ progress, otherProgress }: { progress: Progress | null; 
   return <section className="progress-page">
     <h1 className="display small">Мой прогресс · {course.title}</h1>
     {progress.session && <StudentSessionCard session={progress.session} />}
+    <StudentPairGrades language={course.id} />
     <div className="stat-grid">
       <Stat icon="sparkle" label={level.diagnosticXp ? `Опыт · ${level.diagnosticXp} за диагностику` : 'Опыт'} value={level.xp} suffix="XP" />
       <Stat icon="bolt" label="Задач решено" value={level.solved} />
@@ -858,7 +860,7 @@ function TeacherPage({ request }: { request: Request }) {
   const [students, setStudents] = useState<Student[] | null>(null); const [selected, setSelected] = useState<Student | null>(null)
   const [globalLlm, setGlobalLlm] = useState<LlmStatus | null>(null)
   const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [group, setGroup] = useState(''); const [creating, setCreating] = useState(false)
-  const [view, setView] = useState<'students' | 'progress' | 'llm' | 'settings'>('students')
+  const [view, setView] = useState<'students' | 'progress' | 'grades' | 'llm' | 'settings'>('students')
   const toast = useToast()
   const [groupFilter, setGroupFilter] = useGroupFilter('rmzn-admin-group', students ? [...new Set(students.map(s => s.group).filter((g): g is string => !!g))] : null)
   /** Picking a group also fills it in for the next new account, the usual way to add students to a group. */
@@ -913,14 +915,16 @@ function TeacherPage({ request }: { request: Request }) {
     setProgressFocus(focus => ({ id, nonce: (focus?.nonce ?? 0) + 1 })); setView('progress'); window.scrollTo({ top: 0 })
   }, [])
   const configDisabled = globalLlm?.reason === 'DISABLED_BY_CONFIGURATION'
-  const tabs = <nav className="segmented admin-tabs four" role="tablist" style={{ '--active': ['students', 'progress', 'llm', 'settings'].indexOf(view) } as CSSProperties}>
+  const tabs = <nav className="segmented admin-tabs five" role="tablist" style={{ '--active': ['students', 'progress', 'grades', 'llm', 'settings'].indexOf(view) } as CSSProperties}>
     <span className="segmented-thumb" aria-hidden="true" />
     <button role="tab" aria-selected={view === 'students'} className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}><Icon name="user" size={16} /> Студенты</button>
     <button role="tab" aria-selected={view === 'progress'} className={view === 'progress' ? 'active' : ''} onClick={() => { setProgressFocus(null); setView('progress') }}><Icon name="target" size={16} /> Прогресс</button>
+    <button role="tab" aria-selected={view === 'grades'} className={view === 'grades' ? 'active' : ''} onClick={() => setView('grades')}><Icon name="award" size={16} /> Оценки</button>
     <button role="tab" aria-selected={view === 'llm'} className={view === 'llm' ? 'active' : ''} onClick={() => setView('llm')}><Icon name="chart" size={16} /> Аналитика LLM</button>
     <button role="tab" aria-selected={view === 'settings'} className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}><Icon name="sparkle" size={16} /> Настройки LLM</button>
   </nav>
   if (view === 'progress') return <>{tabs}<ProgressAnalytics request={request} onOpenStudent={openStudent} focus={progressFocus} /></>
+  if (view === 'grades') return <>{tabs}<PairGrades request={request} groups={students ? groupCounts(students, s => s.group).groups.map(g => g.name) : null} /></>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
   if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
   const counts = groupCounts(students ?? [], s => s.group)

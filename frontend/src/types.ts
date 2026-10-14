@@ -113,3 +113,31 @@ export interface StudentSession {
   pace: number; neededPace: number | null; status: SessionStatus | null; forecastDate: string | null
   days: string[]; closedSeries: number[]
 }
+
+// ───────── Pair grades (GET/POST /admin/pairs…, GET /grades) ─────────
+/** «н» — absent; numeric grades as strings, the way the backend stores them. */
+export type PairGrade = 'н' | '2' | '3' | '4' | '5'
+/** WEEK — median of a previous week's saved results (medianWeek is that Monday); PAIR — of this pair itself; NONE — no median. */
+export type MedianSource = 'WEEK' | 'PAIR' | 'NONE'
+/** Teacher-only: points, tasks by difficulty, percent of the median. manual — grade differs from autoGrade or a comment is set. */
+export interface PairResult {
+  userId: Id; login: string; displayName: string
+  attended: boolean; points: number; tasks: { '1': number; '2': number; '3': number; hard: number }
+  hard: boolean; percent: number | null; autoGrade: PairGrade; grade: PairGrade; comment: string | null; manual: boolean
+}
+/** id null — a preview, nothing saved. startsAt/endsAt — UTC instants. rows are absent in the list of pairs. */
+export interface Pair {
+  id: Id | null; group: string; language: CourseLanguage; startsAt: string; endsAt: string
+  median: number | null; medianSource: MedianSource; medianWeek: string | null
+  thresholds: { five: number; four: number; three: number } | null
+  published: boolean; publishedAt: string | null; createdAt?: string | null
+  counts: Record<PairGrade, number>; rows?: PairResult[]
+}
+/** Students × pairs; grades and manual are aligned with pairs (oldest first). average over 2–5, absences — the number of «н». */
+export interface PairJournal {
+  group: string; language: CourseLanguage
+  pairs: { id: Id; startsAt: string; endsAt: string; published: boolean }[]
+  students: { userId: Id; login: string; displayName: string; grades: (PairGrade | null)[]; manual: boolean[]; average: number | null; absences: number }[]
+}
+/** The student's own grades of published pairs: the date and the grade, nothing else. */
+export interface StudentGrade { date: string; grade: PairGrade }
