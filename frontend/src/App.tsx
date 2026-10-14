@@ -1,6 +1,7 @@
 import { createContext, CSSProperties, FormEvent, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { java } from '@codemirror/lang-java'
+import { javaCompletions } from './javaCompletions'
 import { python } from '@codemirror/lang-python'
 import ReactMarkdown from 'react-markdown'
 import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './api'
@@ -43,7 +44,7 @@ const COURSES = {
 } as const
 type Course = (typeof COURSES)[CourseLanguage]
 // Stable references: a new extensions array on every render would make CodeMirror reconfigure the editor.
-const EDITOR_EXTENSIONS = { JAVA: [java()], PYTHON: [python()] }
+const EDITOR_EXTENSIONS = { JAVA: [java(), javaCompletions], PYTHON: [python()] }
 const LANGUAGES = Object.keys(COURSES) as CourseLanguage[]
 const CourseContext = createContext<Course>(COURSES.JAVA)
 const useCourse = () => useContext(CourseContext)
