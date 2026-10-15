@@ -139,15 +139,24 @@ export interface PairJournal {
 // ───────── Test at the board (/board…, /admin/board…) ─────────
 export type BoardStatus = 'CALLED' | 'CANCELLED' | 'EXPIRED' | 'STARTED' | 'FINISHED'
 export type BoardGrade = '2' | '3' | '4' | '5'
-export type BoardItemKind = 'code' | 'output'
-/** The student's view: never the expected output, the reference, the checks, grades or the assessment. now — the server clock. */
+/** The kinds of items the teacher chooses when calling; a test always has them in this order (parsons → fix → code). */
+export type BoardItemKind = 'parsons' | 'fix' | 'code'
+/** A movable line of «Собери программу»: text with its original indentation. */
+export interface BoardLine { id: string; text: string }
+/** One item of the student's view; never the solution order, which line is extra, the reference or the bug description. */
+export type BoardStudentItem =
+  | { kind: 'parsons'; title: string; statement: string; language: CourseLanguage; before: string; after: string; lines: BoardLine[]; extraLines: number }
+  | { kind: 'fix'; title: string; statement: string; language: CourseLanguage; program: string }
+  | { kind: 'code'; title: string; statement: string; language: CourseLanguage; starterCode?: string | null }
+/** Only the chosen kinds: code/fix — the program text, parsons — ids of the placed lines in the student's order. */
+export interface BoardAnswers { code?: string | null; fix?: string | null; parsons?: string[] | null }
+/** The student's view: never the checks, scores, grades or the assessment. now — the server clock. */
 export interface BoardStudentTest {
-  id: Id; status: BoardStatus; startedAt: string; endsAt: string; now: string
-  items: [{ kind: 'code'; title: string; statement: string; starterCode?: string | null; language: CourseLanguage }, { kind: 'output'; program: string; language: CourseLanguage }]
-  answers: { code: string | null; output: string | null }
+  id: Id; status: BoardStatus; startedAt: string; endsAt: string; now: string; durationSeconds?: number | null
+  items: BoardStudentItem[]; answers: BoardAnswers
 }
 /** GET /board/current: the student's active call or their running test. */
-export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string } | null; test: BoardStudentTest | null }
+export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null } | null; test: BoardStudentTest | null }
 /** The student's own board grades in «Мой прогресс»: Moscow date, the teacher's final grade and comment. */
 export interface BoardStudentGrade { date: string; grade: BoardGrade; comment: string | null }
 export type AssessmentStatus = 'PENDING' | 'DONE' | 'UNAVAILABLE'
@@ -155,26 +164,38 @@ export interface BoardTestSummary {
   id: Id; userId: Id; displayName: string; status: BoardStatus
   calledAt: string; expiresAt: string | null; startedAt: string | null; endsAt: string | null; finishedAt: string | null
   suggestedGrade: BoardGrade | null; finalGrade: BoardGrade | null; assessmentStatus: AssessmentStatus | null
+  kinds?: BoardItemKind[] | null; durationSeconds?: number | null
 }
 export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null }
 export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[] }
+/** An item with full data: parsons — before/after, lines, solution (ids in the reference order), extraLineId, reference;
+ *  fix — program (the buggy one), bugDescription, reference; code — statement and starter. */
 export interface BoardAdminItem {
   kind: BoardItemKind; language?: CourseLanguage; title?: string | null; statement?: string | null; starterCode?: string | null
-  program?: string | null; expectedOutput?: string | null; taskId?: Id | null; externalKey?: string | null; skillCode?: string | null; skillTitle?: string | null
+  program?: string | null; bugDescription?: string | null; reference?: string | null
+  before?: string | null; after?: string | null; lines?: BoardLine[] | null; solution?: string[] | null; extraLineId?: string | null
+  taskId?: Id | null; externalKey?: string | null; skillCode?: string | null; skillTitle?: string | null; difficulty?: number | null
 }
-/** The check of one item: passed, the checker's output/feedback; for the output item the expected text next to the answer. */
-export interface BoardCheck { kind?: BoardItemKind; passed: Flag; output?: string | null; feedback?: string | null; console?: ConsoleRun | null; mismatch?: OutputMismatch | null; expected?: string | null; actual?: string | null }
-export interface BoardRun { at?: string | null; createdAt?: string | null; code: string; console: ConsoleRun }
+/** The check of one item; program — the assembled program of parsons. */
+export interface BoardCheck { kind?: BoardItemKind; passed: Flag; output?: string | null; outcome?: string | null; feedback?: string | null; console?: ConsoleRun | null; unavailable?: Flag | null; program?: string | null }
+export interface BoardRun { at?: string | null; createdAt?: string | null; item?: BoardItemKind | null; code: string; console: ConsoleRun }
+export type BoardVerdict = 'верно' | 'частично верно' | 'неверно'
 export interface BoardAssessment {
-  status: AssessmentStatus; grade?: BoardGrade | number | null; summary?: string | null; error?: string | null
-  items?: { item: BoardItemKind; verdict: string; explanation: string }[] | null
+  status: AssessmentStatus; summary?: string | null; error?: string | null
+  items?: { item: BoardItemKind; verdict: BoardVerdict | string; explanation: string }[] | null
+  /** 1–2 short questions to ask the student aloud (teacher-only). */
+  questions?: string[] | null
+  /** The LLM's draft of the comment for the student; the student sees only what the teacher saves. */
+  studentComment?: string | null
 }
+/** score per item: 1 passed, 0.5 «частично верно» by the LLM, 0 otherwise; points = Σ weight × score. */
+export interface BoardScore { items: { kind: BoardItemKind; weight: number; score: number }[]; points: number; max: number; percent: number }
 export interface BoardAdminTest extends BoardTestSummary {
   login?: string; group?: string | null; language?: CourseLanguage
-  items: BoardAdminItem[] | null; answers: { code: string | null; output: string | null } | null
+  items: BoardAdminItem[] | null; answers: BoardAnswers | null
   /** Aligned with items, or keyed by kind. */
   results: BoardCheck[] | Partial<Record<BoardItemKind, BoardCheck>> | null
-  runs: BoardRun[] | null
+  runs: BoardRun[] | null; score?: BoardScore | null
   paceStatus: SessionStatus | null; paceCap: number | null; ruleGrade: BoardGrade | null
   assessment: BoardAssessment | null; comment: string | null; gradedAt?: string | null
 }

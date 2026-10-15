@@ -18,28 +18,27 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * «К доске»: the teacher calls a student from his laptop; the student starts the test on the classroom PC within
- * CALL; one timer of TEST for two items — a regular task to solve (`code`) and «Что выведет этот код?» (`output`). The
- * answers are autosaved; the client submits at 0, and the server finishes a test whose time is over (after GRACE) with
- * the last autosaved answers — lazily on every board request and every 15 s (BoardTestFinisher).
- * <p>After the finish the code is checked like a lesson attempt and the output compared; nothing is credited. The grade
- * by the rule, the LLM's proposal (asynchronous, a platform thread) and the pace cap give a suggested grade; the teacher
- * sets the final one. The student sees only the test itself and, later, the date, the final grade and the comment.
- * Rules: backend/README.md, «К доске».
+ * «К доске»: the teacher calls a student from his laptop with the kinds of items he chose (BoardItems: parsons «Собери
+ * программу», fix «Исправь ошибку», code «Напиши код»); the student starts the test on the classroom PC within CALL; one
+ * timer — the sum of the kinds' minutes. The answers are autosaved; the client submits at 0, and the server finishes a
+ * test whose time is over (after GRACE) with the last autosaved answers — lazily on every board request and every 15 s
+ * (BoardTestFinisher).
+ * <p>After the finish every item's program is checked like a lesson attempt; nothing is credited. The weighted grade by
+ * the checks, the LLM's verdicts (asynchronous, a platform thread: «частично верно» gives half of a failed item's weight)
+ * and the pace cap give a suggested grade; the teacher sets the final one. The student sees only the test itself and,
+ * later, the date, the final grade and the comment. Rules: backend/README.md, «К доске».
  */
 @Component
 class BoardTests implements DisposableBean {
   private static final Logger log = LoggerFactory.getLogger(BoardTests.class);
-  static final Duration CALL = Duration.ofMinutes(5), TEST = Duration.ofMinutes(6), GRACE = Duration.ofSeconds(15);
-  /** A topic passed by practice this many days ago or less is «recent»: the code item comes from it, the output item preferably not. */
+  static final Duration CALL = Duration.ofMinutes(5), GRACE = Duration.ofSeconds(15);
+  /** A topic passed by practice more than this many days ago is «older»: the parsons item comes preferably from it. */
   static final int RECENT_DAYS = 14;
   /** A member is present with activity in the course within this many minutes or an open lesson. */
   static final int PRESENT_MINUTES = 60;
-  /** From this block on a topic's code item is of difficulty 1 (the later topics take longer), before it of difficulty 2. */
-  static final int EASY_FROM_BLOCK = 5;
   /** Runs the LLM sees; the oldest of a longer history are left out. */
   static final int LLM_RUNS = 10;
-  static final int ANSWER_MAX = 10_000, COMMENT_MAX = 500, EXTEND_MAX_SECONDS = 1800;
+  static final int COMMENT_MAX = 500, EXTEND_MAX_SECONDS = 1800;
   /** Recent finished, cancelled and expired tests stay in the teacher's «active» panel this long. */
   static final Duration ACTIVE_RECENT = Duration.ofHours(2);
   static final List<String> GRADES = List.of("2", "3", "4", "5");
@@ -63,20 +62,22 @@ class BoardTests implements DisposableBean {
 
   // ---------------------------------------------------------------- rules
 
-  /** Both items right → 5; one right and the other partly right (the LLM's verdict) → 4; one right → 3; none → 2. */
-  static int ruleGrade(boolean code, boolean output, boolean otherPartly) {
-    return code && output ? 5 : code || output ? (otherPartly ? 4 : 3) : 2;
-  }
   /** The highest grade the pace allows: borderline → 4, behind → 3; on track, course closed, no session date or not a member → none. */
   static Integer cap(String paceStatus) { return "BORDERLINE".equals(paceStatus) ? Integer.valueOf(4) : "BEHIND".equals(paceStatus) ? Integer.valueOf(3) : null; }
   static int suggested(int grade, Integer cap) { return cap == null ? grade : Math.min(grade, cap); }
-  /** The output answer is right when it equals the expected output after CRLF → LF and without trailing newlines; spaces and case matter. */
-  static boolean sameOutput(String expected, String actual) { return normalized(expected).equals(normalized(actual)); }
-  private static String normalized(String text) {
-    String s = (text == null ? "" : text).replace("\r\n", "\n");
-    int end = s.length(); while (end > 0 && s.charAt(end - 1) == '\n') end--;
-    return s.substring(0, end);
+  /**
+   * Per item of a checked test (in its order) the score: passed → 1; else the LLM's verdict «частично верно» (a DONE
+   * assessment) → 0.5; else 0. Without an assessment — the grade by the checks alone.
+   */
+  static Map<String, Double> scores(List<Map<String, Object>> results, Map<?, ?> assessment) {
+    var partly = new HashSet<Object>();
+    if (assessment != null && "DONE".equals(assessment.get("status")) && assessment.get("items") instanceof List<?> verdicts)
+      for (var v : verdicts) if (v instanceof Map<?, ?> m && BoardAssessment.PARTLY.equals(m.get("verdict"))) partly.add(m.get("item"));
+    var scores = new LinkedHashMap<String, Double>();
+    for (var r : results) scores.put((String) r.get("kind"), Boolean.TRUE.equals(r.get("passed")) ? 1.0 : partly.contains(r.get("kind")) ? 0.5 : 0.0);
+    return scores;
   }
+  static int grade(List<Map<String, Object>> results, Map<?, ?> assessment) { return BoardItems.grade(BoardItems.percent(scores(results, assessment))); }
 
   // ---------------------------------------------------------------- finishing on time
 
@@ -97,16 +98,20 @@ class BoardTests implements DisposableBean {
   }
 
   /** STARTED → FINISHED with the given answers on top of the autosaved ones; false if another request finished it first. */
-  private boolean claim(long id, Map<String, String> answers, Instant now) {
+  private boolean claim(long id, Map<String, Object> answers, Instant now) {
     var set = answersUpdate(answers);
     var params = new ArrayList<Object>(); params.add(iso(now)); params.addAll(set.params()); params.add(write(Map.of("status", "PENDING"))); params.add(id);
     return db.update("update board_tests set status='FINISHED',finished_at=?,answers_json=" + set.sql() + ",assessment_json=? where id=? and status='STARTED'", params.toArray()) > 0;
   }
   private record JsonSet(String sql, List<Object> params) {}
-  /** json_set over answers_json for the fields given (code, output); the others keep their saved value. */
-  private static JsonSet answersUpdate(Map<String, String> answers) {
+  /** json_set over answers_json for the fields given (code, fix: text; parsons: the placed line ids); the others keep their saved value. */
+  private JsonSet answersUpdate(Map<String, Object> answers) {
     var sql = new StringBuilder("json_set(coalesce(answers_json,'{}')"); var params = new ArrayList<Object>();
-    for (var key : List.of("code", "output")) if (answers.get(key) != null) { sql.append(",'$.").append(key).append("',?"); params.add(answers.get(key)); }
+    for (var key : BoardItems.ALL) {
+      Object value = answers.get(key);
+      if (value instanceof String text) { sql.append(",'$.").append(key).append("',?"); params.add(text); }
+      else if (value != null) { sql.append(",'$.").append(key).append("',json(?)"); params.add(write(value)); }
+    }
     return new JsonSet(sql.append(")").toString(), params);
   }
 
@@ -115,9 +120,10 @@ class BoardTests implements DisposableBean {
   /** GET /api/board/current: the student's active call and running test. */
   Map<String, Object> current(long user) {
     settle();
-    var calls = db.queryForList("select id,called_at,call_expires_at from board_tests where user_id=? and status='CALLED' order by id desc limit 1", user);
+    var calls = db.queryForList("select id,called_at,call_expires_at,kinds,duration_seconds from board_tests where user_id=? and status='CALLED' order by id desc limit 1", user);
     var running = db.queryForList("select id from board_tests where user_id=? and status='STARTED' order by id desc limit 1", Long.class, user);
-    var call = calls.isEmpty() ? null : obj("id", calls.getFirst().get("id"), "calledAt", calls.getFirst().get("called_at"), "expiresAt", calls.getFirst().get("call_expires_at"));
+    var c = calls.isEmpty() ? null : calls.getFirst();
+    var call = c == null ? null : obj("id", c.get("id"), "calledAt", c.get("called_at"), "expiresAt", c.get("call_expires_at"), "kinds", kinds(c), "durationSeconds", duration(c));
     return obj("call", call, "test", running.isEmpty() ? null : studentView(load(running.getFirst())));
   }
 
@@ -128,14 +134,20 @@ class BoardTests implements DisposableBean {
     if ("STARTED".equals(t.get("status"))) return studentView(t);
     requireCalled(t);
     Language lang = Language.of(t.get("language"));
-    var items = chooseItems(user, lang, now);
+    var items = chooseItems(user, lang, kinds(t), now);
     String pace = paceStatus(user, lang, now);
-    var answers = new LinkedHashMap<String, Object>(); answers.put("code", items.getFirst().get("starterCode") == null ? "" : items.getFirst().get("starterCode")); answers.put("output", "");
+    var answers = new LinkedHashMap<String, Object>();
+    for (var item : items)
+      switch ((String) item.get("kind")) {
+        case "parsons" -> answers.put("parsons", List.of());
+        case "fix" -> answers.put("fix", item.get("program"));
+        default -> answers.put("code", item.get("starterCode") == null ? "" : item.get("starterCode"));
+      }
     int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=? where id=? and status='CALLED' and call_expires_at>=?",
-        iso(now), iso(now.plus(TEST)), write(items), write(answers), pace, id, iso(now));
+        iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, id, iso(now));
     var after = load(id);
     if (started == 0 && !"STARTED".equals(after.get("status"))) requireCalled(after);
-    if (started > 0) log.info("Board test {} started by student {}: code task {}, output task {}, pace {}", id, user, items.get(0).get("taskId"), items.get(1).get("taskId"), pace);
+    if (started > 0) log.info("Board test {} started by student {}: tasks {}, pace {}", id, user, items.stream().map(i -> i.get("kind") + " " + i.get("taskId")).toList(), pace);
     return studentView(after);
   }
   private static void requireCalled(Map<String, Object> t) {
@@ -151,21 +163,23 @@ class BoardTests implements DisposableBean {
   Map<String, Object> saveAnswers(long user, long id, Map<String, Object> body) {
     Instant now = now(); settle(now);
     var t = own(user, id); requireRunning(t, now);
-    var set = answersUpdate(submitted(body));
+    var set = answersUpdate(submitted(body, items(t)));
     var params = new ArrayList<Object>(set.params()); params.add(id);
     if (db.update("update board_tests set answers_json=" + set.sql() + " where id=? and status='STARTED'", params.toArray()) == 0) throw over();
     return obj("savedAt", iso(now));
   }
 
-  /** POST /api/board/tests/{id}/run: «Запустить» during the test — the console, recorded in the test's runs; the code is saved too. */
-  Map<String, Object> run(long user, long id, String code) {
+  /** POST /api/board/tests/{id}/run: «Запустить» for the code or fix item — the console, recorded in the test's runs with its item; that answer is saved too. */
+  Map<String, Object> run(long user, long id, Object item, String code) {
     Instant now = now(); settle(now);
     var t = own(user, id); requireRunning(t, now);
+    String kind = item == null ? "code" : item instanceof String s ? s : "";
+    if (!List.of("code", "fix").contains(kind) || !kinds(t).contains(kind)) throw new ApiError("INVALID_ITEM", "Запускать можно только код заданий этого теста «Исправь ошибку» и «Напиши код»");
     Language lang = Language.of(t.get("language"));
     long started = System.nanoTime(); var console = runner.console(lang, code, "");
-    log.info("Board test {} console run ({}): {} in {} ms", id, lang, console.status(), (System.nanoTime() - started) / 1_000_000);
-    db.update("update board_tests set runs_json=json_insert(coalesce(runs_json,'[]'),'$[#]',json(?)),answers_json=json_set(coalesce(answers_json,'{}'),'$.code',?) where id=? and status='STARTED'",
-        write(obj("at", iso(now), "code", code, "console", console.view())), code, id);
+    log.info("Board test {} console run ({}, {}): {} in {} ms", id, lang, kind, console.status(), (System.nanoTime() - started) / 1_000_000);
+    db.update("update board_tests set runs_json=json_insert(coalesce(runs_json,'[]'),'$[#]',json(?)),answers_json=json_set(coalesce(answers_json,'{}'),'$." + kind + "',?) where id=? and status='STARTED'",
+        write(obj("at", iso(now), "item", kind, "code", code, "console", console.view())), code, id);
     return obj("console", console.view());
   }
 
@@ -174,7 +188,7 @@ class BoardTests implements DisposableBean {
     Instant now = now(); settle(now);
     var t = own(user, id);
     if ("STARTED".equals(t.get("status"))) {
-      var answers = submitted(body);
+      var answers = submitted(body, items(t));
       if (now.isAfter(instant(t.get("ends_at")).plus(GRACE))) answers = Map.of();
       if (claim(id, answers, now)) { log.info("Board test {} finished by the student", id); check(id); }
     } else if (!"FINISHED".equals(t.get("status"))) throw new ApiError("BOARD_TEST_NOT_STARTED", "Тест не начат");
@@ -192,45 +206,75 @@ class BoardTests implements DisposableBean {
     if (now.isAfter(instant(t.get("ends_at")).plus(GRACE))) throw new ApiError("BOARD_TEST_OVER", "Время теста вышло");
   }
   private static ApiError over() { return new ApiError("BOARD_TEST_OVER", "Тест уже завершён"); }
-  /** The answers of a request body (code, output), validated; absent fields are left out. */
-  private static Map<String, String> submitted(Map<String, Object> body) {
-    var answers = new HashMap<String, String>();
+  /**
+   * The answers of a request body, validated against the test's items: code and fix — text; parsons — ids of the item's
+   * lines, each at most once. A field of a kind the test does not have is an error; absent and null fields are left out.
+   */
+  private static Map<String, Object> submitted(Map<String, Object> body, List<Map<String, Object>> items) {
+    var answers = new HashMap<String, Object>();
     if (body == null) return answers;
-    for (var key : List.of("code", "output")) {
+    for (var key : BoardItems.ALL) {
       Object value = body.get(key);
       if (value == null) continue;
-      if (!(value instanceof String text)) throw new ApiError("INVALID_ANSWER", key + " должен быть строкой");
-      int max = "code".equals(key) ? ApiController.SOURCE_LIMIT : ANSWER_MAX;
-      if (text.length() > max) throw new ApiError("ANSWER_TOO_LONG", ("code".equals(key) ? "Код" : "Ответ") + " длиннее " + max + " символов");
-      answers.put(key, text);
+      var item = items.stream().filter(i -> key.equals(i.get("kind"))).findFirst().orElse(null);
+      if (item == null) throw new ApiError("INVALID_ANSWER", "В этом тесте нет задания «" + BoardItems.kind(key).title() + "»");
+      if ("parsons".equals(key)) {
+        if (!(value instanceof List<?> list)) throw new ApiError("INVALID_ANSWER", "parsons — список строк программы");
+        var known = new HashSet<Object>(); for (var line : lineList(item)) known.add(line.get("id"));
+        var ids = new ArrayList<String>();
+        for (Object v : list) {
+          if (!(v instanceof String lineId) || !known.contains(lineId)) throw new ApiError("INVALID_ANSWER", "Нет такой строки: " + v);
+          if (ids.contains(lineId)) throw new ApiError("INVALID_ANSWER", "Строка " + lineId + " поставлена дважды");
+          ids.add(lineId);
+        }
+        answers.put(key, ids);
+      } else {
+        if (!(value instanceof String text)) throw new ApiError("INVALID_ANSWER", key + " должен быть строкой");
+        if (text.length() > ApiController.SOURCE_LIMIT) throw new ApiError("ANSWER_TOO_LONG", "Код длиннее " + ApiController.SOURCE_LIMIT + " символов");
+        answers.put(key, text);
+      }
     }
     return answers;
   }
 
-  /** The student's view: the items as shown, the answers and the time — never the expected output, the reference, checks, grades or the assessment. */
+  /** The student's view: the items as shown, the answers and the time — never the solution order, the extra line, the reference, the bug, checks, grades or the assessment. */
   private Map<String, Object> studentView(Map<String, Object> t) {
     var items = new ArrayList<Map<String, Object>>();
-    for (var item : items(t))
-      items.add("code".equals(item.get("kind"))
-          ? obj("kind", "code", "title", item.get("title"), "statement", item.get("statement"), "starterCode", item.get("starterCode"), "language", item.get("language"))
-          : obj("kind", "output", "program", item.get("program"), "language", item.get("language")));
-    var answers = answers(t);
-    return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "now", iso(now()),
-        "items", items, "answers", obj("code", answers.get("code"), "output", answers.get("output")));
+    var answers = answers(t); var shown = new LinkedHashMap<String, Object>();
+    for (var item : items(t)) {
+      String kind = (String) item.get("kind");
+      var view = obj("kind", kind, "title", item.get("title"), "statement", item.get("statement"), "language", item.get("language"));
+      switch (kind) {
+        case "parsons" -> {
+          view.put("before", item.get("before")); view.put("after", item.get("after"));
+          view.put("lines", lineList(item).stream().map(l -> obj("id", l.get("id"), "text", l.get("text"))).toList()); view.put("extraLines", item.get("extraLines"));
+        }
+        case "fix" -> view.put("program", item.get("program"));
+        default -> view.put("starterCode", item.get("starterCode"));
+      }
+      items.add(view); shown.put(kind, answers.get(kind));
+    }
+    return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "now", iso(now()), "durationSeconds", duration(t),
+        "items", items, "answers", shown);
   }
 
   // ---------------------------------------------------------------- items
 
   /** A task the test may use; story: «curated:<slug>:» for the bank's variants, null for a task that is a story of its own. */
-  private record Candidate(long id, String skill, String title, String statement, String starter, Integer difficulty, boolean curated, String key, String reference, String goalJson, String story) {}
+  private record Candidate(long id, String skill, String title, String statement, String starter, Integer difficulty, boolean curated, String key, String reference, String wrongJson, String story) {
+    String storyOrTask() { return story == null ? "task:" + id : story; }
+  }
   private record Passed(String skill, int block, long at) {}
+  /** A candidate that fits a kind; detail — the Bug (fix), the Parsons (parsons) or the added lines (code); rank — the kind's own preference, lower first. */
+  private record Fit(Candidate task, Object detail, int rank) {}
 
   /**
-   * The code item from the most recent topic passed by practice (then the older ones, then the topics confirmed by the
-   * diagnostic, then the course's first topic); the output item from another topic passed earlier. Regular tasks only,
-   * so a hard-mode student gets the same kind of test.
+   * The items of the chosen kinds, in the canonical order. code: the first «recent» topic (passed by practice, the most
+   * recent first; then confirmed by the diagnostic; then the course's first topic) with a candidate; fix: the same
+   * topics, another topic than the code item's first; parsons: an «older» topic first (passed more than RECENT_DAYS ago).
+   * Regular tasks only, so a hard-mode student gets the same kind of test; no task or story twice in a test.
    */
-  private List<Map<String, Object>> chooseItems(long user, Language lang, Instant now) {
+  private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, Instant now) {
     var practiced = db.query("select s.code,s.block_no,coalesce("
         + "(select max(" + epoch("x.created_at") + ") from skill_iterations i join submissions x on x.lesson_id=i.lesson_id and x.passed=1 join task_target_skills ts on ts.task_id=x.task_id and ts.skill_code=i.skill_code where i.user_id=p.user_id and i.skill_code=s.code and i.iteration_number=1),"
         + "(select " + epoch("l.started_at") + " from skill_iterations i join lessons l on l.id=i.lesson_id where i.user_id=p.user_id and i.skill_code=s.code and i.iteration_number=1),0) as at "
@@ -240,55 +284,106 @@ class BoardTests implements DisposableBean {
     var confirmed = db.queryForList("select s.code from diagnostic_skill_results d join skills s on s.code=d.skill_code where d.user_id=? and d.confirmed=1 and s.language=? order by s.block_no desc,s.sort_order desc", String.class, user, lang.name())
         .stream().filter(code -> !practicedCodes.contains(code)).toList();
     var course = db.queryForList("select code from skills where language=? order by block_no,sort_order,code", String.class, lang.name());
-    Map<String, Integer> blocks = new HashMap<>();
-    db.query("select code,block_no from skills where language=?", (RowCallbackHandler) rs -> blocks.put(rs.getString(1), rs.getInt(2)), lang.name());
     Set<Long> solvedTasks = new HashSet<>(db.queryForList("select task_id from successful_task_credit where user_id=?", Long.class, user));
     Set<String> solvedStories = new HashSet<>();
     for (String key : db.queryForList("select t.external_key from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.source='CURATED' and t.external_key like 'curated:%:%'", String.class, user))
       solvedStories.add(story(key));
+    Map<String, List<Candidate>> byTopic = new HashMap<>();
+    for (var c : db.query("select t.id,ts.skill_code,t.title,t.statement,t.starter_code,t.difficulty,t.source='CURATED',t.external_key,t.reference_code,t.wrong_json from tasks t join task_target_skills ts on ts.task_id=t.id "
+        + "where t.language=? and t.active=1 and t.mode='NORMAL' and coalesce(t.goal_json,'') not like '%IO_BEHAVIOR%'", (rs, i) -> candidate(rs), lang.name()))
+      byTopic.computeIfAbsent(c.skill(), k -> new ArrayList<>()).add(c);
+    Set<Long> usedTasks = new HashSet<>(); Set<String> usedStories = new HashSet<>();
+    Map<String, Fit> chosen = new HashMap<>();
 
-    var codeTopics = new LinkedHashSet<String>(practicedCodes); codeTopics.addAll(confirmed); if (!course.isEmpty()) codeTopics.add(course.getFirst());
-    Candidate code = null;
-    for (String topic : codeTopics) {
-      int preferred = blocks.getOrDefault(topic, 1) >= EASY_FROM_BLOCK ? 1 : 2;
-      var candidates = shuffled(db.query("select t.id,ts.skill_code,t.title,t.statement,t.starter_code,t.difficulty,t.source='CURATED',t.external_key,t.reference_code,t.goal_json from tasks t join task_target_skills ts on ts.task_id=t.id "
-          + "where ts.skill_code=? and t.language=? and t.active=1 and t.mode='NORMAL' and coalesce(t.goal_json,'') not like '%IO_BEHAVIOR%'", (rs, i) -> candidate(rs), topic, lang.name()));
-      candidates.sort(Comparator.comparing((Candidate c) -> solved(c, solvedTasks, solvedStories)).thenComparing(c -> !c.curated())
-          .thenComparing(c -> c.difficulty() == null).thenComparingInt(c -> c.difficulty() == null ? 0 : Math.abs(c.difficulty() - preferred)).thenComparingInt(c -> c.difficulty() == null ? 0 : c.difficulty()));
-      if (!candidates.isEmpty()) { code = candidates.getFirst(); break; }
+    // Passed by practice (most recent first), confirmed by the diagnostic, then the course from its start (its first topics
+    // may have no bank task with a reference and wrong solutions for «Исправь ошибку»).
+    var passedTopics = new LinkedHashSet<String>(practicedCodes); passedTopics.addAll(confirmed);
+    var recent = new LinkedHashSet<String>(passedTopics); recent.addAll(course);
+    if (kinds.contains("code")) chosen.put("code", pick(lang, "code", recent, byTopic, solvedTasks, solvedStories, usedTasks, usedStories));
+    if (kinds.contains("fix")) {
+      // Another passed topic than the code item's first, else the same topic with another story, then the course.
+      var topics = new LinkedHashSet<String>(passedTopics);
+      if (chosen.containsKey("code")) { String codeTopic = chosen.get("code").task().skill(); topics.remove(codeTopic); topics.add(codeTopic); }
+      topics.addAll(course);
+      chosen.put("fix", pick(lang, "fix", topics, byTopic, solvedTasks, solvedStories, usedTasks, usedStories));
     }
-    if (code == null) throw new ApiError("NO_BOARD_TASK", "Для теста не нашлось задачи по пройденным темам");
-
-    // The output item: a topic passed earlier (more than RECENT_DAYS ago first), then any other passed or confirmed one,
-    // then the code item's topic, then the course from its start.
-    long recent = now.minus(Duration.ofDays(RECENT_DAYS)).getEpochSecond();
-    String codeTopic = code.skill();
-    var older = shuffled(practiced.stream().filter(p -> p.at() <= recent).map(Passed::skill).toList());
-    var others = new ArrayList<String>(practiced.stream().filter(p -> p.at() > recent).map(Passed::skill).toList()); others.addAll(confirmed);
-    var outputTopics = new LinkedHashSet<String>(older); outputTopics.addAll(shuffled(others)); outputTopics.remove(codeTopic); outputTopics.add(codeTopic); outputTopics.addAll(course);
-    Map<String, List<Candidate>> outputs = new HashMap<>();
-    for (var c : db.query("select t.id,ts.skill_code,t.title,t.statement,t.starter_code,t.difficulty,1,t.external_key,t.reference_code,t.goal_json from tasks t join task_target_skills ts on ts.task_id=t.id "
-        + "where t.language=? and t.active=1 and t.source='CURATED' and t.mode='NORMAL' and t.reference_code is not null and trim(t.reference_code)<>'' and t.goal_json like '%OUTPUT_TEXT%'", (rs, i) -> candidate(rs), lang.name())) {
-      var goal = TaskGoal.fromJson(json, c.goalJson());
-      if (goal != null && goal.kind() == TaskGoal.Kind.OUTPUT_TEXT && goal.expectedOutput() != null && !goal.expectedOutput().isBlank() && c.id() != code.id()
-          && (c.story() == null || !c.story().equals(code.story())))
-        outputs.computeIfAbsent(c.skill(), k -> new ArrayList<>()).add(c);
+    if (kinds.contains("parsons")) {
+      // Passed more than RECENT_DAYS ago, then the other passed or confirmed topics, then the topics of this test's other items, then the course from its start.
+      long border = now.minus(Duration.ofDays(RECENT_DAYS)).getEpochSecond();
+      var taken = chosen.values().stream().map(f -> f.task().skill()).toList();
+      var others = new ArrayList<String>(practiced.stream().filter(p -> p.at() > border).map(Passed::skill).toList()); others.addAll(confirmed); others.removeAll(taken);
+      var topics = new LinkedHashSet<String>(shuffled(practiced.stream().filter(p -> p.at() <= border).map(Passed::skill).toList()));
+      topics.addAll(shuffled(others)); topics.addAll(taken); topics.addAll(course);
+      chosen.put("parsons", pick(lang, "parsons", topics, byTopic, solvedTasks, solvedStories, usedTasks, usedStories));
     }
-    Candidate output = null;
-    for (String topic : outputTopics) {
-      var candidates = shuffled(outputs.getOrDefault(topic, List.of()));
-      candidates.sort(Comparator.comparing((Candidate c) -> solved(c, solvedTasks, solvedStories)));
-      if (!candidates.isEmpty()) { output = candidates.getFirst(); break; }
-    }
-    if (output == null) throw new ApiError("NO_BOARD_TASK", "В банке нет задач «что выведет этот код» с эталонной программой");
 
     Map<String, String> titles = new HashMap<>();
-    db.query("select code,title from skills where code in (?,?)", (RowCallbackHandler) rs -> titles.put(rs.getString(1), rs.getString(2)), code.skill(), output.skill());
-    var codeItem = obj("kind", "code", "language", lang.name(), "taskId", code.id(), "externalKey", code.key(), "skillCode", code.skill(), "skillTitle", titles.get(code.skill()),
-        "difficulty", code.difficulty(), "title", code.title(), "statement", code.statement(), "starterCode", code.starter());
-    var outputItem = obj("kind", "output", "language", lang.name(), "taskId", output.id(), "externalKey", output.key(), "skillCode", output.skill(), "skillTitle", titles.get(output.skill()),
-        "difficulty", output.difficulty(), "title", output.title(), "program", output.reference(), "expectedOutput", TaskGoal.fromJson(json, output.goalJson()).expectedOutput());
-    return List.of(codeItem, outputItem);
+    db.query("select code,title from skills where language=?", (RowCallbackHandler) rs -> titles.put(rs.getString(1), rs.getString(2)), lang.name());
+    var items = new ArrayList<Map<String, Object>>();
+    for (String kind : kinds) {
+      var fit = chosen.get(kind); var c = fit.task();
+      var item = obj("kind", kind, "language", lang.name(), "taskId", c.id(), "externalKey", c.key(), "skillCode", c.skill(), "skillTitle", titles.get(c.skill()),
+          "difficulty", c.difficulty(), "title", c.title(), "statement", c.statement());
+      switch (kind) {
+        case "parsons" -> parsonsItem(item, (BoardItems.Parsons) fit.detail(), c.reference());
+        case "fix" -> { var bug = (BoardItems.Bug) fit.detail(); item.put("program", bug.program()); item.put("bugDescription", bug.description()); item.put("reference", c.reference()); }
+        default -> item.put("starterCode", c.starter());
+      }
+      items.add(item);
+    }
+    return items;
+  }
+
+  /** The first topic with a candidate of the kind: curated first, an unsolved story, the kind's difficulty order, the kind's own preference, then random. */
+  private Fit pick(Language lang, String kind, Collection<String> topics, Map<String, List<Candidate>> byTopic, Set<Long> solvedTasks, Set<String> solvedStories,
+                   Set<Long> usedTasks, Set<String> usedStories) {
+    var difficulties = BoardItems.kind(kind).difficulties();
+    for (String topic : topics) {
+      var fits = new ArrayList<Fit>();
+      for (var c : shuffled(byTopic.getOrDefault(topic, List.of()))) {
+        if (usedTasks.contains(c.id()) || usedStories.contains(c.storyOrTask())) continue;
+        var fit = fit(lang, kind, c);
+        if (fit != null) fits.add(fit);
+      }
+      fits.sort(Comparator.comparing((Fit f) -> !f.task().curated()).thenComparing(f -> solved(f.task(), solvedTasks, solvedStories))
+          .thenComparingInt(f -> f.task().difficulty() == null || !difficulties.contains(f.task().difficulty()) ? difficulties.size() : difficulties.indexOf(f.task().difficulty()))
+          .thenComparingInt(Fit::rank));
+      if (!fits.isEmpty()) { var f = fits.getFirst(); usedTasks.add(f.task().id()); usedStories.add(f.task().storyOrTask()); return f; }
+    }
+    throw new ApiError("NO_BOARD_TASK", "Для задания «" + BoardItems.kind(kind).title() + "» не нашлось задачи по пройденным темам");
+  }
+  /** Whether a task fits a kind: parsons — the starter/reference shape (a distractor preferred), fix — a small bug among the wrong solutions, code — any (a short one preferred). */
+  private Fit fit(Language lang, String kind, Candidate c) {
+    switch (kind) {
+      case "parsons" -> { var p = BoardItems.parsons(lang, c.starter(), c.reference(), wrong(c)); return p == null ? null : new Fit(c, p, p.extra() == null ? 1 : 0); }
+      case "fix" -> { var bug = BoardItems.bug(lang, c.reference(), wrong(c)); return bug == null ? null : new Fit(c, bug, bug.changed()); }
+      default -> { Integer added = BoardItems.added(lang, c.starter(), c.reference()); return new Fit(c, added, added == null || added <= BoardItems.SHORT_CODE_LINES ? 0 : 1); }
+    }
+  }
+  private List<BoardItems.Wrong> wrong(Candidate c) {
+    if (c.wrongJson() == null || c.wrongJson().isBlank()) return List.of();
+    try {
+      var list = new ArrayList<BoardItems.Wrong>();
+      for (var w : json.readTree(c.wrongJson())) if (w.path("source").isTextual()) list.add(new BoardItems.Wrong(w.path("description").asText(""), w.path("source").asText()));
+      return list;
+    } catch (Exception e) { log.warn("Task {}: wrong_json is not readable: {}", c.id(), e.toString()); return List.of(); }
+  }
+  /**
+   * The lines of a parsons item shuffled once (never in the solution order when another order exists), then numbered
+   * l1…lN in the order shown; solution — the ids in the reference order; extraLineId — the extra line or null.
+   */
+  private void parsonsItem(Map<String, Object> item, BoardItems.Parsons p, String reference) {
+    var pool = new ArrayList<String>(p.block()); if (p.extra() != null) pool.add(p.extra());
+    var order = new ArrayList<Integer>(); for (int i = 0; i < pool.size(); i++) order.add(i);
+    boolean another = new HashSet<>(p.block()).size() > 1;
+    for (int attempt = 0; attempt < 100; attempt++) {
+      Collections.shuffle(order, random);
+      if (!another || !order.stream().filter(i -> i < p.block().size()).map(p.block()::get).toList().equals(p.block())) break;
+    }
+    var lines = new ArrayList<Map<String, Object>>(); var ids = new String[pool.size()];
+    for (int shown = 0; shown < order.size(); shown++) { ids[order.get(shown)] = "l" + (shown + 1); lines.add(obj("id", "l" + (shown + 1), "text", pool.get(order.get(shown)))); }
+    item.put("before", p.before()); item.put("after", p.after()); item.put("lines", lines); item.put("extraLines", p.extra() == null ? 0 : 1);
+    item.put("solution", Arrays.asList(ids).subList(0, p.block().size())); item.put("extraLineId", p.extra() == null ? null : ids[pool.size() - 1]); item.put("reference", reference);
   }
   private static Candidate candidate(java.sql.ResultSet rs) throws java.sql.SQLException {
     int d = rs.getInt(6); Integer difficulty = rs.wasNull() ? null : d; boolean curated = rs.getInt(7) == 1; String key = rs.getString(8);
@@ -308,40 +403,55 @@ class BoardTests implements DisposableBean {
 
   // ---------------------------------------------------------------- checks and assessment
 
-  /** The checks of a finished test: the code like a lesson attempt (not credited), the output compared; then the LLM. */
+  /** The checks of a finished test: every item's program like a lesson attempt (not credited); the grade by the checks; then the LLM. */
   void check(long id) {
     if (!processing.add("check:" + id)) return;
     try {
       var t = load(id);
       if (!"FINISHED".equals(t.get("status")) || t.get("results_json") != null) return;
       Language lang = Language.of(t.get("language"));
-      var items = items(t); var answers = answers(t);
-      Map<String, Object> code;
-      try { code = checkCode(lang, items.get(0), answers.get("code")); }
-      catch (RuntimeException e) {
-        log.error("Board test {}: the code could not be checked", id, e);
-        code = obj("kind", "code", "passed", false, "output", "Проверка не удалась: " + e.getMessage(), "outcome", null, "console", null, "unavailable", true);
+      var answers = answers(t); var results = new ArrayList<Map<String, Object>>();
+      for (var item : items(t)) {
+        String kind = (String) item.get("kind");
+        try { results.add(checkItem(lang, item, answers.get(kind))); }
+        catch (RuntimeException e) {
+          log.error("Board test {}: the {} item could not be checked", id, kind, e);
+          results.add(failedCheck(kind, "Проверка не удалась: " + e.getMessage()));
+        }
       }
-      String expected = (String) items.get(1).get("expectedOutput"), actual = answers.get("output") == null ? "" : answers.get("output");
-      var output = obj("kind", "output", "passed", sameOutput(expected, actual), "expected", expected, "actual", actual);
-      boolean codeOk = Boolean.TRUE.equals(code.get("passed")), outputOk = Boolean.TRUE.equals(output.get("passed"));
-      int rule = ruleGrade(codeOk, outputOk, false);
-      db.update("update board_tests set results_json=?,rule_grade=?,suggested_grade=? where id=?", write(List.of(code, output)), String.valueOf(rule),
+      int rule = grade(results, null);
+      db.update("update board_tests set results_json=?,rule_grade=?,suggested_grade=? where id=?", write(results), String.valueOf(rule),
           String.valueOf(suggested(rule, cap((String) t.get("pace_status")))), id);
-      log.info("Board test {} checked: code {}, output {}, rule grade {}", id, codeOk ? "passed" : "failed", outputOk ? "right" : "wrong", rule);
+      log.info("Board test {} checked: {}, rule grade {}", id, results.stream().map(r -> r.get("kind") + (Boolean.TRUE.equals(r.get("passed")) ? " passed" : " failed")).toList(), rule);
       startAssessment(id);
     } catch (RuntimeException e) {
       // Stored as a failed check, so that the test is not checked again and again; the teacher grades it alone.
       log.error("Board test {} could not be checked", id, e);
       String error = "Проверка не удалась: " + e.getMessage();
-      db.update("update board_tests set results_json=?,rule_grade='2',suggested_grade='2',assessment_json=? where id=? and results_json is null",
-          write(List.of(obj("kind", "code", "passed", false, "output", error, "outcome", null, "console", null, "unavailable", true), obj("kind", "output", "passed", false, "expected", null, "actual", null))),
-          write(unavailable(error)), id);
+      var results = new ArrayList<Map<String, Object>>();
+      try { for (var item : items(load(id))) results.add(failedCheck((String) item.get("kind"), error)); } catch (RuntimeException ignored) {}
+      db.update("update board_tests set results_json=?,rule_grade='2',suggested_grade='2',assessment_json=? where id=? and results_json is null", write(results), write(unavailable(error)), id);
     } finally { processing.remove("check:" + id); }
   }
+  private static Map<String, Object> failedCheck(String kind, String error) {
+    var result = obj("kind", kind, "passed", false, "output", error, "outcome", null, "console", null, "unavailable", true);
+    if ("parsons".equals(kind)) result.put("program", null);
+    return result;
+  }
 
-  private Map<String, Object> checkCode(Language lang, Map<String, Object> item, String code) {
-    var result = obj("kind", "code", "passed", false, "output", null, "outcome", null, "console", null, "unavailable", false);
+  /** One item: parsons — the program assembled from before + the placed lines + after; fix and code — the student's final code. */
+  private Map<String, Object> checkItem(Language lang, Map<String, Object> item, Object answer) {
+    String kind = (String) item.get("kind");
+    if (!"parsons".equals(kind)) return checkProgram(lang, kind, item, answer instanceof String code ? code : null);
+    var texts = new HashMap<Object, String>(); for (var line : lineList(item)) texts.put(line.get("id"), (String) line.get("text"));
+    var placed = answer instanceof List<?> ids ? ids.stream().filter(texts::containsKey).map(texts::get).toList() : List.<String>of();
+    if (placed.isEmpty()) { var result = obj("kind", kind, "passed", false, "output", "Программа не собрана", "outcome", null, "console", null, "unavailable", false); result.put("program", null); return result; }
+    String program = BoardItems.assemble((String) item.get("before"), placed, (String) item.get("after"));
+    var result = checkProgram(lang, kind, item, program); result.put("program", program);
+    return result;
+  }
+  private Map<String, Object> checkProgram(Language lang, String kind, Map<String, Object> item, String code) {
+    var result = obj("kind", kind, "passed", false, "output", null, "outcome", null, "console", null, "unavailable", false);
     if (code == null || code.isBlank()) { result.put("output", "Код не написан"); return result; }
     var rows = db.queryForList("select test_source,goal_json from tasks where id=?", ((Number) item.get("taskId")).longValue());
     if (rows.isEmpty()) { result.put("output", "Задача удалена из банка"); return result; }
@@ -359,46 +469,58 @@ class BoardTests implements DisposableBean {
     return result;
   }
 
-  /** The LLM's proposal in the background; UNAVAILABLE at once when the LLM is off. */
+  /** The LLM's verdicts in the background; UNAVAILABLE at once when the LLM is off. */
   private void startAssessment(long id) {
     if (!generator.available()) { db.update("update board_tests set assessment_json=? where id=?", write(unavailable("LLM выключена или недоступна")), id); return; }
     db.update("update board_tests set assessment_json=? where id=?", write(Map.of("status", "PENDING")), id);
     executor.execute(() -> assess(id));
   }
-  private static Map<String, Object> unavailable(String error) { return obj("status", "UNAVAILABLE", "grade", null, "summary", null, "items", List.of(), "error", error); }
+  private static Map<String, Object> unavailable(String error) { return obj("status", "UNAVAILABLE", "summary", null, "items", List.of(), "questions", List.of(), "studentComment", null, "error", error); }
 
+  /** The LLM's verdicts and questions; the grade again with «частично верно» as half of a failed item → the suggested grade (the rule grade stays the checks' one). */
   void assess(long id) {
     if (!processing.add("assess:" + id)) return;
     try {
       var t = load(id);
       if (!(t.get("assessment") instanceof Map<?, ?> a) || !"PENDING".equals(a.get("status")) || t.get("results_json") == null) return;
       var items = items(t); var answers = answers(t); var results = results(t);
-      boolean codeOk = Boolean.TRUE.equals(results.get(0).get("passed")), outputOk = Boolean.TRUE.equals(results.get(1).get("passed"));
       var runs = runs(t); var recentRuns = new ArrayList<BoardAssessmentRequest.Run>();
       for (var run : runs.subList(Math.max(0, runs.size() - LLM_RUNS), runs.size())) {
         var console = run.get("console") instanceof Map<?, ?> c ? c : Map.of();
-        recentRuns.add(new BoardAssessmentRequest.Run((String) run.get("code"), String.valueOf(console.get("status")), (String) console.get("stdout"), (String) console.get("error")));
+        recentRuns.add(new BoardAssessmentRequest.Run(run.get("item") == null ? "code" : (String) run.get("item"), (String) run.get("code"), String.valueOf(console.get("status")), (String) console.get("stdout"), (String) console.get("error")));
       }
-      var code = items.get(0); var output = items.get(1);
-      var request = new BoardAssessmentRequest(Language.of(t.get("language")), (String) code.get("skillCode"), (String) code.get("title"), (String) code.get("statement"),
-          answers.get("code"), codeOk, (String) results.get(0).get("output"), (String) output.get("program"), (String) output.get("expectedOutput"), answers.get("output"), outputOk,
-          recentRuns, Integer.parseInt((String) t.get("rule_grade")));
+      var requestItems = new ArrayList<BoardAssessmentRequest.Item>();
+      for (var item : items) {
+        String kind = (String) item.get("kind");
+        var result = results.stream().filter(r -> kind.equals(r.get("kind"))).findFirst().orElse(Map.of());
+        boolean passed = Boolean.TRUE.equals(result.get("passed")); String output = (String) result.get("output"); int weight = BoardItems.kind(kind).weight();
+        requestItems.add(switch (kind) {
+          case "parsons" -> {
+            var texts = new HashMap<Object, String>(); for (var line : lineList(item)) texts.put(line.get("id"), (String) line.get("text"));
+            var solution = item.get("solution") instanceof List<?> ids ? ids.stream().map(texts::get).toList() : List.<String>of();
+            yield new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, solution, texts.get(item.get("extraLineId")), null, null,
+                (String) result.get("program"), passed, output);
+          }
+          case "fix" -> new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, null, null, (String) item.get("program"), (String) item.get("bugDescription"),
+              answers.get("fix") instanceof String s ? s : null, passed, output);
+          default -> new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, null, null, null, null,
+              answers.get("code") instanceof String s ? s : null, passed, output);
+        });
+      }
+      String skill = (String) items.stream().filter(i -> "code".equals(i.get("kind"))).findFirst().orElse(items.getFirst()).get("skillCode");
+      var request = new BoardAssessmentRequest(Language.of(t.get("language")), skill, requestItems, recentRuns, Integer.parseInt((String) t.get("rule_grade")));
       long user = ((Number) t.get("user_id")).longValue();
-      Map<String, Object> assessment; String rule = (String) t.get("rule_grade"), suggestedGrade = (String) t.get("suggested_grade");
+      Map<String, Object> assessment;
       try {
-        var proposal = generator.assessBoardTest(user, request);
-        // One item right and the other partly right by the LLM's verdict: 4 by the rule.
-        String other = codeOk ? "output" : "code";
-        boolean partly = codeOk != outputOk && proposal.items().stream().anyMatch(i -> other.equals(i.item()) && BoardAssessment.PARTLY.equals(i.verdict()));
-        rule = String.valueOf(ruleGrade(codeOk, outputOk, partly));
-        assessment = proposal.view();
-        suggestedGrade = String.valueOf(suggested(proposal.grade(), cap((String) t.get("pace_status"))));
-        log.info("Board test {} assessed by the LLM: grade {}, suggested {}", id, proposal.grade(), suggestedGrade);
+        assessment = generator.assessBoardTest(user, request).view();
       } catch (LlmUnavailableException e) {
         log.warn("Board test {} not assessed: {}", id, e.getMessage());
         assessment = unavailable(e.getMessage());
       }
-      db.update("update board_tests set assessment_json=?,rule_grade=?,suggested_grade=? where id=?", write(assessment), rule, suggestedGrade, id);
+      int grade = grade(results, assessment);
+      String suggestedGrade = String.valueOf(suggested(grade, cap((String) t.get("pace_status"))));
+      log.info("Board test {} assessed: {}, grade with the verdicts {}, suggested {}", id, assessment.get("status"), grade, suggestedGrade);
+      db.update("update board_tests set assessment_json=?,suggested_grade=? where id=?", write(assessment), suggestedGrade, id);
     } catch (RuntimeException e) {
       log.error("Board test {} could not be assessed", id, e);
       db.update("update board_tests set assessment_json=? where id=? and json_extract(assessment_json,'$.status')='PENDING'", write(unavailable("Ошибка оценки: " + e.getMessage())), id);
@@ -441,27 +563,28 @@ class BoardTests implements DisposableBean {
     return obj("group", name, "language", lang.name(), "members", view, "suggested", suggestion, "active", active);
   }
 
-  /** POST /api/admin/board/call: a new call; the student's earlier calls that were not started are cancelled. */
+  /** POST /api/admin/board/call: a new call with the kinds chosen (all three when absent); the student's earlier calls that were not started are cancelled. */
   Map<String, Object> call(long admin, Map<String, Object> body) {
     if (body == null || !(body.get("userId") instanceof Number user)) throw new ApiError("INVALID_STUDENT", "Нужен userId студента");
     if (body.get("language") != null && !(body.get("language") instanceof String)) throw new ApiError("UNKNOWN_LANGUAGE", "Неизвестный язык курса");
-    return summary(load(call(admin, user.longValue(), Language.parse((String) body.get("language")))));
+    var kinds = BoardItems.parse(body.get("kinds"));
+    return summary(load(call(admin, user.longValue(), Language.parse((String) body.get("language")), kinds)));
   }
-  private long call(long admin, long user, Language lang) {
+  private long call(long admin, long user, Language lang, List<String> kinds) {
     var rows = db.queryForList("select group_name from users where id=? and role='STUDENT'", user);
     if (rows.isEmpty()) throw new NotFoundError("STUDENT_NOT_FOUND", "Студент не найден");
     Instant now = now(); settle(now);
     db.update("update board_tests set status='CANCELLED' where user_id=? and status='CALLED'", user);
-    long id = db.queryForObject("insert into board_tests(user_id,group_name,language,status,called_at,called_by,call_expires_at) values(?,?,?,'CALLED',?,?,?) returning id", Long.class,
-        user, rows.getFirst().get("group_name"), lang.name(), iso(now), admin, iso(now.plus(CALL)));
-    log.info("Student {} called to the board ({}) by admin {}: test {}", user, lang, admin, id);
+    long id = db.queryForObject("insert into board_tests(user_id,group_name,language,status,called_at,called_by,call_expires_at,kinds,duration_seconds) values(?,?,?,'CALLED',?,?,?,?,?) returning id", Long.class,
+        user, rows.getFirst().get("group_name"), lang.name(), iso(now), admin, iso(now.plus(CALL)), write(kinds), BoardItems.seconds(kinds));
+    log.info("Student {} called to the board ({}, {}) by admin {}: test {}", user, lang, kinds, admin, id);
     return id;
   }
 
-  /** POST /api/admin/board/tests/{id}/recall: a new call for the same student and course. */
+  /** POST /api/admin/board/tests/{id}/recall: a new call for the same student, course and kinds. */
   Map<String, Object> recall(long admin, long id) {
     var t = load(id);
-    return adminView(load(call(admin, ((Number) t.get("user_id")).longValue(), Language.of(t.get("language")))));
+    return adminView(load(call(admin, ((Number) t.get("user_id")).longValue(), Language.of(t.get("language")), kinds(t))));
   }
 
   /** POST /api/admin/board/tests/{id}/cancel: a call or a running test; a finished test can only be deleted. */
@@ -557,18 +680,26 @@ class BoardTests implements DisposableBean {
     var assessment = t.get("assessment") instanceof Map<?, ?> a ? a.get("status") : null;
     return obj("id", t.get("id"), "userId", t.get("user_id"), "displayName", t.get("display_name"), "status", t.get("status"), "calledAt", t.get("called_at"),
         "expiresAt", t.get("call_expires_at"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "finishedAt", t.get("finished_at"),
-        "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment);
+        "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t));
   }
-  /** Everything for the teacher: the items with the expected output and the task, the answers, checks, runs, pace, grades. */
+  /** Everything for the teacher: the items with the solution and the task, the answers, checks, the score, runs, pace, grades. */
   private Map<String, Object> adminView(Map<String, Object> t) {
     var view = summary(t);
     String pace = (String) t.get("pace_status");
     view.put("login", t.get("login")); view.put("group", t.get("group_name")); view.put("language", t.get("language"));
     view.put("items", t.get("items_json") == null ? null : items(t)); view.put("answers", t.get("answers_json") == null ? null : answers(t));
-    view.put("results", t.get("results_json") == null ? null : results(t)); view.put("runs", runs(t));
+    view.put("results", t.get("results_json") == null ? null : results(t)); view.put("score", t.get("results_json") == null ? null : score(results(t), (Map<?, ?>) t.get("assessment")));
+    view.put("runs", runs(t));
     view.put("paceStatus", pace); view.put("paceCap", cap(pace)); view.put("ruleGrade", t.get("rule_grade")); view.put("assessment", t.get("assessment"));
     view.put("comment", t.get("comment")); view.put("gradedAt", t.get("graded_at"));
     return view;
+  }
+
+  /** The score table: per item its weight and score (0, 0.5, 1); the points, the maximum and the percent (one decimal). */
+  private static Map<String, Object> score(List<Map<String, Object>> results, Map<?, ?> assessment) {
+    var scores = scores(results, assessment); var items = new ArrayList<Map<String, Object>>(); double points = 0; int max = 0;
+    for (var e : scores.entrySet()) { int weight = BoardItems.kind(e.getKey()).weight(); items.add(obj("kind", e.getKey(), "weight", weight, "score", e.getValue())); points += weight * e.getValue(); max += weight; }
+    return obj("items", items, "points", points, "max", max, "percent", Math.round(BoardItems.percent(scores) * 10) / 10.0);
   }
 
   // ---------------------------------------------------------------- loading and helpers
@@ -587,7 +718,12 @@ class BoardTests implements DisposableBean {
     return t;
   }
   private List<Map<String, Object>> items(Map<String, Object> t) { return t.get("items_json") == null ? List.of() : read((String) t.get("items_json"), new TypeReference<List<Map<String, Object>>>() {}); }
-  private Map<String, String> answers(Map<String, Object> t) { return t.get("answers_json") == null ? Map.of() : read((String) t.get("answers_json"), new TypeReference<LinkedHashMap<String, String>>() {}); }
+  private Map<String, Object> answers(Map<String, Object> t) { return t.get("answers_json") == null ? Map.of() : read((String) t.get("answers_json"), new TypeReference<LinkedHashMap<String, Object>>() {}); }
+  @SuppressWarnings("unchecked")
+  private static List<Map<String, Object>> lineList(Map<String, Object> item) { return item.get("lines") instanceof List<?> lines ? (List<Map<String, Object>>) lines : List.of(); }
+  /** The test's kinds in the canonical order (a row without them: all three). */
+  private List<String> kinds(Map<String, Object> t) { return t.get("kinds") == null ? BoardItems.ALL : read((String) t.get("kinds"), new TypeReference<List<String>>() {}); }
+  private int duration(Map<String, Object> t) { return t.get("duration_seconds") instanceof Number n ? n.intValue() : BoardItems.seconds(kinds(t)); }
   private List<Map<String, Object>> results(Map<String, Object> t) { return read((String) t.get("results_json"), new TypeReference<List<Map<String, Object>>>() {}); }
   private List<Map<String, Object>> runs(Map<String, Object> t) { return t.get("runs_json") == null ? List.of() : read((String) t.get("runs_json"), new TypeReference<List<Map<String, Object>>>() {}); }
 

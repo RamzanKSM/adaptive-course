@@ -13,6 +13,12 @@ import sys
 QUALITY_VERSION = 2  # LearningContentGenerator.TASK_QUALITY_VERSION
 
 
+def wrong_json(t: dict):
+    """tasks.wrong_json: the bank's wrong solutions [{"description","source"}], null when the bank has none."""
+    wrong = [{"description": w.get("description", ""), "source": w["source"]} for w in t.get("wrong") or [] if w.get("source")]
+    return json.dumps(wrong, ensure_ascii=False) if wrong else None
+
+
 def main(bank_path: str, db_path: str) -> None:
     tasks = json.load(open(bank_path, encoding="utf-8"))["tasks"]
     db = sqlite3.connect(db_path, timeout=15, isolation_level=None)
@@ -26,19 +32,19 @@ def main(bank_path: str, db_path: str) -> None:
             if not db.execute("select 1 from skills where code=? and language=?", (t["skill"], language)).fetchone():
                 raise SystemExit(f"unknown topic {t['skill']} ({t['key']})")
             row = db.execute("select id from tasks where external_key=?", (t["key"],)).fetchone()
-            # reference: the full program, shown by the «Что выведет этот код?» item of the test at the board.
+            # reference and wrong: the full program and the wrong solutions, used by the test at the board.
             values = (t["skill"], t["title"], t["statement"], t["starter"], t["testSource"], t["testFileName"], t["difficulty"], t["goalJson"], QUALITY_VERSION, language,
-                      t.get("reference"))
+                      t.get("reference"), wrong_json(t))
             if row:
                 task_id = row[0]
                 db.execute("update tasks set skill_code=?, title=?, statement=?, starter_code=?, test_source=?, test_file_name=?, difficulty=?, goal_json=?, "
-                           "quality_version=?, language=?, reference_code=?, source='CURATED', mode='NORMAL', active=1 where id=?", values + (task_id,))
+                           "quality_version=?, language=?, reference_code=?, wrong_json=?, source='CURATED', mode='NORMAL', active=1 where id=?", values + (task_id,))
                 db.execute("delete from task_target_skills where task_id=?", (task_id,))
                 db.execute("delete from task_cases where task_id=?", (task_id,))
                 updated += 1
             else:
                 task_id = db.execute("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,goal_json,quality_version,"
-                                     "language,reference_code,source,mode,active,external_key) values(?,?,?,?,?,?,?,?,?,?,?,'CURATED','NORMAL',1,?) returning id",
+                                     "language,reference_code,wrong_json,source,mode,active,external_key) values(?,?,?,?,?,?,?,?,?,?,?,?,'CURATED','NORMAL',1,?) returning id",
                                      values + (t["key"],)).fetchone()[0]
                 inserted += 1
             db.execute("insert into task_target_skills(task_id,skill_code) values(?,?)", (task_id, t["skill"]))

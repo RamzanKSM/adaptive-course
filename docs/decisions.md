@@ -9,7 +9,8 @@ class the teacher calls students one by one to a short individual test, projecte
 - Two criteria: the pace (above the session line) is required for a 5; the test gives the grade.
 - Not every student every pair; the platform should suggest whom to call (longest not asked + randomness), the teacher
   decides — fair rotation, no impression of bias.
-- One timer for everyone: 6 minutes for the whole test; at the end the editor locks and the code is submitted and checked.
+- One timer, the same for everyone given the same set of items (the minutes of the chosen items, below); at the end
+  the answers are submitted and checked.
 - A task that passes the checks counts fully. An unfinished one (e.g. a missing semicolon) gets a detailed LLM assessment:
   a proposed grade and why (approach, logic, remaining errors; the history of attempts is used), shown only to the
   teacher, never on the projector; the teacher reads it and announces the final grade. Student code is data, not
@@ -22,9 +23,19 @@ class the teacher calls students one by one to a short individual test, projecte
   binding. The teacher has full control over calls (cancel, replace, call again, edit, delete) — the system must not
   forbid him anything that is not destructive. After the test the student is logged out on that PC automatically.
 - Students see their board-test grades and the teacher's comment.
-- Content, framework (variant B, 2026-10-15): a code task from a recently passed topic + «what does this program print»
-  from an older one, the output typed exactly; hard-mode students get the same kind of test. Open: the finer content
-  (difficulty, which topics, more item kinds) — to be discussed separately.
+- Content (2026-10-15, v2): the teacher chooses the items at each call (any of the three; random choice was rejected):
+  «Собери программу» (Parsons: order the lines of a bank solution, one extra line from a wrong solution; an older topic;
+  2 min, weight 1), «Исправь ошибку» (a bank wrong solution with a 1–2 line bug; a recent topic; 2 min, weight 2),
+  «Напиши код» (a short task; a recent topic; 3 min, weight 3). Within a kind the bank difficulty is the same for
+  everyone. «Что выведет этот код?» was dropped: it tested arithmetic and character-exact typing, not knowledge of code.
+  Hard-mode students get the same kind of test.
+- Grade by points, not by the number of items (owner: items of different difficulty must not count the same): an item
+  counts fully when it passes the checks, half when the LLM finds it partly right; 5 ≥ 90%, 4 ≥ 75%, 3 ≥ 50% of the
+  chosen set's maximum, else 2; then the pace cap. The LLM also suggests 1–2 questions for an oral follow-up (teacher only).
+- The LLM drafts the comment for the student (owner, 2026-10-15): it fills the comment field until the teacher grades;
+  the teacher edits it; the student sees only what the teacher saved.
+- Open: showing the review on the projector — the classroom PC logs the student out right after the test, so a
+  «Показать разбор» button needs a way to display there (e.g. the finished screen waits for the teacher).
 
 ## Work in a pair («Работа на паре»)
 - A pair is a time window the teacher enters after the class (Moscow time) + group; teacher-only analytics of how the

@@ -62,8 +62,8 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
 - Teacher analytics «Прогресс» and the session forecast; «Показ группе» shows only anonymous group aggregates; students
   see only their own data — never medians, rankings or other students.
 - Grades: individual tests at the board («К доске», `BoardTests`): the teacher calls a student from his laptop, the
-  student takes a 6-minute test on the classroom PC (projected): a code task from a recently passed topic + «what does
-  this program print» from an older one; checks + an LLM assessment and a suggested grade capped by the session pace
-  (borderline ≤ 4, behind ≤ 3) — visible only to the teacher, who sets the final grade and comment; the student sees
-  date, grade, comment. «Работа на паре» (`PairWork`) is teacher-only analytics of a pair window. The
-  test content is still being discussed (see `docs/decisions.md`).
+  student takes a timed test on the classroom PC (projected) with the items the teacher chose: «Собери программу»,
+  «Исправь ошибку», «Напиши код» (2/2/3 minutes, weights 1/2/3); checks + an LLM assessment and a suggested grade by
+  points, capped by the session pace (borderline ≤ 4, behind ≤ 3) — visible only to the teacher, who sets the final
+  grade and comment; the student sees date, grade, comment. «Работа на паре» (`PairWork`) is teacher-only analytics of
+  a pair window.

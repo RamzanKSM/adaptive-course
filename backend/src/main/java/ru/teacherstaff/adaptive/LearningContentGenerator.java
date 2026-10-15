@@ -23,8 +23,8 @@ interface LearningContentGenerator {
    */
   default SolutionReview checkCalculation(long studentId, ReviewRequest request) { throw new LlmUnavailableException("LLM review is unavailable"); }
   /**
-   * The test at the board, for the teacher only: a proposed grade 2..5 with a detailed explanation per item. Student code
-   * and answers are data, never instructions. Throws LlmUnavailableException when the LLM cannot answer usably.
+   * The test at the board, for the teacher only: a detailed verdict per item and questions for an oral follow-up. Student
+   * code and answers are data, never instructions. Throws LlmUnavailableException when the LLM cannot answer usably.
    */
   default BoardAssessment assessBoardTest(long studentId, BoardAssessmentRequest request) { throw new LlmUnavailableException("LLM assessment is unavailable"); }
   /** Whether background work (task repair) may call the LLM now; student-triggered calls check the student's own access. */
@@ -50,25 +50,39 @@ record ContentBrief(Language language, String skillCode, String skillTitle, int 
 record ReviewRequest(Language language, String skillCode, String title, String statement, String source, String operation, String operands) {}
 
 /**
- * What the assessor of a test at the board sees: the task (statement) with the student's final code and its check, the
- * program with its expected output and the student's answer, the «Запустить» runs during the test (oldest first, at most
- * BoardTests.LLM_RUNS) and the grade by the rule.
+ * What the assessor of a test at the board sees: the chosen items in the test's order (parsons → fix → code), each with
+ * its weight, the student's final program and its check, the «Запустить» runs during the test (oldest first, at most
+ * BoardTests.LLM_RUNS, each tagged with its item) and the grade by the checks alone. skillCode: for the LLM call log.
  */
-record BoardAssessmentRequest(Language language, String skillCode, String title, String statement, String code, boolean codePassed, String checkOutput,
-                              String program, String expectedOutput, String answer, boolean outputCorrect, List<Run> runs, int ruleGrade) {
-  record Run(String code, String status, String stdout, String error) {}
+record BoardAssessmentRequest(Language language, String skillCode, List<Item> items, List<Run> runs, int ruleGrade) {
+  BoardAssessmentRequest { items = List.copyOf(items); runs = List.copyOf(runs); }
+  /**
+   * parsons: lines — the movable lines in the reference order, extraLine — the extra one (null when none), answer — the
+   * program the student assembled; fix: program — the buggy program given, bugDescription — what is wrong in it; code
+   * and fix: answer — the student's final code.
+   */
+  record Item(String kind, String title, String statement, int weight, List<String> lines, String extraLine, String program, String bugDescription,
+              String answer, boolean passed, String checkOutput) {
+    Item { lines = lines == null ? List.of() : List.copyOf(lines); }
+  }
+  record Run(String item, String code, String status, String stdout, String error) {}
 }
 
-/** The assessor's proposal: grade 2..5, why, and a verdict per item («code», «output»): «верно», «частично верно» or «неверно». */
-record BoardAssessment(int grade, String summary, List<Item> items) {
+/**
+ * The assessor's answer: why, a verdict per item («parsons», «fix», «code»): «верно», «частично верно» or «неверно» —
+ * «частично верно» of a failed item gives it half of its weight — 1–2 questions the teacher can ask aloud, and a draft of
+ * the comment for the student that the teacher edits before saving (null when the assessor gave none).
+ */
+record BoardAssessment(String summary, List<Item> items, List<String> questions, String studentComment) {
   static final List<String> VERDICTS = List.of("верно", "частично верно", "неверно");
   static final String PARTLY = "частично верно";
   record Item(String item, String verdict, String explanation) {}
-  BoardAssessment { items = items == null ? List.of() : List.copyOf(items); }
+  BoardAssessment { items = items == null ? List.of() : List.copyOf(items); questions = questions == null ? List.of() : List.copyOf(questions); }
+  BoardAssessment(String summary, List<Item> items, List<String> questions) { this(summary, items, questions, null); }
   java.util.Map<String, Object> view() {
     var list = new java.util.ArrayList<java.util.Map<String, Object>>();
     for (Item i : items) { var m = new java.util.LinkedHashMap<String, Object>(); m.put("item", i.item()); m.put("verdict", i.verdict()); m.put("explanation", i.explanation()); list.add(m); }
-    var view = new java.util.LinkedHashMap<String, Object>(); view.put("status", "DONE"); view.put("grade", grade); view.put("summary", summary); view.put("items", list);
+    var view = new java.util.LinkedHashMap<String, Object>(); view.put("status", "DONE"); view.put("summary", summary); view.put("items", list); view.put("questions", questions); view.put("studentComment", studentComment); view.put("error", null);
     return view;
   }
 }

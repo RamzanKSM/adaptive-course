@@ -27,11 +27,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * «К доске» end to end: the choice of the two items, the call (only the called student, expiry, cancel, recall, extend),
- * the timer (autosave window, the server's finish with the last autosave), the checks (nothing credited), the rule
- * grade, the pace cap, the LLM assessment (stored, unavailable), the teacher's grade, what the student may see, the
- * rotation suggestion, the journal and admin-only access. The LLM and Piston are stubbed; the clock is the test's.
- * Every test uses topics and students of its own.
+ * «К доске» end to end: the kinds chosen at the call and the test time, the choice of the items (parsons, fix, code),
+ * the call (only the called student, expiry, cancel, recall, extend), the timer (autosave window, the server's finish
+ * with the last autosave), the checks per item (nothing credited), the weighted grade, the pace cap, the LLM assessment
+ * (verdicts, questions, unavailable), the teacher's grade, what the student may see, the rotation suggestion, the journal
+ * and admin-only access. The LLM and Piston are stubbed; the clock is the test's. Every test uses topics and students of
+ * its own.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -44,6 +45,18 @@ class BoardTestsIntegrationTest {
   static final Instant START = Instant.parse("2041-03-01T10:00:00Z");
   volatile Instant now = START;
   int order = 0;
+
+  /** The parsons task of the tests: the block (4 meaningful lines, a comment and a blank line dropped) replaces the placeholder. */
+  static final String PARSONS_STARTER = "public class Solution {\n    public static void main(String[] args) {\n        // Напиши решение здесь\n    }\n}\n";
+  static final List<String> BLOCK = List.of("        int x = 1;", "        int y = 2;", "        System.out.println(x + y);", "        System.out.println(\"done\");");
+  static final String BEFORE = "public class Solution {\n    public static void main(String[] args) {", AFTER = "    }\n}\n";
+  static final String PARSONS_REFERENCE = BEFORE + "\n" + BLOCK.get(0) + "\n        // the second number\n" + BLOCK.get(1) + "\n\n" + BLOCK.get(2) + "\n" + BLOCK.get(3) + "\n" + AFTER;
+  /** The extra line: a wrong solution replaces exactly the second line of the block. */
+  static final String EXTRA = "        int y = 3;";
+  /** The programs the stubbed checks accept: the reference order and the declarations swapped. */
+  static final Set<String> VALID = Set.of(assembled(BLOCK), assembled(List.of(BLOCK.get(1), BLOCK.get(0), BLOCK.get(2), BLOCK.get(3))));
+  static String assembled(List<String> lines) { return BEFORE + "\n" + String.join("\n", lines) + "\n" + AFTER; }
+  static final String FIX_REFERENCE = "int a = 1;\nint b = 2;\nint c = 3;\nprint(a + b + c);\n";
 
   @DynamicPropertySource static void properties(DynamicPropertyRegistry p) {
     p.add("spring.datasource.url", () -> "jdbc:sqlite:file:board-" + UUID.randomUUID() + "?mode=memory&cache=shared");
@@ -62,7 +75,7 @@ class BoardTestsIntegrationTest {
     when(clock.getZone()).thenReturn(ZoneOffset.UTC);
     when(runner.configured()).thenReturn(true);
     when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true, "READY", "17.0.1"));
-    when(runner.run(any(Language.class), anyString(), anyString())).thenAnswer(call -> ((String) call.getArgument(1)).contains("RIGHT")
+    when(runner.run(any(Language.class), anyString(), anyString())).thenAnswer(call -> ((String) call.getArgument(1)).contains("RIGHT") || VALID.contains((String) call.getArgument(1))
         ? new PistonCodeRunner.Run(true, "Решение прошло скрытые проверки", PistonCodeRunner.Outcome.PASSED)
         : new PistonCodeRunner.Run(false, "Неверный вывод программы", PistonCodeRunner.Outcome.CHECK_FAILED));
     when(runner.console(any(Language.class), anyString())).thenReturn(new PistonCodeRunner.Console("OK", "printed\n", null, false));
@@ -72,71 +85,65 @@ class BoardTestsIntegrationTest {
     board.runBackgroundWorkWith(Runnable::run);
   }
 
+  // ---------------------------------------------------------------- kinds and time
+
+  @Test void theKindsAreChosenAtTheCallAndGiveTheTime() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("kd-a", "Карина", "K-1"); long a = studentId("kd-a");
+    simpleBank(a, "BT_KD");
+    var all = call(admin, a, null);
+    assertEquals(List.of("parsons", "fix", "code"), texts(all.path("kinds")), "no kinds: all three"); assertEquals(420, all.path("durationSeconds").asInt(), "2 + 2 + 3 minutes");
+    var current = read(token, get("/api/board/current")).path("call");
+    assertEquals(List.of("parsons", "fix", "code"), texts(current.path("kinds"))); assertEquals(420, current.path("durationSeconds").asInt());
+    var two = call(admin, a, List.of("code", "parsons", "code"));
+    assertEquals(List.of("parsons", "code"), texts(two.path("kinds")), "stored in the canonical order"); assertEquals(300, two.path("durationSeconds").asInt());
+    for (var bad : List.of("[]", "[\"output\"]", "\"code\"", "[\"code\",7]"))
+      expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":" + a + ",\"language\":\"JAVA\",\"kinds\":" + bad + "}"), status().isBadRequest(), "INVALID_KINDS");
+    // The recall keeps the kinds; the test lasts their minutes and has their items only.
+    var recalled = read(admin, post("/api/admin/board/tests/{id}/recall", two.path("id").asLong()));
+    assertEquals(List.of("parsons", "code"), texts(recalled.path("kinds"))); assertEquals(300, recalled.path("durationSeconds").asInt());
+    var test = read(token, post("/api/board/tests/{id}/start", recalled.path("id").asLong()));
+    assertEquals(START.plusSeconds(300).toString(), test.path("endsAt").asText()); assertEquals(300, test.path("durationSeconds").asInt());
+    assertEquals(List.of("parsons", "code"), test.path("items").findValuesAsText("kind"));
+    assertEquals(Set.of("parsons", "code"), fields(test.path("answers"))); assertEquals(0, test.path("answers").path("parsons").size());
+    finishNow(admin, test.path("id").asLong());
+    var fix = read(token, post("/api/board/tests/{id}/start", call(admin, a, List.of("fix")).path("id").asLong()));
+    assertEquals(START.plusSeconds(120).toString(), fix.path("endsAt").asText());
+    assertEquals(List.of("fix"), fix.path("items").findValuesAsText("kind"));
+  }
+
   // ---------------------------------------------------------------- items
 
-  @Test void theCodeItemComesFromTheRecentPracticeTopicAndTheOutputItemFromAnOlderOne() throws Exception {
+  @Test void theCodeItemComesFromTheRecentPracticeTopicPreferringEasyAndShortTasks() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("it-a", "Ирина", "B-1"); long a = studentId("it-a");
-    String recent = skill("BT_IT_RECENT", 2), older = skill("BT_IT_OLDER", 2), middle = skill("BT_IT_MIDDLE", 2);
+    String recent = skill("BT_IT_RECENT", 2), older = skill("BT_IT_OLDER", 2);
     passed(a, older, START.minus(Duration.ofDays(40)));
-    passed(a, middle, START.minus(Duration.ofDays(20)));
     passed(a, recent, START.minus(Duration.ofDays(3)));
-    // The recent topic: a solved story, an unsolved one (two variants), another difficulty, another source, an input task, a hard task.
-    long solved = codeTask(recent, 2, "CURATED", "curated:it-solved:1"); codeTask(recent, 2, "CURATED", "curated:it-solved:2"); credit(a, solved);
-    long wanted1 = codeTask(recent, 2, "CURATED", "curated:it-fresh:1"), wanted2 = codeTask(recent, 2, "CURATED", "curated:it-fresh:2");
-    codeTask(recent, 3, "CURATED", "curated:it-harder:1"); codeTask(recent, 2, "LLM", null);
-    long io = codeTask(recent, 2, "CURATED", "curated:it-io:1"); db.update("update tasks set goal_json='{\"kind\":\"IO_BEHAVIOR\"}' where id=?", io);
-    long hard = codeTask(recent, 2, "CURATED", "curated:it-hard:1"); db.update("update tasks set mode='HARD' where id=?", hard);
-    // Output tasks: the older topics (one story solved), and the recent topic, which must not be used.
-    long outSolved = outputTask(older, "curated:it-out-solved:1", "print(1)\n", "1\n"); credit(a, outSolved);
-    long outOld = outputTask(older, "curated:it-out-old:1", "print('old')\n", "old\n");
-    long outMiddle = outputTask(middle, "curated:it-out-mid:1", "print('mid')\n", "mid\n");
-    outputTask(recent, "curated:it-out-recent:1", "print('recent')\n", "recent\n");
-    outputTask(older, "curated:it-out-noref:1", null, "x\n");
+    // The recent topic: a solved story, an unsolved one (two variants), a long one, another difficulty, another source, an input task, a hard task.
+    long solved = codeTask(recent, 1, "CURATED", "curated:it-solved:1"); codeTask(recent, 1, "CURATED", "curated:it-solved:2"); credit(a, solved);
+    long wanted1 = codeTask(recent, 1, "CURATED", "curated:it-fresh:1"), wanted2 = codeTask(recent, 1, "CURATED", "curated:it-fresh:2");
+    long longer = codeTask(recent, 1, "CURATED", "curated:it-long:1");
+    db.update("update tasks set reference_code=? where id=?", "starter " + longer + "\n" + "x();\n".repeat(11), longer);
+    long shortOne = codeTask(recent, 1, "CURATED", "curated:it-fresh:3"); db.update("update tasks set reference_code=? where id=?", "starter " + shortOne + "\n" + "x();\n".repeat(10), shortOne);
+    codeTask(recent, 2, "CURATED", "curated:it-harder:1"); codeTask(recent, 1, "LLM", null);
+    long io = codeTask(recent, 1, "CURATED", "curated:it-io:1"); db.update("update tasks set goal_json='{\"kind\":\"IO_BEHAVIOR\"}' where id=?", io);
+    long hard = codeTask(recent, 1, "CURATED", "curated:it-hard:1"); db.update("update tasks set mode='HARD' where id=?", hard);
+    codeTask(older, 1, "CURATED", "curated:it-older:1");
 
     for (int i = 0; i < 6; i++) {
-      var test = startTest(admin, token, a);
-      var code = test.path("items").get(0); var output = test.path("items").get(1);
-      long codeTask = adminTest(admin, test.path("id").asLong()).path("items").get(0).path("taskId").asLong();
-      assertTrue(Set.of(wanted1, wanted2).contains(codeTask), "an unsolved curated story of the recent topic at difficulty 2, got " + codeTask);
-      assertEquals("code", code.path("kind").asText()); assertEquals("JAVA", code.path("language").asText());
+      var test = startTest(admin, token, a, List.of("code"));
+      var code = test.path("items").get(0);
+      var item = adminTest(admin, test.path("id").asLong()).path("items").get(0);
+      long codeTask = item.path("taskId").asLong();
+      assertTrue(Set.of(wanted1, wanted2, shortOne).contains(codeTask), "an unsolved short curated story of the recent topic at difficulty 1, got " + codeTask);
+      assertEquals(recent, item.path("skillCode").asText()); assertEquals(1, item.path("difficulty").asInt());
+      assertEquals(Set.of("kind", "title", "statement", "language", "starterCode"), fields(code));
+      assertEquals("code", code.path("kind").asText()); assertEquals("JAVA", code.path("language").asText()); assertEquals("Задача " + codeTask, code.path("title").asText());
       assertEquals("starter " + codeTask, code.path("starterCode").asText()); assertEquals("starter " + codeTask, test.path("answers").path("code").asText());
-      long outputTask = adminTest(admin, test.path("id").asLong()).path("items").get(1).path("taskId").asLong();
-      assertTrue(Set.of(outOld, outMiddle).contains(outputTask), "an unsolved story of a topic passed more than 14 days ago, got " + outputTask);
-      assertEquals(outputTask == outOld ? "print('old')\n" : "print('mid')\n", output.path("program").asText(), "the full reference program");
       finishNow(admin, test.path("id").asLong());
     }
     assertEquals(0, count("select count(*) from submissions where task_id in (?,?)", wanted1, wanted2), "a board test makes no submissions");
-  }
-
-  @Test void laterTopicsUseDifficultyOneAndTheOutputItemFallsBackToOtherTopics() throws Exception {
-    String admin = login("admin", "admin-pass");
-    String token = createStudent("df-a", "Дарья", "B-2"); long a = studentId("df-a");
-    String late = skill("BT_DF_LATE", 5), other = skill("BT_DF_OTHER", 2), confirmed = skill("BT_DF_CONF", 1);
-    passed(a, other, START.minus(Duration.ofDays(5)));
-    passed(a, late, START.minus(Duration.ofDays(1)));
-    confirm(a, confirmed);
-    codeTask(late, 2, "CURATED", "curated:df-two:1"); long one = codeTask(late, 1, "CURATED", "curated:df-one:1"); codeTask(late, 3, "CURATED", "curated:df-three:1");
-    long out = outputTask(other, "curated:df-out:1", "print(2)\n", "2\n");
-    var test = startTest(admin, token, a);
-    var view = adminTest(admin, test.path("id").asLong());
-    assertEquals(one, view.path("items").get(0).path("taskId").asLong(), "block 5: difficulty 1");
-    assertEquals(1, view.path("items").get(0).path("difficulty").asInt());
-    assertEquals(out, view.path("items").get(1).path("taskId").asLong(), "no topic older than 14 days: another passed topic");
-    finishNow(admin, test.path("id").asLong());
-
-    // Only a topic confirmed by the diagnostic has output tasks: it is used.
-    db.update("update tasks set active=0 where id=?", out);
-    long confirmedOut = outputTask(confirmed, "curated:df-conf-out:1", "print(3)\n", "3\n");
-    test = startTest(admin, token, a);
-    assertEquals(confirmedOut, adminTest(admin, test.path("id").asLong()).path("items").get(1).path("taskId").asLong());
-    finishNow(admin, test.path("id").asLong());
-
-    // Nothing else: the code item's own topic.
-    db.update("update tasks set active=0 where id=?", confirmedOut);
-    long sameTopic = outputTask(late, "curated:df-late-out:1", "print(4)\n", "4\n");
-    test = startTest(admin, token, a);
-    assertEquals(sameTopic, adminTest(admin, test.path("id").asLong()).path("items").get(1).path("taskId").asLong());
   }
 
   @Test void withoutPracticeTheDiagnosticThenTheFirstTopic() throws Exception {
@@ -144,31 +151,179 @@ class BoardTestsIntegrationTest {
     String token = createStudent("fb-a", "Фёдор", "B-3"); long a = studentId("fb-a");
     String confirmed = skill("BT_FB_CONF", 3);
     confirm(a, confirmed);
-    long code = codeTask(confirmed, 2, "CURATED", "curated:fb-code:1"), out = outputTask(confirmed, "curated:fb-out:1", "print(5)\n", "5\n");
-    var test = startTest(admin, token, a);
-    var view = adminTest(admin, test.path("id").asLong());
-    assertEquals(code, view.path("items").get(0).path("taskId").asLong(), "a topic confirmed by the diagnostic");
-    assertEquals(out, view.path("items").get(1).path("taskId").asLong());
+    long code = codeTask(confirmed, 1, "CURATED", "curated:fb-code:1"), parsons = parsonsTask(confirmed, 2, "curated:fb-parsons:1", true);
+    var view = adminTest(admin, startTest(admin, token, a, List.of("parsons", "code")).path("id").asLong());
+    assertEquals(parsons, view.path("items").get(0).path("taskId").asLong(), "a topic confirmed by the diagnostic");
+    assertEquals(code, view.path("items").get(1).path("taskId").asLong());
 
     String first = db.queryForObject("select code from skills where language='JAVA' order by block_no,sort_order,code limit 1", String.class);
     String token2 = createStudent("fb-b", "Фаина", "B-3"); long b = studentId("fb-b");
-    codeTask(first, 1, "CURATED", "curated:fb-first:1"); outputTask(first, "curated:fb-first-out:1", "print(6)\n", "6\n");
-    var second = adminTest(admin, startTest(admin, token2, b).path("id").asLong());
+    codeTask(first, 1, "CURATED", "curated:fb-first:1"); parsonsTask(first, 2, "curated:fb-first-p:1", false);
+    var second = adminTest(admin, startTest(admin, token2, b, List.of("parsons", "code")).path("id").asLong());
     assertEquals(first, second.path("items").get(0).path("skillCode").asText(), "nothing passed: the course's first topic");
     assertEquals(first, second.path("items").get(1).path("skillCode").asText());
+    // The first topic has no task for «Исправь ошибку»: the search goes on through the course.
+    String later = skill("BT_FB_LATER", 9);
+    long laterFix = fixTask(later, 2, "curated:fb-later-fix:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    String token3 = createStudent("fb-c", "Фатима", "B-3"); long c = studentId("fb-c");
+    var fix = adminTest(admin, startTest(admin, token3, c, List.of("fix")).path("id").asLong()).path("items").get(0);
+    assertEquals("fix", fix.path("kind").asText()); assertNotEquals(first, fix.path("skillCode").asText(), "nothing to fix in the first topic");
+    assertTrue(db.queryForObject("select count(*) from tasks where id=? or (wrong_json is not null and skill_code=?)", Integer.class, laterFix, fix.path("skillCode").asText()) > 0);
+    // No task of a kind in the whole course: the error names it.
+    var body = json.readTree(mvc.perform(post("/api/board/tests/{id}/start", read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("userId", b, "language", "PYTHON", "kinds", List.of("fix"))))).path("id").asLong()).cookie(cookie(token2)))
+        .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("NO_BOARD_TASK", body.path("error").asText()); assertTrue(body.path("message").asText().contains("Исправь ошибку"), body.toString());
   }
 
   @Test void aHardModeStudentGetsTheSameKindOfTest() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("hm-a", "Хасан", "B-4"); long a = studentId("hm-a");
-    String topic = skill("BT_HM", 2), old = skill("BT_HM_OLD", 2);
-    passed(a, old, START.minus(Duration.ofDays(30))); passed(a, topic, START.minus(Duration.ofDays(2)));
+    String topic = skill("BT_HM", 2);
+    passed(a, topic, START.minus(Duration.ofDays(2)));
     db.update("update users set hard_mode_allowed=1,hard_mode_on=1 where id=?", a);
-    long hard = codeTask(topic, 2, "CURATED", "curated:hm-hard:1"); db.update("update tasks set mode='HARD' where id=?", hard);
+    long hard = codeTask(topic, 1, "CURATED", "curated:hm-hard:1"); db.update("update tasks set mode='HARD' where id=?", hard);
     long regular = codeTask(topic, 3, "CURATED", "curated:hm-regular:1");
-    outputTask(old, "curated:hm-out:1", "print(7)\n", "7\n");
-    var view = adminTest(admin, startTest(admin, token, a).path("id").asLong());
+    var view = adminTest(admin, startTest(admin, token, a, List.of("code")).path("id").asLong());
     assertEquals(regular, view.path("items").get(0).path("taskId").asLong(), "a regular task, never a hard one");
+  }
+
+  @Test void theParsonsItemFromAnOlderTopicWithItsLinesShuffledAndNothingLeaked() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("ps-a", "Патимат", "P-1"); long a = studentId("ps-a");
+    String older = skill("BT_PS_OLD", 2), recent = skill("BT_PS_NEW", 2);
+    passed(a, older, START.minus(Duration.ofDays(30))); passed(a, recent, START.minus(Duration.ofDays(2)));
+    parsonsTask(recent, 2, "curated:ps-recent:1", true); // a recent topic: only when no older one has a task
+    // Not eligible: two placeholders; a block of three lines; the reference does not keep the starter.
+    long two = parsonsTask(older, 2, "curated:ps-two:1", true); db.update("update tasks set starter_code=? where id=?", PARSONS_STARTER.replace("    }\n}", "        // Напиши решение здесь\n    }\n}"), two);
+    long three = parsonsTask(older, 2, "curated:ps-three:1", true); db.update("update tasks set reference_code=replace(reference_code,?,'') where id=?", BLOCK.get(3) + "\n", three);
+    long other = parsonsTask(older, 2, "curated:ps-other:1", true); db.update("update tasks set reference_code=replace(reference_code,'public class','class') where id=?", other);
+    long plain = parsonsTask(older, 2, "curated:ps-plain:1", false), withExtra = parsonsTask(older, 2, "curated:ps-extra:1", true);
+    var orders = new HashSet<List<String>>();
+    for (int i = 0; i < 5; i++) {
+      var test = startTest(admin, token, a, List.of("parsons")); long id = test.path("id").asLong();
+      var item = adminTest(admin, id).path("items").get(0);
+      assertEquals(withExtra, item.path("taskId").asLong(), "an eligible task of the older topic, the one with an extra line preferred");
+      assertEquals(BEFORE, item.path("before").asText()); assertEquals(AFTER, item.path("after").asText());
+      assertEquals(5, item.path("lines").size()); assertEquals(List.of("l1", "l2", "l3", "l4", "l5"), item.path("lines").findValuesAsText("id"), "numbered in the order shown");
+      var text = new HashMap<String, String>(); for (var l : item.path("lines")) text.put(l.path("id").asText(), l.path("text").asText());
+      assertEquals(BLOCK, texts(item.path("solution")).stream().map(text::get).toList(), "the solution: the block in the reference order, with its indentation");
+      assertEquals(EXTRA, text.get(item.path("extraLineId").asText()));
+      var shown = item.path("lines").findValuesAsText("text").stream().filter(BLOCK::contains).toList();
+      assertNotEquals(BLOCK, shown, "never in the solution order"); orders.add(item.path("lines").findValuesAsText("text"));
+      assertEquals(PARSONS_REFERENCE, item.path("reference").asText());
+      // The student: the lines and their number, nothing of the solution.
+      var p = test.path("items").get(0);
+      assertEquals(Set.of("kind", "title", "statement", "language", "before", "after", "lines", "extraLines"), fields(p));
+      assertEquals(1, p.path("extraLines").asInt()); assertEquals(item.path("lines"), p.path("lines")); assertEquals(Set.of("id", "text"), fields(p.path("lines").get(0)));
+      String body = mvc.perform(get("/api/board/current").cookie(cookie(token))).andReturn().getResponse().getContentAsString();
+      for (String leak : List.of("solution", "extraLineId", "reference", "the second number", "taskId", "externalKey", "wrong"))
+        assertFalse(body.contains(leak), "the student view leaks " + leak);
+      finishNow(admin, id);
+    }
+    assertTrue(orders.size() > 1, "shuffled at random");
+    // Without the extra line: no extra line; a test of another student without the preferred task.
+    db.update("update tasks set active=0 where id=?", withExtra);
+    var item = adminTest(admin, startTest(admin, token, a, List.of("parsons")).path("id").asLong()).path("items").get(0);
+    assertEquals(plain, item.path("taskId").asLong()); assertEquals(0, item.path("extraLines").asInt()); assertTrue(item.path("extraLineId").isNull()); assertEquals(4, item.path("lines").size());
+    assertTrue(two > 0 && three > 0 && other > 0);
+  }
+
+  @Test void parsonsIsAssembledAndCheckedAnyRightOrderPassesAndTheAnswersAreValidated() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("pa-a", "Пётр", "P-2"); long a = studentId("pa-a");
+    String older = skill("BT_PA_OLD", 2); passed(a, older, START.minus(Duration.ofDays(30)));
+    parsonsTask(older, 2, "curated:pa:1", true);
+    // Another valid order (the declarations swapped) passes.
+    long id = startTest(admin, token, a, List.of("parsons")).path("id").asLong();
+    var ids = idsOf(adminTest(admin, id).path("items").get(0));
+    var swapped = List.of(ids.get(BLOCK.get(1)), ids.get(BLOCK.get(0)), ids.get(BLOCK.get(2)), ids.get(BLOCK.get(3)));
+    for (var bad : List.of("{\"parsons\":[\"l1\",\"l9\"]}", "{\"parsons\":[\"l1\",\"l1\"]}", "{\"parsons\":\"l1\"}", "{\"code\":\"RIGHT\"}", "{\"fix\":\"x\"}"))
+      expect(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content(bad), status().isBadRequest(), "INVALID_ANSWER");
+    expect(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"parsons\",\"code\":\"x\"}"), status().isBadRequest(), "INVALID_ITEM");
+    expect(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"x\"}"), status().isBadRequest(), "INVALID_ITEM");
+    read(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("parsons", swapped.subList(0, 2)))));
+    assertEquals(swapped.subList(0, 2), texts(read(token, get("/api/board/current")).path("test").path("answers").path("parsons")), "autosaved");
+    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("parsons", swapped))));
+    var view = adminTest(admin, id); var result = view.path("results").get(0);
+    assertEquals(swapped, texts(view.path("answers").path("parsons")));
+    assertEquals(Set.of("kind", "passed", "output", "outcome", "console", "unavailable", "program"), fields(result));
+    assertTrue(result.path("passed").asBoolean()); assertEquals(assembled(List.of(BLOCK.get(1), BLOCK.get(0), BLOCK.get(2), BLOCK.get(3))), result.path("program").asText());
+    assertEquals("5", view.path("ruleGrade").asText());
+
+    // The extra line instead of its twin: the checks fail.
+    id = startTest(admin, token, a, List.of("parsons")).path("id").asLong();
+    var item = adminTest(admin, id).path("items").get(0); ids = idsOf(item);
+    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON)
+        .content(json.writeValueAsString(Map.of("parsons", List.of(ids.get(BLOCK.get(0)), item.path("extraLineId").asText(), ids.get(BLOCK.get(2)), ids.get(BLOCK.get(3)))))));
+    result = adminTest(admin, id).path("results").get(0);
+    assertFalse(result.path("passed").asBoolean()); assertTrue(result.path("program").asText().contains(EXTRA)); assertEquals("Неверный вывод программы", result.path("output").asText());
+    // Nothing placed: not passed, nothing run.
+    id = startTest(admin, token, a, List.of("parsons")).path("id").asLong();
+    clearInvocations(runner);
+    finishNow(admin, id);
+    view = adminTest(admin, id); result = view.path("results").get(0);
+    assertFalse(result.path("passed").asBoolean()); assertEquals("Программа не собрана", result.path("output").asText()); assertTrue(result.path("program").isNull());
+    assertEquals("2", view.path("ruleGrade").asText());
+    verify(runner, never()).run(any(Language.class), anyString(), anyString());
+  }
+
+  @Test void theFixItemShowsTheSmallestBugAndIsCheckedLikeCode() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("fx-a", "Фатима", "F-1"); long a = studentId("fx-a");
+    String topic = skill("BT_FX", 2); passed(a, topic, START.minus(Duration.ofDays(1)));
+    String one = "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n", twoLines = "int a = 1;\nint b = 3;\nint c = 4;\nprint(a + b + c);\n";
+    String threeLines = "int a = 0;\nint b = 3;\nint c = 4;\nprint(a + b + c);\n", spaces = "int a = 1;\n  int b = 2;   \nint c = 3;\n\nprint(a + b + c);\n";
+    long fix = fixTask(topic, 2, "curated:fx:1", Map.of("три строки", threeLines, "только пробелы", spaces, "две строки", twoLines, "b равно 3", one));
+    long id = startTest(admin, token, a, List.of("fix")).path("id").asLong();
+    var item = adminTest(admin, id).path("items").get(0);
+    assertEquals(fix, item.path("taskId").asLong());
+    assertEquals(one, item.path("program").asText(), "the wrong solution with the fewest changed lines"); assertEquals("b равно 3", item.path("bugDescription").asText());
+    assertEquals(FIX_REFERENCE, item.path("reference").asText());
+    var student = read(token, get("/api/board/current")).path("test");
+    assertEquals(Set.of("kind", "title", "statement", "language", "program"), fields(student.path("items").get(0)));
+    assertEquals(one, student.path("items").get(0).path("program").asText()); assertEquals(one, student.path("answers").path("fix").asText(), "the editor starts with the buggy program");
+    assertFalse(student.toString().contains("b равно 3"), "the bug is not told");
+    // «Запустить» for the fix item: recorded with its item, the answer saved.
+    read(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"fix\",\"code\":\"RIGHT draft\"}"));
+    expect(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"code\",\"code\":\"x\"}"), status().isBadRequest(), "INVALID_ITEM");
+    var view = adminTest(admin, id);
+    assertEquals("fix", view.path("runs").get(0).path("item").asText()); assertEquals("RIGHT draft", view.path("answers").path("fix").asText());
+    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content("{\"fix\":\"RIGHT fixed\"}"));
+    view = adminTest(admin, id);
+    assertTrue(view.path("results").get(0).path("passed").asBoolean()); assertEquals("fix", view.path("results").get(0).path("kind").asText());
+    assertEquals("printed\n", view.path("results").get(0).path("console").path("stdout").asText());
+    // Only bugs of more than two lines: this task is never a fix item (another topic of the course is used).
+    db.update("update tasks set wrong_json=? where id=?", json.writeValueAsString(List.of(Map.of("description", "три", "source", threeLines))), fix);
+    fixTask(skill("BT_FX_LATER", 9), 2, "curated:fx-later:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    var other = adminTest(admin, startTest(admin, token, a, List.of("fix")).path("id").asLong()).path("items").get(0);
+    assertNotEquals(fix, other.path("taskId").asLong(), "a bug of three lines is not a fix item");
+  }
+
+  @Test void fixPrefersAnotherRecentTopicThanCodeAndATestNeverRepeatsAStory() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("tp-a", "Тагир", "T-1"); long a = studentId("tp-a");
+    String newest = skill("BT_TP_1", 2), next = skill("BT_TP_2", 2);
+    passed(a, next, START.minus(Duration.ofDays(4))); passed(a, newest, START.minus(Duration.ofDays(1)));
+    long code = codeTask(newest, 1, "CURATED", "curated:tp-code:1");
+    fixTask(newest, 2, "curated:tp-fix-same:1", Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    long fixNext = fixTask(next, 2, "curated:tp-fix-next:1", Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    var view = adminTest(admin, startTest(admin, token, a, List.of("fix", "code")).path("id").asLong());
+    assertEquals(code, view.path("items").get(1).path("taskId").asLong(), "code: the most recent topic");
+    assertEquals(fixNext, view.path("items").get(0).path("taskId").asLong(), "fix: the next recent topic");
+    finishNow(admin, view.path("id").asLong());
+
+    // One topic only: code takes a story (difficulty 1 first), fix takes another story, never the other variant of code's.
+    String token2 = createStudent("tp-b", "Тамара", "T-1"); long b = studentId("tp-b");
+    String only = skill("BT_TP_ONLY", 2); passed(b, only, START.minus(Duration.ofDays(1)));
+    var bug = Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n");
+    long s1 = fixTask(only, 1, "curated:tp-s1:1", bug), s1b = fixTask(only, 1, "curated:tp-s1:2", bug), s2 = fixTask(only, 3, "curated:tp-s2:1", bug);
+    for (int i = 0; i < 4; i++) {
+      var v = adminTest(admin, startTest(admin, token2, b, List.of("fix", "code")).path("id").asLong());
+      assertTrue(Set.of(s1, s1b).contains(v.path("items").get(1).path("taskId").asLong()), "code: difficulty 1");
+      assertEquals(s2, v.path("items").get(0).path("taskId").asLong(), "fix: the same topic, another story");
+      finishNow(admin, v.path("id").asLong());
+    }
   }
 
   // ---------------------------------------------------------------- the call
@@ -180,10 +335,11 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_CALL");
     var call = call(admin, a);
     assertEquals("CALLED", call.path("status").asText()); assertEquals(START.plus(Duration.ofMinutes(5)).toString(), call.path("expiresAt").asText());
-    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus"), fields(call));
+    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds"), fields(call));
     long id = call.path("id").asLong();
     var current = read(token, get("/api/board/current"));
     assertEquals(id, current.path("call").path("id").asLong()); assertTrue(current.path("test").isNull());
+    assertEquals(Set.of("id", "calledAt", "expiresAt", "kinds", "durationSeconds"), fields(current.path("call")));
     assertTrue(read(other, get("/api/board/current")).path("call").isNull(), "another student sees nothing");
     expect(other, post("/api/board/tests/{id}/start", id), status().isNotFound(), "BOARD_TEST_NOT_FOUND");
 
@@ -207,10 +363,12 @@ class BoardTestsIntegrationTest {
     assertEquals("CANCELLED", adminTest(admin, second).path("status").asText());
     var started = read(token, post("/api/board/tests/{id}/start", third));
     assertEquals("STARTED", started.path("status").asText());
-    assertEquals(now.toString(), started.path("startedAt").asText()); assertEquals(now.plus(Duration.ofMinutes(6)).toString(), started.path("endsAt").asText());
+    assertEquals(now.toString(), started.path("startedAt").asText()); assertEquals(now.plus(Duration.ofMinutes(7)).toString(), started.path("endsAt").asText());
     assertEquals(started.path("items"), read(token, post("/api/board/tests/{id}/start", third)).path("items"), "starting again returns the same test");
     var running = read(token, get("/api/board/current"));
     assertTrue(running.path("call").isNull()); assertEquals(third, running.path("test").path("id").asLong());
+    // The teacher extends a running test.
+    assertEquals(now.plus(Duration.ofMinutes(8)).toString(), read(admin, post("/api/admin/board/tests/{id}/extend", third).contentType(MediaType.APPLICATION_JSON).content("{\"seconds\":60}")).path("endsAt").asText());
     expect(admin, post("/api/admin/board/tests/{id}/finish", second), status().isBadRequest(), "BOARD_TEST_NOT_STARTED");
     expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":987654,\"language\":\"JAVA\"}"), status().isNotFound(), "STUDENT_NOT_FOUND");
   }
@@ -223,22 +381,25 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_TM");
     int credits = count("select count(*) from successful_task_credit where user_id=?", a), submissions = count("select count(*) from submissions");
     var test = startTest(admin, token, a); long id = test.path("id").asLong();
-    String expected = adminTest(admin, id).path("items").get(1).path("expectedOutput").asText();
+    var solution = texts(adminTest(admin, id).path("items").get(0).path("solution"));
     assertEquals(START.toString(), read(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON)
         .content(json.writeValueAsString(Map.of("code", "first try")))).path("savedAt").asText());
-    now = START.plus(Duration.ofMinutes(6)).plusSeconds(10); // after the end, inside the grace
-    read(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("code", "RIGHT at last", "output", expected.strip() + "\r\n\r\n"))));
-    assertEquals("STARTED", read(token, get("/api/board/current")).path("test").path("status").asText());
-    now = START.plus(Duration.ofMinutes(6)).plusSeconds(16);
+    now = START.plus(Duration.ofMinutes(7)).plusSeconds(10); // after the end, inside the grace
+    read(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("code", "RIGHT at last", "parsons", solution))));
+    var running = read(token, get("/api/board/current")).path("test");
+    assertEquals("STARTED", running.path("status").asText()); assertEquals("RIGHT at last", running.path("answers").path("code").asText());
+    assertTrue(running.path("answers").path("fix").asText().contains("int b = 3;"), "fields not sent keep their value");
+    now = START.plus(Duration.ofMinutes(7)).plusSeconds(16);
     expect(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"late\"}"), status().isBadRequest(), "BOARD_TEST_OVER");
     var current = read(token, get("/api/board/current"));
     assertTrue(current.path("test").isNull(), "finished by the server"); assertTrue(current.path("call").isNull());
     var view = checked(admin, id);
     assertEquals("FINISHED", view.path("status").asText()); assertEquals(now.toString(), view.path("finishedAt").asText());
     assertEquals("RIGHT at last", view.path("answers").path("code").asText(), "the last autosave");
-    assertTrue(view.path("results").get(0).path("passed").asBoolean()); assertEquals("printed\n", view.path("results").get(0).path("console").path("stdout").asText());
-    assertTrue(view.path("results").get(1).path("passed").asBoolean(), "CRLF and trailing newlines do not matter");
-    assertEquals("5", view.path("ruleGrade").asText());
+    assertEquals(List.of("parsons", "fix", "code"), view.path("results").findValuesAsText("kind"));
+    assertTrue(view.path("results").get(0).path("passed").asBoolean()); assertFalse(view.path("results").get(1).path("passed").asBoolean(), "the bug was left in");
+    assertTrue(view.path("results").get(2).path("passed").asBoolean()); assertEquals("printed\n", view.path("results").get(2).path("console").path("stdout").asText());
+    assertEquals("3", view.path("ruleGrade").asText(), "parsons and code: 1 + 3 of 6 points, 66.7 % → 3");
     assertEquals(credits, count("select count(*) from successful_task_credit where user_id=?", a), "nothing is credited");
     assertEquals(submissions, count("select count(*) from submissions"), "no submissions");
     expect(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"x\"}"), status().isBadRequest(), "BOARD_TEST_OVER");
@@ -246,22 +407,7 @@ class BoardTestsIntegrationTest {
     assertEquals("RIGHT at last", adminTest(admin, id).path("answers").path("code").asText());
   }
 
-  @Test void outputIsComparedExactlyExceptLineEndingsAndTrailingNewlines() {
-    assertTrue(BoardTests.sameOutput("a\nb\n", "a\r\nb"));
-    assertTrue(BoardTests.sameOutput("a\nb", "a\nb\n\n\n"));
-    assertFalse(BoardTests.sameOutput("a b\n", "a  b\n"), "spaces matter");
-    assertFalse(BoardTests.sameOutput("Total: 5\n", "total: 5\n"), "case matters");
-    assertFalse(BoardTests.sameOutput("a\n", "a \n"), "trailing spaces matter");
-    assertFalse(BoardTests.sameOutput("a\n", "\na\n"), "leading newlines matter");
-    assertFalse(BoardTests.sameOutput("a\nb\n", "a\n\nb\n"));
-    assertEquals(5, BoardTests.ruleGrade(true, true, false)); assertEquals(4, BoardTests.ruleGrade(true, false, true)); assertEquals(4, BoardTests.ruleGrade(false, true, true));
-    assertEquals(3, BoardTests.ruleGrade(true, false, false)); assertEquals(3, BoardTests.ruleGrade(false, true, false)); assertEquals(2, BoardTests.ruleGrade(false, false, true));
-    assertNull(BoardTests.cap("ON_TRACK")); assertNull(BoardTests.cap("DONE")); assertNull(BoardTests.cap(null));
-    assertEquals(4, BoardTests.cap("BORDERLINE")); assertEquals(3, BoardTests.cap("BEHIND"));
-    assertEquals(3, BoardTests.suggested(5, 3)); assertEquals(4, BoardTests.suggested(4, null)); assertEquals(2, BoardTests.suggested(2, 4));
-  }
-
-  @Test void theChecksTheRuleGradeAndThePaceCapWithoutTheLlm() throws Exception {
+  @Test void theChecksTheWeightedGradeAndThePaceCapWithoutTheLlm() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("pc-a", "Полина", "B-7"); long a = studentId("pc-a");
     simpleBank(a, "BT_PC");
@@ -272,52 +418,96 @@ class BoardTestsIntegrationTest {
     expect(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"  \"}"), status().isBadRequest(), "EMPTY_SOURCE");
     now = now.plusSeconds(100);
     var finished = read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON)
-        .content(json.writeValueAsString(Map.of("code", "RIGHT final", "output", adminTest(admin, id).path("items").get(1).path("expectedOutput").asText()))));
+        .content(json.writeValueAsString(Map.of("code", "RIGHT final", "fix", "RIGHT fixed", "parsons", texts(adminTest(admin, id).path("items").get(0).path("solution"))))));
     assertEquals(Map.of("finished", true), json.convertValue(finished, Map.class));
     var view = adminTest(admin, id);
     assertEquals("FINISHED", view.path("status").asText()); assertEquals("RIGHT final", view.path("answers").path("code").asText());
-    assertEquals(1, view.path("runs").size()); assertEquals("RIGHT draft", view.path("runs").get(0).path("code").asText());
+    assertEquals(1, view.path("runs").size()); assertEquals("RIGHT draft", view.path("runs").get(0).path("code").asText()); assertEquals("code", view.path("runs").get(0).path("item").asText());
     assertEquals("OK", view.path("runs").get(0).path("console").path("status").asText());
     assertEquals("BEHIND", view.path("paceStatus").asText(), "a week to the session, the course far from closed"); assertEquals(3, view.path("paceCap").asInt());
     assertEquals("5", view.path("ruleGrade").asText()); assertEquals("3", view.path("suggestedGrade").asText(), "the pace caps the grade");
+    assertEquals(6, view.path("score").path("points").asDouble()); assertEquals(6, view.path("score").path("max").asInt()); assertEquals(100, view.path("score").path("percent").asDouble());
+    assertEquals(List.of("parsons", "fix", "code"), view.path("score").path("items").findValuesAsText("kind"));
+    assertEquals(List.of(1, 2, 3), view.path("score").path("items").findValues("weight").stream().map(JsonNode::asInt).toList());
     assertEquals("UNAVAILABLE", view.path("assessment").path("status").asText()); assertFalse(view.path("assessment").path("error").asText().isBlank());
     assertEquals("UNAVAILABLE", view.path("assessmentStatus").asText());
     verify(generator, never()).assessBoardTest(anyLong(), any());
 
-    // Not a session participant: no cap; a wrong code and a wrong output: 2.
+    // Not a session participant: no cap. Only the code right: 3 of 6 points → 3; only parsons: 1 of 6 → 2.
     db.update("update users set session_participant=0 where id=?", a);
-    var second = startTest(admin, token, a); long id2 = second.path("id").asLong();
-    read(token, post("/api/board/tests/{id}/finish", id2).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"wrong\",\"output\":\"nope\"}"));
+    long id2 = startTest(admin, token, a).path("id").asLong();
+    read(token, post("/api/board/tests/{id}/finish", id2).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\",\"fix\":\"nope\"}"));
     var v2 = adminTest(admin, id2);
     assertTrue(v2.path("paceStatus").isNull()); assertTrue(v2.path("paceCap").isNull());
-    assertFalse(v2.path("results").get(0).path("passed").asBoolean()); assertEquals("Неверный вывод программы", v2.path("results").get(0).path("output").asText());
-    assertFalse(v2.path("results").get(1).path("passed").asBoolean()); assertEquals("nope", v2.path("results").get(1).path("actual").asText());
-    assertEquals("2", v2.path("ruleGrade").asText()); assertEquals("2", v2.path("suggestedGrade").asText());
+    assertFalse(v2.path("results").get(1).path("passed").asBoolean()); assertEquals("Неверный вывод программы", v2.path("results").get(1).path("output").asText());
+    assertEquals("3", v2.path("ruleGrade").asText()); assertEquals("3", v2.path("suggestedGrade").asText()); assertEquals(50, v2.path("score").path("percent").asDouble());
+    long id3 = startTest(admin, token, a).path("id").asLong();
+    read(token, post("/api/board/tests/{id}/finish", id3).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("parsons", texts(adminTest(admin, id3).path("items").get(0).path("solution"))))));
+    assertEquals("2", adminTest(admin, id3).path("ruleGrade").asText()); assertEquals(16.7, adminTest(admin, id3).path("score").path("percent").asDouble());
   }
 
-  @Test void theLlmAssessmentTheSuggestedAndTheFinalGrade() throws Exception {
+  @Test void theWeightedGradeRule() {
+    assertEquals(5, BoardItems.grade(90)); assertEquals(4, BoardItems.grade(89.9)); assertEquals(4, BoardItems.grade(75)); assertEquals(3, BoardItems.grade(50)); assertEquals(2, BoardItems.grade(49.9));
+    var partlyCode = Map.<String, Object>of("status", "DONE", "items", List.of(Map.of("item", "code", "verdict", "частично верно"), Map.of("item", "fix", "verdict", "частично верно")));
+    // All three, the code partly right: 1 + 2 + 1.5 = 4.5 of 6 → 75 % → 4; by the checks alone 3 of 6 → 3. A partial verdict of a passed item changes nothing.
+    var all = List.of(result("parsons", true), result("fix", true), result("code", false));
+    assertEquals(4, BoardTests.grade(all, partlyCode)); assertEquals(3, BoardTests.grade(all, null));
+    assertEquals(Map.of("parsons", 1.0, "fix", 1.0, "code", 0.5), BoardTests.scores(all, partlyCode));
+    // Only the code, partly right: 1.5 of 3 → 50 % → 3.
+    assertEquals(3, BoardTests.grade(List.of(result("code", false)), partlyCode));
+    // Parsons and fix, only parsons right: 1 of 3 → 2; an UNAVAILABLE assessment gives no partial scores.
+    assertEquals(2, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), null));
+    assertEquals(2, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), Map.of("status", "UNAVAILABLE", "items", List.of(Map.of("item", "fix", "verdict", "частично верно")))));
+    assertEquals(3, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), partlyCode), "the fix partly right: 1 + 1 of 3, 66.7 % → 3");
+    assertNull(BoardTests.cap("ON_TRACK")); assertNull(BoardTests.cap("DONE")); assertNull(BoardTests.cap(null));
+    assertEquals(4, BoardTests.cap("BORDERLINE")); assertEquals(3, BoardTests.cap("BEHIND"));
+    assertEquals(3, BoardTests.suggested(5, 3)); assertEquals(4, BoardTests.suggested(4, null)); assertEquals(2, BoardTests.suggested(2, 4));
+  }
+
+  @Test void theLlmVerdictsRaiseTheSuggestedGradeAndTheTeacherGrades() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("llm-a", "Лейла", "B-8"); long a = studentId("llm-a");
     simpleBank(a, "BT_LLM");
+    db.update("insert into app_settings(key,value) values('session_date',?)", LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(7).toString());
     when(generator.available()).thenReturn(true);
-    when(generator.assessBoardTest(eq(a), any())).thenReturn(new BoardAssessment(4, "Подход верный, не хватает «;».",
-        List.of(new BoardAssessment.Item("code", "частично верно", "Строка 3: пропущена «;»."), new BoardAssessment.Item("output", "верно", "Вывод совпадает."))));
+    when(generator.assessBoardTest(eq(a), any())).thenReturn(new BoardAssessment("Подход верный, не хватает «;».",
+        List.of(new BoardAssessment.Item("parsons", "верно", "Порядок верный."), new BoardAssessment.Item("fix", "верно", "Исправлено."),
+            new BoardAssessment.Item("code", "частично верно", "Строка 3: пропущена «;».")), List.of("Зачем здесь цикл?", "Что будет при n = 0?"),
+        "Программу ты собрал и ошибку нашёл. В своём коде проверяй «;» в конце строк."));
     var test = startTest(admin, token, a); long id = test.path("id").asLong();
-    for (int i = 1; i <= 12; i++) read(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"run " + i + "\"}"));
-    String expected = adminTest(admin, id).path("items").get(1).path("expectedOutput").asText();
-    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("code", "almost", "output", expected))));
+    var item = adminTest(admin, id).path("items");
+    for (int i = 1; i <= 12; i++) read(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"" + (i % 2 == 0 ? "code" : "fix") + "\",\"code\":\"run " + i + "\"}"));
+    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON)
+        .content(json.writeValueAsString(Map.of("parsons", texts(item.get(0).path("solution")), "fix", "RIGHT", "code", "almost"))));
     var view = assessed(admin, id);
-    assertEquals("DONE", view.path("assessment").path("status").asText()); assertEquals(4, view.path("assessment").path("grade").asInt());
-    assertEquals("Подход верный, не хватает «;».", view.path("assessment").path("summary").asText());
-    assertEquals("частично верно", view.path("assessment").path("items").get(0).path("verdict").asText());
-    assertEquals("4", view.path("ruleGrade").asText(), "the output right and the code partly right by the LLM");
-    assertEquals("4", view.path("suggestedGrade").asText());
+    assertEquals(Set.of("status", "summary", "items", "questions", "studentComment", "error"), fields(view.path("assessment")));
+    assertEquals("Программу ты собрал и ошибку нашёл. В своём коде проверяй «;» в конце строк.", view.path("assessment").path("studentComment").asText(), "the draft for the student");
+    assertTrue(view.path("comment").isNull(), "the draft is not the comment until the teacher saves it");
+    assertEquals("DONE", view.path("assessment").path("status").asText()); assertEquals("Подход верный, не хватает «;».", view.path("assessment").path("summary").asText());
+    assertEquals("частично верно", view.path("assessment").path("items").get(2).path("verdict").asText());
+    assertEquals(List.of("Зачем здесь цикл?", "Что будет при n = 0?"), texts(view.path("assessment").path("questions")), "the oral questions are stored");
+    assertEquals("3", view.path("ruleGrade").asText(), "by the checks: 3 of 6 points");
+    assertEquals(4.5, view.path("score").path("points").asDouble()); assertEquals(75, view.path("score").path("percent").asDouble());
+    assertEquals(0.5, view.path("score").path("items").get(2).path("score").asDouble());
+    assertEquals("3", view.path("suggestedGrade").asText(), "4 with the verdict, capped at 3 by the pace");
+    db.update("delete from app_settings where key='session_date'"); db.update("update board_tests set pace_status=null where id=?", id);
+    read(admin, post("/api/admin/board/tests/{id}/assess", id));
+    view = assessed(admin, id);
+    assertEquals("4", view.path("suggestedGrade").asText(), "the partial verdict raises the suggested grade"); assertEquals("3", view.path("ruleGrade").asText());
     var request = ArgumentCaptor.forClass(BoardAssessmentRequest.class);
-    verify(generator).assessBoardTest(eq(a), request.capture());
-    assertEquals(3, request.getValue().ruleGrade(), "the LLM gets the grade by the checks alone"); assertFalse(request.getValue().codePassed()); assertTrue(request.getValue().outputCorrect());
-    assertEquals("almost", request.getValue().code()); assertEquals(expected, request.getValue().expectedOutput());
-    assertEquals(BoardTests.LLM_RUNS, request.getValue().runs().size(), "the last ten runs");
-    assertEquals("run 3", request.getValue().runs().getFirst().code()); assertEquals("run 12", request.getValue().runs().getLast().code());
+    verify(generator, times(2)).assessBoardTest(eq(a), request.capture());
+    var r = request.getValue();
+    assertEquals(3, r.ruleGrade(), "the LLM gets the grade by the checks alone");
+    assertEquals(List.of("parsons", "fix", "code"), r.items().stream().map(BoardAssessmentRequest.Item::kind).toList());
+    assertEquals(List.of(1, 2, 3), r.items().stream().map(BoardAssessmentRequest.Item::weight).toList());
+    var parsons = r.items().get(0);
+    assertEquals(BLOCK, parsons.lines()); assertEquals(EXTRA, parsons.extraLine()); assertEquals(assembled(BLOCK), parsons.answer()); assertTrue(parsons.passed());
+    var fix = r.items().get(1);
+    assertTrue(fix.program().contains("int b = 3;")); assertEquals("b равно 3", fix.bugDescription()); assertEquals("RIGHT", fix.answer());
+    var code = r.items().get(2);
+    assertEquals("almost", code.answer()); assertFalse(code.passed()); assertEquals("Неверный вывод программы", code.checkOutput());
+    assertEquals(BoardTests.LLM_RUNS, r.runs().size(), "the last ten runs");
+    assertEquals("run 3", r.runs().getFirst().code()); assertEquals("fix", r.runs().getFirst().item()); assertEquals("run 12", r.runs().getLast().code()); assertEquals("code", r.runs().getLast().item());
     assertEquals(12, view.path("runs").size(), "all runs are kept");
 
     // The teacher's grade and comment, changeable any time; the student sees only date, grade and comment.
@@ -336,12 +526,14 @@ class BoardTestsIntegrationTest {
     assertTrue(cleared.path("finalGrade").isNull()); assertEquals("Молодец", cleared.path("comment").asText(), "only the fields sent change");
     assertEquals(0, read(token, get("/api/board/grades")).path("grades").size(), "no final grade, nothing to show");
 
-    // The assessment again, now with the LLM failing: UNAVAILABLE with the reason, the rule grade by the checks.
+    // The assessment again, now with the LLM failing: UNAVAILABLE with the reason, the suggested grade by the checks.
     when(generator.assessBoardTest(eq(a), any())).thenThrow(new LlmUnavailableException("Codex App Server недоступен: timeout"));
     read(admin, post("/api/admin/board/tests/{id}/assess", id));
     var failed = assessed(admin, id);
     assertEquals("UNAVAILABLE", failed.path("assessment").path("status").asText()); assertEquals("Codex App Server недоступен: timeout", failed.path("assessment").path("error").asText());
-    assertEquals("4", failed.path("ruleGrade").asText(), "the rule grade from the earlier assessment stays");
+    assertEquals(0, failed.path("assessment").path("questions").size());
+    assertEquals("3", failed.path("ruleGrade").asText()); assertEquals("3", failed.path("suggestedGrade").asText(), "no partial verdicts without the LLM");
+    assertEquals(3, failed.path("score").path("points").asDouble());
   }
 
   @Test void theAssessmentRunsLaterOnAPlatformThread() throws Exception {
@@ -350,11 +542,11 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_BG");
     var thread = new java.util.concurrent.atomic.AtomicReference<Thread>(); var called = new java.util.concurrent.CountDownLatch(1); var release = new java.util.concurrent.CountDownLatch(1);
     when(generator.available()).thenReturn(true);
-    when(generator.assessBoardTest(eq(a), any())).thenAnswer(i -> { thread.set(Thread.currentThread()); called.countDown(); release.await(); return new BoardAssessment(3, "Есть ошибки.", List.of()); });
+    when(generator.assessBoardTest(eq(a), any())).thenAnswer(i -> { thread.set(Thread.currentThread()); called.countDown(); release.await(); return new BoardAssessment("Есть ошибки.", List.of(), List.of()); });
     long id = startTest(admin, token, a).path("id").asLong();
     board.runBackgroundWorkWith(null);
     try {
-      read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\",\"output\":\"no\"}"));
+      read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\"}"));
       assertTrue(called.await(5, java.util.concurrent.TimeUnit.SECONDS), "the LLM is asked after the finish");
       assertFalse(thread.get().isVirtual(), "a platform thread"); assertTrue(thread.get().getName().startsWith("board-"), thread.get().getName());
       assertEquals("PENDING", adminTest(admin, id).path("assessment").path("status").asText(), "the finish does not wait for the LLM");
@@ -364,21 +556,23 @@ class BoardTestsIntegrationTest {
     } finally { release.countDown(); board.runBackgroundWorkWith(Runnable::run); }
   }
 
-  @Test void theStudentNeverSeesTheExpectedOutputTheTaskOrTheAssessment() throws Exception {
+  @Test void theStudentNeverSeesTheSolutionTheTaskOrTheAssessment() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("lk-a", "Лука", "B-9"); long a = studentId("lk-a");
     simpleBank(a, "BT_LK");
     long id = call(admin, a).path("id").asLong();
     var started = read(token, post("/api/board/tests/{id}/start", id));
-    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "items", "answers"), fields(started));
-    assertEquals(Set.of("kind", "title", "statement", "starterCode", "language"), fields(started.path("items").get(0)));
-    assertEquals(Set.of("kind", "program", "language"), fields(started.path("items").get(1)));
-    assertEquals(Set.of("code", "output"), fields(started.path("answers")));
+    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "durationSeconds", "items", "answers"), fields(started));
+    assertEquals(List.of("parsons", "fix", "code"), started.path("items").findValuesAsText("kind"));
+    assertEquals(Set.of("kind", "title", "statement", "language", "before", "after", "lines", "extraLines"), fields(started.path("items").get(0)));
+    assertEquals(Set.of("kind", "title", "statement", "language", "program"), fields(started.path("items").get(1)));
+    assertEquals(Set.of("kind", "title", "statement", "language", "starterCode"), fields(started.path("items").get(2)));
+    assertEquals(Set.of("parsons", "fix", "code"), fields(started.path("answers")));
     String text = mvc.perform(get("/api/board/current").cookie(cookie(token))).andReturn().getResponse().getContentAsString();
     assertEquals(started.path("items"), json.readTree(text).path("test").path("items"));
-    for (String leak : List.of("second line", "expectedOutput", "taskId", "externalKey", "results", "assessment", "suggestedGrade", "ruleGrade", "reference"))
+    for (String leak : List.of("solution", "extraLineId", "bugDescription", "b равно 3", "taskId", "externalKey", "results", "assessment", "suggestedGrade", "ruleGrade", "reference", "score"))
       assertFalse(text.contains(leak), "the student view leaks " + leak);
-    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\",\"output\":\"x\"}"));
+    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\"}"));
     var after = read(token, get("/api/board/current"));
     assertTrue(after.path("test").isNull() && after.path("call").isNull(), "nothing after the finish");
     expect(token, post("/api/board/tests/{id}/start", id), status().isBadRequest(), "BOARD_TEST_FINISHED");
@@ -408,12 +602,13 @@ class BoardTestsIntegrationTest {
     assertTrue(Set.of(never1, never2, tenDays).contains(suggested), "present, the three oldest; got " + suggested);
     assertEquals(suggested, read(admin, get("/api/admin/board").param("group", "R-1").param("language", "JAVA")).path("suggested").asLong(), "stable between polls");
 
-    // A called student is not suggested; the call is in the active panel.
-    call(admin, never1); call(admin, never2); call(admin, tenDays);
+    // A called student is not suggested; the call is in the active panel with its kinds.
+    call(admin, never1); call(admin, never2); call(admin, tenDays, List.of("code"));
     var after = read(admin, get("/api/admin/board").param("group", "R-1").param("language", "JAVA"));
     assertTrue(Set.of(yesterday, today).contains(after.path("suggested").asLong()), "yesterday and today remain: " + after.path("suggested"));
     assertTrue(after.path("active").findValuesAsText("status").containsAll(List.of("CALLED", "FINISHED")));
     assertEquals(3, after.path("active").findValuesAsText("status").stream().filter("CALLED"::equals).count());
+    assertEquals(List.of("code"), texts(after.path("active").get(0).path("kinds"))); assertEquals(180, after.path("active").get(0).path("durationSeconds").asInt());
     // Nobody present: everyone taking the session.
     db.update("update lessons set finished_at=?,last_activity_at=?,started_at=? where user_id in (?,?,?,?,?,?)", "2041-02-01 00:00:00", "2041-02-01T00:00:00Z", "2041-02-01 00:00:00", never1, never2, tenDays, yesterday, today, volunteer);
     db.update("update board_tests set status='CANCELLED' where status='CALLED'");
@@ -427,7 +622,7 @@ class BoardTestsIntegrationTest {
     String token = createStudent("jr-a", "Яна", "J-9"); long a = studentId("jr-a"); long b = studentRow("jr-b", "Артур", "J-9");
     simpleBank(a, "BT_JR");
     long first = startTest(admin, token, a).path("id").asLong();
-    read(token, post("/api/board/tests/{id}/finish", first).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\",\"output\":\"\"}"));
+    read(token, post("/api/board/tests/{id}/finish", first).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\"}"));
     read(admin, patch("/api/admin/board/tests/{id}", first).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":\"3\"}"));
     now = now.plus(Duration.ofDays(2));
     long second = startTest(admin, token, a).path("id").asLong();
@@ -468,18 +663,25 @@ class BoardTestsIntegrationTest {
 
   // ---------------------------------------------------------------- helpers
 
-  /** A recent topic with a code task and an older topic with an output task, so a test can start. */
+  /**
+   * A test of all three kinds can start: the recent topic has a code task, the older one a fix task (difficulty 2, the
+   * bug «b равно 3») and a parsons task with an extra line (difficulty 3, so that fix does not take it).
+   */
   private void simpleBank(long user, String prefix) {
     String topic = skill(prefix, 2), old = skill(prefix + "_OLD", 2);
     passed(user, old, START.minus(Duration.ofDays(30))); passed(user, topic, START.minus(Duration.ofDays(1)));
-    codeTask(topic, 2, "CURATED", "curated:" + prefix.toLowerCase() + ":1");
-    outputTask(old, "curated:" + prefix.toLowerCase() + "-out:1", "print('" + prefix + "')\n", prefix + "\nsecond line\n");
+    codeTask(topic, 1, "CURATED", "curated:" + prefix.toLowerCase() + ":1");
+    fixTask(old, 2, "curated:" + prefix.toLowerCase() + "-fix:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    parsonsTask(old, 3, "curated:" + prefix.toLowerCase() + "-parsons:1", true);
   }
-  private JsonNode call(String admin, long user) throws Exception {
-    return read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", user, "language", "JAVA"))));
+  private JsonNode call(String admin, long user) throws Exception { return call(admin, user, null); }
+  private JsonNode call(String admin, long user, List<String> kinds) throws Exception {
+    var body = new LinkedHashMap<String, Object>(Map.of("userId", user, "language", "JAVA")); if (kinds != null) body.put("kinds", kinds);
+    return read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
   }
-  private JsonNode startTest(String admin, String token, long user) throws Exception {
-    return read(token, post("/api/board/tests/{id}/start", call(admin, user).path("id").asLong()));
+  private JsonNode startTest(String admin, String token, long user) throws Exception { return startTest(admin, token, user, null); }
+  private JsonNode startTest(String admin, String token, long user, List<String> kinds) throws Exception {
+    return read(token, post("/api/board/tests/{id}/start", call(admin, user, kinds).path("id").asLong()));
   }
   private void finishNow(String admin, long id) throws Exception { read(admin, post("/api/admin/board/tests/{id}/finish", id)); }
   private JsonNode adminTest(String admin, long id) throws Exception { return read(admin, get("/api/admin/board/tests/{id}", id)); }
@@ -494,6 +696,10 @@ class BoardTestsIntegrationTest {
     throw new AssertionError("test " + id + " was not assessed");
   }
   private static JsonNode member(JsonNode board, String login) { for (var m : board.path("members")) if (login.equals(m.path("login").asText())) return m; throw new AssertionError(login); }
+  /** A parsons item's line ids by their text. */
+  private static Map<String, String> idsOf(JsonNode item) { var ids = new HashMap<String, String>(); for (var l : item.path("lines")) ids.put(l.path("text").asText(), l.path("id").asText()); return ids; }
+  private static List<String> texts(JsonNode array) { var list = new ArrayList<String>(); for (var n : array) list.add(n.asText()); return list; }
+  private static Map<String, Object> result(String kind, boolean passed) { return Map.of("kind", kind, "passed", passed); }
 
   private String skill(String code, int block) {
     db.update("insert into skills(code,title,sort_order,prerequisite_code,block_no,language) values(?,?,?,null,?,'JAVA')", code, "Тема " + code, 10_000 + ++order, block);
@@ -505,15 +711,28 @@ class BoardTestsIntegrationTest {
     db.update("insert into task_target_skills(task_id,skill_code) values(?,?)", id, skill);
     return id;
   }
+  /** A task without a reference: only for the code item. */
   private long codeTask(String skill, int difficulty, String source, String key) {
     long id = task(skill, difficulty, source, key, "{\"kind\":\"OUTPUT_TEXT\",\"expectedOutput\":\"ok\\n\"}", null);
     db.update("update tasks set starter_code=?,title=? where id=?", "starter " + id, "Задача " + id, id);
     return id;
   }
-  private long outputTask(String skill, String key, String reference, String expected) throws RuntimeException {
-    // Difficulty 3, so that it does not compete for the code item of the tests (difficulty 1 or 2 is preferred).
-    try { return task(skill, 3, "CURATED", key, json.writeValueAsString(Map.of("kind", "OUTPUT_TEXT", "expectedOutput", expected)), reference); }
-    catch (Exception e) { throw new IllegalStateException(e); }
+  /** A task of the parsons shape; extra: a wrong solution replacing one line of the block (else one changing three lines — no extra line, no fix item). */
+  private long parsonsTask(String skill, int difficulty, String key, boolean extra) {
+    long id = codeTask(skill, difficulty, "CURATED", key);
+    String wrong = extra ? PARSONS_REFERENCE.replace(BLOCK.get(1), EXTRA) : PARSONS_REFERENCE.replace(BLOCK.get(0), "        int x = 0;").replace(BLOCK.get(2), "        System.out.println(x);").replace(BLOCK.get(3), "        System.out.println();");
+    db.update("update tasks set starter_code=?,reference_code=?,wrong_json=? where id=?", PARSONS_STARTER, PARSONS_REFERENCE, wrongJson(Map.of("ошибка", wrong)), id);
+    return id;
+  }
+  /** A task with FIX_REFERENCE and the given wrong solutions (description → program). */
+  private long fixTask(String skill, int difficulty, String key, Map<String, String> wrong) {
+    long id = codeTask(skill, difficulty, "CURATED", key);
+    db.update("update tasks set reference_code=?,wrong_json=? where id=?", FIX_REFERENCE, wrongJson(wrong), id);
+    return id;
+  }
+  private String wrongJson(Map<String, String> wrong) {
+    var list = new ArrayList<Map<String, String>>(); for (var e : new TreeMap<>(wrong).entrySet()) list.add(Map.of("description", e.getKey(), "source", e.getValue()));
+    try { return json.writeValueAsString(list); } catch (Exception e) { throw new IllegalStateException(e); }
   }
   /** The first iteration of a topic completed by practice at `at`: a lesson, a passed submission, the iteration. */
   private void passed(long user, String skill, Instant at) {

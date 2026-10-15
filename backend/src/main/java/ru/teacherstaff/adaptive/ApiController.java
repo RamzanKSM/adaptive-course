@@ -596,7 +596,7 @@ public class ApiController {
   @DeleteMapping("/admin/pairs/{id}") @Transactional public Map<String,Object> deletePair(@PathVariable long id,HttpServletRequest r){ admin(r); var result=pairWork.delete(id); log.info("Pair {} deleted by admin {}",id,uid(r)); return result; }
 
   /**
-   * «К доске»: the teacher calls a student, the student takes a timed two-item test on the classroom PC, the teacher
+   * «К доске»: the teacher calls a student, the student takes a timed test of the chosen items on the classroom PC, the teacher
    * grades it with the LLM's proposal (BoardTests; rules in README «К доске»). Not @Transactional: checks call Piston.
    */
   @GetMapping("/board/current") public Map<String,Object> boardCurrent(HttpServletRequest r){ return boardTests.current(student(r)); }
@@ -613,7 +613,7 @@ public class ApiController {
     if(!codeRunner.status(language).available()) return ResponseEntity.status(503).body(Map.of("error","RUNNER_UNAVAILABLE","message","Запуск "+language.title+" сейчас недоступен","runner",runner(language)));
     long retryAfter=runLimiter.retryAfterSeconds(u);
     if(retryAfter>0) return ResponseEntity.status(429).header("Retry-After",String.valueOf(retryAfter)).body(Map.of("error","RUN_RATE_LIMITED","message","Слишком много запусков подряд. Подожди "+retryAfter+" с."));
-    return ResponseEntity.ok(boardTests.run(u,id,source));
+    return ResponseEntity.ok(boardTests.run(u,id,b.get("item"),source));
   }
   @PostMapping("/board/tests/{id}/finish") public Map<String,Object> finishBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.finish(student(r),id,b); }
   @GetMapping("/board/grades") public Map<String,Object> boardGrades(@RequestParam(name="language",required=false) String language,HttpServletRequest r){ return boardTests.studentGrades(student(r),Language.parse(language)); }

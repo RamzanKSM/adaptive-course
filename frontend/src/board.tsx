@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DragEvent, FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { api, ApiError, patch, post, remove } from './api'
 import { ConsolePanel } from './console'
@@ -9,8 +9,9 @@ import { groupCourse, moscow } from './pairs'
 import { NO_GROUP, useGroupFilter } from './groups'
 import { dayNumber, plural, shortDay, StatusChip } from './session'
 import type {
-  BoardAdminItem, BoardAdminTest, BoardAssessment, BoardCheck, BoardCurrent, BoardGrade, BoardItemKind, BoardJournal, BoardMember,
-  BoardOverview, BoardRun, BoardStatus, BoardStudentGrade, BoardStudentTest, BoardTestSummary, ConsoleRun, CourseLanguage, Id,
+  BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardCheck, BoardCurrent, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
+  BoardMember, BoardOverview, BoardRun, BoardScore, BoardStatus, BoardStudentGrade, BoardStudentItem, BoardStudentTest, BoardTestSummary,
+  ConsoleRun, CourseLanguage, Id,
 } from './types'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
@@ -19,6 +20,18 @@ const COURSES: [CourseLanguage, string][] = [['JAVA', 'Java'], ['PYTHON', 'Pytho
 const courseTitle = (language: CourseLanguage) => COURSES.find(c => c[0] === language)?.[1] ?? language
 const GRADES: BoardGrade[] = ['2', '3', '4', '5']
 const STUDENT_POLL_MS = 5_000, ADMIN_POLL_MS = 2_000, AUTOSAVE_MS = 5_000, AUTOSAVE_DEBOUNCE_MS = 1_200, LOGOUT_SECONDS = 10
+
+/** The kinds of items in their fixed order: title, the phrase of the call dialog, minutes and weight (as the backend). */
+const KINDS: BoardItemKind[] = ['parsons', 'fix', 'code']
+const KIND: Record<BoardItemKind, { title: string; phrase: string; minutes: number; weight: number }> = {
+  parsons: { title: 'Собери программу', phrase: 'собери программу', minutes: 2, weight: 1 },
+  fix: { title: 'Исправь ошибку', phrase: 'исправь ошибку', minutes: 2, weight: 2 },
+  code: { title: 'Напиши код', phrase: 'напиши код', minutes: 3, weight: 3 },
+}
+/** Known kinds in the canonical order; missing or empty → all three (as the backend's default). */
+const canonical = (kinds: readonly string[] | null | undefined) => { const known = KINDS.filter(k => kinds?.includes(k)); return known.length ? known : [...KINDS] }
+const minutesOf = (kinds: BoardItemKind[], durationSeconds?: number | null) => durationSeconds ? Math.round(durationSeconds / 60) : kinds.reduce((sum, k) => sum + KIND[k].minutes, 0)
+const minutesText = (n: number) => `${n} ${plural(n, 'минуту', 'минуты', 'минут')}`
 
 const ms = (value: string | null | undefined) => value ? parseDate(value).getTime() : NaN
 /** «5:07», never negative. */
@@ -37,6 +50,12 @@ function useNow(step = 1000) {
 export function GradeChip({ grade, small }: { grade: BoardGrade | string | null | undefined; small?: boolean }) {
   if (!grade) return <span className="muted">—</span>
   return <span className={`grade-chip g${grade} ${small ? 'small' : ''}`}>{grade}</span>
+}
+
+/** A line of code with its indentation kept and marked by guides (Python needs it). */
+function CodeText({ text }: { text: string }) {
+  const indent = /^[ \t]*/.exec(text)?.[0] ?? ''
+  return <code className="parsons-code">{indent && <span className="parsons-indent">{indent}</span>}{text.slice(indent.length) || ' '}</code>
 }
 
 // ═════════ Student ═════════
@@ -66,6 +85,7 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const left = ms(call.expiresAt) - now
+  const kinds = canonical(call.kinds)
   async function start() {
     setBusy(true); setError('')
     try { onStarted(await post<BoardStudentTest>(`/board/tests/${call.id}/start`)) }
@@ -76,7 +96,7 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
       <span className="board-call-icon"><Icon name="flag" size={30} /></span>
       <p className="eyebrow">Ответ у доски</p>
       <h2 id="board-call-title" className="display small">Тебя вызвали к доске</h2>
-      <p>Тест на 6 минут: напиши программу по условию и определи, что выведет готовый код. Таймер запустится, когда нажмёшь «Начать тест».</p>
+      <p>Тест на {minutesText(minutesOf(kinds, call.durationSeconds))}: {kinds.map(k => KIND[k].phrase).join(', ')}. Таймер запустится, когда нажмёшь «Начать тест».</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button type="button" className="primary big" disabled={busy} onClick={start} autoFocus>{busy ? <><span className="spinner" aria-hidden="true" /> Начинаем…</> : <>Начать тест <Icon name="arrow" /></>}</button>
       {left > 0 && <small className="muted tabular">Вызов действует ещё {clock(left)}</small>}
@@ -85,19 +105,36 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
 }
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
+type ParsonsItem = Extract<BoardStudentItem, { kind: 'parsons' }>
+type FixItem = Extract<BoardStudentItem, { kind: 'fix' }>
+type CodeItem = Extract<BoardStudentItem, { kind: 'code' }>
+type RunKind = 'code' | 'fix'
 
 /**
- * The test on the classroom PC (projector): one 6-minute timer for both items, autosave, «Завершить тест».
- * At 0 the editors lock and the answers are submitted; the server would finish the test with the last autosave anyway.
- * Nothing here shows the expected output, the checks or a grade.
+ * The test on the classroom PC (projector): one timer for the chosen items, shown one at a time with steps, autosave,
+ * «Завершить тест». At 0 the answers lock and are submitted; the server would finish the test with the last autosave anyway.
+ * Nothing here shows the solution, the checks or a grade.
  */
 export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudentTest; name: string; onFinished: () => void }) {
-  const [codeItem, outputItem] = test.items
-  const language = codeItem.language
-  const [code, setCode] = useState(() => test.answers.code ?? (codeItem.starterCode || FALLBACK_CODE[language]))
-  const [output, setOutput] = useState(() => test.answers.output ?? '')
-  const latest = useRef({ code, output })
-  latest.current = { code, output }
+  const items = test.items
+  const parsonsItem = items.find((i): i is ParsonsItem => i.kind === 'parsons')
+  const fixItem = items.find((i): i is FixItem => i.kind === 'fix')
+  const codeItem = items.find((i): i is CodeItem => i.kind === 'code')
+  const initialCode = codeItem ? codeItem.starterCode || FALLBACK_CODE[codeItem.language] : ''
+  const [code, setCode] = useState(() => test.answers.code ?? initialCode)
+  const [fix, setFix] = useState(() => test.answers.fix ?? fixItem?.program ?? '')
+  const [parsons, setParsons] = useState<string[]>(() => {
+    const known = new Set(parsonsItem?.lines.map(l => l.id))
+    return [...new Set(test.answers.parsons ?? [])].filter(id => known.has(id))
+  })
+  /** Only the chosen kinds go to the server. */
+  const payload = (): BoardAnswers => ({ ...(parsonsItem && { parsons }), ...(fixItem && { fix }), ...(codeItem && { code }) })
+  const latest = useRef(payload())
+  latest.current = payload()
+  const touched: Record<BoardItemKind, boolean> = { parsons: parsons.length > 0, fix: !!fixItem && fix !== fixItem.program, code: !!codeItem && code !== initialCode }
+  const [step, setStep] = useState(0)
+  const active = items[Math.min(step, items.length - 1)]
+
   // The server clock decides: endsAt is compared with the client clock shifted by the server's «now» of the last poll.
   const offset = useMemo(() => { const server = ms(test.now); return Number.isNaN(server) ? 0 : server - Date.now() }, [test.now])
   const now = useNow(250)
@@ -109,7 +146,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   const locked = over || finishing
   const done = useRef(false)
 
-  // ───── autosave: shortly after typing stops and every few seconds while something is unsaved ─────
+  // ───── autosave: shortly after an edit stops and every few seconds while something is unsaved ─────
   const [save, setSave] = useState<SaveState>('saved')
   const dirty = useRef(false), saving = useRef(false)
   const persist = useCallback(async () => {
@@ -126,7 +163,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
     if (!dirty.current) return
     const timer = setTimeout(persist, AUTOSAVE_DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [code, output, persist])
+  }, [code, fix, parsons, persist])
   useEffect(() => { const timer = setInterval(persist, AUTOSAVE_MS); return () => clearInterval(timer) }, [persist])
 
   const finish = useCallback(async (auto: boolean) => {
@@ -141,19 +178,30 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   }, [test.id, onFinished])
   useEffect(() => { if (over) finish(true) }, [over, finish])
 
-  // ───── «Запустить» ─────
-  const [run, setRun] = useState<{ console: ConsoleRun; n: number } | null>(null)
-  const [running, setRunning] = useState(false)
-  const consoleRef = useRef<HTMLElement>(null)
-  async function runCode() {
-    setRunning(true); setError('')
-    try { const result = await post<{ console: ConsoleRun }>(`/board/tests/${test.id}/run`, { code }); setRun(r => ({ console: result.console, n: (r?.n ?? 0) + 1 })) }
+  // ───── «Запустить» (code and fix; each item keeps its own console) ─────
+  const [runs, setRuns] = useState<Partial<Record<RunKind, { console: ConsoleRun; n: number }>>>({})
+  const [running, setRunning] = useState<RunKind | null>(null)
+  async function runItem(item: RunKind, text: string) {
+    setRunning(item); setError('')
+    try {
+      const result = await post<{ console: ConsoleRun }>(`/board/tests/${test.id}/run`, { item, code: text })
+      setRuns(r => ({ ...r, [item]: { console: result.console, n: (r[item]?.n ?? 0) + 1 } }))
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Не удалось запустить программу') }
-    finally { setRunning(false) }
+    finally { setRunning(null) }
   }
-  useEffect(() => { if (run) consoleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [run])
+
+  // Steps: ← → between the tabs (WAI-ARIA tabs pattern).
+  const tabs = useRef<(HTMLButtonElement | null)[]>([])
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const to = e.key === 'ArrowRight' ? (i + 1) % items.length : e.key === 'ArrowLeft' ? (i - 1 + items.length) % items.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : null
+    if (to === null) return
+    e.preventDefault(); setStep(to); tabs.current[to]?.focus()
+  }
 
   const low = left < 60_000
+  const next = items[step + 1], prev = items[step - 1]
   return <main className="board-screen">
     <header className="board-bar">
       <div className="board-who">
@@ -169,35 +217,42 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
       </div>
     </header>
     {error && <p className="board-error" role="alert">{error}</p>}
-    <div className="board-items">
-      <section className="board-item" aria-labelledby="board-item-1">
-        <h2 id="board-item-1" className="board-item-title"><span className="board-num">1</span> Задача</h2>
-        {codeItem.title && <h3 className="board-task-title">{codeItem.title}</h3>}
-        <div className="board-statement"><Markdown>{codeItem.statement}</Markdown></div>
-        <CodeMirror className="code-editor board-editor" value={code} extensions={EDITOR_EXTENSIONS[language]} editable={!locked} readOnly={locked}
-          onChange={value => { setCode(value); edited() }} aria-label={`Редактор решения на ${courseTitle(language)}`} />
+    {items.length > 1 && <div className="board-steps" role="tablist" aria-label="Задания теста">
+      {items.map((item, i) => <button key={item.kind} ref={el => { tabs.current[i] = el }} type="button" role="tab" id={`board-tab-${item.kind}`}
+        aria-selected={item === active} aria-controls={`board-panel-${item.kind}`} tabIndex={item === active ? 0 : -1}
+        className={`board-step ${item === active ? 'active' : ''} ${touched[item.kind] ? 'touched' : ''}`} onClick={() => setStep(i)} onKeyDown={e => onTabKey(e, i)}>
+        <span className="board-num">{i + 1}</span>
+        <span className="board-step-title">{KIND[item.kind].title}</span>
+        {touched[item.kind] && <span className="board-step-mark" title="Ты уже начал это задание"><Icon name="check" size={18} /><span className="sr-only">начато</span></span>}
+      </button>)}
+    </div>}
+    {items.map((item, i) => <section key={item.kind} id={`board-panel-${item.kind}`} className="board-item" hidden={item !== active}
+      role={items.length > 1 ? 'tabpanel' : undefined} aria-labelledby={items.length > 1 ? `board-tab-${item.kind}` : `board-title-${item.kind}`}>
+      <h2 id={`board-title-${item.kind}`} className="board-item-title"><span className="board-num">{i + 1}</span> {KIND[item.kind].title}</h2>
+      {item.kind === 'fix' && <p className="board-callout"><Icon name="target" size={22} /> В программе есть ошибка: она работает не так, как требует условие. Найди и исправь её.</p>}
+      {item.title && <h3 className="board-task-title">{item.title}</h3>}
+      {item.statement && <div className="board-statement"><Markdown>{item.statement}</Markdown></div>}
+      {item.kind === 'parsons' && <Parsons item={item} placed={parsons} locked={locked} onChange={ids => { setParsons(ids); edited() }} />}
+      {item.kind !== 'parsons' && <>
+        <CodeMirror className="code-editor board-editor" value={item.kind === 'fix' ? fix : code} extensions={EDITOR_EXTENSIONS[item.language]} editable={!locked} readOnly={locked}
+          onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited() }}
+          aria-label={item.kind === 'fix' ? `Программа с ошибкой на ${courseTitle(item.language)}` : `Редактор решения на ${courseTitle(item.language)}`} />
         <div className="task-actions">
-          <button type="button" className="ghost big" disabled={locked || running || !code.trim()} onClick={runCode}>
-            {running ? <><span className="spinner" aria-hidden="true" /> Запускаем…</> : <><Icon name="terminal" size={18} /> Запустить</>}</button>
+          <button type="button" className="ghost big" disabled={locked || running !== null || !(item.kind === 'fix' ? fix : code).trim()} onClick={() => runItem(item.kind, item.kind === 'fix' ? fix : code)}>
+            {running === item.kind ? <><span className="spinner" aria-hidden="true" /> Запускаем…</> : <><Icon name="terminal" size={18} /> Запустить</>}</button>
         </div>
-        {run && <ConsolePanel ref={consoleRef} key={run.n} run={run.console} origin="run" language={language} />}
-      </section>
-      <section className="board-item" aria-labelledby="board-item-2">
-        <h2 id="board-item-2" className="board-item-title"><span className="board-num">2</span> Что выведет этот код?</h2>
-        <CodeMirror className="code-editor board-program" value={outputItem.program} extensions={EDITOR_EXTENSIONS[outputItem.language]} editable={false} readOnly
-          basicSetup={{ highlightActiveLine: false, highlightActiveLineGutter: false, foldGutter: false }} aria-label="Программа" />
-        <label className="board-answer">
-          <span>Точный вывод программы</span>
-          <textarea value={output} disabled={locked} rows={6} spellCheck={false} autoComplete="off" autoCapitalize="off"
-            onChange={e => { setOutput(e.target.value); edited() }} placeholder="Каждая напечатанная строка — с новой строки" />
-        </label>
-        <p className="board-hint">Пиши ровно то, что появится в консоли: пробелы, регистр и порядок строк важны.</p>
-      </section>
-    </div>
+        {runs[item.kind] && <ConsolePanel key={runs[item.kind]!.n} run={runs[item.kind]!.console} origin="run" language={item.language} />}
+      </>}
+      {items.length > 1 && <nav className="board-step-nav" aria-label="Переход между заданиями">
+        {prev ? <button type="button" className="ghost big" onClick={() => setStep(i - 1)}><Icon name="back" size={18} /> {i}. {KIND[prev.kind].title}</button> : <span />}
+        {next && <button type="button" className="secondary big" onClick={() => setStep(i + 1)}>{i + 2}. {KIND[next.kind].title} <Icon name="arrow" size={18} /></button>}
+      </nav>}
+    </section>)}
     {confirming && <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-confirm-title">
       <div className="board-call">
         <h2 id="board-confirm-title" className="title">Завершить тест?</h2>
         <p>Ответы отправятся преподавателю, изменить их будет нельзя. Осталось {clock(left)}.</p>
+        {items.some(i => !touched[i.kind]) && <p className="board-confirm-warn">Не начато: {items.filter(i => !touched[i.kind]).map(i => `«${KIND[i.kind].title}»`).join(', ')}.</p>}
         <div className="board-confirm-actions">
           <button type="button" className="ghost big" onClick={() => setConfirming(false)} autoFocus>Продолжить тест</button>
           <button type="button" className="primary big" onClick={() => finish(false)}>Завершить</button>
@@ -206,6 +261,122 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
     </div>}
     {finishing && <div className="board-call-backdrop" role="status"><div className="board-call"><span className="spinner big-spinner" aria-hidden="true" /><h2 className="title">{over ? 'Время вышло — сдаём тест…' : 'Сдаём тест…'}</h2></div></div>}
   </main>
+}
+
+/**
+ * «Собери программу»: the fixed code before and after, the student's program between them and the pool of lines below.
+ * Click a pool line to append it; ↑ ↓ ✕ in the program; native drag & drop to reorder and to move between pool and program.
+ * Every control is a focusable button, and focus follows the line it acted on.
+ */
+function Parsons({ item, placed, locked, onChange }: { item: ParsonsItem; placed: string[]; locked: boolean; onChange: (ids: string[]) => void }) {
+  const byId = useMemo(() => new Map(item.lines.map(l => [l.id, l])), [item.lines])
+  const program = placed.map(id => byId.get(id)).filter((l): l is BoardLine => !!l)
+  const pool = item.lines.filter(l => !placed.includes(l.id))
+  const root = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLOListElement>(null)
+  const focus = useRef<string | null>(null)
+  useLayoutEffect(() => { if (focus.current) { root.current?.querySelector<HTMLElement>(focus.current)?.focus(); focus.current = null } })
+  const [drag, setDrag] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<number | null>(null)
+  const [overPool, setOverPool] = useState(false)
+  const [said, setSaid] = useState('')
+  const text = (id: string) => byId.get(id)?.text.trim() ?? ''
+
+  function add(id: string) {
+    const i = pool.findIndex(l => l.id === id), other = pool[i + 1] ?? pool[i - 1]
+    focus.current = other ? `[data-pool="${other.id}"]` : `[data-placed="${id}"] [data-act="remove"]`
+    onChange([...placed, id]); setSaid(`Строка добавлена в программу: ${text(id)}`)
+  }
+  function move(index: number, delta: -1 | 1) {
+    const to = index + delta
+    if (to < 0 || to >= placed.length) return
+    const ids = [...placed]; [ids[index], ids[to]] = [ids[to], ids[index]]
+    const id = placed[index]
+    // A button at the edge becomes disabled: keep focus on the line by moving it to the other arrow.
+    focus.current = `[data-placed="${id}"] [data-act="${to === 0 ? 'down' : to === placed.length - 1 ? 'up' : delta < 0 ? 'up' : 'down'}"]`
+    onChange(ids); setSaid(`Строка ${to + 1} из ${placed.length}: ${text(id)}`)
+  }
+  function back(index: number) {
+    const id = placed[index], other = placed[index + 1] ?? placed[index - 1]
+    focus.current = other ? `[data-placed="${other}"] [data-act="remove"]` : `[data-pool="${id}"]`
+    onChange(placed.filter(x => x !== id)); setSaid(`Строка убрана из программы: ${text(id)}`)
+  }
+  function dropInto(at: number, id: string) {
+    const from = placed.indexOf(id)
+    const ids = placed.filter(x => x !== id)
+    ids.splice(from >= 0 && from < at ? at - 1 : at, 0, id)
+    if (ids.join() !== placed.join()) onChange(ids)
+  }
+
+  // ───── drag & drop: the insertion point is found by the pointer against the rows' middles ─────
+  const reset = () => { setDrag(null); setDropAt(null); setOverPool(false) }
+  const start = (e: DragEvent, id: string) => {
+    if (locked) { e.preventDefault(); return }
+    e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; setDrag(id)
+  }
+  const dragged = (e: DragEvent) => { const id = drag ?? e.dataTransfer.getData('text/plain'); return byId.has(id) ? id : null }
+  function overProgram(e: DragEvent<HTMLOListElement>) {
+    if (!drag) return
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+    const rows = [...(list.current?.querySelectorAll<HTMLElement>('[data-placed]') ?? [])]
+    const at = rows.findIndex(row => { const r = row.getBoundingClientRect(); return e.clientY < r.top + r.height / 2 })
+    setDropAt(at < 0 ? rows.length : at)
+  }
+  function dropProgram(e: DragEvent<HTMLOListElement>) {
+    e.preventDefault()
+    const id = dragged(e)
+    if (id) dropInto(dropAt ?? placed.length, id)
+    reset()
+  }
+  const leave = (e: DragEvent, clear: () => void) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) clear() }
+
+  const fixed = (code: string, where: string) => code ? <div className="parsons-fixed" aria-label={where}>
+    {code.split('\n').map((line, i) => <div key={i} className="parsons-row"><span className="parsons-grip" aria-hidden="true" /><CodeText text={line} /></div>)}
+  </div> : null
+
+  return <div ref={root} className={`parsons ${locked ? 'locked' : ''} ${drag ? 'dragging' : ''}`}>
+    <div className="parsons-sheet">
+      {fixed(item.before, 'Код до твоей программы — менять не нужно')}
+      <div className="parsons-zone">
+        <div className="parsons-zone-head"><b>Твоя программа</b><small>{program.length ? `${program.length} ${plural(program.length, 'строка', 'строки', 'строк')}` : 'пока пусто'}</small></div>
+        <ol ref={list} className={`parsons-program ${dropAt !== null ? 'drop-target' : ''}`} aria-label="Твоя программа"
+          onDragOver={overProgram} onDrop={dropProgram} onDragLeave={e => leave(e, () => setDropAt(null))}>
+          {program.map((line, i) => <li key={line.id} data-placed={line.id} draggable={!locked} onDragStart={e => start(e, line.id)} onDragEnd={reset}
+            className={`parsons-row placed ${drag === line.id ? 'is-dragged' : ''} ${dropAt === i ? 'drop-before' : ''} ${dropAt === program.length && i === program.length - 1 ? 'drop-after' : ''}`}>
+            <span className="parsons-grip" aria-hidden="true">⋮⋮</span>
+            <CodeText text={line.text} />
+            <span className="parsons-tools">
+              <button type="button" data-act="up" disabled={locked || i === 0} onClick={() => move(i, -1)} aria-label={`Поднять строку ${i + 1}`} title="Поднять">↑</button>
+              <button type="button" data-act="down" disabled={locked || i === program.length - 1} onClick={() => move(i, 1)} aria-label={`Опустить строку ${i + 1}`} title="Опустить">↓</button>
+              <button type="button" data-act="remove" className="parsons-remove" disabled={locked} onClick={() => back(i)} aria-label={`Убрать строку ${i + 1} обратно в «Строки»`} title="Убрать в «Строки»">✕</button>
+            </span>
+          </li>)}
+          {!program.length && <li className={`parsons-empty ${dropAt !== null ? 'drop-before' : ''}`}>Нажми на строку внизу или перетащи её сюда</li>}
+        </ol>
+      </div>
+      {fixed(item.after, 'Код после твоей программы — менять не нужно')}
+    </div>
+
+    <div className={`parsons-pool ${overPool ? 'drop-target' : ''}`}
+      onDragOver={e => { if (drag && placed.includes(drag)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverPool(true) } }}
+      onDragLeave={e => leave(e, () => setOverPool(false))}
+      onDrop={e => { e.preventDefault(); const id = dragged(e); if (id && placed.includes(id)) onChange(placed.filter(x => x !== id)); reset() }}>
+      <div className="parsons-zone-head"><b>Строки</b><small>{pool.length ? 'нажми, чтобы добавить в конец программы' : 'все строки в программе'}</small></div>
+      {item.extraLines > 0 && <p className="parsons-extra-note"><Icon name="x" size={18} /> Одна строка лишняя — её не используй.</p>}
+      <ul className="parsons-pool-list" aria-label="Строки">
+        {pool.map(line => <li key={line.id}>
+          <div role="button" tabIndex={locked ? -1 : 0} aria-disabled={locked} data-pool={line.id} className="parsons-row pooled" draggable={!locked}
+            onDragStart={e => start(e, line.id)} onDragEnd={reset} aria-label={`Добавить строку: ${line.text.trim()}`}
+            onClick={() => !locked && add(line.id)} onKeyDown={e => { if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); add(line.id) } }}>
+            <span className="parsons-grip" aria-hidden="true">⋮⋮</span>
+            <CodeText text={line.text} />
+            <span className="parsons-add" aria-hidden="true"><Icon name="plus" size={18} /></span>
+          </div>
+        </li>)}
+      </ul>
+    </div>
+    <p className="sr-only" aria-live="polite">{said}</p>
+  </div>
 }
 
 function SaveBadge({ state }: { state: SaveState }) {
@@ -263,6 +434,28 @@ function BoardStatusTag({ status }: { status: BoardStatus }) {
 }
 const live = (t: BoardTestSummary) => t.status === 'CALLED' || t.status === 'STARTED'
 
+/** The kinds the teacher calls with, remembered in this browser (default: all three, never empty). */
+const KINDS_KEY = 'rmzn-board-kinds'
+function useBoardKinds() {
+  const [kinds, setKinds] = useState<BoardItemKind[]>(() => {
+    try { const stored = JSON.parse(localStorage.getItem(KINDS_KEY) ?? 'null'); return Array.isArray(stored) ? canonical(stored) : [...KINDS] } catch { return [...KINDS] }
+  })
+  const toggle = useCallback((kind: BoardItemKind) => setKinds(current => {
+    const next = current.includes(kind) ? current.filter(k => k !== kind) : KINDS.filter(k => k === kind || current.includes(k))
+    if (!next.length) return current
+    try { localStorage.setItem(KINDS_KEY, JSON.stringify(next)) } catch { /* private mode: not remembered */ }
+    return next
+  }), [])
+  return [kinds, toggle] as const
+}
+
+/** «Собери программу · Исправь ошибку · 7 мин» for a call or test; nothing for tests without kinds. */
+function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationSeconds'> }) {
+  if (!test.kinds?.length) return null
+  const kinds = canonical(test.kinds)
+  return <small className="board-kinds-note">{kinds.map(k => KIND[k].title).join(' · ')} · {minutesOf(kinds, test.durationSeconds)} мин</small>
+}
+
 /** What is counting down: the call's expiry or the end of the test. */
 function Countdown({ test, now }: { test: BoardTestSummary; now: number }) {
   const target = test.status === 'CALLED' ? ms(test.expiresAt) : test.status === 'STARTED' ? ms(test.endsAt) : NaN
@@ -310,6 +503,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   const [openId, setOpenId] = useState<Id | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  const [kinds, toggleKind] = useBoardKinds()
   const toast = useToast()
   const now = useNow()
   /** The detail view registers here to receive the test an action returns. */
@@ -349,7 +543,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   async function call(member: BoardMember) {
     if (!language) return
     setBusy(`call:${member.userId}`)
-    const test = await request(() => post<BoardTestSummary>('/admin/board/call', { userId: member.userId, language }))
+    const test = await request(() => post<BoardTestSummary>('/admin/board/call', { userId: member.userId, language, kinds }))
     setBusy(null)
     if (!test) return
     setReload(n => n + 1); open(test.id)
@@ -392,7 +586,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
       <div>
         <p className="eyebrow">Преподаватель</p>
         <h1 className="display small">К доске</h1>
-        <p className="muted small">Вызови студента — он войдёт на компьютере у доски и решит тест за 6 минут. Оценка LLM и предложенная оценка видны только тебе.</p>
+        <p className="muted small">Вызови студента — он войдёт на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.</p>
       </div>
       <div className="period" role="group" aria-label="Курс">
         {COURSES.map(([key, title]) => <button key={key} type="button" disabled={!language} className={key === language ? 'active' : ''} aria-pressed={key === language} onClick={() => key !== language && chooseCourse(key)}>{title}</button>)}
@@ -412,7 +606,17 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
       <div className="card board-members">
         <h2 className="card-title">Студенты{overview && <span className="muted small">{group} · {courseTitle(overview.language)} · на месте {present} из {overview.members.length}</span>}</h2>
         {!members ? <p className="muted">Загружаем…</p> : !members.length ? <p className="muted">В группе нет участников курса {language ? courseTitle(language) : ''}.</p>
-          : <ul className="board-member-list">{members.map(m => {
+          : <>
+          <fieldset className="board-kinds">
+            <legend>Задания теста</legend>
+            {KINDS.map(k => { const on = kinds.includes(k), last = on && kinds.length === 1
+              return <label key={k} className={`board-kind ${on ? 'on' : ''}`} title={last ? 'Нужно хотя бы одно задание' : undefined}>
+                <input type="checkbox" checked={on} disabled={last} onChange={() => toggleKind(k)} />
+                <span>{KIND[k].title} <small>· {KIND[k].minutes} мин</small></span>
+              </label> })}
+            <span className="board-kinds-total">тест <b className="tabular">{minutesText(minutesOf(kinds))}</b></span>
+          </fieldset>
+          <ul className="board-member-list">{members.map(m => {
             const suggested = m.userId === overview?.suggested, active = activeOf(m.userId)
             return <li key={m.userId} className={suggested ? 'suggested' : ''}>
               <span className={`presence ${m.present ? 'on' : ''}`} title={m.present ? 'На месте: занимается сейчас или был активен последний час' : 'Не активен последний час'}><span className="sr-only">{m.present ? 'на месте' : 'не на месте'}</span></span>
@@ -425,7 +629,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
               <button type="button" className={`${suggested ? 'primary' : 'ghost'} small-button`} disabled={busy === `call:${m.userId}`} onClick={() => call(m)}>
                 {busy === `call:${m.userId}` ? <span className="spinner" aria-hidden="true" /> : <Icon name="flag" size={15} />}Вызвать</button>
             </li>
-          })}</ul>}
+          })}</ul></>}
         <p className="muted small table-note">Предложение: сначала те, кто на месте, затем кто дольше всех не был у доски (случайно среди трёх). Решаешь ты.</p>
       </div>
 
@@ -438,6 +642,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
                 <button type="button" className="row-link" onClick={() => open(t.id)}>{t.displayName}</button>
                 <BoardStatusTag status={t.status} />
                 <Countdown test={t} now={now} />
+                <KindsNote test={t} />
                 {t.status === 'FINISHED' && <span className="board-active-grade">{t.assessmentStatus === 'PENDING' ? <><span className="spinner" aria-hidden="true" /> LLM оценивает</> : <>предложено <GradeChip grade={t.suggestedGrade} small /></>}{t.finalGrade && <> · итог <GradeChip grade={t.finalGrade} small /></>}</span>}
               </div>
               <BoardActions test={t} busy={busy} onAct={act} />
@@ -453,6 +658,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   </section>
 }
 
+
 /** Results of one item, whether the backend sends them aligned with items or keyed by kind. */
 function checkOf(test: BoardAdminTest, kind: BoardItemKind, index: number): BoardCheck | null {
   const results = test.results
@@ -460,7 +666,146 @@ function checkOf(test: BoardAdminTest, kind: BoardItemKind, index: number): Boar
   if (Array.isArray(results)) return results.find(r => r?.kind === kind) ?? results[index] ?? null
   return results[kind] ?? null
 }
-const visible = (text: string | null | undefined) => text == null ? '' : text.length ? text.replace(/ +$/gm, m => '·'.repeat(m.length)).replace(/\n/g, '↵\n') : '(пусто)'
+/** «1», «0,5», «0». */
+const decimal = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
+
+function BoardTestBody({ test, assess, saveGrade }: { test: BoardAdminTest; assess: () => Promise<void>; saveGrade: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
+  const items = test.items ?? []
+  const assessmentStatus = test.assessment?.status ?? test.assessmentStatus
+  const explanation = (kind: BoardItemKind) => test.assessment?.status === 'DONE' ? test.assessment.items?.find(i => i.item === kind) : undefined
+  const score = test.score
+  return <>
+    <div className="panel-facts">
+      <span className="mini-stats-cell"><b><StatusChip status={test.paceStatus} /></b><small>темп к сессии · {test.paceCap ? `оценка не выше ${test.paceCap}` : 'без ограничения'}</small></span>
+      <span className="mini-stats-cell"><b>{score ? <span className="tabular">{Math.round(score.percent)}%</span> : '—'}</b><small>{score ? `баллы ${decimal(score.points)} из ${decimal(score.max)}` : 'баллы — после проверки'}</small></span>
+      <span className="mini-stats-cell"><b><GradeChip grade={test.ruleGrade} small /></b><small>по проверкам (без частичных)</small></span>
+      <span className="mini-stats-cell"><b>{assessmentStatus === 'PENDING' ? <span className="spinner" aria-hidden="true" /> : <GradeChip grade={test.suggestedGrade} small />}</b><small>предложено (с учётом LLM и темпа)</small></span>
+    </div>
+    <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — на экране у доски этого нет.</p>
+
+    {items.map((item, i) => {
+      const check = checkOf(test, item.kind, i)
+      return <BoardItemBlock key={item.kind} n={i + 1} item={item} check={check} explanation={explanation(item.kind)}>
+        {item.statement && <details className="board-statement-small"><summary>Условие</summary><Markdown>{item.statement}</Markdown></details>}
+        {item.kind === 'parsons' ? <ParsonsReview item={item} placed={test.answers?.parsons ?? null} assembled={check?.program ?? null} />
+          : item.kind === 'fix' ? <>
+            <div className="compare-grid">
+              <div><small>Программа с ошибкой</small><pre>{item.program || '—'}</pre></div>
+              <div><small>Исправленный код студента</small><pre>{test.answers?.fix || '(пусто)'}</pre></div>
+            </div>
+            {item.bugDescription && <p className="board-bug"><b>Ошибка:</b> {item.bugDescription}</p>}
+            {item.reference && <details className="board-statement-small"><summary>Эталонное решение</summary><pre>{item.reference}</pre></details>}
+          </>
+            : <div className="board-code"><small>Код студента</small><pre>{test.answers?.code || '(пусто)'}</pre></div>}
+      </BoardItemBlock>
+    })}
+
+    {score && <ScoreTable score={score} />}
+    <Runs runs={test.runs ?? []} language={test.language ?? items[0]?.language ?? 'JAVA'} />
+    <Assessment assessment={test.assessment} status={assessmentStatus} finished={test.status === 'FINISHED'} onAssess={assess} />
+    {test.status === 'FINISHED' && <GradeForm key={`${test.id}:${test.gradedAt ?? ''}:${test.finalGrade ?? ''}`} test={test} onSave={saveGrade} />}
+  </>
+}
+
+function BoardItemBlock({ n, item, check, explanation, children }: { n: number; item: BoardAdminItem; check: BoardCheck | null; explanation?: { verdict: string; explanation: string }; children: ReactNode }) {
+  const topic = item.skillTitle ?? item.skillCode
+  return <div className="board-detail-item">
+    <div className="board-detail-item-head">
+      <h3><span className="board-num small">{n}</span> {KIND[item.kind]?.title ?? item.kind}{item.title && <span className="muted"> · {item.title}</span>}</h3>
+      {!check ? <span className="check-tag">не проверено</span>
+        : check.unavailable ? <span className="check-tag warn" title="Проверка не запускалась"><Icon name="x" size={14} />проверка недоступна</span>
+          : <span className={`check-tag ${check.passed ? 'ok' : 'bad'}`}><Icon name={check.passed ? 'check' : 'x'} size={14} />{check.passed ? 'верно' : 'не верно'}</span>}
+    </div>
+    <p className="muted small board-item-ref">{[`вес ${KIND[item.kind]?.weight ?? '—'}`, topic && `тема: ${topic}`, item.difficulty != null && `сложность ${item.difficulty}`,
+      item.externalKey ?? (item.taskId != null ? `задача #${item.taskId}` : null)].filter(Boolean).join(' · ')}</p>
+    {children}
+    {check && (check.feedback || check.output) && <div className="board-code"><small>Проверка</small><pre>{check.feedback || check.output}</pre></div>}
+    {check?.console && <ConsolePanel run={check.console} origin="attempt" language={item.language ?? 'JAVA'} />}
+    {explanation && <div className={`board-llm-item ${verdictTone(explanation.verdict)}`}><b><Icon name="sparkle" size={14} /> {explanation.verdict}</b><p>{explanation.explanation}</p></div>}
+  </div>
+}
+const verdictTone = (verdict: string) => verdict === 'верно' ? 'ok' : verdict === 'частично верно' ? 'partly' : verdict === 'неверно' ? 'bad' : ''
+
+/** «Собери программу» for the teacher: the correct program next to the student's assembled one, the extra line marked. */
+function ParsonsReview({ item, placed, assembled }: { item: BoardAdminItem; placed: string[] | null; assembled: string | null }) {
+  const lines = new Map((item.lines ?? []).map(l => [l.id, l]))
+  const solution = (item.solution ?? []).map(id => lines.get(id)?.text).filter((t): t is string => t != null)
+  const correct = item.reference || [item.before, ...solution, item.after].filter(part => part).join('\n')
+  const ids = placed ?? []
+  const extra = item.extraLineId ? lines.get(item.extraLineId) : null
+  const usedExtra = !!item.extraLineId && ids.includes(item.extraLineId)
+  const fixedLines = (code: string | null | undefined) => code ? code.split('\n').map((line, i) => <span key={i} className="parsons-review-fixed">{line}{'\n'}</span>) : null
+  return <>
+    <div className="compare-grid">
+      <div><small>Собрал студент</small>
+        {!ids.length ? <pre>{assembled || '(программа не собрана)'}</pre>
+          : lines.size ? <pre>{fixedLines(item.before)}{ids.map((id, i) => {
+            const text = lines.get(id)?.text ?? `(строка ${id})`
+            return id === item.extraLineId ? <mark key={i} className="parsons-review-extra">{text}  ← лишняя{'\n'}</mark> : <span key={i}>{text}{'\n'}</span>
+          })}{fixedLines(item.after)}</pre>
+            : <pre>{assembled}</pre>}
+      </div>
+      <div><small>Правильная программа</small><pre>{correct || '—'}</pre></div>
+    </div>
+    <p className="muted small">{ids.length ? `Использовано строк: ${ids.length} из ${lines.size}` : 'Студент не поставил ни одной строки.'}
+      {extra && <> · лишняя строка <code>{extra.text.trim()}</code> — {usedExtra ? <b className="board-extra-used">использована</b> : 'не использована'}</>}
+      {!item.extraLineId && ' · лишней строки не было'}</p>
+  </>
+}
+
+function ScoreTable({ score }: { score: BoardScore }) {
+  return <div className="board-score">
+    <h3 className="card-title"><span className="chip-icon"><Icon name="target" size={16} /></span> Баллы</h3>
+    <div className="table-scroll"><table className="data-table board-score-table">
+      <thead><tr><th className="text">Задание</th><th>Вес</th><th>Оценка</th><th>Баллы</th></tr></thead>
+      <tbody>{score.items.map(s => <tr key={s.kind}>
+        <td className="text">{KIND[s.kind]?.title ?? s.kind}</td>
+        <td>{s.weight}</td>
+        <td><span className={`check-tag ${s.score >= 1 ? 'ok' : s.score > 0 ? 'warn' : 'bad'}`}>{decimal(s.score)}</span></td>
+        <td>{decimal(s.weight * s.score)}</td>
+      </tr>)}</tbody>
+      <tfoot><tr><td className="text"><b>Итого</b></td><td>{decimal(score.max)}</td><td /><td><b>{decimal(score.points)} из {decimal(score.max)} · {Math.round(score.percent)}%</b></td></tr></tfoot>
+    </table></div>
+    <p className="muted small table-note">Верно — 1, «частично верно» по LLM — 0,5, иначе 0. Оценка по проценту: ≥ 90 — 5, ≥ 75 — 4, ≥ 50 — 3, ниже — 2.</p>
+  </div>
+}
+
+function Runs({ runs, language }: { runs: BoardRun[]; language: CourseLanguage }) {
+  if (!runs.length) return <p className="muted small board-runs-none">«Запустить» во время теста не нажимали.</p>
+  return <details className="board-runs">
+    <summary>Запуски во время теста · {runs.length}</summary>
+    {runs.map((r, i) => <details key={i} className="board-run">
+      <summary><span className={`check-tag ${r.console.status === 'OK' ? 'ok' : 'bad'}`}>{r.console.status}</span> запуск {i + 1}{r.item && KIND[r.item] && <span> · {KIND[r.item].title}</span>}{(r.at ?? r.createdAt) && <span className="muted"> · {moscow(r.at ?? r.createdAt ?? '').time}</span>}</summary>
+      <pre>{r.code}</pre>
+      <ConsolePanel run={r.console} origin="run" language={language} />
+    </details>)}
+  </details>
+}
+
+function Assessment({ assessment, status, finished, onAssess }: { assessment: BoardAssessment | null; status: BoardAssessment['status'] | null | undefined; finished: boolean; onAssess: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const again = finished && <button type="button" className="ghost small-button" disabled={busy || status === 'PENDING'} onClick={async () => { setBusy(true); await onAssess(); setBusy(false) }}>
+    {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="refresh" size={15} />}Оценить заново</button>
+  const questions = assessment?.questions?.filter(q => q?.trim()) ?? []
+  return <div className="board-assessment">
+    <h3 className="card-title"><span className="chip-icon"><Icon name="sparkle" size={16} /></span> Оценка LLM</h3>
+    {!finished ? <p className="muted small">Появится после окончания теста.</p>
+      : status === 'PENDING' ? <p className="loading-note"><span className="spinner" aria-hidden="true" /> LLM разбирает ответы…</p>
+        : status === 'DONE' && assessment ? <>
+          {assessment.summary && <p className="board-assessment-summary">{assessment.summary}</p>}
+          {!!assessment.items?.length && <ul className="board-verdicts">{assessment.items.map(v => <li key={v.item}>
+            {KIND[v.item]?.title ?? v.item} <span className={`board-verdict ${verdictTone(v.verdict)}`}>{v.verdict}</span></li>)}</ul>}
+          <p className="muted small">Пояснения по каждому заданию — выше, под заданием.</p>
+          {questions.length > 0 && <div className="board-questions">
+            <b><Icon name="chat" size={15} /> Вопросы для устного разбора</b>
+            <ol>{questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
+          </div>}
+        </>
+          : <p className="board-unavailable"><Icon name="x" size={15} /> LLM недоступна{assessment?.error ? `: ${assessment.error}` : ''}. Оцени сам — проверки и код выше.</p>}
+    {again}
+  </div>
+}
+
 
 function BoardTestDetail({ id, request, busy, onAct, onClose, register, onSaved }: {
   id: Id; request: Request; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; onClose: () => void
@@ -507,6 +852,7 @@ function BoardTestDetail({ id, request, busy, onAct, onClose, register, onSaved 
         <h2 className="title">{test.displayName} <BoardStatusTag status={test.status} /></h2>
         <p className="muted small">Вызван {dayTime(test.calledAt)}{test.login && ` · ${test.login}`}{test.language && ` · ${courseTitle(test.language)}`}
           {duration !== null && ` · тест занял ${clock(duration * 1000)}`}</p>
+        <KindsNote test={test} />
       </div>
       <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
     </div>
@@ -519,88 +865,14 @@ function BoardTestDetail({ id, request, busy, onAct, onClose, register, onSaved 
   </section>
 }
 
-function BoardTestBody({ test, assess, saveGrade }: { test: BoardAdminTest; assess: () => Promise<void>; saveGrade: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
-  const items = test.items ?? []
-  const codeIndex = items.findIndex(i => i.kind === 'code'), outputIndex = items.findIndex(i => i.kind === 'output')
-  const codeItem = items[codeIndex], outputItem = items[outputIndex]
-  const assessmentStatus = test.assessment?.status ?? test.assessmentStatus
-  return <>
-    <div className="panel-facts">
-      <span className="mini-stats-cell"><b><StatusChip status={test.paceStatus} /></b><small>темп к сессии · {test.paceCap ? `оценка не выше ${test.paceCap}` : 'без ограничения'}</small></span>
-      <span className="mini-stats-cell"><b><GradeChip grade={test.ruleGrade} small /></b><small>по правилу (обе верно — 5 … ни одной — 2)</small></span>
-      <span className="mini-stats-cell"><b>{assessmentStatus === 'PENDING' ? <span className="spinner" aria-hidden="true" /> : <GradeChip grade={assessmentStatus === 'DONE' && test.assessment?.grade != null ? String(test.assessment.grade) : null} small />}</b><small>оценка LLM</small></span>
-      <span className="mini-stats-cell"><b><GradeChip grade={test.suggestedGrade} small /></b><small>предложено (с учётом темпа)</small></span>
-    </div>
-    <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — на экране у доски этого нет.</p>
-
-    {codeItem && <BoardItemBlock n={1} title="Задача" item={codeItem} check={checkOf(test, 'code', codeIndex)} explanation={test.assessment?.items?.find(i => i.item === 'code')}>
-      {codeItem.statement && <details className="board-statement-small"><summary>Условие</summary><Markdown>{codeItem.statement}</Markdown></details>}
-      <div className="board-code"><small>Код студента</small><pre>{test.answers?.code || '(пусто)'}</pre></div>
-    </BoardItemBlock>}
-    {outputItem && <BoardItemBlock n={2} title="Что выведет этот код?" item={outputItem} check={checkOf(test, 'output', outputIndex)} explanation={test.assessment?.items?.find(i => i.item === 'output')}>
-      <details className="board-statement-small"><summary>Программа</summary><pre>{outputItem.program}</pre></details>
-      <div className="compare-grid">
-        <div><small>Ответ студента</small><pre>{test.answers?.output ? visible(test.answers.output) : '(пусто)'}</pre></div>
-        <div><small>Правильный вывод</small><pre>{visible(outputItem.expectedOutput ?? checkOf(test, 'output', outputIndex)?.expected) || '—'}</pre></div>
-      </div>
-      <p className="muted small">↵ — перевод строки, · — пробел в конце строки.</p>
-    </BoardItemBlock>}
-
-    <Runs runs={test.runs ?? []} language={test.language ?? codeItem?.language ?? 'JAVA'} />
-    <Assessment assessment={test.assessment} status={assessmentStatus} finished={test.status === 'FINISHED'} onAssess={assess} />
-    {test.status === 'FINISHED' && <GradeForm key={`${test.id}:${test.gradedAt ?? ''}:${test.finalGrade ?? ''}`} test={test} onSave={saveGrade} />}
-  </>
-}
-
-function BoardItemBlock({ n, title, item, check, explanation, children }: { n: number; title: string; item: BoardAdminItem; check: BoardCheck | null; explanation?: { verdict: string; explanation: string }; children: ReactNode }) {
-  const topic = item.skillTitle ?? item.skillCode
-  return <div className="board-detail-item">
-    <div className="board-detail-item-head">
-      <h3><span className="board-num small">{n}</span> {title}{item.title && <span className="muted"> · {item.title}</span>}</h3>
-      {check ? <span className={`check-tag ${check.passed ? 'ok' : 'bad'}`}><Icon name={check.passed ? 'check' : 'x'} size={14} />{check.passed ? 'верно' : 'не верно'}</span>
-        : <span className="check-tag">не проверено</span>}
-    </div>
-    <p className="muted small board-item-ref">{[topic && `тема: ${topic}`, item.externalKey ?? (item.taskId != null ? `задача #${item.taskId}` : null)].filter(Boolean).join(' · ')}</p>
-    {children}
-    {check && (check.feedback || check.output) && <div className="board-code"><small>Проверка</small><pre>{check.feedback || check.output}</pre></div>}
-    {check?.console && <ConsolePanel run={check.console} origin="attempt" language={item.language ?? 'JAVA'} />}
-    {explanation && <div className="board-llm-item"><b><Icon name="sparkle" size={14} /> {explanation.verdict}</b><p>{explanation.explanation}</p></div>}
-  </div>
-}
-
-function Runs({ runs, language }: { runs: BoardRun[]; language: CourseLanguage }) {
-  if (!runs.length) return <p className="muted small board-runs-none">«Запустить» во время теста не нажимали.</p>
-  return <details className="board-runs">
-    <summary>Запуски во время теста · {runs.length}</summary>
-    {runs.map((r, i) => <details key={i} className="board-run">
-      <summary><span className={`check-tag ${r.console.status === 'OK' ? 'ok' : 'bad'}`}>{r.console.status}</span> запуск {i + 1}{(r.at ?? r.createdAt) && <span className="muted"> · {moscow(r.at ?? r.createdAt ?? '').time}</span>}</summary>
-      <pre>{r.code}</pre>
-      <ConsolePanel run={r.console} origin="run" language={language} />
-    </details>)}
-  </details>
-}
-
-function Assessment({ assessment, status, finished, onAssess }: { assessment: BoardAssessment | null; status: BoardAssessment['status'] | null | undefined; finished: boolean; onAssess: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false)
-  const again = finished && <button type="button" className="ghost small-button" disabled={busy || status === 'PENDING'} onClick={async () => { setBusy(true); await onAssess(); setBusy(false) }}>
-    {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="refresh" size={15} />}Оценить заново</button>
-  return <div className="board-assessment">
-    <h3 className="card-title"><span className="chip-icon"><Icon name="sparkle" size={16} /></span> Оценка LLM</h3>
-    {!finished ? <p className="muted small">Появится после окончания теста.</p>
-      : status === 'PENDING' ? <p className="loading-note"><span className="spinner" aria-hidden="true" /> LLM разбирает ответы…</p>
-        : status === 'DONE' && assessment ? <>
-          <p className="board-assessment-grade">Предлагает <GradeChip grade={assessment.grade != null ? String(assessment.grade) : null} /></p>
-          {assessment.summary && <p className="board-assessment-summary">{assessment.summary}</p>}
-          <p className="muted small">Пояснения по каждому заданию — выше, под заданием.</p>
-        </>
-          : <p className="board-unavailable"><Icon name="x" size={15} /> LLM недоступна{assessment?.error ? `: ${assessment.error}` : ''}. Оцени сам — проверки и код выше.</p>}
-    {again}
-  </div>
-}
 
 function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
   const [grade, setGrade] = useState<BoardGrade | null>(test.finalGrade)
-  const [comment, setComment] = useState(test.comment ?? '')
+  // The LLM's draft for the student fills the comment until the teacher grades for the first time; later it can be inserted.
+  const draft = test.assessment?.status === 'DONE' ? test.assessment.studentComment?.trim() ?? '' : ''
+  const fresh = !test.finalGrade && !test.comment
+  const [comment, setComment] = useState(test.comment ?? (fresh ? draft : ''))
+  useEffect(() => { if (fresh && draft) setComment(current => current.trim() ? current : draft) }, [fresh, draft])
   const [saving, setSaving] = useState(false)
   const changed = grade !== test.finalGrade || comment.trim() !== (test.comment ?? '').trim()
   async function submit(e: FormEvent) {
@@ -614,7 +886,10 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
       {GRADES.map(g => <button key={g} type="button" role="radio" aria-checked={grade === g} className={`board-grade-pick g${g} ${grade === g ? 'active' : ''}`} onClick={() => setGrade(grade === g ? null : g)}>
         {g}{test.suggestedGrade === g && <small>предложено</small>}</button>)}
     </div>
-    <label>Комментарий для студента<textarea rows={3} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} placeholder="Что получилось и что подтянуть — студент увидит это в «Моём прогрессе»" /></label>
+    <label>Комментарий для студента<textarea rows={4} maxLength={500} value={comment} onChange={e => setComment(e.target.value)} placeholder="Что получилось и что подтянуть — студент увидит это в «Моём прогрессе»" /></label>
+    {draft && comment.trim() === draft && comment.trim() !== (test.comment ?? '').trim()
+      ? <p className="muted small board-comment-draft"><Icon name="sparkle" size={14} /> Черновик от нейросети — поправь, если нужно. Студент увидит комментарий только после сохранения.</p>
+      : draft && comment.trim() !== draft && <button type="button" className="ghost small-button board-comment-draft" onClick={() => setComment(draft)}><Icon name="sparkle" size={14} /> Вставить черновик нейросети</button>}
     <div className="pair-form-actions">
       <button className="primary" disabled={saving || !changed}>{saving ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : test.finalGrade ? 'Сохранить изменения' : 'Поставить оценку'}</button>
       <span className="muted small">{test.finalGrade ? `Сейчас: ${test.finalGrade}${test.gradedAt ? ` · ${dayTime(test.gradedAt)}` : ''}` : 'Оценка пока не выставлена — студент ничего не видит.'}</span>
