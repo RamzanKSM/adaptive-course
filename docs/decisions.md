@@ -54,8 +54,11 @@ class the teacher calls students one by one to a short individual test, projecte
   students complained about «the same task again with other numbers». Variants of a story are per student, so
   classmates get different numbers.
 - 2026-10-14: all text a student types or reads as program text/output is English ASCII (owner did not want to switch
-  keyboard layouts): curated bank, hard bank, seeds and a rule in the LLM generator prompt. Old LLM tasks with Russian
-  output (82): to be translated and re-verified (not deactivated); open: deactivate those that fail re-verification?
+  keyboard layouts): curated bank, hard bank, seeds and a rule in the LLM generator prompt.
+- 2026-10-15: the 83 old LLM tasks with Russian program text were translated in place (same ids, statement prose and
+  titles stay Russian, submissions and credit untouched) and passed the platform validation (reference + wrong solutions
+  on Piston). The owner's rule: fix such tasks, never deactivate them; bring the ones that cannot be fixed to him.
+  Prompts, scripts and results: `agent-runs/llm-english/`.
 - Open (2026-10-14): the seed «Чтение кода» tasks are fiddly (4–6 submissions per solve) — maybe rework.
 - 2026-10-13: the curated bank exists because the LLM generator and the verifier kept disagreeing and students waited;
   same wording, different values; checked by substituting values (Python AST / Java static fields via reflection).
