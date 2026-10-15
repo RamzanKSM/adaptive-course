@@ -1,15 +1,13 @@
 import { createContext, CSSProperties, FormEvent, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { java } from '@codemirror/lang-java'
-import { javaCompletions } from './javaCompletions'
-import { python } from '@codemirror/lang-python'
-import ReactMarkdown from 'react-markdown'
+import { EDITOR_EXTENSIONS, FALLBACK_CODE, Markdown } from './editor'
 import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './api'
 import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, iterationTasks, parseDate, skillPercent, skillStarted, streak, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
 import { ProgressAnalytics } from './progress'
-import { PairGrades, StudentPairGrades } from './grades'
+import { PairWork } from './pairs'
+import { BoardAdmin, BoardCallDialog, BoardDone, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
 import { StudentSessionCard } from './session'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
@@ -33,18 +31,16 @@ const minutesText = (n: number) => { const d = n % 10, h = n % 100; return `${n}
 const COURSES = {
   JAVA: {
     id: 'JAVA', key: 'java', title: 'Java', logo: 'J',
-    fallback: 'public class Solution {\n    public static void main(String[] args) {\n        // Напишите решение здесь\n    }\n}\n',
+    fallback: FALLBACK_CODE.JAVA,
     pitch: 'Строгая типизация и классический ООП. Язык бэкенда, Android и больших систем.', tags: ['ООП', 'Бэкенд', 'Android'],
   },
   PYTHON: {
     id: 'PYTHON', key: 'python', title: 'Python', logo: 'Py',
-    fallback: '# Напиши решение здесь\n',
+    fallback: FALLBACK_CODE.PYTHON,
     pitch: 'Короткий понятный синтаксис. Автоматизация, анализ данных, бэкенд и машинное обучение.', tags: ['Простой синтаксис', 'Данные', 'Автоматизация'],
   },
 } as const
 type Course = (typeof COURSES)[CourseLanguage]
-// Stable references: a new extensions array on every render would make CodeMirror reconfigure the editor.
-const EDITOR_EXTENSIONS = { JAVA: [java(), javaCompletions], PYTHON: [python()] }
 const LANGUAGES = Object.keys(COURSES) as CourseLanguage[]
 const CourseContext = createContext<Course>(COURSES.JAVA)
 const useCourse = () => useContext(CourseContext)
@@ -61,19 +57,6 @@ const storedLanguage = (): CourseLanguage | null => {
   try { const value = localStorage.getItem(LANGUAGE_KEY); return value === 'JAVA' || value === 'PYTHON' ? value : null } catch { return null }
 }
 const storeLanguage = (language: CourseLanguage) => { try { localStorage.setItem(LANGUAGE_KEY, language) } catch { /* private mode: choice lasts for this page only */ } }
-
-function Markdown({ children, inline = false }: { children: string; inline?: boolean }) {
-  const content = <ReactMarkdown
-    components={{
-      p: ({ children: paragraphChildren }) => inline ? <>{paragraphChildren}</> : <p>{paragraphChildren}</p>,
-      code: ({ className, children, node: _node, ...props }) => {
-        const language = /language-(\w+)/.exec(className || '')?.[1]
-        return language ? <code className={`language-${language}`}>{children}</code> : <code {...props}>{children}</code>
-      },
-    }}
-  >{children}</ReactMarkdown>
-  return inline ? <span className="markdown inline-markdown">{content}</span> : <div className="markdown">{content}</div>
-}
 
 const Spinner = () => <span className="spinner" aria-hidden="true" />
 
@@ -168,10 +151,27 @@ function Shell() {
   }
   const login = (user: User) => { setError(''); setMe(user) }
   const logout = async () => { await request(() => post<void>('/auth/logout')); setError(''); setMe(null) }
+  // Test at the board: the called student sees the call on any page; the test and its «Тест сдан» replace the whole screen.
+  const [boardDone, setBoardDone] = useState(false)
+  const [board, setBoard] = useBoardCurrent(isStudent && !boardDone)
+  const boardTest = useRef<Id | null>(null)
+  useEffect(() => {
+    if (board?.test) boardTest.current = board.test.id
+    // The running test disappeared (the teacher finished or removed it, the server closed it): it is over for this screen too.
+    else if (board && boardTest.current !== null) { boardTest.current = null; setBoardDone(true) }
+  }, [board])
+  const boardFinished = useCallback(() => { boardTest.current = null; setBoardDone(true) }, [])
+  const boardLogout = useCallback(async () => {
+    await post<void>('/auth/logout').catch(() => {})
+    boardTest.current = null; setBoardDone(false); setError(''); setMe(null)
+  }, [])
   if (loading) return <div className="center"><Spinner /><span>Загружаем…</span></div>
   if (!me) return <Login onLogin={login} onError={setError} error={error} />
+  if (isStudent && boardDone) return <BoardDone onLogout={boardLogout} />
+  if (isStudent && board?.test) return <BoardTestScreen key={board.test.id} test={board.test} name={me.displayName} onFinished={boardFinished} />
   return <main className={`app ${hardOn ? 'hard' : ''}`}>
     {hardOn && <DangerFrame />}
+    {isStudent && board?.call && <BoardCallDialog key={board.call.id} call={board.call} onStarted={test => setBoard({ call: null, test })} />}
     {hardDialog && <HardModeDialog onConfirm={() => setHardMode(true)} onCancel={() => setHardDialog(false)} />}
     <header ref={header} className={`topbar ${scrolled ? 'scrolled' : ''}`}>
       {hardOn && <HeaderTapes />}
@@ -807,7 +807,7 @@ function ProgressView({ progress, otherProgress }: { progress: Progress | null; 
   return <section className="progress-page">
     <h1 className="display small">Мой прогресс · {course.title}</h1>
     {progress.session && <StudentSessionCard session={progress.session} />}
-    <StudentPairGrades language={course.id} />
+    <StudentBoardGrades language={course.id} />
     <div className="stat-grid">
       <Stat icon="sparkle" label={level.diagnosticXp ? `Опыт · ${level.diagnosticXp} за диагностику` : 'Опыт'} value={level.xp} suffix="XP" />
       <Stat icon="bolt" label="Задач решено" value={level.solved} />
@@ -861,7 +861,7 @@ function TeacherPage({ request }: { request: Request }) {
   const [students, setStudents] = useState<Student[] | null>(null); const [selected, setSelected] = useState<Student | null>(null)
   const [globalLlm, setGlobalLlm] = useState<LlmStatus | null>(null)
   const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [group, setGroup] = useState(''); const [creating, setCreating] = useState(false)
-  const [view, setView] = useState<'students' | 'progress' | 'grades' | 'llm' | 'settings'>('students')
+  const [view, setView] = useState<'students' | 'progress' | 'pairs' | 'board' | 'llm' | 'settings'>('students')
   const toast = useToast()
   const [groupFilter, setGroupFilter] = useGroupFilter('rmzn-admin-group', students ? [...new Set(students.map(s => s.group).filter((g): g is string => !!g))] : null)
   /** Picking a group also fills it in for the next new account, the usual way to add students to a group. */
@@ -916,16 +916,23 @@ function TeacherPage({ request }: { request: Request }) {
     setProgressFocus(focus => ({ id, nonce: (focus?.nonce ?? 0) + 1 })); setView('progress'); window.scrollTo({ top: 0 })
   }, [])
   const configDisabled = globalLlm?.reason === 'DISABLED_BY_CONFIGURATION'
-  const tabs = <nav className="segmented admin-tabs five" role="tablist" style={{ '--active': ['students', 'progress', 'grades', 'llm', 'settings'].indexOf(view) } as CSSProperties}>
+  const VIEWS = ['students', 'progress', 'pairs', 'board', 'llm', 'settings'] as const
+  const active = VIEWS.indexOf(view)
+  const tab = (key: typeof view, icon: Parameters<typeof Icon>[0]['name'], title: string, short: string, onClick = () => setView(key)) =>
+    <button role="tab" aria-label={title} aria-selected={view === key} className={view === key ? 'active' : ''} onClick={onClick}><Icon name={icon} size={16} /> <span className="tab-long">{title}</span><span className="tab-short">{short}</span></button>
+  const tabs = <nav className="segmented admin-tabs six" role="tablist" style={{ '--active': active, '--col': active % 3, '--row': Math.floor(active / 3) } as CSSProperties}>
     <span className="segmented-thumb" aria-hidden="true" />
-    <button role="tab" aria-selected={view === 'students'} className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}><Icon name="user" size={16} /> Студенты</button>
-    <button role="tab" aria-selected={view === 'progress'} className={view === 'progress' ? 'active' : ''} onClick={() => { setProgressFocus(null); setView('progress') }}><Icon name="target" size={16} /> Прогресс</button>
-    <button role="tab" aria-selected={view === 'grades'} className={view === 'grades' ? 'active' : ''} onClick={() => setView('grades')}><Icon name="award" size={16} /> Оценки</button>
-    <button role="tab" aria-selected={view === 'llm'} className={view === 'llm' ? 'active' : ''} onClick={() => setView('llm')}><Icon name="chart" size={16} /> Аналитика LLM</button>
-    <button role="tab" aria-selected={view === 'settings'} className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}><Icon name="sparkle" size={16} /> Настройки LLM</button>
+    {tab('students', 'user', 'Студенты', 'Студенты')}
+    {tab('progress', 'target', 'Прогресс', 'Прогресс', () => { setProgressFocus(null); setView('progress') })}
+    {tab('pairs', 'chart', 'Работа на паре', 'На паре')}
+    {tab('board', 'flag', 'К доске', 'К доске')}
+    {tab('llm', 'chart', 'Аналитика LLM', 'LLM')}
+    {tab('settings', 'sparkle', 'Настройки LLM', 'Настройки')}
   </nav>
+  const groupList = students ? groupCounts(students, s => s.group).groups.map(g => g.name) : null
   if (view === 'progress') return <>{tabs}<ProgressAnalytics request={request} onOpenStudent={openStudent} focus={progressFocus} /></>
-  if (view === 'grades') return <>{tabs}<PairGrades request={request} groups={students ? groupCounts(students, s => s.group).groups.map(g => g.name) : null} /></>
+  if (view === 'pairs') return <>{tabs}<PairWork request={request} groups={groupList} /></>
+  if (view === 'board') return <>{tabs}<BoardAdmin request={request} groups={groupList} /></>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
   if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
   const counts = groupCounts(students ?? [], s => s.group)

@@ -50,6 +50,7 @@ class ProgressAnalyticsIntegrationTest {
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
     p.add("app.task-audit.enabled", () -> "false");
     p.add("app.lesson.idle-close.enabled", () -> "false"); // lessons written for 2030 must stay open
+    p.add("app.board.auto-finish.enabled", () -> "false"); // the mocked clock is not stubbed between tests
   }
   @BeforeEach void prepare() {
     db.update("update users set password_hash=? where login='admin'", new BCryptPasswordEncoder().encode("admin-pass"));

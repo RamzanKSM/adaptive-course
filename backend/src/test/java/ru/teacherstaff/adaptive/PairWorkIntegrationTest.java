@@ -26,13 +26,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Pair grades end to end: points and attendance inside the window, the norm (previous Moscow week, earlier week, the pair
- * itself), the teacher's grades through recalculation, publishing, the journal, and what a student may see.
+ * «Работа на паре» end to end: points, attendance and activity inside the window, the reference median (previous Moscow
+ * week, earlier week, the pair itself), recalculation, the journal and admin-only access.
  * Every test works in its own year, so the saved pairs of one never feed the weekly norm of another.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-class PairGradesIntegrationTest {
+class PairWorkIntegrationTest {
   @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json;
   @MockBean PistonCodeRunner runner;
   @MockBean LlmTutor tutor;
@@ -47,6 +47,7 @@ class PairGradesIntegrationTest {
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
     p.add("app.task-audit.enabled", () -> "false");
     p.add("app.lesson.idle-close.enabled", () -> "false");
+    p.add("app.board.auto-finish.enabled", () -> "false"); // the mocked clock is not stubbed between tests
   }
   @BeforeEach void prepare() {
     db.update("update users set password_hash=? where login='admin'", new BCryptPasswordEncoder().encode("admin-pass"));
@@ -57,19 +58,10 @@ class PairGradesIntegrationTest {
     when(clock.getZone()).thenReturn(ZoneOffset.UTC);
   }
 
-  @Test void gradeThresholdsAreExactAtTheBoundaries() {
-    assertEquals("5", PairGrades.grade(true, 27, 20.0)); assertEquals("4", PairGrades.grade(true, 26, 20.0));
-    assertEquals("4", PairGrades.grade(true, 20, 20.0)); assertEquals("3", PairGrades.grade(true, 19, 20.0));
-    assertEquals("3", PairGrades.grade(true, 12, 20.0)); assertEquals("2", PairGrades.grade(true, 11, 20.0)); assertEquals("2", PairGrades.grade(true, 0, 20.0));
-    assertEquals("5", PairGrades.grade(true, 34, 25.0)); assertEquals("4", PairGrades.grade(true, 33, 25.0), "1.35 × 25 = 33.75");
-    assertEquals("5", PairGrades.grade(true, 27, 19.5), "26.325"); assertEquals("4", PairGrades.grade(true, 26, 19.5));
-    assertEquals("3", PairGrades.grade(true, 3, 5.0)); assertEquals("2", PairGrades.grade(true, 2, 5.0), "0.60 × 5 = 3");
-    assertEquals("4", PairGrades.grade(true, 1, null)); assertEquals("2", PairGrades.grade(true, 0, null));
-    assertEquals("4", PairGrades.grade(true, 1, 0.0)); assertEquals("2", PairGrades.grade(true, 0, 0.0));
-    assertEquals("н", PairGrades.grade(false, 0, 20.0));
-    assertEquals(20.0, PairGrades.median(List.of(27, 11, 20, 19, 26))); assertEquals(19.5, PairGrades.median(List.of(20, 11, 19, 27)));
-    assertEquals(LocalDate.of(2031, 3, 3), PairGrades.week(Instant.parse("2031-03-09T20:59:59Z")), "Sunday 23:59 in Moscow");
-    assertEquals(LocalDate.of(2031, 3, 10), PairGrades.week(Instant.parse("2031-03-09T21:00:00Z")), "Monday 00:00 in Moscow");
+  @Test void medianAndMoscowWeeks() {
+    assertEquals(20.0, PairWork.median(List.of(27, 11, 20, 19, 26))); assertEquals(19.5, PairWork.median(List.of(20, 11, 19, 27)));
+    assertEquals(LocalDate.of(2031, 3, 3), PairWork.week(Instant.parse("2031-03-09T20:59:59Z")), "Sunday 23:59 in Moscow");
+    assertEquals(LocalDate.of(2031, 3, 10), PairWork.week(Instant.parse("2031-03-09T21:00:00Z")), "Monday 00:00 in Moscow");
   }
 
   @Test void pointsCountFirstPassesOfCreditedTasksInsideTheWindow() throws Exception {
@@ -113,15 +105,21 @@ class PairGradesIntegrationTest {
     assertTrue(rowA.path("hard").asBoolean(), "a HARD task in the window"); assertTrue(rowA.path("attended").asBoolean());
     assertTrue(row(pair, "pts-b").path("attended").asBoolean(), "a student's chat message"); assertEquals(0, row(pair, "pts-b").path("points").asInt());
     assertTrue(row(pair, "pts-c").path("attended").asBoolean(), "a lesson started in the window");
-    assertFalse(row(pair, "pts-d").path("attended").asBoolean(), "Python activity is not a Java pair"); assertEquals("н", row(pair, "pts-d").path("grade").asText());
-    // The regular attended students (b, c) have 0 points: the pair's own median is 0, so points > 0 → 4, 0 → 2.
-    assertEquals("PAIR", pair.path("medianSource").asText()); assertEquals(0.0, pair.path("median").asDouble()); assertTrue(pair.path("thresholds").isNull());
-    assertEquals("4", rowA.path("grade").asText()); assertEquals("2", row(pair, "pts-b").path("grade").asText());
-    assertTrue(rowA.path("percent").isNull()); assertFalse(rowA.path("manual").asBoolean());
-    assertEquals(Map.of("н", 1, "2", 2, "3", 0, "4", 1, "5", 0, "-", 0), json.convertValue(pair.path("counts"), Map.class));
+    assertFalse(row(pair, "pts-d").path("attended").asBoolean(), "Python activity is not a Java pair");
+    // The regular attended students (b, c) have 0 points: the pair's own median is 0, no percent.
+    assertEquals("PAIR", pair.path("medianSource").asText()); assertEquals(0.0, pair.path("median").asDouble());
+    assertTrue(rowA.path("percent").isNull());
+    // Activity: a's Java submissions at minutes 5 (failed), 10, 20, 25, 30, 35, 40, 45, 50 — nine 5-minute slots; b's question at 60.
+    assertEquals(9, rowA.path("submissions").asInt()); assertEquals(1, rowA.path("failed").asInt()); assertEquals(45, rowA.path("activeMinutes").asInt());
+    assertEquals(0, rowA.path("chatQuestions").asInt());
+    var rowB = row(pair, "pts-b");
+    assertEquals(1, rowB.path("chatQuestions").asInt(), "the assistant's answers are not questions"); assertEquals(5, rowB.path("activeMinutes").asInt()); assertEquals(0, rowB.path("submissions").asInt());
+    assertEquals(0, row(pair, "pts-d").path("activeMinutes").asInt(), "Python activity is not a Java pair");
+    assertEquals(Set.of("userId", "login", "displayName", "attended", "points", "tasks", "hard", "percent", "activeMinutes", "submissions", "failed", "chatQuestions"), fields(rowA), "no grades");
+    assertEquals(Set.of("id", "group", "language", "startsAt", "endsAt", "median", "medianSource", "medianWeek", "createdAt", "rows"), fields(pair), "no thresholds, counts or publishing");
   }
 
-  @Test void hardStudentsAreGradedButLeftOutOfTheMedian() throws Exception {
+  @Test void hardStudentsAreLeftOutOfTheMedian() throws Exception {
     String admin = login("admin", "admin-pass");
     Instant start = Instant.parse("2034-03-16T08:00:00Z");
     var regular = List.of(11, 19, 20, 26, 27);
@@ -138,10 +136,9 @@ class PairGradesIntegrationTest {
     var pair = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("H-1", "JAVA", start.toString(), start.plusSeconds(5400).toString())));
     assertEquals("PAIR", pair.path("medianSource").asText());
     assertEquals(20.0, pair.path("median").asDouble(), "11, 19, 20, 20, 26, 27 — without the hard students' 2 and 30");
-    assertEquals(27.0, pair.path("thresholds").path("five").asDouble()); assertEquals(20.0, pair.path("thresholds").path("four").asDouble()); assertEquals(12.0, pair.path("thresholds").path("three").asDouble());
-    assertEquals(List.of("2", "3", "4", "4", "5"), regular.stream().map(points -> row(pair, "hm-" + points).path("grade").asText()).toList());
-    assertTrue(row(pair, "hm-mode").path("hard").asBoolean()); assertEquals("2", row(pair, "hm-mode").path("grade").asText());
-    assertTrue(row(pair, "hm-task").path("hard").asBoolean()); assertEquals(30, row(pair, "hm-task").path("points").asInt()); assertEquals("5", row(pair, "hm-task").path("grade").asText());
+    assertEquals(List.of(55, 95, 100, 130, 135), regular.stream().map(points -> row(pair, "hm-" + points).path("percent").asInt()).toList());
+    assertTrue(row(pair, "hm-mode").path("hard").asBoolean()); assertEquals(10, row(pair, "hm-mode").path("percent").asInt());
+    assertTrue(row(pair, "hm-task").path("hard").asBoolean()); assertEquals(30, row(pair, "hm-task").path("points").asInt());
     assertFalse(row(pair, "hm-off").path("hard").asBoolean(), "allowed but switched off is regular");
     assertEquals(135, row(pair, "hm-27").path("percent").asInt()); assertEquals(150, row(pair, "hm-task").path("percent").asInt());
   }
@@ -162,7 +159,7 @@ class PairGradesIntegrationTest {
     var pair = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("W-1", "JAVA", start.toString(), start.plusSeconds(5400).toString())));
     assertEquals("WEEK", pair.path("medianSource").asText()); assertEquals("2031-03-03", pair.path("medianWeek").asText());
     assertEquals(8.0, pair.path("median").asDouble(), "1..15");
-    assertEquals(125, row(pair, "week-a").path("percent").asInt()); assertEquals("4", row(pair, "week-a").path("grade").asText(), "10 < 1.35 × 8");
+    assertEquals(125, row(pair, "week-a").path("percent").asInt());
     // A week later the previous week has only the five Monday rows: the latest earlier week with enough rows is still the 3rd.
     Instant later = start.plus(Duration.ofDays(7));
     var next = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("W-1", "JAVA", later.toString(), later.plusSeconds(5400).toString())));
@@ -178,93 +175,54 @@ class PairGradesIntegrationTest {
     long s = studentRow("fall-a", "fall-a", "F-1"); earn(s, "JAVA", start, 9);
     var pair = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("F-1", "JAVA", start.toString(), start.plusSeconds(5400).toString())));
     assertEquals("WEEK", pair.path("medianSource").asText()); assertEquals("2032-05-24", pair.path("medianWeek").asText(), "the latest earlier week with 15 rows");
-    assertEquals(6.0, pair.path("median").asDouble()); assertEquals("5", row(pair, "fall-a").path("grade").asText());
+    assertEquals(6.0, pair.path("median").asDouble()); assertEquals(150, row(pair, "fall-a").path("percent").asInt());
 
     // Thirteen weeks after the full weeks there is no norm in the last twelve: the pair's own regular students.
     Instant far = Instant.parse("2032-08-26T08:00:00Z");
     long t = studentRow("fall-b", "fall-b", "F-2"); earn(t, "JAVA", far, 4); long u = studentRow("fall-c", "fall-c", "F-2"); earn(u, "JAVA", far, 8);
     var own = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("F-2", "JAVA", far.toString(), far.plusSeconds(5400).toString())));
     assertEquals("PAIR", own.path("medianSource").asText()); assertTrue(own.path("medianWeek").isNull()); assertEquals(6.0, own.path("median").asDouble());
-    assertEquals("3", row(own, "fall-b").path("grade").asText()); assertEquals("4", row(own, "fall-c").path("grade").asText());
+    assertEquals(67, row(own, "fall-b").path("percent").asInt()); assertEquals(133, row(own, "fall-c").path("percent").asInt());
 
     // Nobody came: no norm at all.
     var none = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("F-2", "JAVA", "2032-09-01T08:00:00Z", "2032-09-01T09:30:00Z")));
-    assertEquals("NONE", none.path("medianSource").asText()); assertTrue(none.path("median").isNull()); assertTrue(none.path("thresholds").isNull());
-    assertEquals(Map.of("н", 2, "2", 0, "3", 0, "4", 0, "5", 0, "-", 0), json.convertValue(none.path("counts"), Map.class));
+    assertEquals("NONE", none.path("medianSource").asText()); assertTrue(none.path("median").isNull());
+    for (var r : none.path("rows")) { assertFalse(r.path("attended").asBoolean()); assertTrue(r.path("percent").isNull()); }
   }
 
-  @Test void theTeachersGradesSurviveRecalculation() throws Exception {
+  @Test void savingAndRecalculation() throws Exception {
     String admin = login("admin", "admin-pass");
     Instant start = Instant.parse("2033-04-07T08:00:00Z");
     long a = studentRow("man-a", "Алла", "M-1"), b = studentRow("man-b", "Богдан", "M-1"), c = studentRow("man-c", "Вика", "M-1");
     earn(a, "JAVA", start, 2); earn(b, "JAVA", start, 10); earn(c, "JAVA", start, 6);
-    var request = new LinkedHashMap<String, Object>(Map.of("group", "M-1", "language", "JAVA", "startsAt", start.toString(), "endsAt", start.plusSeconds(5400).toString()));
-    request.put("grades", List.of(Map.of("userId", a, "grade", "5", "comment", "  ответ у доски "), Map.of("userId", 999_999, "grade", "3")));
-    var saved = read(admin, post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)));
+    var saved = read(admin, post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(body("M-1", "JAVA", start.toString(), start.plusSeconds(5400).toString())));
     long id = saved.path("id").asLong();
-    assertEquals(6.0, saved.path("median").asDouble()); assertFalse(saved.path("published").asBoolean()); assertEquals(NOW.toString(), saved.path("createdAt").asText());
-    var rowA = row(saved, "man-a");
-    assertEquals("2", rowA.path("autoGrade").asText()); assertEquals("5", rowA.path("grade").asText()); assertEquals("ответ у доски", rowA.path("comment").asText()); assertTrue(rowA.path("manual").asBoolean());
-    assertEquals("5", row(saved, "man-b").path("grade").asText()); assertEquals("4", row(saved, "man-c").path("grade").asText());
-    assertEquals(3, count("select count(*) from pair_grades where pair_id=?", id), "unknown students in grades are ignored");
+    assertEquals(6.0, saved.path("median").asDouble()); assertEquals(NOW.toString(), saved.path("createdAt").asText());
+    assertEquals(33, row(saved, "man-a").path("percent").asInt()); assertEquals(167, row(saved, "man-b").path("percent").asInt());
+    assertEquals(3, count("select count(*) from pair_results where pair_id=?", id));
 
-    // A comment alone makes a row manual; the auto grade without a comment makes it auto again.
-    var patched = read(admin, patch("/api/admin/pairs/{id}/grades/{u}", id, c).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"4\",\"comment\":\"опоздал\"}"));
-    assertTrue(row(patched, "man-c").path("manual").asBoolean());
-    patched = read(admin, patch("/api/admin/pairs/{id}/grades/{u}", id, c).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"4\",\"comment\":null}"));
-    assertFalse(row(patched, "man-c").path("manual").asBoolean());
-
-    // Revoked credits: b loses 6 of 10 points, a loses everything; the median moves to 4, the auto grades follow.
+    // Revoked credits: b loses 6 of 10 points, a loses everything; the median moves to 4.
     db.update("delete from successful_task_credit where user_id=? and task_id in (select task_id from successful_task_credit where user_id=? order by task_id limit 2)", b, b);
     db.update("delete from successful_task_credit where user_id=?", a);
     var again = read(admin, post("/api/admin/pairs/{id}/recalculate", id));
     assertEquals(4.0, again.path("median").asDouble(), "0, 4, 6");
-    assertEquals(0, row(again, "man-a").path("points").asInt()); assertEquals("2", row(again, "man-a").path("autoGrade").asText());
-    assertEquals("5", row(again, "man-a").path("grade").asText(), "the teacher's grade stays"); assertEquals("ответ у доски", row(again, "man-a").path("comment").asText());
-    assertEquals(4, row(again, "man-b").path("points").asInt()); assertEquals("4", row(again, "man-b").path("grade").asText());
-    assertEquals("5", row(again, "man-c").path("autoGrade").asText()); assertEquals("5", row(again, "man-c").path("grade").asText(), "auto rows take the new grade");
-
-    expect(admin, patch("/api/admin/pairs/{id}/grades/{u}", id, c).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"6\"}"), status().isBadRequest(), "INVALID_GRADE");
-    expect(admin, patch("/api/admin/pairs/{id}/grades/{u}", id, c).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"Н\"}"), status().isBadRequest(), "INVALID_GRADE");
-    expect(admin, patch("/api/admin/pairs/{id}/grades/{u}", id, 999_999).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"4\"}"), status().isNotFound(), "STUDENT_NOT_FOUND");
-    expect(admin, post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("group", "M-1", "language", "JAVA", "startsAt", start.toString(),
-        "endsAt", start.plusSeconds(60).toString(), "grades", List.of(Map.of("userId", a, "grade", "отл"))))), status().isBadRequest(), "INVALID_GRADE");
+    assertEquals(0, row(again, "man-a").path("points").asInt()); assertEquals(4, row(again, "man-b").path("points").asInt()); assertEquals(150, row(again, "man-c").path("percent").asInt());
+    assertEquals(again, read(admin, get("/api/admin/pairs/{id}", id)), "the saved pair as recalculated");
   }
 
-  @Test void studentsSeeOnlyTheDateAndGradeOfTheirPublishedPairs() throws Exception {
+  @Test void onlyTheTeacherSeesPairs() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("pub-a", "Публикуемый", "S-1"); long a = studentId("pub-a");
-    long b = studentRow("pub-b", "Другой", "S-1");
-    Instant first = Instant.parse("2035-03-14T22:00:00Z"), second = Instant.parse("2035-03-20T08:00:00Z"); // the first is 15 March in Moscow
-    earn(a, "JAVA", first, 3); earn(b, "JAVA", first, 5); earn(a, "JAVA", second, 4);
-    long one = save(admin, "S-1", "JAVA", first), two = save(admin, "S-1", "JAVA", second);
-    assertEquals(0, read(token, get("/api/grades").param("language", "JAVA")).path("grades").size(), "nothing is published yet");
-
-    var published = read(admin, post("/api/admin/pairs/{id}/publish", one).contentType(MediaType.APPLICATION_JSON).content("{\"published\":true}"));
-    assertTrue(published.path("published").asBoolean()); assertEquals(NOW.toString(), published.path("publishedAt").asText());
-    read(admin, post("/api/admin/pairs/{id}/publish", two).contentType(MediaType.APPLICATION_JSON).content("{\"published\":true}"));
-    var grades = read(token, get("/api/grades").param("language", "JAVA")).path("grades");
-    assertEquals(2, grades.size());
-    assertEquals("2035-03-20", grades.get(0).path("date").asText(), "newest first"); assertEquals("2035-03-15", grades.get(1).path("date").asText(), "the Moscow date");
-    assertEquals("3", grades.get(1).path("grade").asText(), "the student's own grade: 3 points against the median 4");
-    for (var g : grades) assertEquals(Set.of("date", "grade"), fields(g), "no points, tasks, median, percent or thresholds");
-    assertEquals(Set.of("grades"), fields(read(token, get("/api/grades").param("language", "JAVA"))));
-    assertEquals(0, read(token, get("/api/grades").param("language", "PYTHON")).path("grades").size());
-
-    var unpublished = read(admin, post("/api/admin/pairs/{id}/publish", two).contentType(MediaType.APPLICATION_JSON).content("{\"published\":false}"));
-    assertFalse(unpublished.path("published").asBoolean()); assertTrue(unpublished.path("publishedAt").isNull());
-    assertEquals(List.of("2035-03-15"), read(token, get("/api/grades").param("language", "JAVA")).path("grades").findValuesAsText("date"));
-    expect(admin, post("/api/admin/pairs/{id}/publish", one).contentType(MediaType.APPLICATION_JSON).content("{\"published\":\"yes\"}"), status().isBadRequest(), "INVALID_PUBLISHED");
-
-    // Admin-only: a student gets FORBIDDEN on every teacher endpoint, the teacher has no own grades.
+    Instant first = Instant.parse("2035-03-14T22:00:00Z");
+    earn(a, "JAVA", first, 3);
+    long one = save(admin, "S-1", "JAVA", first);
+    // Admin-only: a student gets FORBIDDEN on every teacher endpoint.
     for (var request : List.<MockHttpServletRequestBuilder>of(get("/api/admin/pairs"), get("/api/admin/pairs/{id}", one), get("/api/admin/pairs/course").param("group", "S-1"),
         get("/api/admin/pairs/journal").param("group", "S-1"), post("/api/admin/pairs/{id}/recalculate", one), delete("/api/admin/pairs/{id}", one),
         post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body("S-1", "JAVA", first.toString(), first.plusSeconds(60).toString())),
-        post("/api/admin/pairs/{id}/publish", one).contentType(MediaType.APPLICATION_JSON).content("{\"published\":false}"),
-        patch("/api/admin/pairs/{id}/grades/{u}", one, a).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"5\"}")))
+        post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(body("S-1", "JAVA", first.toString(), first.plusSeconds(60).toString()))))
       expect(token, request, status().isBadRequest(), "FORBIDDEN");
-    expect(admin, get("/api/grades"), status().isBadRequest(), "FORBIDDEN");
-    assertEquals("3", db.queryForObject("select grade from pair_grades where pair_id=? and user_id=?", String.class, one, a));
+    assertEquals(1, count("select count(*) from pairs where id=?", one));
   }
 
   @Test void theJournalListsAndDeletion() throws Exception {
@@ -275,8 +233,6 @@ class PairGradesIntegrationTest {
     earn(b, "JAVA", p2, 3);                                                       // median 3: н, 4, н
     earn(a, "JAVA", p3, 2); earn(b, "JAVA", p3, 6); earn(moved, "JAVA", p3, 4);   // median 4: 2, 5, 4
     long one = save(admin, "J-1", "JAVA", p1), two = save(admin, "J-1", "JAVA", p2), three = save(admin, "J-1", "JAVA", p3);
-    read(admin, patch("/api/admin/pairs/{id}/grades/{u}", three, a).contentType(MediaType.APPLICATION_JSON).content("{\"grade\":\"3\"}"));
-    read(admin, post("/api/admin/pairs/{id}/publish", two).contentType(MediaType.APPLICATION_JSON).content("{\"published\":true}"));
     studentRow("jr-c", "Вадим", "J-1"); // joined after three pairs
     long four = save(admin, "J-1", "JAVA", p3.plusSeconds(6000)); // nobody worked
     db.update("update users set group_name='J-2' where id=?", moved); // left the group: the results stay in its journal
@@ -284,59 +240,36 @@ class PairGradesIntegrationTest {
     var journal = read(admin, get("/api/admin/pairs/journal").param("group", "J-1").param("language", "JAVA"));
     assertEquals("J-1", journal.path("group").asText()); assertEquals("JAVA", journal.path("language").asText());
     assertEquals(List.of(one, two, three, four), journal.path("pairs").findValues("id").stream().map(JsonNode::asLong).toList(), "oldest first");
-    assertEquals(List.of(false, true, false, false), journal.path("pairs").findValues("published").stream().map(JsonNode::asBoolean).toList());
+    assertEquals(Set.of("id", "startsAt", "endsAt"), fields(journal.path("pairs").get(0)));
     var students = journal.path("students");
     assertEquals(List.of("jr-a", "jr-b", "jr-c", "jr-d"), students.findValuesAsText("login"));
     var rowA = students.get(0);
-    assertEquals(Arrays.asList("5", "н", "3", "н"), strings(rowA.path("grades"))); assertEquals(List.of(false, false, true, false), booleans(rowA.path("manual")));
-    assertEquals(4.0, rowA.path("average").asDouble()); assertEquals(2, rowA.path("absences").asInt());
-    assertEquals(Arrays.asList("4", "4", "5", "н"), strings(students.get(1).path("grades"))); assertEquals(4.33, students.get(1).path("average").asDouble()); assertEquals(1, students.get(1).path("absences").asInt());
-    assertEquals(Arrays.asList(null, null, null, "н"), strings(students.get(2).path("grades"))); assertTrue(students.get(2).path("average").isNull()); assertEquals(1, students.get(2).path("absences").asInt());
-    assertEquals(Arrays.asList("2", "н", "4", "н"), strings(students.get(3).path("grades"))); assertEquals(3.0, students.get(3).path("average").asDouble()); assertEquals(2, students.get(3).path("absences").asInt());
+    assertEquals(Set.of("userId", "login", "displayName", "cells", "pairs"), fields(rowA));
+    var cell = rowA.path("cells").get(0);
+    assertEquals(Set.of("attended", "points", "percent", "activeMinutes"), fields(cell));
+    assertTrue(cell.path("attended").asBoolean()); assertEquals(10, cell.path("points").asInt()); assertEquals(200, cell.path("percent").asInt(), "median 5"); assertEquals(5, cell.path("activeMinutes").asInt());
+    assertFalse(rowA.path("cells").get(1).path("attended").asBoolean()); assertTrue(rowA.path("cells").get(1).path("percent").isNull());
+    assertEquals(2, rowA.path("pairs").asInt(), "attended pairs 1 and 3");
+    assertEquals(3, students.get(1).path("pairs").asInt());
+    assertEquals(Arrays.asList(true, true, true, false), Arrays.asList(students.get(2).path("cells").get(0).isNull(), students.get(2).path("cells").get(1).isNull(), students.get(2).path("cells").get(2).isNull(), students.get(2).path("cells").get(3).isNull()), "joined after three pairs");
+    assertEquals(0, students.get(2).path("pairs").asInt());
+    assertEquals(2, students.get(3).path("pairs").asInt());
     assertEquals("JAVA", read(admin, get("/api/admin/pairs/journal").param("group", "J-1")).path("language").asText(), "the group's course by default");
 
     var list = read(admin, get("/api/admin/pairs").param("group", "J-1").param("language", "JAVA")).path("pairs");
     assertEquals(List.of(four, three, two, one), list.findValues("id").stream().map(JsonNode::asLong).toList(), "newest first");
     for (var p : list) assertTrue(p.path("rows").isMissingNode(), "a list has no rows");
-    assertEquals(Map.of("н", 0, "2", 0, "3", 1, "4", 1, "5", 1, "-", 0), json.convertValue(list.get(1).path("counts"), Map.class));
     assertEquals(0, read(admin, get("/api/admin/pairs").param("group", "J-1").param("language", "PYTHON")).path("pairs").size());
 
     assertTrue(read(admin, delete("/api/admin/pairs/{id}", four)).path("deleted").asBoolean());
-    assertEquals(0, count("select count(*) from pair_grades where pair_id=?", four));
+    assertEquals(0, count("select count(*) from pair_results where pair_id=?", four));
     expect(admin, get("/api/admin/pairs/{id}", four), status().isNotFound(), "PAIR_NOT_FOUND");
     expect(admin, post("/api/admin/pairs/{id}/recalculate", four), status().isNotFound(), "PAIR_NOT_FOUND");
 
     // Deleting a student deletes their results.
     mvc.perform(delete("/api/admin/students/{id}", moved).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"confirmLogin\":\"jr-d\"}")).andExpect(status().isOk());
-    assertEquals(0, count("select count(*) from pair_grades where user_id=?", moved));
+    assertEquals(0, count("select count(*) from pair_results where user_id=?", moved));
     assertEquals(2, read(admin, get("/api/admin/pairs/{id}", three)).path("rows").size());
-  }
-
-  @Test void theTeacherCanLeaveAStudentWithoutAGrade() throws Exception {
-    String admin = login("admin", "admin-pass");
-    long a = studentRow("ng-a", "Альфа", "N-1"), b = studentRow("ng-b", "Бета", "N-1");
-    String token = createStudent("ng-c", "Гамма", "N-1"); long c = studentId("ng-c");
-    Instant start = Instant.parse("2037-04-07T08:00:00Z");
-    earn(a, "JAVA", start, 10); earn(b, "JAVA", start, 5); earn(c, "JAVA", start, 2);
-    String saveBody = json.writeValueAsString(Map.of("group", "N-1", "language", "JAVA", "startsAt", start.toString(), "endsAt", start.plusSeconds(5400).toString(),
-        "grades", List.of(Map.of("userId", c, "grade", "-", "comment", "болел"))));
-    var pair = read(admin, post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(saveBody));
-    long id = pair.path("id").asLong();
-    assertEquals(7.5, pair.path("median").asDouble(), "the ungraded student is not part of the pair's own norm");
-    assertEquals("4", row(pair, "ng-a").path("grade").asText()); assertEquals("3", row(pair, "ng-b").path("grade").asText());
-    assertEquals("-", row(pair, "ng-c").path("grade").asText()); assertTrue(row(pair, "ng-c").path("manual").asBoolean());
-    assertEquals(1, pair.path("counts").path("-").asInt());
-
-    var recalculated = read(admin, post("/api/admin/pairs/{id}/recalculate", id));
-    assertEquals("-", row(recalculated, "ng-c").path("grade").asText()); assertEquals(7.5, recalculated.path("median").asDouble());
-
-    var journal = read(admin, get("/api/admin/pairs/journal").param("group", "N-1").param("language", "JAVA")).path("students");
-    var rowC = journal.get(2);
-    assertEquals("ng-c", rowC.path("login").asText()); assertEquals(List.of("-"), strings(rowC.path("grades")));
-    assertTrue(rowC.path("average").isNull(), "no grade, no average"); assertEquals(0, rowC.path("absences").asInt(), "not an absence");
-
-    read(admin, post("/api/admin/pairs/{id}/publish", id).contentType(MediaType.APPLICATION_JSON).content("{\"published\":true}"));
-    assertEquals(0, read(token, get("/api/grades").param("language", "JAVA")).path("grades").size(), "the student sees nothing for this pair");
   }
 
   @Test void theGroupsCourseAndValidation() throws Exception {
@@ -382,7 +315,7 @@ class PairGradesIntegrationTest {
         language, start.toString(), start.plusSeconds(5400).toString());
     for (int p : points) {
       long user = studentRow("hist-" + UUID.randomUUID(), "История", "Архив");
-      db.update("insert into pair_grades(pair_id,user_id,attended,points,tasks_json,hard,auto_grade,grade) values(?,?,?,?,'{}',?,'4','4')", pair, user, attended ? 1 : 0, p, hard ? 1 : 0);
+      db.update("insert into pair_results(pair_id,user_id,attended,points,tasks_json,hard) values(?,?,?,?,'{}',?)", pair, user, attended ? 1 : 0, p, hard ? 1 : 0);
     }
   }
   private long save(String admin, String group, String language, Instant start) throws Exception {
@@ -415,8 +348,6 @@ class PairGradesIntegrationTest {
   private static JsonNode row(JsonNode pair, String login) { for (var r : pair.path("rows")) if (login.equals(r.path("login").asText())) return r; throw new AssertionError("no row " + login); }
   private static List<String> logins(JsonNode pair) { return pair.path("rows").findValuesAsText("login"); }
   private static Set<String> fields(JsonNode node) { var names = new HashSet<String>(); node.fieldNames().forEachRemaining(names::add); return names; }
-  private static List<String> strings(JsonNode array) { var list = new ArrayList<String>(); for (var x : array) list.add(x.isNull() ? null : x.asText()); return list; }
-  private static List<Boolean> booleans(JsonNode array) { var list = new ArrayList<Boolean>(); for (var x : array) list.add(x.asBoolean()); return list; }
 
   private JsonNode read(String token, MockHttpServletRequestBuilder request) throws Exception {
     return json.readTree(mvc.perform(request.cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());

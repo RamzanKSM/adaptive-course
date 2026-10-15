@@ -112,31 +112,73 @@ export interface StudentSession {
   days: string[]; closedSeries: number[]
 }
 
-// ───────── Pair grades (GET/POST /admin/pairs…, GET /grades) ─────────
-/** «н» — absent; numeric grades as strings, the way the backend stores them. */
-/** '-' — the teacher left the student without a grade for this pair. */
-export type PairGrade = 'н' | '2' | '3' | '4' | '5' | '-'
+// ───────── Work in a pair (GET/POST /admin/pairs…): teacher-only analytics of a class period ─────────
 /** WEEK — median of a previous week's saved results (medianWeek is that Monday); PAIR — of this pair itself; NONE — no median. */
 export type MedianSource = 'WEEK' | 'PAIR' | 'NONE'
-/** Teacher-only: points, tasks by difficulty, percent of the median. manual — grade differs from autoGrade or a comment is set. */
+/** Tasks first solved in the window by difficulty, points (hard ×10), percent of the median; activeMinutes — 5 × the 5-minute
+ *  slots with a submission or a chat message; submissions/failed and chatQuestions — this course, inside the window. */
 export interface PairResult {
   userId: Id; login: string; displayName: string
   attended: boolean; points: number; tasks: { '1': number; '2': number; '3': number; hard: number }
-  hard: boolean; percent: number | null; autoGrade: PairGrade; grade: PairGrade; comment: string | null; manual: boolean
+  hard: boolean; percent: number | null; activeMinutes: number; submissions: number; failed: number; chatQuestions: number
 }
 /** id null — a preview, nothing saved. startsAt/endsAt — UTC instants. rows are absent in the list of pairs. */
 export interface Pair {
   id: Id | null; group: string; language: CourseLanguage; startsAt: string; endsAt: string
   median: number | null; medianSource: MedianSource; medianWeek: string | null
-  thresholds: { five: number; four: number; three: number } | null
-  published: boolean; publishedAt: string | null; createdAt?: string | null
-  counts: Record<PairGrade, number>; rows?: PairResult[]
+  createdAt?: string | null; rows?: PairResult[]
 }
-/** Students × pairs; grades and manual are aligned with pairs (oldest first). average over 2–5, absences — the number of «н». */
+export interface PairCell { attended: boolean; points: number; percent: number | null; activeMinutes: number }
+/** Students × pairs; cells are aligned with pairs (oldest first), null — not a member then; pairs — how many pairs attended. */
 export interface PairJournal {
   group: string; language: CourseLanguage
-  pairs: { id: Id; startsAt: string; endsAt: string; published: boolean }[]
-  students: { userId: Id; login: string; displayName: string; grades: (PairGrade | null)[]; manual: boolean[]; average: number | null; absences: number }[]
+  pairs: { id: Id; startsAt: string; endsAt: string }[]
+  students: { userId: Id; login: string; displayName: string; cells: (PairCell | null)[]; pairs: number }[]
 }
-/** The student's own grades of published pairs: the date and the grade, nothing else. */
-export interface StudentGrade { date: string; grade: PairGrade }
+
+// ───────── Test at the board (/board…, /admin/board…) ─────────
+export type BoardStatus = 'CALLED' | 'CANCELLED' | 'EXPIRED' | 'STARTED' | 'FINISHED'
+export type BoardGrade = '2' | '3' | '4' | '5'
+export type BoardItemKind = 'code' | 'output'
+/** The student's view: never the expected output, the reference, the checks, grades or the assessment. now — the server clock. */
+export interface BoardStudentTest {
+  id: Id; status: BoardStatus; startedAt: string; endsAt: string; now: string
+  items: [{ kind: 'code'; title: string; statement: string; starterCode?: string | null; language: CourseLanguage }, { kind: 'output'; program: string; language: CourseLanguage }]
+  answers: { code: string | null; output: string | null }
+}
+/** GET /board/current: the student's active call or their running test. */
+export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string } | null; test: BoardStudentTest | null }
+/** The student's own board grades in «Мой прогресс»: Moscow date, the teacher's final grade and comment. */
+export interface BoardStudentGrade { date: string; grade: BoardGrade; comment: string | null }
+export type AssessmentStatus = 'PENDING' | 'DONE' | 'UNAVAILABLE'
+export interface BoardTestSummary {
+  id: Id; userId: Id; displayName: string; status: BoardStatus
+  calledAt: string; expiresAt: string | null; startedAt: string | null; endsAt: string | null; finishedAt: string | null
+  suggestedGrade: BoardGrade | null; finalGrade: BoardGrade | null; assessmentStatus: AssessmentStatus | null
+}
+export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null }
+export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[] }
+export interface BoardAdminItem {
+  kind: BoardItemKind; language?: CourseLanguage; title?: string | null; statement?: string | null; starterCode?: string | null
+  program?: string | null; expectedOutput?: string | null; taskId?: Id | null; externalKey?: string | null; skillCode?: string | null; skillTitle?: string | null
+}
+/** The check of one item: passed, the checker's output/feedback; for the output item the expected text next to the answer. */
+export interface BoardCheck { kind?: BoardItemKind; passed: Flag; output?: string | null; feedback?: string | null; console?: ConsoleRun | null; mismatch?: OutputMismatch | null; expected?: string | null; actual?: string | null }
+export interface BoardRun { at?: string | null; createdAt?: string | null; code: string; console: ConsoleRun }
+export interface BoardAssessment {
+  status: AssessmentStatus; grade?: BoardGrade | number | null; summary?: string | null; error?: string | null
+  items?: { item: BoardItemKind; verdict: string; explanation: string }[] | null
+}
+export interface BoardAdminTest extends BoardTestSummary {
+  login?: string; group?: string | null; language?: CourseLanguage
+  items: BoardAdminItem[] | null; answers: { code: string | null; output: string | null } | null
+  /** Aligned with items, or keyed by kind. */
+  results: BoardCheck[] | Partial<Record<BoardItemKind, BoardCheck>> | null
+  runs: BoardRun[] | null
+  paceStatus: SessionStatus | null; paceCap: number | null; ruleGrade: BoardGrade | null
+  assessment: BoardAssessment | null; comment: string | null; gradedAt?: string | null
+}
+export interface BoardJournal {
+  tests: { id: Id; userId: Id; displayName: string; calledAt: string; status: BoardStatus; finalGrade: BoardGrade | null; suggestedGrade: BoardGrade | null }[]
+  students: { userId: Id; displayName: string; grades: (BoardGrade | null)[]; lastTestAt: string | null }[]
+}

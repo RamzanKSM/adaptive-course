@@ -18,7 +18,7 @@ public class ApiController {
   private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(ApiController.class);
   /** Verification is strict (reference must pass, wrong solutions must fail), so the generator gets three tries. */
   static final int GENERATION_ATTEMPTS=3;
-  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairGrades pairGrades;
+  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairWork pairWork; private final BoardTests boardTests;
   /**
    * Serializes /learning/next per student and course. It replaces what the long transaction never really gave:
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
@@ -26,7 +26,7 @@ public class ApiController {
    */
   private final ConcurrentHashMap<String,java.util.concurrent.locks.ReentrantLock> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairGrades pairGrades) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairGrades=pairGrades; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled,hard_mode_allowed,hard_mode_on from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
@@ -585,21 +585,49 @@ public class ApiController {
     return view==null?ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error","GROUP_NOT_FOUND","message","В группе нет участников сессии этого курса")):ResponseEntity.ok(view);
   }
 
+  /** «Работа на паре»: teacher-only analytics of a class period (PairWork; rules in README «Работа на паре»). */
+  @GetMapping("/admin/pairs/course") public Map<String,Object> pairCourse(@RequestParam(name="group",required=false) String group,HttpServletRequest r){ admin(r); return pairWork.course(group); }
+  @PostMapping("/admin/pairs/preview") public Map<String,Object> previewPair(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return pairWork.preview(b); }
+  @PostMapping("/admin/pairs") @Transactional public Map<String,Object> savePair(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairWork.save(b,uid(r)); log.info("Pair {} of group {} ({}) saved by admin {}",pair.get("id"),pair.get("group"),pair.get("language"),uid(r)); return pair; }
+  @GetMapping("/admin/pairs") public Map<String,Object> pairs(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return pairWork.list(group,language); }
+  @GetMapping("/admin/pairs/journal") public Map<String,Object> pairJournal(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return pairWork.journal(group,language); }
+  @GetMapping("/admin/pairs/{id}") public Map<String,Object> pair(@PathVariable long id,HttpServletRequest r){ admin(r); return pairWork.pair(id); }
+  @PostMapping("/admin/pairs/{id}/recalculate") @Transactional public Map<String,Object> recalculatePair(@PathVariable long id,HttpServletRequest r){ admin(r); var pair=pairWork.recalculate(id); log.info("Pair {} recalculated by admin {}",id,uid(r)); return pair; }
+  @DeleteMapping("/admin/pairs/{id}") @Transactional public Map<String,Object> deletePair(@PathVariable long id,HttpServletRequest r){ admin(r); var result=pairWork.delete(id); log.info("Pair {} deleted by admin {}",id,uid(r)); return result; }
+
   /**
-   * Grades for a class period («пара»): the teacher computes, corrects, saves and publishes them (PairGrades; rules in
-   * README «Оценки за пару»). The student sees only the date and the grade of published pairs.
+   * «К доске»: the teacher calls a student, the student takes a timed two-item test on the classroom PC, the teacher
+   * grades it with the LLM's proposal (BoardTests; rules in README «К доске»). Not @Transactional: checks call Piston.
    */
-  @GetMapping("/admin/pairs/course") public Map<String,Object> pairCourse(@RequestParam(name="group",required=false) String group,HttpServletRequest r){ admin(r); return pairGrades.course(group); }
-  @PostMapping("/admin/pairs/preview") public Map<String,Object> previewPair(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return pairGrades.preview(b); }
-  @PostMapping("/admin/pairs") @Transactional public Map<String,Object> savePair(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairGrades.save(b,uid(r)); log.info("Pair {} of group {} ({}) saved by admin {}",pair.get("id"),pair.get("group"),pair.get("language"),uid(r)); return pair; }
-  @GetMapping("/admin/pairs") public Map<String,Object> pairs(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return pairGrades.list(group,language); }
-  @GetMapping("/admin/pairs/journal") public Map<String,Object> pairJournal(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return pairGrades.journal(group,language); }
-  @GetMapping("/admin/pairs/{id}") public Map<String,Object> pair(@PathVariable long id,HttpServletRequest r){ admin(r); return pairGrades.pair(id); }
-  @PatchMapping("/admin/pairs/{id}/grades/{userId}") @Transactional public Map<String,Object> setPairGrade(@PathVariable long id,@PathVariable long userId,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairGrades.setGrade(id,userId,b); log.info("Pair {}: grade of student {} set by admin {}",id,userId,uid(r)); return pair; }
-  @PostMapping("/admin/pairs/{id}/recalculate") @Transactional public Map<String,Object> recalculatePair(@PathVariable long id,HttpServletRequest r){ admin(r); var pair=pairGrades.recalculate(id); log.info("Pair {} recalculated by admin {}",id,uid(r)); return pair; }
-  @PostMapping("/admin/pairs/{id}/publish") @Transactional public Map<String,Object> publishPair(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var pair=pairGrades.publish(id,b); log.info("Pair {} {} by admin {}",id,Boolean.TRUE.equals(pair.get("published"))?"published":"unpublished",uid(r)); return pair; }
-  @DeleteMapping("/admin/pairs/{id}") @Transactional public Map<String,Object> deletePair(@PathVariable long id,HttpServletRequest r){ admin(r); var result=pairGrades.delete(id); log.info("Pair {} deleted by admin {}",id,uid(r)); return result; }
-  @GetMapping("/grades") public Map<String,Object> grades(@RequestParam(name="language",required=false) String language,HttpServletRequest r){ long u=student(r); return pairGrades.studentGrades(u,Language.parse(language)); }
+  @GetMapping("/board/current") public Map<String,Object> boardCurrent(HttpServletRequest r){ return boardTests.current(student(r)); }
+  @PostMapping("/board/tests/{id}/start") public Map<String,Object> startBoardTest(@PathVariable long id,HttpServletRequest r){ return boardTests.start(student(r),id); }
+  @PutMapping("/board/tests/{id}/answers") public Map<String,Object> saveBoardAnswers(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.saveAnswers(student(r),id,b); }
+  /** «Запустить» during the test: the same limits and answers as /run; the run is recorded in the test. */
+  @PostMapping("/board/tests/{id}/run") public ResponseEntity<?> runBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){
+    long u=student(r);
+    if(b==null||!(b.get("code") instanceof String source)||source.isBlank()) throw bad("EMPTY_SOURCE","Напиши код, чтобы его запустить");
+    if(source.length()>SOURCE_LIMIT) throw bad("SOURCE_TOO_LONG","Код длиннее "+SOURCE_LIMIT+" символов");
+    var lang=db.queryForList("select language from board_tests where id=? and user_id=?",String.class,id,u);
+    if(lang.isEmpty()) throw new NotFoundError("BOARD_TEST_NOT_FOUND","Тест не найден");
+    Language language=Language.of(lang.getFirst());
+    if(!codeRunner.status(language).available()) return ResponseEntity.status(503).body(Map.of("error","RUNNER_UNAVAILABLE","message","Запуск "+language.title+" сейчас недоступен","runner",runner(language)));
+    long retryAfter=runLimiter.retryAfterSeconds(u);
+    if(retryAfter>0) return ResponseEntity.status(429).header("Retry-After",String.valueOf(retryAfter)).body(Map.of("error","RUN_RATE_LIMITED","message","Слишком много запусков подряд. Подожди "+retryAfter+" с."));
+    return ResponseEntity.ok(boardTests.run(u,id,source));
+  }
+  @PostMapping("/board/tests/{id}/finish") public Map<String,Object> finishBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.finish(student(r),id,b); }
+  @GetMapping("/board/grades") public Map<String,Object> boardGrades(@RequestParam(name="language",required=false) String language,HttpServletRequest r){ return boardTests.studentGrades(student(r),Language.parse(language)); }
+  @GetMapping("/admin/board") public Map<String,Object> board(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return boardTests.overview(group,language); }
+  @PostMapping("/admin/board/call") public Map<String,Object> callToBoard(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.call(uid(r),b); }
+  @GetMapping("/admin/board/journal") public Map<String,Object> boardJournal(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return boardTests.journal(group,language); }
+  @GetMapping("/admin/board/tests/{id}") public Map<String,Object> boardTest(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.test(id); }
+  @PostMapping("/admin/board/tests/{id}/cancel") public Map<String,Object> cancelBoardTest(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.cancel(id); }
+  @PostMapping("/admin/board/tests/{id}/recall") public Map<String,Object> recallToBoard(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.recall(uid(r),id); }
+  @PostMapping("/admin/board/tests/{id}/extend") public Map<String,Object> extendBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.extend(id,b); }
+  @PostMapping("/admin/board/tests/{id}/finish") public Map<String,Object> finishBoardTestNow(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.finishNow(id); }
+  @PatchMapping("/admin/board/tests/{id}") public Map<String,Object> gradeBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var test=boardTests.grade(id,b); log.info("Board test {} graded by admin {}: {}",id,uid(r),test.get("finalGrade")); return test; }
+  @PostMapping("/admin/board/tests/{id}/assess") public Map<String,Object> assessBoardTest(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.reassess(id); }
+  @DeleteMapping("/admin/board/tests/{id}") public Map<String,Object> deleteBoardTest(@PathVariable long id,HttpServletRequest r){ admin(r); var result=boardTests.delete(id); log.info("Board test {} deleted by admin {}",id,uid(r)); return result; }
 
   /** Reasoning levels per purpose and LLM rate limits; options come from the model when the App Server can tell. */
   @GetMapping("/admin/llm/settings") public Map<String,Object> llmSettings(HttpServletRequest r){ admin(r); return settingsView(); }
@@ -716,7 +744,8 @@ public class ApiController {
     db.update("delete from skill_iterations where user_id=? or lesson_id in "+lessons,id,id);
     int lessonCount=db.update("delete from lessons where user_id=?",id);
     db.update("update submissions set revoked_by=null where revoked_by=?",id);
-    db.update("delete from pair_grades where user_id=?",id);
+    db.update("delete from pair_results where user_id=?",id);
+    db.update("delete from board_tests where user_id=?",id);
     for(String table:List.of("pending_redos","successful_task_credit","student_skills","diagnostic_answers","diagnostic_skill_results","student_languages","sessions"))
       db.update("delete from "+table+" where user_id=?",id);
     int llmCalls=db.update("update llm_calls set user_id=null where user_id=?",id);

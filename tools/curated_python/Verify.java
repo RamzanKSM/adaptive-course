@@ -15,7 +15,8 @@ import java.util.List;
  * Runs every task of the curated bank through the platform's own validation, exactly as a generated task is
  * validated before it is stored (ApiController.storeGeneratedTask): no platform internals in the statement, nothing
  * the topic has not taught yet, and TaskVerifier.verify on Piston — the reference passes, wrong solutions fail a check,
- * function tasks get their cases recorded from the reference. Writes the rows to import.
+ * function tasks get their cases recorded from the reference. Writes the rows to import, with the reference program
+ * (tasks.reference_code).
  *
  * Compile and run against the backend's classes:
  *   javac -cp "target/classes:$(cat cp.txt)" -d out Verify.java
@@ -50,6 +51,7 @@ public class Verify {
         row.put("key", key); row.put("language", language.name()); row.put("skill", skill); row.put("difficulty", t.path("difficulty").asInt());
         row.put("title", t.path("title").asText()); row.put("statement", t.path("statement").asText()); row.put("starter", t.path("starter").asText());
         row.put("testSource", verified.testSource()); row.put("testFileName", t.path("testFileName").asText()); row.put("goalJson", verified.goalJson());
+        row.put("reference", t.path("reference").asText()); // shown by the «Что выведет этот код?» item of the test at the board
         ArrayNode cases = row.putArray("cases");
         for (var c : verified.cases()) { ObjectNode n = cases.addObject(); n.put("ordinal", c.ordinal()); n.put("input", c.input()); n.put("expected", c.expected()); n.put("public", c.isPublic()); }
         System.out.println("✓ " + key);

@@ -23,7 +23,7 @@ thinks in Moscow time (UTC+3). Useful tables: `users` (role, group_name, session
 `lessons` (language, language_lesson_number, started_at, finished_at, finish_reason), `lesson_tasks`, `submissions`
 (passed, revoked_at, source_code), `successful_task_credit`, `student_skills`, `skill_iterations`,
 `diagnostic_skill_results`, `tasks` (source CURATED/LLM/SEED/EXERCISM, mode NORMAL/HARD, external_key, difficulty),
-`chat_messages`, `llm_calls`, `pairs`, `pair_grades`. «Запустить» runs are not stored in the database.
+`chat_messages`, `llm_calls`, `pairs`, `pair_results`, `board_tests`. «Запустить» runs are not stored in the database.
 
 Students' names are fine to show to the owner (he is their teacher); don't compute rankings or «who is behind» lists unless
 he asks for them.

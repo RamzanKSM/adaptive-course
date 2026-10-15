@@ -3,23 +3,38 @@
 Why things are the way they are. Newest first within each section. Mechanics live in `backend/README.md`; this file keeps
 the reasoning and the open questions so a new agent does not re-ask settled points.
 
-## Grades per pair («Оценки», since 2026-10-14)
-- A pair is a time window the teacher enters after the class (Moscow time) + group → «Высчитать оценки». Grades are
-  hidden until «Показать студентам»; the teacher announces them himself.
-- Points: tasks first solved inside the window; difficulty 1/2/3 points; hard-bank tasks ×10 (owner: hard must be worth
-  much more).
-- Grade relative to a weekly course median (per course, previous Moscow week, regular non-hard attended students; first
-  pairs use the pair's own median): 5 ≥ 135%, 4 ≥ 100%, 3 ≥ 60%, else 2. The norm adapts as topics get harder.
-- Students must never see the median, thresholds, points or percentages (owner fears they would collude to lower the
-  median); they see only date + grade.
-- «н» = no activity in the window. «-» = без оценки (excused, first day, the teacher's choice): no grade, no absence, not
-  in any median, invisible to the student. On 2026-10-14 the teacher's manual «н» for attendees were converted to «-»;
-  the two Python pairs of that day must not be recalculated (their pair medians included those students).
-- Grade 3 stays (the teacher simply does not copy 3s into the official journal).
-- Open (2026-10-14): (1) points by task cost — «normative minutes» (median time for the topic + step, rolling 4 weeks,
-  weekly) vs fixed block multipliers; data shows the 1/2/3 step barely reflects effort and later topics take 2–3× longer;
-  (2) whether activity (runs, active 5-minute slots, questions) should set a floor — undecided, runs are not stored yet;
-  (3) the seed «Чтение кода» tasks are fiddly (4–6 submissions per solve) — maybe rework.
+## Test at the board («вызов к доске», in design since 2026-10-15)
+The owner finds grades for work during the pair inappropriate. New model: students study at home on the platform; in
+class the teacher calls students one by one to a short individual test, projected for the group.
+- Two criteria: the pace (above the session line) is required for a 5; the test gives the grade.
+- Not every student every pair; the platform should suggest whom to call (longest not asked + randomness), the teacher
+  decides — fair rotation, no impression of bias.
+- One timer for everyone: 6 minutes for the whole test; at the end the editor locks and the code is submitted and checked.
+- A task that passes the checks counts fully. An unfinished one (e.g. a missing semicolon) gets a detailed LLM assessment:
+  a proposed grade and why (approach, logic, remaining errors; the history of attempts is used), shown only to the
+  teacher, never on the projector; the teacher reads it and announces the final grade. Student code is data, not
+  instructions (same protection as the «calculate» review); without the LLM the teacher grades alone.
+- After the time is up the teacher reviews the mistakes with the student (projector or not — to decide later).
+- Pace caps the grade: on track (or course closed) → up to 5; borderline → at most 4; behind → at most 3.
+- Grades come only from this test. The pair window stays as teacher-only analytics («Работа на паре», below).
+- Two devices (decided 2026-10-15): the teacher calls a student from the admin on his laptop; the called student logs in on
+  the classroom PC (projector) and only then can start the test; the call expires after 5 minutes. No «board device»
+  binding. The teacher has full control over calls (cancel, replace, call again, edit, delete) — the system must not
+  forbid him anything that is not destructive. After the test the student is logged out on that PC automatically.
+- Students see their board-test grades and the teacher's comment.
+- Content, framework (variant B, 2026-10-15): a code task from a recently passed topic + «what does this program print»
+  from an older one, the output typed exactly; hard-mode students get the same kind of test. Open: the finer content
+  (difficulty, which topics, more item kinds) — to be discussed separately.
+
+## Work in a pair («Работа на паре»)
+- A pair is a time window the teacher enters after the class (Moscow time) + group; teacher-only analytics of how the
+  students worked: attendance, tasks first solved in the window (difficulty 1/2/3 points, hard-bank tasks ×10), active
+  5-minute slots, submissions, questions to the assistant. Students see nothing of it.
+- «Темп относительно группы» = points vs a weekly course median (previous Moscow week, regular non-hard attended students;
+  first pairs use the pair's own median). The owner does not want students to know about the median.
+- 2026-10-14…15 a pair also carried grades (thresholds on that median, manual grades, «без оценки», publishing). The owner
+  found grading the work in class inappropriate; they were removed completely (V27 dropped the columns, the table is now
+  `pair_results`) — don't bring them back; grades come from the test at the board.
 
 ## Teacher analytics and the session (since 2026-10-13)
 - Tab «Прогресс»: growth per day (skills %, solved, XP — same formula as the student sees), a line per group member +
@@ -30,7 +45,7 @@ the reasoning and the open questions so a new agent does not re-ask settled poin
 - Students see their own pace and the red «Не успеваешь» together with the needed pace; teacher-only flags (stuck,
   gone, not started). The «≥ 5 topics below the group median» flag was dropped: it mostly reflected diagnostic results.
 - «Участвует в сессии» flag: off for the teacher, volunteers, test accounts — excluded from forecasts, group statistics
-  and grading.
+  and «Работа на паре»; no pace cap at the board.
 - Visibility (pedagogy agreed with the owner): projected «Показ группе» = anonymous group aggregates only, no counts of
   students behind; students never get rankings or group medians; no CSV export (not needed).
 
@@ -41,6 +56,7 @@ the reasoning and the open questions so a new agent does not re-ask settled poin
 - 2026-10-14: all text a student types or reads as program text/output is English ASCII (owner did not want to switch
   keyboard layouts): curated bank, hard bank, seeds and a rule in the LLM generator prompt. Old LLM tasks with Russian
   output (82): to be translated and re-verified (not deactivated); open: deactivate those that fail re-verification?
+- Open (2026-10-14): the seed «Чтение кода» tasks are fiddly (4–6 submissions per solve) — maybe rework.
 - 2026-10-13: the curated bank exists because the LLM generator and the verifier kept disagreeing and students waited;
   same wording, different values; checked by substituting values (Python AST / Java static fields via reflection).
 - 2026-10-13: for disputed checks prefer deterministic checks over an LLM review (collection choice via bytecode, a

@@ -3,7 +3,7 @@
 Adaptive Java/Python course for university groups (teacher = the repo owner, Ramzan; students are beginners). Production:
 https://rmzn.net. Talk to the owner in Russian; student-facing UI text is Russian, addressing the student as «ты».
 
-Read before changing behaviour: `backend/README.md` (rules of checking, bank, hard mode, analytics, grades — the source of
+Read before changing behaviour: `backend/README.md` (rules of checking, bank, hard mode, analytics, board tests — the source of
 truth), `docs/decisions.md` (what was agreed with the owner and why), `ARCHITECTURE.md`.
 
 ## Working rules (agreed with the owner)
@@ -23,11 +23,11 @@ truth), `docs/decisions.md` (what was agreed with the owner and why), `ARCHITECT
 ## Layout
 - `backend/` — Spring Boot 3, Java 21, SQLite (WAL) via JdbcTemplate, Flyway migrations in
   `src/main/resources/db/migration` (never edit an applied migration; add the next `V<n>__*.sql`). `ApiController.java` is
-  large and written in a compact style — keep new logic in its own class (e.g. `ProgressAnalytics`, `PairGrades`,
+  large and written in a compact style — keep new logic in its own class (e.g. `ProgressAnalytics`, `PairWork`,
   `IterationRule`) and match the surrounding style.
 - `frontend/` — React + TypeScript + Vite, no UI/chart libraries; own SVG charts (`charts.tsx`); CSS tokens in
   `src/styles.css`. Tabs: student lesson/progress (`App.tsx`), teacher «Студенты», «Прогресс» (`progress.tsx`),
-  «Оценки» (`grades.tsx`), LLM analytics/settings.
+  «Работа на паре» (`pairs.tsx`), «К доске» (`board.tsx`), LLM analytics/settings.
 - `tools/curated_python/` — the curated task bank (Python and Java despite the name), see the `task-bank` skill.
 - `tools/build_hard_bank.py` — the hard-mode bank (Exercism problem-specifications) → `backend/src/main/resources/hard-tasks/exercism.json`.
 - Root `*.md` specs: `adaptive_java_tutor_mvp_spec_v4.md`, `java_initial_diagnostic_mvp_v2.md`,
@@ -61,6 +61,9 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
   generator prompt.
 - Teacher analytics «Прогресс» and the session forecast; «Показ группе» shows only anonymous group aggregates; students
   see only their own data — never medians, rankings or other students.
-- Grades per pair («Оценки»): points for tasks first solved in the pair window, hard ×10, relative to a hidden weekly
-  course median (5 ≥ 135%, 4 ≥ 100%, 3 ≥ 60%, else 2; «н» absent; «-» = без оценки). Students see only date + grade,
-  never the median. The grading model is still being discussed (see `docs/decisions.md`).
+- Grades: individual tests at the board («К доске», `BoardTests`): the teacher calls a student from his laptop, the
+  student takes a 6-minute test on the classroom PC (projected): a code task from a recently passed topic + «what does
+  this program print» from an older one; checks + an LLM assessment and a suggested grade capped by the session pace
+  (borderline ≤ 4, behind ≤ 3) — visible only to the teacher, who sets the final grade and comment; the student sees
+  date, grade, comment. «Работа на паре» (`PairWork`) is teacher-only analytics of a pair window. The
+  test content is still being discussed (see `docs/decisions.md`).
