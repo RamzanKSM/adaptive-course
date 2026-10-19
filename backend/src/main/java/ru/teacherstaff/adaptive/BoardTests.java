@@ -74,7 +74,8 @@ class BoardTests implements DisposableBean {
     if (assessment != null && "DONE".equals(assessment.get("status")) && assessment.get("items") instanceof List<?> verdicts)
       for (var v : verdicts) if (v instanceof Map<?, ?> m && BoardAssessment.PARTLY.equals(m.get("verdict"))) partly.add(m.get("item"));
     var scores = new LinkedHashMap<String, Double>();
-    for (var r : results) scores.put((String) r.get("kind"), Boolean.TRUE.equals(r.get("passed")) ? 1.0 : partly.contains(r.get("kind")) ? 0.5 : 0.0);
+    // A test of the first version (2026-10-15) may hold an «output» item: no kind of today, no score.
+    for (var r : results) if (BoardItems.ALL.contains(r.get("kind"))) scores.put((String) r.get("kind"), Boolean.TRUE.equals(r.get("passed")) ? 1.0 : partly.contains(r.get("kind")) ? 0.5 : 0.0);
     return scores;
   }
   static int grade(List<Map<String, Object>> results, Map<?, ?> assessment) { return BoardItems.grade(BoardItems.percent(scores(results, assessment))); }
@@ -492,6 +493,7 @@ class BoardTests implements DisposableBean {
       var requestItems = new ArrayList<BoardAssessmentRequest.Item>();
       for (var item : items) {
         String kind = (String) item.get("kind");
+        if (!BoardItems.ALL.contains(kind)) continue;
         var result = results.stream().filter(r -> kind.equals(r.get("kind"))).findFirst().orElse(Map.of());
         boolean passed = Boolean.TRUE.equals(result.get("passed")); String output = (String) result.get("output"); int weight = BoardItems.kind(kind).weight();
         requestItems.add(switch (kind) {

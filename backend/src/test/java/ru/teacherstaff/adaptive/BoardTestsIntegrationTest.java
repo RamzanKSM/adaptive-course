@@ -446,6 +446,19 @@ class BoardTestsIntegrationTest {
     assertEquals("2", adminTest(admin, id3).path("ruleGrade").asText()); assertEquals(16.7, adminTest(admin, id3).path("score").path("percent").asDouble());
   }
 
+  @Test void aTestOfTheFirstVersionWithAnOutputItemStillOpens() throws Exception {
+    String admin = login("admin", "admin-pass");
+    createStudent("v1-a", "Вера", "B-11"); long a = studentId("v1-a");
+    long id = db.queryForObject("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,started_at,ends_at,finished_at,items_json,answers_json,runs_json,results_json,rule_grade,suggested_grade,assessment_json) "
+        + "values(?,'B-11','JAVA','FINISHED','2026-10-15T12:44:56Z','2026-10-15T12:49:56Z','2026-10-15T12:45:03Z','2026-10-15T12:51:03Z','2026-10-15T12:50:00Z',?,?,'[]',?,'3','3',?) returning id", Long.class, a,
+        "[{\"kind\":\"code\",\"title\":\"t\",\"statement\":\"s\",\"starterCode\":\"\"},{\"kind\":\"output\",\"program\":\"p\",\"expectedOutput\":\"x\"}]",
+        "{\"code\":\"c\",\"output\":\"x\"}", "[{\"kind\":\"code\",\"passed\":true},{\"kind\":\"output\",\"passed\":true}]",
+        "{\"status\":\"UNAVAILABLE\",\"summary\":null,\"items\":[],\"error\":\"off\"}");
+    var view = adminTest(admin, id);
+    assertEquals(1, view.path("score").path("items").size(), "the output item has no score today");
+    assertEquals(100, view.path("score").path("percent").asDouble());
+  }
+
   @Test void theWeightedGradeRule() {
     assertEquals(5, BoardItems.grade(90)); assertEquals(4, BoardItems.grade(89.9)); assertEquals(4, BoardItems.grade(75)); assertEquals(3, BoardItems.grade(50)); assertEquals(2, BoardItems.grade(49.9));
     var partlyCode = Map.<String, Object>of("status", "DONE", "items", List.of(Map.of("item", "code", "verdict", "частично верно"), Map.of("item", "fix", "verdict", "частично верно")));
