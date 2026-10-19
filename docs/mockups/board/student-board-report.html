@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разбор ответа у доски — макет</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--font-display:'Unbounded',system-ui,sans-serif;--font-body:'Manrope',system-ui,sans-serif;--font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+--bg:#f3f2ed;--surface:#fff;--surface-2:#f8f7f3;--ink:#15141a;--ink-2:#3a3944;--muted:#6b6a74;--line:#e5e3da;--line-strong:#d3d0c4;
+--brand:#5b3df5;--brand-2:#8b5cf6;--brand-ink:#3b23c4;--brand-soft:#eeeaff;
+--success:#10a067;--success-soft:#e2f6ec;--danger:#e5484d;--danger-soft:#fdeced;--danger-ink:#b42318;--warn-soft:#fff1d6;--warn-ink:#8a5300}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-body);background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;font-variant-ligatures:none}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+h1,h2,h3,p{margin:0}
+.mock{position:fixed;left:12px;bottom:12px;z-index:99;display:flex;gap:6px;align-items:center;padding:6px;border-radius:14px;background:#15141aee;color:#fff;font-size:13px;box-shadow:0 8px 24px #0005}
+.mock b{padding:0 8px;font-weight:800}
+.mock button{padding:6px 12px;border-radius:9px;color:#cfcbe8;font-weight:700}
+.mock button.on{background:var(--brand);color:#fff}
+.mock .note{max-width:460px;padding:0 8px;color:#bdbac8;font-weight:600}
+.mock.min .note,.mock.min [data-v]:not(.on){display:none}
+.view{display:none}.view.on{display:block}
+.top{display:flex;align-items:center;gap:18px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--surface)}
+.logo{font-family:var(--font-display);font-weight:700;font-size:17px}.logo i{font-style:normal;color:var(--brand)}
+.nav{display:flex;gap:4px;font-weight:700;font-size:14px;color:var(--muted)}
+.nav span{padding:6px 12px;border-radius:10px}.nav .on{background:var(--brand-soft);color:var(--brand-ink)}
+.page{max-width:1220px;margin:0 auto;padding:20px 24px 90px;display:grid;gap:14px}
+.eyebrow{font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+.display{font-family:var(--font-display);font-size:26px;letter-spacing:-.02em}
+.muted{color:var(--muted)}.small{font-size:13px}
+.card{padding:16px 18px;border-radius:20px;border:1px solid var(--line);background:var(--surface);box-shadow:0 1px 0 #15141a0a,0 2px 6px -2px #15141a10;min-width:0}
+.card-title{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:15px;font-weight:800}
+.chip-icon{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--brand-soft);color:var(--brand)}
+.grade{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;font-family:var(--font-display);font-size:15px;font-weight:700;flex:none}
+.g5{background:var(--success-soft);color:#0b6b44}.g4{background:var(--brand-soft);color:var(--brand-ink)}.g3{background:var(--warn-soft);color:var(--warn-ink)}.g2{background:var(--danger-soft);color:var(--danger-ink)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:800;white-space:nowrap}
+.tag.ok{background:var(--success-soft);color:#0b6b44}.tag.bad{background:var(--danger-soft);color:var(--danger-ink)}.tag.part{background:var(--warn-soft);color:var(--warn-ink)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:750;font-size:13px;white-space:nowrap}
+.btn.primary{border-color:var(--brand);background:var(--brand);color:#fff}
+pre{margin:0;padding:10px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);font:13.5px/1.55 var(--font-mono);white-space:pre-wrap;overflow:auto}
+code{font-family:var(--font-mono);font-size:.92em;padding:0 4px;border-radius:5px;background:var(--surface-2)}
+.lab{display:block;margin-bottom:4px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+
+/* student: grades list with reports */
+.grades{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.grades>li{border:1px solid var(--line);border-radius:16px;background:var(--surface-2)}
+.grow{display:flex;align-items:center;gap:12px;padding:10px 12px}
+.grow .date{min-width:70px;color:var(--muted);font-weight:700}
+.grow .comment{flex:1;color:var(--ink-2);font-weight:600}
+.grow .open{margin-left:auto}
+.report{display:grid;gap:10px;padding:0 12px 12px}
+.ritem{display:grid;gap:8px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface)}
+.rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rhead h3{font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px}
+.num{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--brand);color:#fff;font-family:var(--font-display);font-size:12px}
+.rhead .sp{flex:1}
+.stmt{font-size:14px;color:var(--ink-2)}
+.hint{padding:9px 12px;border-radius:12px;font-size:14px}
+.hint.bad{background:var(--danger-soft);color:var(--danger-ink)}
+.hint.warn{background:var(--warn-soft);color:var(--warn-ink)}
+.hint.ok{background:var(--success-soft);color:#0b6b44}
+.diff{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin-top:6px;font:13px/1.5 var(--font-mono)}
+.diff span{font-family:var(--font-body);font-weight:800;font-size:12px}
+.rnote{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:var(--brand-soft);color:var(--brand-ink);font-size:13.5px;font-weight:650}
+.hidden-report{padding:0 12px 12px}
+
+/* teacher: Итог column */
+.tgrid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+.facts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.fact{display:grid;padding:8px 10px;border-radius:12px;background:var(--surface-2)}
+.fact b{font-family:var(--font-display);font-size:17px;line-height:1.2}.fact small{font-size:11.5px;font-weight:650;color:var(--muted)}
+.form{display:grid;gap:10px;padding:14px;border-radius:16px;border:1px solid var(--brand);background:color-mix(in srgb,var(--brand-soft) 45%,var(--surface))}
+.picks{display:flex;gap:8px}
+.pick{flex:1;display:grid;justify-items:center;padding:6px 0;border-radius:12px;border:2px solid var(--line-strong);background:var(--surface);font-family:var(--font-display);font-size:22px;line-height:1.1}
+.pick small{font-family:var(--font-body);font-size:10px;font-weight:800;color:var(--muted)}
+.pick.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-ink)}
+textarea{width:100%;padding:9px 11px;border-radius:12px;border:1.5px solid var(--line-strong);font:inherit;resize:vertical;background:var(--surface)}
+.toggle{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:start;padding:10px 12px;border-radius:12px;background:var(--surface);border:1.5px solid var(--line-strong);cursor:pointer}
+.toggle.on{border-color:var(--brand)}
+.switch{position:relative;width:38px;height:22px;border-radius:99px;background:var(--line-strong);transition:background .15s;margin-top:1px}
+.switch::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle.on .switch{background:var(--brand)}.toggle.on .switch::after{left:19px}
+.toggle b{font-size:14px}.toggle small{grid-column:2;font-size:12.5px;color:var(--muted);font-weight:600}
+.preview{grid-column:2;margin-top:4px;font-size:12.5px;font-weight:700;color:var(--brand-ink);text-decoration:underline;justify-self:start}
+.item-mini{display:grid;gap:8px}
+.item-mini .row{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+</style>
+</head>
+<body>
+<div class="mock"><b>Разбор у доски</b>
+  <button data-v="S" class="on">Студент · «Мой прогресс»</button>
+  <button data-v="T">Преподаватель · «Итог»</button>
+  <span class="note" id="note"></span><button data-hide title="Скрыть панель макета">✕</button>
+</div>
+
+<!-- ───────── Student ───────── -->
+<section class="view on" data-view="S">
+  <header class="top"><span class="logo">rmzn<i>.</i>tutor</span><nav class="nav"><span>Урок</span><span class="on">Мой прогресс</span></nav></header>
+  <div class="page">
+    <div><p class="eyebrow">Java</p><h1 class="display">Мой прогресс</h1></div>
+    <div class="card">
+      <h2 class="card-title"><span class="chip-icon">★</span> Ответы у доски</h2>
+      <ul class="grades">
+        <li data-row="1">
+          <div class="grow"><span class="date">19 окт</span><span class="grade g4">4</span>
+            <span class="comment">Хорошо: собрала программу и нашла ошибку в цикле. В подсчёте гласных не учла заглавные буквы — повтори toLowerCase().</span>
+            <button class="btn open" data-toggle="1">Разбор ▾</button></div>
+          <div class="report" data-report="1">
+            <div class="ritem"><div class="rhead"><h3><span class="num">1</span> Собери программу <span class="muted" style="font-weight:600">· Чётные числа</span></h3><span class="sp"></span><span class="tag ok">✓ верно</span></div>
+              <p class="stmt">Напечатай все чётные числа от <code>2</code> до <code>n</code> через пробел.</p>
+              <div><span class="lab">Твоя программа</span><pre>int n = in.nextInt();
+for (int i = 1; i &lt;= n; i++) {
+    if (i % 2 == 0) {
+        System.out.print(i + " ");
+    }
+}</pre></div>
+              <p class="hint ok">Программа собрана верно, лишнюю строку ты не использовала.</p></div>
+
+            <div class="ritem"><div class="rhead"><h3><span class="num">2</span> Исправь ошибку <span class="muted" style="font-weight:600">· Сумма массива</span></h3><span class="sp"></span><span class="tag ok">✓ верно</span></div>
+              <p class="stmt">Программа должна напечатать сумму элементов <code>nums</code>. Для <code>{3, 5, 7}</code> ожидается <code>15</code>.</p>
+              <div><span class="lab">Твой исправленный код</span><pre>for (int i = 0; i &lt; nums.length; i++) {
+    sum += nums[i];
+}</pre></div>
+              <p class="hint ok">Все проверки пройдены.</p></div>
+
+            <div class="ritem"><div class="rhead"><h3><span class="num">3</span> Напиши код <span class="muted" style="font-weight:600">· Гласные в строке</span></h3><span class="sp"></span><span class="tag part">◐ частично верно</span></div>
+              <p class="stmt">Прочитай строку и напечатай, сколько в ней гласных <code>a e i o u</code> (большие и маленькие). <code>Hello World</code> → <code>3</code>.</p>
+              <div><span class="lab">Твой код</span><pre>String line = in.nextLine();
+int count = 0;
+for (char c : line.toCharArray()) {
+    if ("aeiou".indexOf(c) &gt;= 0) {
+        count++;
+    }
+}
+System.out.println(count);</pre></div>
+              <div class="hint warn"><b>Пример из условия пройден, скрытый тест 3 из 4 — нет.</b> Подумай, какие строки твоя программа считает неверно.</div></div>
+            <p class="small muted">Правильные решения здесь не показываются — эти задачи ещё могут встретиться тебе на уроках. Разбери их с преподавателем или в чате с помощником.</p>
+          </div>
+        </li>
+        <li data-row="2">
+          <div class="grow"><span class="date">12 окт</span><span class="grade g3">3</span>
+            <span class="comment">Цикл получился, а вывод собран неверно — потренируй форматирование строк.</span>
+            <button class="btn open" data-toggle="2">Разбор ▾</button></div>
+          <div class="report" data-report="2" hidden>
+            <div class="ritem"><div class="rhead"><h3><span class="num">1</span> Напиши код <span class="muted" style="font-weight:600">· Номера мест в ряду</span></h3><span class="sp"></span><span class="tag bad">✕ не верно</span></div>
+              <p class="stmt">Напиши цикл, который для каждого кресла от 1 до <code>seats</code> выводит строку <code>Seat N</code>.</p>
+              <div><span class="lab">Твой код</span><pre>for (int i = 1; i &lt; seats; i++) {
+    System.out.println("Seat " + i);
+}</pre></div>
+              <div class="hint bad"><b>Пример из условия не пройден.</b>
+                <div class="diff"><span>ожидалось</span><div>Seat 1↵Seat 2↵Seat 3↵Seat 4↵Seat 5</div><span>получилось</span><div>Seat 1↵Seat 2↵Seat 3↵Seat 4</div></div></div></div>
+          </div>
+        </li>
+        <li>
+          <div class="grow"><span class="date">5 окт</span><span class="grade g5">5</span>
+            <span class="comment">Отлично, всё верно и быстро.</span>
+            <span class="small muted" style="margin-left:auto">разбор не открыт</span></div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── Teacher ───────── -->
+<section class="view" data-view="T">
+  <header class="top"><span class="logo">rmzn<i>.</i>tutor</span><nav class="nav"><span>Студенты</span><span>Прогресс</span><span>Работа на паре</span><span class="on">К доске</span><span>Настройки</span></nav></header>
+  <div class="page" style="max-width:1100px">
+    <div class="tgrid">
+      <div class="card item-mini"><p class="eyebrow">Ответ у доски</p><h2 style="font-size:20px;font-weight:800">Алина Смирнова</h2>
+        <p class="small muted">…центральная колонка — без изменений: задания по вкладкам, ответ студента рядом с эталоном…</p>
+        <div class="row">1 · Собери программу <span class="tag ok" style="margin-left:auto">✓ верно</span></div>
+        <div class="row">2 · Исправь ошибку <span class="tag ok" style="margin-left:auto">✓ верно</span></div>
+        <div class="row">3 · Напиши код <span class="tag bad" style="margin-left:auto">✕ не верно</span></div></div>
+
+      <aside class="card" style="display:grid;gap:12px">
+        <h2 class="card-title" style="margin:0">Итог · Алина Смирнова</h2>
+        <div class="facts"><span class="fact"><b>в графике</b><small>темп к сессии · без ограничения</small></span><span class="fact"><b>75%</b><small>баллы 4,5 из 6</small></span>
+          <span class="fact"><b><span class="grade g3" style="width:24px;height:24px;font-size:12px">3</span></b><small>по проверкам (без LLM)</small></span><span class="fact"><b><span class="grade g4" style="width:24px;height:24px;font-size:12px">4</span></b><small>предложено (с учётом LLM и темпа)</small></span></div>
+        <div class="form">
+          <h3 class="card-title" style="margin:0">★ Итоговая оценка</h3>
+          <div class="picks"><button class="pick">2</button><button class="pick">3</button><button class="pick on">4<small>предложено</small></button><button class="pick">5</button></div>
+          <label><span class="lab">Комментарий для студента</span><textarea rows="4">Хорошо: собрала программу и нашла ошибку в цикле. В подсчёте гласных не учла заглавные буквы — повтори toLowerCase().</textarea></label>
+          <div class="toggle on" data-switch role="switch" aria-checked="true" tabindex="0"><span class="switch"></span><b>Показать студенту разбор</b>
+            <small>Студент увидит в «Моём прогрессе» по каждому заданию условие, свой код, «верно / частично / не верно» и подсказку как на уроке. Эталон, описание ошибки, баллы и пояснения LLM — нет.</small>
+            <button class="preview" type="button" data-v="S">Как это увидит студент</button></div>
+          <div style="display:flex;align-items:center;gap:10px"><button class="btn primary" style="padding:10px 18px;font-size:15px">Поставить оценку</button><span class="small muted">Пока не выставлена — студент ничего не видит.</span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<script>
+const NOTES = {
+  S: 'Студент, «Мой прогресс» → «Ответы у доски»: у каждой оценки кнопка «Разбор», если преподаватель его открыл. Внутри — задания: условие, свой код, итог и подсказка как на уроке (открытый пример — ожидалось/получилось, скрытый — только номер теста). Без эталона и баллов.',
+  T: 'Преподаватель, колонка «Итог»: под комментарием переключатель «Показать студенту разбор» (по умолчанию включён). Сохраняется вместе с оценкой и меняется в любой момент; выключен — студент видит только дату, оценку и комментарий.'
+}
+let v = 'S'
+function render() {
+  document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.dataset.view === v))
+  document.querySelectorAll('.mock [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v))
+  document.getElementById('note').textContent = NOTES[v]
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button,[data-switch]'); if (!t) return
+  if ('hide' in t.dataset) { const m = t.closest('.mock'); m.classList.toggle('min'); t.textContent = m.classList.contains('min') ? '⋯' : '✕'; return }
+  if (t.dataset.v) { v = t.dataset.v; render(); scrollTo(0, 0); return }
+  if (t.dataset.toggle) { const r = document.querySelector(`[data-report="${t.dataset.toggle}"]`); r.hidden = !r.hidden; t.textContent = r.hidden ? 'Разбор ▾' : 'Свернуть ▴'; return }
+  if ('switch' in t.dataset) { const on = !t.classList.contains('on'); t.classList.toggle('on', on); t.setAttribute('aria-checked', on); return }
+  if (t.classList.contains('pick')) t.parentNode.querySelectorAll('.pick').forEach(p => p.classList.toggle('on', p === t))
+})
+document.querySelector('[data-toggle="1"]').textContent = 'Свернуть ▴'
+render()
+</script>
+</body>
+</html>

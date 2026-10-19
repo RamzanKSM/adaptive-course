@@ -22,7 +22,12 @@ class the teacher calls students one by one to a short individual test, projecte
   the classroom PC (projector) and only then can start the test; the call expires after 5 minutes. No «board device»
   binding. The teacher has full control over calls (cancel, replace, call again, edit, delete) — the system must not
   forbid him anything that is not destructive. After the test the student is logged out on that PC automatically.
-- Students see their board-test grades and the teacher's comment.
+- Students see their board-test grades and the teacher's comment. Since 2026-10-19 also a report (owner: «почему бы не
+  показывать студентам отчёт») — per item the statement, their own answer, the verdict (with the LLM, as in the score)
+  and the lesson-style check message; never the reference, the bug, the solution order, the points, the suggested grade
+  or the LLM's explanations, because the board takes unsolved bank stories that may still come up in the student's
+  lessons and in classmates' tests. The teacher hides it per test with «Показать студенту разбор» (on by default); the
+  teacher's view itself stays as it is (owner: no big changes there).
 - Content (2026-10-15, v2): the teacher chooses the items at each call (any of the three; random choice was rejected):
   «Собери программу» (Parsons: order the lines of a bank solution, one extra line from a wrong solution; an older topic;
   2 min, weight 1), «Исправь ошибку» (a bank wrong solution with a 1–2 line bug; a recent topic; 2 min, weight 2),

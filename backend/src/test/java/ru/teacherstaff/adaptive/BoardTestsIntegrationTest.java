@@ -537,9 +537,27 @@ class BoardTestsIntegrationTest {
     assertEquals("4", read(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":\"4\"}")).path("finalGrade").asText());
     var grades = read(token, get("/api/board/grades").param("language", "JAVA"));
     assertEquals(Set.of("grades"), fields(grades)); assertEquals(1, grades.path("grades").size());
-    assertEquals(Set.of("date", "grade", "comment"), fields(grades.path("grades").get(0)));
+    assertEquals(Set.of("id", "date", "grade", "comment", "report"), fields(grades.path("grades").get(0)));
     assertEquals("2041-03-01", grades.path("grades").get(0).path("date").asText()); assertEquals("4", grades.path("grades").get(0).path("grade").asText());
     assertEquals("Молодец", grades.path("grades").get(0).path("comment").asText());
+    // The report (shown by default): per item the statement, the student's own answer, the verdict with the LLM, the check
+    // message — never the reference, the solution order, the bug, the LLM's explanations or the points.
+    var report = grades.path("grades").get(0).path("report");
+    assertEquals(3, report.size()); assertTrue(adminTest(admin, id).path("reportVisible").asBoolean(), "shown by default");
+    for (var entry : report) assertEquals(Set.of("kind", "title", "statement", "language", "answer", "verdict", "passed", "check", "extraUsed"), fields(entry));
+    assertEquals(List.of("parsons", "fix", "code"), List.of(report.get(0).path("kind").asText(), report.get(1).path("kind").asText(), report.get(2).path("kind").asText()));
+    assertEquals(List.of("верно", "верно", "частично верно"), List.of(report.get(0).path("verdict").asText(), report.get(1).path("verdict").asText(), report.get(2).path("verdict").asText()));
+    assertEquals(assembled(BLOCK), report.get(0).path("answer").asText()); assertFalse(report.get(0).path("extraUsed").asBoolean());
+    assertEquals("RIGHT", report.get(1).path("answer").asText()); assertTrue(report.get(1).path("extraUsed").isNull());
+    assertEquals("almost", report.get(2).path("answer").asText()); assertFalse(report.get(2).path("passed").asBoolean());
+    assertEquals("Неверный вывод программы", report.get(2).path("check").asText());
+    String shown = grades.toString();
+    assertFalse(shown.contains("b равно 3") || shown.contains("Строка 3: пропущена") || shown.contains("solution") || shown.contains("reference") || shown.contains("points"), shown);
+    expect(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"reportVisible\":\"yes\"}"), status().isBadRequest(), "INVALID_REPORT_VISIBLE");
+    var hidden = read(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"reportVisible\":false}"));
+    assertFalse(hidden.path("reportVisible").asBoolean()); assertEquals("4", hidden.path("finalGrade").asText(), "only the fields sent change");
+    var withoutReport = read(token, get("/api/board/grades").param("language", "JAVA")).path("grades").get(0);
+    assertTrue(withoutReport.path("report").isNull()); assertEquals("Молодец", withoutReport.path("comment").asText());
     assertEquals(0, read(token, get("/api/board/grades").param("language", "PYTHON")).path("grades").size());
     var cleared = read(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":null}"));
     assertTrue(cleared.path("finalGrade").isNull()); assertEquals("Молодец", cleared.path("comment").asText(), "only the fields sent change");

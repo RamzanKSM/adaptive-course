@@ -10,7 +10,7 @@ import { NO_GROUP, useGroupFilter } from './groups'
 import { dayNumber, plural, shortDay, StatusChip } from './session'
 import type {
   BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardCheck, BoardCurrent, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
-  BoardMember, BoardOverview, BoardRun, BoardScore, BoardStatus, BoardStudentGrade, BoardStudentItem, BoardStudentTest, BoardTestSummary,
+  BoardMember, BoardOverview, BoardReportItem, BoardRun, BoardScore, BoardStatus, BoardStudentGrade, BoardStudentItem, BoardStudentTest, BoardTestSummary,
   ConsoleRun, CourseLanguage, Id,
 } from './types'
 
@@ -449,11 +449,41 @@ export function StudentBoardGrades({ language }: { language: CourseLanguage }) {
   if (!grades.length) return null
   return <section className="card student-grades enter" aria-label="Ответы у доски">
     <h2 className="card-title"><span className="chip-icon"><Icon name="award" size={16} /></span> Ответы у доски</h2>
-    <ul className="board-grades">{grades.map((g, i) => <li key={`${g.date}-${i}`}>
+    <ul className="board-grades">{grades.map((g, i) => <StudentGrade key={g.id ?? `${g.date}-${i}`} grade={g} open={i === 0} />)}</ul>
+  </section>
+}
+
+const VERDICT_TONE: Record<BoardReportItem['verdict'], string> = { 'верно': 'ok', 'частично верно': 'warn', 'неверно': 'bad' }
+const VERDICT_TEXT: Record<BoardReportItem['verdict'], string> = { 'верно': 'верно', 'частично верно': 'частично верно', 'неверно': 'не верно' }
+
+/** One graded test: date, grade, comment and, when the teacher shows it, the report by item (the latest one opened). */
+function StudentGrade({ grade: g, open: initiallyOpen }: { grade: BoardStudentGrade; open: boolean }) {
+  const report = g.report?.length ? g.report : null
+  const [open, setOpen] = useState(initiallyOpen && !!report)
+  const id = `board-report-${g.id}`
+  return <li className="board-grade-row">
+    <div className="board-grade-head">
       <span className="muted">{shortDay(dayNumber(g.date))}</span><GradeChip grade={g.grade} />
       {g.comment && <span className="board-grade-comment">{g.comment}</span>}
-    </li>)}</ul>
-  </section>
+      {report && <button type="button" className="ghost small-button board-report-button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(o => !o)}>
+        {open ? 'Свернуть' : 'Разбор'} <Icon name={open ? 'back' : 'arrow'} size={14} /></button>}
+    </div>
+    {report && open && <div className="board-report" id={id}>
+      {report.map((item, i) => <div key={item.kind} className="board-report-item">
+        <div className="board-report-item-head">
+          <h3><span className="board-num small">{i + 1}</span> {KIND[item.kind]?.title ?? item.kind}{item.title && <span className="muted"> · {item.title}</span>}</h3>
+          <span className={`check-tag ${VERDICT_TONE[item.verdict] ?? ''}`}><Icon name={item.verdict === 'верно' ? 'check' : 'x'} size={14} />{VERDICT_TEXT[item.verdict] ?? item.verdict}</span>
+        </div>
+        {item.statement && <details className="board-report-statement"><summary>Условие задачи</summary><Markdown>{item.statement}</Markdown></details>}
+        <div className="board-code"><small>{item.kind === 'parsons' ? 'Твоя программа' : item.kind === 'fix' ? 'Твой исправленный код' : 'Твой код'}</small>
+          <pre>{item.answer ?? (item.kind === 'parsons' ? '(программа не собрана)' : '(пусто)')}</pre></div>
+        {item.extraUsed && <p className="board-report-hint bad">В программе есть лишняя строка — та, которую не нужно было использовать.</p>}
+        {item.passed ? <p className="board-report-hint ok">Все проверки пройдены.</p>
+          : item.check && <div className="board-code"><small>Проверка</small><pre>{item.check}</pre></div>}
+      </div>)}
+      <p className="muted small">Правильные решения здесь не показываются — эти задачи ещё могут встретиться тебе на уроках. Разбери их с преподавателем или в чате с помощником.</p>
+    </div>}
+  </li>
 }
 
 // ═════════ Teacher ═════════
@@ -745,7 +775,7 @@ function BoardTestItems({ test }: { test: BoardAdminTest }) {
 }
 
 /** The right column of an opened test: the facts, the LLM assessment and the final grade. */
-function BoardSummary({ test, assess, saveGrade }: { test: BoardAdminTest; assess: () => Promise<void>; saveGrade: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
+function BoardSummary({ test, assess, saveGrade }: { test: BoardAdminTest; assess: () => Promise<void>; saveGrade: (grade: BoardGrade | null, comment: string, reportVisible: boolean) => Promise<boolean> }) {
   const assessmentStatus = test.assessment?.status ?? test.assessmentStatus
   const score = test.score
   const ran = test.status === 'STARTED' || test.status === 'FINISHED'
@@ -762,7 +792,7 @@ function BoardSummary({ test, assess, saveGrade }: { test: BoardAdminTest; asses
     </>}
     {test.status === 'FINISHED' ? <>
       <Assessment assessment={test.assessment} status={assessmentStatus} finished onAssess={assess} />
-      <GradeForm key={`${test.id}:${test.gradedAt ?? ''}:${test.finalGrade ?? ''}`} test={test} onSave={saveGrade} />
+      <GradeForm key={`${test.id}:${test.gradedAt ?? ''}:${test.finalGrade ?? ''}:${test.reportVisible !== false}`} test={test} onSave={saveGrade} />
     </> : <p className="muted small">{test.status === 'STARTED' ? 'Тест идёт — оценка LLM и итоговая оценка появятся, когда студент сдаст тест.' : SUMMARY_HINT}</p>}
   </aside>
 }
@@ -893,9 +923,9 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, onClose, register, 
     const value = await request(() => post<BoardAdminTest>(`/admin/board/tests/${test.id}/assess`))
     if (value) setTest(value)
   }
-  async function saveGrade(finalGrade: BoardGrade | null, comment: string) {
+  async function saveGrade(finalGrade: BoardGrade | null, comment: string, reportVisible: boolean) {
     if (!test) return false
-    const value = await request(() => patch<BoardAdminTest>(`/admin/board/tests/${test.id}`, { finalGrade, comment: comment.trim() || null }))
+    const value = await request(() => patch<BoardAdminTest>(`/admin/board/tests/${test.id}`, { finalGrade, comment: comment.trim() || null, reportVisible }))
     if (!value) return false
     setTest(value); onSaved()
     toast({ tone: 'info', icon: 'award', title: finalGrade ? `Оценка ${finalGrade} сохранена` : 'Оценка снята', text: `${value.displayName} · студент увидит её в «Моём прогрессе»` })
@@ -934,18 +964,19 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, onClose, register, 
 }
 
 
-function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
+function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: BoardGrade | null, comment: string, reportVisible: boolean) => Promise<boolean> }) {
   const [grade, setGrade] = useState<BoardGrade | null>(test.finalGrade)
   // The LLM's draft for the student fills the comment until the teacher grades for the first time; later it can be inserted.
   const draft = test.assessment?.status === 'DONE' ? test.assessment.studentComment?.trim() ?? '' : ''
   const fresh = !test.finalGrade && !test.comment
   const [comment, setComment] = useState(test.comment ?? (fresh ? draft : ''))
   useEffect(() => { if (fresh && draft) setComment(current => current.trim() ? current : draft) }, [fresh, draft])
+  const [report, setReport] = useState(test.reportVisible !== false)
   const [saving, setSaving] = useState(false)
-  const changed = grade !== test.finalGrade || comment.trim() !== (test.comment ?? '').trim()
+  const changed = grade !== test.finalGrade || comment.trim() !== (test.comment ?? '').trim() || report !== (test.reportVisible !== false)
   async function submit(e: FormEvent) {
     e.preventDefault(); setSaving(true)
-    await onSave(grade, comment)
+    await onSave(grade, comment, report)
     setSaving(false)
   }
   return <form className="board-grade-form" onSubmit={submit}>
@@ -958,6 +989,8 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
     {draft && comment.trim() === draft && comment.trim() !== (test.comment ?? '').trim()
       ? <p className="muted small board-comment-draft"><Icon name="sparkle" size={14} /> Черновик от нейросети — поправь, если нужно. Студент увидит комментарий только после сохранения.</p>
       : draft && comment.trim() !== draft && <button type="button" className="ghost small-button board-comment-draft" onClick={() => setComment(draft)}><Icon name="sparkle" size={14} /> Вставить черновик нейросети</button>}
+    <label className="board-report-toggle"><input type="checkbox" checked={report} onChange={e => setReport(e.target.checked)} />
+      <span><b>Показать студенту разбор</b><small>В «Моём прогрессе»: по каждому заданию условие, его код, «верно / частично / не верно» и сообщение проверки. Без эталона, описания ошибки, баллов и пояснений LLM.</small></span></label>
     <div className="pair-form-actions">
       <button className="primary" disabled={saving || !changed}>{saving ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : test.finalGrade ? 'Сохранить изменения' : 'Поставить оценку'}</button>
       <span className="muted small">{test.finalGrade ? `Сейчас: ${test.finalGrade}${test.gradedAt ? ` · ${dayTime(test.gradedAt)}` : ''}` : 'Оценка пока не выставлена — студент ничего не видит.'}</span>

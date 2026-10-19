@@ -1180,8 +1180,8 @@ th.text .sort { justify-content: flex-start; }
 
 /* ───────── Student: grades from the board ───────── */
 .student-grades { display: grid; gap: 12px; margin: 14px 0 4px; }
-.student-grades ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.student-grades li { display: inline-flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; font-weight: 700; }
+.student-grades > ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.student-grades > ul > li { display: inline-flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; font-weight: 700; }
 
 /* ───────── Admin tabs: six ───────── */
 .segmented.six { grid-template-columns: repeat(6, 1fr); }
@@ -1498,6 +1498,26 @@ button.ghost.board-run-button { padding: 9px 16px; border: 2px solid var(--brand
 .board-grades li { flex-wrap: wrap; }
 .board-grade-comment { flex-basis: 100%; padding: 0 6px 4px 0; color: var(--ink-2); font-weight: 600; white-space: pre-line; }
 .student-grades .board-grades { flex-direction: column; align-items: stretch; }
-.student-grades .board-grades li { display: flex; align-self: stretch; padding: 8px 12px; }
-.board-statement-small > summary::before, .board-runs > summary::before, .board-run > summary::before { content: '▸'; color: var(--muted); transition: transform var(--fast); }
-.board-statement-small[open] > summary::before, .board-runs[open] > summary::before, .board-run[open] > summary::before { transform: rotate(90deg); }
+.student-grades .board-grades li.board-grade-row { display: grid; gap: 10px; align-self: stretch; padding: 8px 12px; }
+.board-grade-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.board-grade-head .board-grade-comment { flex: 1 1 260px; padding: 0; }
+.board-report-button { margin: 0 0 0 auto; }
+.board-report { display: grid; gap: 10px; font-weight: 500; font-size: 14px; }
+.board-report-item { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.board-report-item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.board-report-item h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 800; }
+.board-report-statement > summary { cursor: pointer; font-weight: 750; font-size: 13.5px; }
+.board-report-statement .markdown { margin-top: 6px; font-size: 14px; color: var(--ink-2); }
+.board-report-statement .markdown :is(h1, h2, h3, h4) { margin: 10px 0 4px; font-family: var(--font-body); font-size: 14.5px; font-weight: 800; letter-spacing: 0; }
+.board-report-statement .markdown p { margin: 0 0 6px; }
+.board-report pre { margin-top: 4px; white-space: pre-wrap; max-height: 22rem; }
+.board-report-hint { margin: 0; padding: 8px 12px; border-radius: 10px; font-weight: 700; }
+.board-report-hint.ok { background: var(--success-soft); color: #0b6b44; }
+.board-report-hint.bad { background: var(--danger-soft); color: var(--danger-ink); }
+.board-report-toggle { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: var(--surface); cursor: pointer; }
+.board-report-toggle input { width: 18px; height: 18px; margin: 2px 0 0; padding: 0; accent-color: var(--brand); }
+.board-report-toggle span { display: grid; gap: 2px; }
+.board-report-toggle b { font-size: 14px; }
+.board-report-toggle small { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.board-statement-small > summary::before, .board-report-statement > summary::before, .board-runs > summary::before, .board-run > summary::before { content: '▸'; color: var(--muted); transition: transform var(--fast); }
+.board-statement-small[open] > summary::before, .board-report-statement[open] > summary::before, .board-runs[open] > summary::before, .board-run[open] > summary::before { transform: rotate(90deg); }

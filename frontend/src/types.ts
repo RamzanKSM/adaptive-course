@@ -158,7 +158,12 @@ export interface BoardStudentTest {
 /** GET /board/current: the student's active call or their running test. */
 export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null } | null; test: BoardStudentTest | null }
 /** The student's own board grades in «Мой прогресс»: Moscow date, the teacher's final grade and comment. */
-export interface BoardStudentGrade { date: string; grade: BoardGrade; comment: string | null }
+/** One item of the report a student sees for a graded test (when the teacher shows it): never the reference or the scores. */
+export interface BoardReportItem {
+  kind: BoardItemKind; title: string | null; statement: string | null; language: CourseLanguage; answer: string | null
+  verdict: 'верно' | 'частично верно' | 'неверно'; passed: boolean; check: string | null; extraUsed: boolean | null
+}
+export interface BoardStudentGrade { id: Id; date: string; grade: BoardGrade; comment: string | null; report: BoardReportItem[] | null }
 export type AssessmentStatus = 'PENDING' | 'DONE' | 'UNAVAILABLE'
 export interface BoardTestSummary {
   id: Id; userId: Id; displayName: string; status: BoardStatus
@@ -198,6 +203,8 @@ export interface BoardAdminTest extends BoardTestSummary {
   runs: BoardRun[] | null; score?: BoardScore | null
   paceStatus: SessionStatus | null; paceCap: number | null; ruleGrade: BoardGrade | null
   assessment: BoardAssessment | null; comment: string | null; gradedAt?: string | null
+  /** «Показать студенту разбор»; true by default. */
+  reportVisible?: boolean
 }
 export interface BoardJournal {
   tests: { id: Id; userId: Id; displayName: string; calledAt: string; status: BoardStatus; finalGrade: BoardGrade | null; suggestedGrade: BoardGrade | null }[]

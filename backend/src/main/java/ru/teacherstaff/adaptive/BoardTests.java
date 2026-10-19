@@ -199,10 +199,47 @@ class BoardTests implements DisposableBean {
     return obj("finished", true);
   }
 
-  /** GET /api/board/grades: the student's graded tests — the date (Moscow), the final grade and the comment, nothing else. */
+  /**
+   * GET /api/board/grades: the student's graded tests — the date (Moscow), the final grade, the comment and, when the
+   * teacher shows it, the report (studentReport).
+   */
   Map<String, Object> studentGrades(long user, Language lang) {
-    return obj("grades", db.query("select coalesce(started_at,called_at),final_grade,comment from board_tests where user_id=? and language=? and final_grade is not null order by called_at desc,id desc",
-        (rs, i) -> obj("date", Instant.parse(rs.getString(1)).atZone(PairWork.MOSCOW).toLocalDate().toString(), "grade", rs.getString(2), "comment", rs.getString(3)), user, lang.name()));
+    return obj("grades", db.queryForList("select * from board_tests where user_id=? and language=? and final_grade is not null order by called_at desc,id desc", user, lang.name()).stream()
+        .map(t -> { t.put("assessment", t.get("assessment_json") == null ? null : read((String) t.get("assessment_json"), new TypeReference<LinkedHashMap<String, Object>>() {}));
+          return obj("id", t.get("id"), "date", instant(firstNonNull(t.get("started_at"), t.get("called_at"))).atZone(PairWork.MOSCOW).toLocalDate().toString(), "grade", t.get("final_grade"),
+              "comment", t.get("comment"), "report", visible(t) ? studentReport(t) : null); }).toList());
+  }
+  private static Object firstNonNull(Object a, Object b) { return a != null ? a : b; }
+  private static boolean visible(Map<String, Object> t) { return !(t.get("report_visible") instanceof Number n) || n.intValue() != 0; }
+
+  /**
+   * What the student may see of his test: per item (of today's kinds) the title, the statement, his own answer (the
+   * assembled program for parsons), the verdict as in the score (passed or the LLM's «верно» → «верно», «частично верно»,
+   * else «не верно»), the check message as a lesson shows it (a public example — expected/got, a hidden case — only its
+   * number) and whether the extra line was used. Never the reference, the order of the solution, the bug, the LLM's
+   * explanations or the points: the bank stories may still come up in his lessons and in his classmates' tests.
+   */
+  private List<Map<String, Object>> studentReport(Map<String, Object> t) {
+    if (t.get("results_json") == null || t.get("items_json") == null) return List.of();
+    var results = results(t); var scores = scores(results, (Map<?, ?>) t.get("assessment")); var answers = answers(t);
+    var report = new ArrayList<Map<String, Object>>();
+    for (var item : items(t)) {
+      String kind = (String) item.get("kind");
+      if (!BoardItems.ALL.contains(kind)) continue;
+      var result = results.stream().filter(r -> kind.equals(r.get("kind"))).findFirst().orElse(Map.of());
+      double score = scores.getOrDefault(kind, 0.0);
+      Object answer = answers.get(kind); String code; Boolean extraUsed = null;
+      if ("parsons".equals(kind)) {
+        var texts = new HashMap<Object, String>(); for (var line : lineList(item)) texts.put(line.get("id"), (String) line.get("text"));
+        var placed = answer instanceof List<?> ids ? ids.stream().filter(texts::containsKey).toList() : List.of();
+        code = placed.isEmpty() ? null : BoardItems.assemble((String) item.get("before"), placed.stream().map(texts::get).toList(), (String) item.get("after"));
+        if (item.get("extraLineId") != null) extraUsed = placed.contains(item.get("extraLineId"));
+      } else code = answer instanceof String text && !text.isBlank() ? text : null;
+      report.add(obj("kind", kind, "title", item.get("title"), "statement", item.get("statement"), "language", item.get("language"), "answer", code,
+          "verdict", score >= 1 ? BoardAssessment.RIGHT : score > 0 ? BoardAssessment.PARTLY : "неверно", "passed", Boolean.TRUE.equals(result.get("passed")),
+          "check", result.get("output"), "extraUsed", extraUsed));
+    }
+    return report;
   }
 
   private void requireRunning(Map<String, Object> t, Instant now) {
@@ -626,7 +663,11 @@ class BoardTests implements DisposableBean {
   /** PATCH /api/admin/board/tests/{id}: the teacher's final grade and comment, only the fields present; any time. */
   Map<String, Object> grade(long id, Map<String, Object> body) {
     load(id);
-    if (body == null || !body.containsKey("finalGrade") && !body.containsKey("comment")) throw new ApiError("INVALID_GRADE", "Нужны finalGrade и/или comment");
+    if (body == null || !body.containsKey("finalGrade") && !body.containsKey("comment") && !body.containsKey("reportVisible")) throw new ApiError("INVALID_GRADE", "Нужны finalGrade, comment и/или reportVisible");
+    if (body.containsKey("reportVisible")) {
+      if (!(body.get("reportVisible") instanceof Boolean shown)) throw new ApiError("INVALID_REPORT_VISIBLE", "reportVisible — true или false");
+      db.update("update board_tests set report_visible=? where id=?", shown ? 1 : 0, id);
+    }
     if (body.containsKey("finalGrade")) {
       Object value = body.get("finalGrade"); String grade = value == null ? null : value.toString().strip();
       if (grade != null && !GRADES.contains(grade)) throw new ApiError("INVALID_GRADE", "Оценка — 2, 3, 4 или 5");
@@ -696,7 +737,7 @@ class BoardTests implements DisposableBean {
     view.put("results", t.get("results_json") == null ? null : results(t)); view.put("score", t.get("results_json") == null ? null : score(results(t), (Map<?, ?>) t.get("assessment")));
     view.put("runs", runs(t));
     view.put("paceStatus", pace); view.put("paceCap", cap(pace)); view.put("ruleGrade", t.get("rule_grade")); view.put("assessment", t.get("assessment"));
-    view.put("comment", t.get("comment")); view.put("gradedAt", t.get("graded_at"));
+    view.put("comment", t.get("comment")); view.put("gradedAt", t.get("graded_at")); view.put("reportVisible", visible(t));
     return view;
   }
 
