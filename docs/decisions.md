@@ -30,8 +30,16 @@ class the teacher calls students one by one to a short individual test, projecte
   everyone. «Что выведет этот код?» was dropped: it tested arithmetic and character-exact typing, not knowledge of code.
   Hard-mode students get the same kind of test.
 - Grade by points, not by the number of items (owner: items of different difficulty must not count the same): an item
-  counts fully when it passes the checks, half when the LLM finds it partly right; 5 ≥ 90%, 4 ≥ 75%, 3 ≥ 50% of the
+  counts fully when it passes the checks or the LLM finds it right, half when the LLM finds it partly right; 5 ≥ 90%, 4 ≥ 75%, 3 ≥ 50% of the
   chosen set's maximum, else 2; then the pace cap. The LLM also suggests 1–2 questions for an oral follow-up (teacher only).
+- The LLM is lenient to the format of the console output (owner, 2026-10-19: at the board students write fast and the
+  check compares the output strictly): a program that prints the right values and fails only because of spaces, line
+  breaks, case, punctuation, labels or separators is «верно», and an LLM «верно» of a failed item now counts fully (before,
+  only «частично верно» gave anything — half). The rule grade stays by the checks alone; the teacher sets the final grade.
+- Layout (owner chose variant A of the mockups `docs/mockups/board/`, 2026-10-19): the student's screen fills the
+  viewport — one-line header with the tabs and the timer, the statement on the left, the editor full height on the
+  right with the console under it, the Parsons pool next to the program; the teacher's tab is a full-width three-column
+  console: students to call, the test with items as tabs, a sticky «Итог» with the facts, the LLM and the grade form.
 - The LLM drafts the comment for the student (owner, 2026-10-15): it fills the comment field until the teacher grades;
   the teacher edits it; the student sees only what the teacher saved.
 - Open: showing the review on the projector — the classroom PC logs the student out right after the test, so a

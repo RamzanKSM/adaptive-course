@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>К доске — макеты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--font-display:'Unbounded',system-ui,sans-serif;--font-body:'Manrope',system-ui,sans-serif;--font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+--bg:#f3f2ed;--surface:#fff;--surface-2:#f8f7f3;--ink:#15141a;--ink-2:#3a3944;--muted:#6b6a74;--line:#e5e3da;--line-strong:#d3d0c4;
+--brand:#5b3df5;--brand-2:#8b5cf6;--brand-ink:#3b23c4;--brand-soft:#eeeaff;--amber:#ffb224;
+--success:#10a067;--success-soft:#e2f6ec;--danger:#e5484d;--danger-soft:#fdeced;--danger-ink:#b42318;--warn-soft:#fff1d6;--warn-ink:#8a5300}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-body);background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;font-variant-ligatures:none}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+h1,h2,h3{margin:0}
+.view{display:none}.view.on{display:block}
+
+.mock{position:fixed;left:12px;bottom:12px;z-index:99;display:flex;gap:6px;align-items:center;padding:6px;border-radius:14px;background:#15141aee;color:#fff;font-size:13px;box-shadow:0 8px 24px #0005}
+.mock b{padding:0 8px;font-weight:800}
+.mock button{padding:6px 12px;border-radius:9px;color:#cfcbe8;font-weight:700}
+.mock button.on{background:var(--brand);color:#fff}
+.mock .note{max-width:440px;padding:0 8px;color:#bdbac8;font-weight:600}
+.mock.min .note,.mock.min [data-v]:not(.on){display:none}
+
+/* app chrome */
+.top{display:flex;align-items:center;gap:18px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--surface)}
+.logo{font-family:var(--font-display);font-weight:700;font-size:17px}
+.logo i{font-style:normal;color:var(--brand)}
+.nav{display:flex;gap:4px;font-weight:700;font-size:14px;color:var(--muted)}
+.nav span{padding:6px 12px;border-radius:10px}.nav .on{background:var(--brand-soft);color:var(--brand-ink)}
+.eyebrow{margin:0;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+.display{font-family:var(--font-display);font-size:26px;letter-spacing:-.02em}
+.muted{color:var(--muted)}.small{font-size:13px}
+.card{padding:16px 18px;border-radius:20px;border:1px solid var(--line);background:var(--surface);box-shadow:0 1px 0 #15141a0a,0 2px 6px -2px #15141a10;min-width:0}
+.card-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px;font-size:15px;font-weight:800}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:5px 11px;border-radius:10px;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:700;font-size:13px}
+.chip.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-ink)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:750;font-size:13px;white-space:nowrap}
+.btn.primary{border-color:var(--brand);background:var(--brand);color:#fff}
+.btn.danger{color:var(--danger-ink)}
+.btn.big{padding:10px 18px;font-size:15px;border-radius:12px}
+.status{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:800;background:var(--surface-2);color:var(--muted)}
+.status i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.status.ok{background:var(--success-soft);color:#0b6b44}.status.done{background:var(--brand-soft);color:var(--brand-ink)}.status.warn{background:var(--warn-soft);color:var(--warn-ink)}
+.grade{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;font-family:var(--font-display);font-size:13px;font-weight:700}
+.g5{background:var(--success-soft);color:#0b6b44}.g4{background:var(--brand-soft);color:var(--brand-ink)}.g3{background:var(--warn-soft);color:var(--warn-ink)}.g2{background:var(--danger-soft);color:var(--danger-ink)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:800}
+.tag.ok{background:var(--success-soft);color:#0b6b44}.tag.bad{background:var(--danger-soft);color:var(--danger-ink)}.tag.part{background:var(--warn-soft);color:var(--warn-ink)}
+.presence{width:9px;height:9px;border-radius:50%;background:var(--line-strong);flex:none}.presence.on{background:var(--success);box-shadow:0 0 0 3px #10a06722}
+.countdown{font-family:var(--font-display);font-weight:700;font-variant-numeric:tabular-nums}
+pre{margin:0;padding:10px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);font:13.5px/1.55 var(--font-mono);white-space:pre-wrap;overflow:auto}
+pre mark{background:var(--danger-soft);color:var(--danger-ink);font-weight:700}
+.lab{display:block;margin-bottom:4px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.facts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.fact{display:grid;padding:8px 10px;border-radius:12px;background:var(--surface-2)}
+.fact b{font-family:var(--font-display);font-size:17px;line-height:1.2}.fact small{font-size:11.5px;font-weight:650;color:var(--muted)}
+.picks{display:flex;gap:8px}
+.pick{flex:1;display:grid;justify-items:center;padding:6px 0;border-radius:12px;border:2px solid var(--line-strong);background:var(--surface);font-family:var(--font-display);font-size:22px;line-height:1.1}
+.pick small{font-family:var(--font-body);font-size:10px;font-weight:800;color:var(--muted)}
+.pick.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-ink)}
+textarea{width:100%;padding:9px 11px;border-radius:12px;border:1.5px solid var(--line-strong);font:inherit;resize:vertical;background:var(--surface)}
+.llm{padding:9px 12px;border-radius:12px;background:var(--brand-soft);font-size:14px}
+.llm b{color:var(--brand-ink)}
+.llm.part b{color:var(--warn-ink)}
+.qs{margin:0;padding-left:20px;font-size:14px}
+.draft{font-size:12.5px;font-weight:700;color:var(--brand-ink)}
+.stmt{padding:10px 12px;border-radius:12px;border:1px dashed var(--line-strong);font-size:14px}
+.stmt code,.small code{font-family:var(--font-mono);font-size:.92em;padding:0 4px;border-radius:5px;background:var(--surface-2)}
+.itabs{display:flex;gap:6px;flex-wrap:wrap}
+.itab{display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 6px;border-radius:12px;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:800;font-size:13.5px}
+.itab .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--surface-2);font-family:var(--font-display);font-size:11px}
+.itab.on{border-color:var(--brand);background:var(--brand-soft)}.itab.on .n{background:var(--brand);color:#fff}
+.members{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.members li{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:12px;border:1px solid var(--line)}
+.members li.sug{border-color:var(--brand);background:var(--brand-soft)}
+.members .m{flex:1;min-width:0;display:grid;line-height:1.25}
+.members .m b{font-size:13.5px}.members .m small{font-size:11.5px;color:var(--muted);font-weight:600}
+.sugtag{margin-left:6px;padding:0 6px;border-radius:6px;background:var(--brand);color:#fff;font-size:10.5px;font-weight:800}
+.live{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2)}
+.live.sel{border-color:var(--brand);background:var(--surface)}
+.live .nm{font-weight:800}
+.live .sp{flex:1}
+.kinds{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.kinds .total{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--muted)}
+
+/* A: three columns */
+.A{display:grid;grid-template-columns:340px minmax(0,1fr) 360px;gap:14px;max-width:1680px;margin:0 auto;padding:16px 20px 80px;align-items:start}
+.A .col{display:grid;gap:14px;min-width:0}
+.sticky{position:sticky;top:12px}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.itembody{display:grid;gap:10px}
+
+/* B: full-screen review */
+.B{max-width:1680px;margin:0 auto;padding:14px 20px 140px;display:grid;gap:12px}
+.Bhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.Bhead .sp{flex:1}
+.Bfacts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.B3{display:grid;grid-template-columns:.8fr 1fr 1fr;gap:12px;align-items:start}
+.gradebar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:16px;padding:12px 24px 12px 420px;background:var(--surface);border-top:2px solid var(--brand);box-shadow:0 -10px 30px -18px #15141a55}
+.gradebar .picks{flex:none}.gradebar .pick{width:58px}
+.gradebar textarea{flex:1;height:48px;resize:none}
+
+/* C: drawer */
+.Cpage{max-width:1220px;margin:0 auto;padding:16px 24px 80px;display:grid;gap:14px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{padding:6px 10px;text-align:left;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+td{padding:7px 10px;border-top:1px solid var(--line)}
+.scrim{position:fixed;inset:0;background:#15141a55;z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:41;width:min(860px,62vw);display:flex;flex-direction:column;background:var(--bg);box-shadow:-20px 0 40px -20px #0006}
+.dhead{padding:14px 20px;background:var(--surface);border-bottom:1px solid var(--line);display:grid;gap:8px}
+.dbody{flex:1;overflow:auto;padding:14px 20px;display:grid;gap:10px;align-content:start}
+.dfoot{padding:12px 20px;background:var(--surface);border-top:2px solid var(--brand);display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.dfoot .pick{width:54px}
+details.acc{border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+details.acc>summary{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:800;list-style:none}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::before{content:'▸';color:var(--muted)}
+details.acc[open]>summary::before{content:'▾'}
+details.acc .in{padding:0 14px 14px;display:grid;gap:10px}
+</style>
+</head>
+<body>
+<div class="mock"><b>К доске</b>
+  <button data-v="A" class="on">A · Пульт в 3 колонки</button>
+  <button data-v="B">B · Разбор во весь экран</button>
+  <button data-v="C">C · Список + панель</button>
+  <span class="note" id="note"></span><button data-hide title="Скрыть панель макета">✕</button>
+</div>
+<header class="top"><span class="logo">rmzn<i>.</i>tutor</span><nav class="nav"><span>Студенты</span><span>Прогресс</span><span>Работа на паре</span><span class="on">К доске</span><span>Настройки</span></nav></header>
+<div id="root"></div>
+
+<script>
+const NOTES = {
+  A: 'Вся ширина экрана. Слева компактный список для вызова, в центре «Сейчас у доски» и задания теста по вкладкам, справа закреплённый «Итог»: баллы, LLM, оценка и комментарий — без прокрутки вниз.',
+  B: 'Открытый тест занимает весь экран: факты в одну строку, задания по вкладкам в три колонки «Условие | Ответ студента | Правильно», панель оценки прибита к низу экрана.',
+  C: 'Основная страница — широкая таблица студентов с «Вызвать». Тест открывается выезжающей справа панелью: верные задания свёрнуты, неверные раскрыты, оценка в закреплённом низу панели.'
+}
+const MEMBERS = [
+  ['Тимур Ахмедов', 1, '12 окт · 1 раз', null, 'live'], ['Дарья Ким', 1, 'ещё не был у доски', null, 'sug'], ['Алина Смирнова', 1, '19 окт · 2 раза', '4', 'done'],
+  ['Магомед Исаев', 1, '5 окт · 1 раз', '3'], ['Ева Лебедева', 1, '8 окт · 1 раз', '5'], ['Ислам Хасанов', 0, 'ещё не был у доски', null],
+  ['Полина Орлова', 1, '15 окт · 2 раза', '4'], ['Руслан Гаджиев', 0, '12 окт · 1 раз', '2'], ['София Волкова', 1, '15 окт · 1 раз', '5'], ['Артём Зайцев', 1, '8 окт · 2 раза', '3']]
+const ITEMS = [
+  { n: 1, kind: 'Собери программу', w: 1, title: 'Чётные числа', check: ['ok', 'верно'], topic: 'Циклы for', stmt: 'Напечатай все чётные числа от <code>2</code> до <code>n</code> через пробел.',
+    student: 'int n = in.nextInt();\nfor (int i = 1; i <= n; i++) {\n    if (i % 2 == 0) {\n        System.out.print(i + " ");\n    }\n}', correct: 'int n = in.nextInt();\nfor (int i = 1; i <= n; i++) {\n    if (i % 2 == 0) {\n        System.out.print(i + " ");\n    }\n}',
+    note: 'Использовано строк: 6 из 7 · лишняя строка <code>if (i % 2 == 1) {</code> — не использована', llm: ['ok', 'верно', 'Программа собрана полностью, лишняя строка не использована.'] },
+  { n: 2, kind: 'Исправь ошибку', w: 2, title: 'Сумма массива', check: ['ok', 'верно'], topic: 'Массивы', stmt: 'Напечатай сумму элементов <code>nums</code>. Для <code>{3, 5, 7}</code> ожидается <code>15</code>.',
+    student: 'for (int i = 0; i < nums.length; i++) {\n    sum += nums[i];\n}', correct: 'for (int i = 0; i <= nums.length; i++) {   // было\nfor (int i = 0; i < nums.length; i++) {    // эталон',
+    note: '<b>Ошибка:</b> условие цикла <code>&lt;=</code> выходит за границу массива.', llm: ['ok', 'верно', 'Ошибка найдена и исправлена минимальной правкой.'] },
+  { n: 3, kind: 'Напиши код', w: 3, title: 'Гласные в строке', check: ['bad', 'не верно'], topic: 'Строки и символы', stmt: 'Прочитай строку и напечатай, сколько в ней гласных <code>a e i o u</code> (большие и маленькие). <code>Hello World</code> → <code>3</code>.',
+    student: 'String line = in.nextLine();\nint count = 0;\nfor (char c : line.toCharArray()) {\n    if ("aeiou".indexOf(c) >= 0) {\n        count++;\n    }\n}\nSystem.out.println(count);', correct: 'Тест 3 из 4 не пройден:\n  ввод:     "AEIOU xyz"\n  ожидалось: 5\n  получено:  0',
+    note: 'Запусков во время теста: 2 · последний — OK', llm: ['part', 'частично верно', 'Логика подсчёта верная, но не учтены заглавные буквы: нужен toLowerCase().'] }]
+let variant = 'A', item = 2, drawer = true
+
+const st = s => ({ live: '<span class="status ok"><i></i>Идёт тест</span>', done: '<span class="status done"><i></i>Сдан</span>', called: '<span class="status warn"><i></i>Вызван</span>' })[s] || ''
+const grade = g => g ? `<span class="grade g${g}">${g}</span>` : '<span class="muted">—</span>'
+const kinds = () => `<div class="kinds"><span class="chip on">✓ Собери · 2 мин</span><span class="chip on">✓ Исправь · 2 мин</span><span class="chip on">✓ Напиши · 3 мин</span><span class="total">тест <b>7 минут</b></span></div>`
+const member = ([name, here, last, g, s]) => `<li class="${s === 'sug' ? 'sug' : ''}"><span class="presence ${here ? 'on' : ''}"></span><span class="m"><b>${name}${s === 'sug' ? '<span class="sugtag">предлагаем</span>' : ''}</b><small>${last}</small></span>${s === 'live' ? st('live') : s === 'done' ? st('done') : grade(g)}<button class="btn ${s === 'sug' ? 'primary' : ''}">⚑ Вызвать</button></li>`
+const live = () => `<div class="live"><span class="nm">Тимур Ахмедов</span>${st('live')}<span class="small muted">Собери · Исправь · Напиши</span><span class="sp"></span><span class="countdown" data-cd>3:12</span><span class="small muted">до конца</span><button class="btn">+1 мин</button><button class="btn">⚑ Завершить</button></div>
+  <div class="live sel"><span class="nm">Алина Смирнова</span>${st('done')}<span class="small muted">предложено</span>${grade('4')}<span class="sp"></span><span class="small muted">тест занял 6:12</span><button class="btn">↻ Вызвать снова</button><button class="btn danger">Удалить</button></div>`
+const itabs = () => `<div class="itabs">${ITEMS.map((it, i) => `<button class="itab ${i === item ? 'on' : ''}" data-item="${i}"><span class="n">${it.n}</span>${it.kind}<span class="tag ${it.check[0]}">${it.check[0] === 'ok' ? '✓' : '✕'} ${it.check[1]}</span></button>`).join('')}</div>`
+const ref = it => `<p class="small muted" style="margin:0">вес ${it.w} · тема: ${it.topic} · ${it.title}</p>`
+const llm = it => `<div class="llm ${it.llm[0] === 'part' ? 'part' : ''}"><b>✦ ${it.llm[1]}</b> — ${it.llm[2]}</div>`
+const right = it => it.n === 3 ? 'Проверка' : 'Правильная программа'
+const factsArr = [['в графике', 'темп к сессии · без ограничения'], ['75%', 'баллы 4,5 из 6'], [grade('3'), 'по проверкам'], [grade('4'), 'предложено (LLM и темп)']]
+const facts = cls => `<div class="${cls}">${factsArr.map(([b, s]) => `<span class="fact"><b>${b}</b><small>${s}</small></span>`).join('')}</div>`
+const picks = () => `<div class="picks">${['2', '3', '4', '5'].map(g => `<button class="pick ${g === '4' ? 'on' : ''}">${g}${g === '4' ? '<small>предложено</small>' : ''}</button>`).join('')}</div>`
+const COMMENT = 'Хорошо: собрала программу и нашла ошибку в цикле. В подсчёте гласных не учла заглавные буквы — повтори toLowerCase().'
+const QUESTIONS = '<ol class="qs"><li>Что напечатает программа для «AEIOU»? Почему?</li><li>Чем отличается <code>&lt;</code> от <code>&lt;=</code> в условии цикла по массиву?</li></ol>'
+
+const VIEWS = {
+  A() { const it = ITEMS[item]
+    return `<div class="A">
+      <div class="col"><div class="card"><p class="eyebrow">Преподаватель</p><h1 class="display" style="font-size:22px;margin-bottom:10px">К доске</h1>
+        <div class="chips" style="margin-bottom:8px"><span class="chip on">ИВТ-24-1</span><span class="chip">ИВТ-24-2</span><span class="chip">ПИ-24</span></div>
+        <div class="chips" style="margin-bottom:12px"><span class="chip on">Java</span><span class="chip">Python</span></div>${kinds()}
+        <h2 class="card-title">Студенты <span class="muted small">на месте 8 из 10</span></h2><ul class="members">${MEMBERS.map(member).join('')}</ul></div></div>
+      <div class="col"><div class="card"><h2 class="card-title">● Сейчас у доски</h2><div style="display:grid;gap:8px">${live()}</div></div>
+        <div class="card" style="display:grid;gap:12px"><div style="display:flex;align-items:flex-start;gap:12px"><div style="flex:1"><p class="eyebrow">Ответ у доски</p><h2 style="font-size:20px;font-weight:800">Алина Смирнова ${st('done')}</h2>
+          <p class="small muted" style="margin:2px 0 0">Вызвана 19 окт · 11:20 · Java · тест занял 6:12</p></div><button class="btn">✕</button></div>
+          ${itabs()}<div class="itembody">${ref(it)}<div class="stmt"><span class="lab">Условие</span>${it.stmt}</div>
+          <div class="cmp"><div><span class="lab">Ответ студента</span><pre>${it.student}</pre></div><div><span class="lab">${right(it)}</span><pre>${it.correct}</pre></div></div>
+          <p class="small" style="margin:0">${it.note}</p>${llm(it)}</div></div></div>
+      <div class="col sticky"><div class="card" style="display:grid;gap:12px"><h2 class="card-title" style="margin:0">Итог · Алина Смирнова</h2>${facts('facts')}
+        <div class="llm"><b>✦ Оценка LLM</b><br>Уверенно работает с циклами и массивами; в задаче на строки упущен регистр букв.</div>
+        <div><span class="lab">Вопросы для устного разбора</span>${QUESTIONS}</div>
+        <div><span class="lab">Итоговая оценка</span>${picks()}</div>
+        <label><span class="lab">Комментарий для студента</span><textarea rows="4">${COMMENT}</textarea></label>
+        <span class="draft">✦ Черновик от нейросети — поправь, если нужно</span>
+        <button class="btn primary big" style="justify-content:center">Поставить оценку</button><span class="small muted">Пока не выставлена — студент ничего не видит.</span></div></div>
+    </div>` },
+  B() { const it = ITEMS[item]
+    return `<div class="B"><div class="card Bhead"><button class="btn">← К списку</button><div><p class="eyebrow">Ответ у доски</p><h2 style="font-size:22px;font-weight:800">Алина Смирнова ${st('done')}</h2></div>
+        <span class="small muted">Вызвана 19 окт · 11:20 · ИВТ-24-1 · Java · тест занял 6:12</span><span class="sp"></span>
+        <span class="live" style="padding:6px 10px">Тимур Ахмедов ${st('live')} <span class="countdown" data-cd>3:12</span></span><button class="btn">↻ Вызвать снова</button><button class="btn danger">Удалить</button></div>
+      ${facts('Bfacts').replace('</div>', `<span class="fact"><b>2</b><small>запуска во время теста</small></span></div>`)}
+      <div class="card" style="display:grid;gap:12px">${itabs()}${ref(it)}
+        <div class="B3"><div><span class="lab">Условие</span><div class="stmt">${it.stmt}</div><p class="small" style="margin:8px 0 0">${it.note}</p></div>
+        <div><span class="lab">Ответ студента</span><pre style="font-size:15px">${it.student}</pre></div><div><span class="lab">${right(it)}</span><pre style="font-size:15px">${it.correct}</pre></div></div>${llm(it)}</div>
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div><span class="lab">Оценка LLM</span>Уверенно работает с циклами и массивами; в задаче на строки упущен регистр букв.</div><div><span class="lab">Вопросы для устного разбора</span>${QUESTIONS}</div></div>
+      <div class="gradebar"><b style="position:absolute;left:24px">Итоговая оценка<br><span class="small muted" style="font-weight:600">предложено 4 · по проверкам 3</span></b>${picks()}<textarea>${COMMENT}</textarea><button class="btn primary big">Поставить оценку</button></div></div>` },
+  C() {
+    return `<div class="Cpage"><div style="display:flex;align-items:end;gap:16px"><div style="flex:1"><p class="eyebrow">Преподаватель</p><h1 class="display">К доске</h1></div>
+        <div class="chips"><span class="chip on">ИВТ-24-1</span><span class="chip">ИВТ-24-2</span><span class="chip">ПИ-24</span></div><div class="chips"><span class="chip on">Java</span><span class="chip">Python</span></div></div>
+      <div class="card"><h2 class="card-title">● Сейчас у доски</h2><div style="display:grid;gap:8px">${live()}</div></div>
+      <div class="card">${kinds()}<table><thead><tr><th></th><th>Студент</th><th>У доски</th><th>Оценки</th><th></th></tr></thead><tbody>
+        ${MEMBERS.map(([n, h, l, g, s]) => `<tr><td style="width:20px"><span class="presence ${h ? 'on' : ''}" style="display:inline-block"></span></td><td><b>${n}</b>${s === 'sug' ? '<span class="sugtag">предлагаем</span>' : ''}</td><td class="muted">${l}</td><td>${s === 'live' ? st('live') : s === 'done' ? st('done') : grade(g)}</td><td style="text-align:right"><button class="btn ${s === 'sug' ? 'primary' : ''}">⚑ Вызвать</button></td></tr>`).join('')}</tbody></table></div></div>
+      ${drawer ? `<div class="scrim" data-close></div><aside class="drawer"><div class="dhead"><div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1"><p class="eyebrow">Ответ у доски</p><h2 style="font-size:20px;font-weight:800">Алина Смирнова ${st('done')}</h2><p class="small muted" style="margin:0">19 окт · 11:20 · тест занял 6:12</p></div><button class="btn">↻ Вызвать снова</button><button class="btn" data-close>✕</button></div>
+        ${facts('facts" style="grid-template-columns:repeat(4,1fr)')}</div>
+        <div class="dbody">${ITEMS.map(it => `<details class="acc" ${it.check[0] === 'ok' ? '' : 'open'}><summary>${it.n}. ${it.kind} <span class="muted" style="font-weight:600">· ${it.title}</span><span style="flex:1"></span><span class="tag ${it.check[0]}">${it.check[1]}</span><span class="tag ${it.llm[0] === 'part' ? 'part' : 'ok'}">LLM: ${it.llm[1]}</span></summary>
+          <div class="in">${ref(it)}<div class="stmt">${it.stmt}</div><div class="cmp" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><span class="lab">Ответ студента</span><pre>${it.student}</pre></div><div><span class="lab">${right(it)}</span><pre>${it.correct}</pre></div></div><p class="small" style="margin:0">${it.note}</p>${llm(it)}</div></details>`).join('')}
+          <div class="card"><span class="lab">Оценка LLM</span>Уверенно работает с циклами и массивами; в задаче на строки упущен регистр букв.<span class="lab" style="margin-top:10px">Вопросы для устного разбора</span>${QUESTIONS}</div></div>
+        <div class="dfoot">${picks()}<textarea rows="2" style="resize:none">${COMMENT}</textarea><button class="btn primary big">Поставить оценку</button></div></aside>` : ''}` },
+}
+function render() {
+  document.getElementById('root').innerHTML = VIEWS[variant]()
+  document.querySelectorAll('.mock [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === variant))
+  document.getElementById('note').textContent = NOTES[variant]
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button,[data-close],.live.sel'); if (!t) return
+  if ('hide' in t.dataset) { const m = t.closest('.mock'); m.classList.toggle('min'); t.textContent = m.classList.contains('min') ? '⋯' : '✕'; return }
+  if (t.dataset.v) { variant = t.dataset.v; drawer = true }
+  else if (t.dataset.item) item = +t.dataset.item
+  else if ('close' in t.dataset) drawer = false
+  else if (variant === 'C' && t.closest('.live.sel')) drawer = true
+  else if (t.classList.contains('pick')) { t.parentNode.querySelectorAll('.pick').forEach(p => p.classList.toggle('on', p === t)); return }
+  else return
+  render()
+})
+let cd = 192
+setInterval(() => { cd = cd > 0 ? cd - 1 : 192; document.querySelectorAll('[data-cd]').forEach(el => el.textContent = `${Math.floor(cd / 60)}:${String(cd % 60).padStart(2, '0')}`) }, 1000)
+render()
+</script>
+</body>
+</html>

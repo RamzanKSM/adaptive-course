@@ -70,12 +70,13 @@ record BoardAssessmentRequest(Language language, String skillCode, List<Item> it
 
 /**
  * The assessor's answer: why, a verdict per item («parsons», «fix», «code»): «верно», «частично верно» or «неверно» —
- * «частично верно» of a failed item gives it half of its weight — 1–2 questions the teacher can ask aloud, and a draft of
+ * for a failed item «верно» gives it the whole weight (e.g. only the format of the output differs) and «частично верно» half
+ * of it — 1–2 questions the teacher can ask aloud, and a draft of
  * the comment for the student that the teacher edits before saving (null when the assessor gave none).
  */
 record BoardAssessment(String summary, List<Item> items, List<String> questions, String studentComment) {
   static final List<String> VERDICTS = List.of("верно", "частично верно", "неверно");
-  static final String PARTLY = "частично верно";
+  static final String RIGHT = "верно", PARTLY = "частично верно";
   record Item(String item, String verdict, String explanation) {}
   BoardAssessment { items = items == null ? List.of() : List.copyOf(items); questions = questions == null ? List.of() : List.copyOf(questions); }
   BoardAssessment(String summary, List<Item> items, List<String> questions) { this(summary, items, questions, null); }

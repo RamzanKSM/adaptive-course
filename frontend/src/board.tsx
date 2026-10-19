@@ -1,4 +1,4 @@
-import { DragEvent, FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, DragEvent, FormEvent, KeyboardEvent, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { api, ApiError, patch, post, remove } from './api'
 import { ConsolePanel } from './console'
@@ -104,6 +104,20 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
   </div>
 }
 
+/** The code font on the projector (editor, console, «Собери программу»): A− / A+, remembered in this browser. */
+const CODE_KEY = 'rmzn-board-code-size', CODE_MIN = 16, CODE_MAX = 32, CODE_DEFAULT = 21
+function useCodeSize() {
+  const [size, setSize] = useState(() => {
+    try { const stored = Number(localStorage.getItem(CODE_KEY)); return stored >= CODE_MIN && stored <= CODE_MAX ? stored : CODE_DEFAULT } catch { return CODE_DEFAULT }
+  })
+  const zoom = useCallback((delta: number) => setSize(current => {
+    const next = Math.max(CODE_MIN, Math.min(CODE_MAX, current + delta))
+    try { localStorage.setItem(CODE_KEY, String(next)) } catch { /* private mode: not remembered */ }
+    return next
+  }), [])
+  return [size, zoom] as const
+}
+
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 type ParsonsItem = Extract<BoardStudentItem, { kind: 'parsons' }>
 type FixItem = Extract<BoardStudentItem, { kind: 'fix' }>
@@ -201,53 +215,69 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   }
 
   const low = left < 60_000
-  const next = items[step + 1], prev = items[step - 1]
-  return <main className="board-screen">
+  const [codeSize, zoom] = useCodeSize()
+  const toolbar = (item: BoardStudentItem, run?: ReactNode) => <div className="board-toolbar">
+    <span className="board-file">{item.language === 'PYTHON' ? 'main.py' : 'Main.java'}</span>
+    <span className="board-zoom" role="group" aria-label="Размер шрифта кода">
+      <button type="button" disabled={codeSize <= CODE_MIN} onClick={() => zoom(-2)} aria-label="Уменьшить шрифт кода" title="Мельче">A−</button>
+      <button type="button" disabled={codeSize >= CODE_MAX} onClick={() => zoom(2)} aria-label="Увеличить шрифт кода" title="Крупнее">A+</button>
+    </span>
+    {run}
+  </div>
+  return <main className="board-screen board-split" style={{ '--board-code': `${codeSize}px` } as CSSProperties}>
     <header className="board-bar">
       <div className="board-who">
         <span className="avatar" aria-hidden="true">{initials(name)}</span>
         <span><small>Ответ у доски</small><b>{name}</b></span>
       </div>
+      {items.length > 1 ? <div className="board-steps" role="tablist" aria-label="Задания теста">
+        {items.map((item, i) => <button key={item.kind} ref={el => { tabs.current[i] = el }} type="button" role="tab" id={`board-tab-${item.kind}`}
+          aria-selected={item === active} aria-controls={`board-panel-${item.kind}`} tabIndex={item === active ? 0 : -1}
+          className={`board-step ${item === active ? 'active' : ''} ${touched[item.kind] ? 'touched' : ''}`} onClick={() => setStep(i)} onKeyDown={e => onTabKey(e, i)}>
+          <span className="board-num">{i + 1}</span>
+          <span className="board-step-title">{KIND[item.kind].title}</span>
+          {touched[item.kind] && <span className="board-step-mark" title="Ты уже начал это задание"><Icon name="check" size={15} /><span className="sr-only">начато</span></span>}
+        </button>)}
+      </div> : <span />}
       <div className={`board-timer ${low ? 'low' : ''} ${over ? 'over' : ''}`} role="timer" aria-live="off" aria-label={`Осталось ${clock(left)}`}>
-        <Icon name="clock" size={34} /><span className="tabular">{clock(left)}</span>
+        <Icon name="clock" size={26} /><span className="tabular">{clock(left)}</span>
       </div>
       <div className="board-bar-actions">
         <SaveBadge state={locked ? 'saved' : save} />
-        <button type="button" className="primary big" disabled={locked} onClick={() => setConfirming(true)}><Icon name="flag" size={18} /> Завершить тест</button>
+        <button type="button" className="primary" disabled={locked} onClick={() => setConfirming(true)}><Icon name="flag" size={18} /> Завершить тест</button>
       </div>
     </header>
     {error && <p className="board-error" role="alert">{error}</p>}
-    {items.length > 1 && <div className="board-steps" role="tablist" aria-label="Задания теста">
-      {items.map((item, i) => <button key={item.kind} ref={el => { tabs.current[i] = el }} type="button" role="tab" id={`board-tab-${item.kind}`}
-        aria-selected={item === active} aria-controls={`board-panel-${item.kind}`} tabIndex={item === active ? 0 : -1}
-        className={`board-step ${item === active ? 'active' : ''} ${touched[item.kind] ? 'touched' : ''}`} onClick={() => setStep(i)} onKeyDown={e => onTabKey(e, i)}>
-        <span className="board-num">{i + 1}</span>
-        <span className="board-step-title">{KIND[item.kind].title}</span>
-        {touched[item.kind] && <span className="board-step-mark" title="Ты уже начал это задание"><Icon name="check" size={18} /><span className="sr-only">начато</span></span>}
-      </button>)}
-    </div>}
-    {items.map((item, i) => <section key={item.kind} id={`board-panel-${item.kind}`} className="board-item" hidden={item !== active}
-      role={items.length > 1 ? 'tabpanel' : undefined} aria-labelledby={items.length > 1 ? `board-tab-${item.kind}` : `board-title-${item.kind}`}>
-      <h2 id={`board-title-${item.kind}`} className="board-item-title"><span className="board-num">{i + 1}</span> {KIND[item.kind].title}</h2>
-      {item.kind === 'fix' && <p className="board-callout"><Icon name="target" size={22} /> В программе есть ошибка: она работает не так, как требует условие. Найди и исправь её.</p>}
-      {item.title && <h3 className="board-task-title">{item.title}</h3>}
-      {item.statement && <div className="board-statement"><Markdown>{item.statement}</Markdown></div>}
-      {item.kind === 'parsons' && <Parsons item={item} placed={parsons} locked={locked} onChange={ids => { setParsons(ids); edited() }} />}
-      {item.kind !== 'parsons' && <>
-        <CodeMirror className="code-editor board-editor" value={item.kind === 'fix' ? fix : code} extensions={EDITOR_EXTENSIONS[item.language]} editable={!locked} readOnly={locked}
-          onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited() }}
-          aria-label={item.kind === 'fix' ? `Программа с ошибкой на ${courseTitle(item.language)}` : `Редактор решения на ${courseTitle(item.language)}`} />
-        <div className="task-actions">
-          <button type="button" className="ghost big" disabled={locked || running !== null || !(item.kind === 'fix' ? fix : code).trim()} onClick={() => runItem(item.kind, item.kind === 'fix' ? fix : code)}>
-            {running === item.kind ? <><span className="spinner" aria-hidden="true" /> Запускаем…</> : <><Icon name="terminal" size={18} /> Запустить</>}</button>
-        </div>
-        {runs[item.kind] && <ConsolePanel key={runs[item.kind]!.n} run={runs[item.kind]!.console} origin="run" language={item.language} />}
-      </>}
-      {items.length > 1 && <nav className="board-step-nav" aria-label="Переход между заданиями">
-        {prev ? <button type="button" className="ghost big" onClick={() => setStep(i - 1)}><Icon name="back" size={18} /> {i}. {KIND[prev.kind].title}</button> : <span />}
-        {next && <button type="button" className="secondary big" onClick={() => setStep(i + 1)}>{i + 2}. {KIND[next.kind].title} <Icon name="arrow" size={18} /></button>}
-      </nav>}
-    </section>)}
+    <div className="board-body">
+      {items.map((item, i) => {
+        const next = items[i + 1], prev = items[i - 1]
+        const head = <>
+          <p className="board-item-eyebrow">{items.length > 1 && `${i + 1} из ${items.length} · `}{KIND[item.kind].title}</p>
+          {item.title && <h2 className="board-task-title">{item.title}</h2>}
+          {item.kind === 'fix' && <p className="board-callout"><Icon name="target" size={22} /> В программе есть ошибка: она работает не так, как требует условие. Найди и исправь её.</p>}
+          {item.statement && <div className="board-statement"><Markdown>{item.statement}</Markdown></div>}
+        </>
+        return <section key={item.kind} id={`board-panel-${item.kind}`} className={`board-item ${items.length > 1 ? 'has-nav' : ''}`} hidden={item !== active}
+          role={items.length > 1 ? 'tabpanel' : undefined} aria-labelledby={items.length > 1 ? `board-tab-${item.kind}` : undefined} aria-label={items.length > 1 ? undefined : KIND[item.kind].title}>
+          {item.kind === 'parsons' ? <Parsons item={item} placed={parsons} locked={locked} head={head} toolbar={toolbar(item)} onChange={ids => { setParsons(ids); edited() }} />
+            : <>
+              <div className="board-task">{head}</div>
+              <div className="board-work">
+                {toolbar(item, <button type="button" className="ghost board-run-button" disabled={locked || running !== null || !(item.kind === 'fix' ? fix : code).trim()} onClick={() => runItem(item.kind, item.kind === 'fix' ? fix : code)}>
+                  {running === item.kind ? <><span className="spinner" aria-hidden="true" /> Запускаем…</> : <><Icon name="terminal" size={18} /> Запустить</>}</button>)}
+                <CodeMirror className="code-editor board-editor" value={item.kind === 'fix' ? fix : code} extensions={EDITOR_EXTENSIONS[item.language]} editable={!locked} readOnly={locked}
+                  onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited() }}
+                  aria-label={item.kind === 'fix' ? `Программа с ошибкой на ${courseTitle(item.language)}` : `Редактор решения на ${courseTitle(item.language)}`} />
+                {runs[item.kind] && <ConsolePanel key={runs[item.kind]!.n} run={runs[item.kind]!.console} origin="run" language={item.language} />}
+              </div>
+            </>}
+          {items.length > 1 && <nav className="board-step-nav" aria-label="Переход между заданиями">
+            {prev ? <button type="button" className="ghost big" onClick={() => setStep(i - 1)}><Icon name="back" size={18} /> {i}. {KIND[prev.kind].title}</button> : <span />}
+            {next && <button type="button" className="secondary big" onClick={() => setStep(i + 1)}>{i + 2}. {KIND[next.kind].title} <Icon name="arrow" size={18} /></button>}
+          </nav>}
+        </section>
+      })}
+    </div>
     {confirming && <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-confirm-title">
       <div className="board-call">
         <h2 id="board-confirm-title" className="title">Завершить тест?</h2>
@@ -264,11 +294,12 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
 }
 
 /**
- * «Собери программу»: the fixed code before and after, the student's program between them and the pool of lines below.
+ * «Собери программу»: the statement in the left pane; in the right one the sheet (the fixed code before and after, the
+ * student's program between them) and the pool of lines right under it; the root has no box of its own, so both panes are columns of the item.
  * Click a pool line to append it; ↑ ↓ ✕ in the program; native drag & drop to reorder and to move between pool and program.
  * Every control is a focusable button, and focus follows the line it acted on.
  */
-function Parsons({ item, placed, locked, onChange }: { item: ParsonsItem; placed: string[]; locked: boolean; onChange: (ids: string[]) => void }) {
+function Parsons({ item, placed, locked, head, toolbar, onChange }: { item: ParsonsItem; placed: string[]; locked: boolean; head: ReactNode; toolbar: ReactNode; onChange: (ids: string[]) => void }) {
   const byId = useMemo(() => new Map(item.lines.map(l => [l.id, l])), [item.lines])
   const program = placed.map(id => byId.get(id)).filter((l): l is BoardLine => !!l)
   const pool = item.lines.filter(l => !placed.includes(l.id))
@@ -335,45 +366,50 @@ function Parsons({ item, placed, locked, onChange }: { item: ParsonsItem; placed
   </div> : null
 
   return <div ref={root} className={`parsons ${locked ? 'locked' : ''} ${drag ? 'dragging' : ''}`}>
-    <div className="parsons-sheet">
-      {fixed(item.before, 'Код до твоей программы — менять не нужно')}
-      <div className="parsons-zone">
-        <div className="parsons-zone-head"><b>Твоя программа</b><small>{program.length ? `${program.length} ${plural(program.length, 'строка', 'строки', 'строк')}` : 'пока пусто'}</small></div>
-        <ol ref={list} className={`parsons-program ${dropAt !== null ? 'drop-target' : ''}`} aria-label="Твоя программа"
-          onDragOver={overProgram} onDrop={dropProgram} onDragLeave={e => leave(e, () => setDropAt(null))}>
-          {program.map((line, i) => <li key={line.id} data-placed={line.id} draggable={!locked} onDragStart={e => start(e, line.id)} onDragEnd={reset}
-            className={`parsons-row placed ${drag === line.id ? 'is-dragged' : ''} ${dropAt === i ? 'drop-before' : ''} ${dropAt === program.length && i === program.length - 1 ? 'drop-after' : ''}`}>
-            <span className="parsons-grip" aria-hidden="true">⋮⋮</span>
-            <CodeText text={line.text} />
-            <span className="parsons-tools">
-              <button type="button" data-act="up" disabled={locked || i === 0} onClick={() => move(i, -1)} aria-label={`Поднять строку ${i + 1}`} title="Поднять">↑</button>
-              <button type="button" data-act="down" disabled={locked || i === program.length - 1} onClick={() => move(i, 1)} aria-label={`Опустить строку ${i + 1}`} title="Опустить">↓</button>
-              <button type="button" data-act="remove" className="parsons-remove" disabled={locked} onClick={() => back(i)} aria-label={`Убрать строку ${i + 1} обратно в «Строки»`} title="Убрать в «Строки»">✕</button>
-            </span>
-          </li>)}
-          {!program.length && <li className={`parsons-empty ${dropAt !== null ? 'drop-before' : ''}`}>Нажми на строку внизу или перетащи её сюда</li>}
-        </ol>
-      </div>
-      {fixed(item.after, 'Код после твоей программы — менять не нужно')}
+    <div className="board-task">
+      {head}
     </div>
-
-    <div className={`parsons-pool ${overPool ? 'drop-target' : ''}`}
-      onDragOver={e => { if (drag && placed.includes(drag)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverPool(true) } }}
-      onDragLeave={e => leave(e, () => setOverPool(false))}
-      onDrop={e => { e.preventDefault(); const id = dragged(e); if (id && placed.includes(id)) onChange(placed.filter(x => x !== id)); reset() }}>
-      <div className="parsons-zone-head"><b>Строки</b><small>{pool.length ? 'нажми, чтобы добавить в конец программы' : 'все строки в программе'}</small></div>
-      {item.extraLines > 0 && <p className="parsons-extra-note"><Icon name="x" size={18} /> Одна строка лишняя — её не используй.</p>}
-      <ul className="parsons-pool-list" aria-label="Строки">
-        {pool.map(line => <li key={line.id}>
-          <div role="button" tabIndex={locked ? -1 : 0} aria-disabled={locked} data-pool={line.id} className="parsons-row pooled" draggable={!locked}
-            onDragStart={e => start(e, line.id)} onDragEnd={reset} aria-label={`Добавить строку: ${line.text.trim()}`}
-            onClick={() => !locked && add(line.id)} onKeyDown={e => { if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); add(line.id) } }}>
-            <span className="parsons-grip" aria-hidden="true">⋮⋮</span>
-            <CodeText text={line.text} />
-            <span className="parsons-add" aria-hidden="true"><Icon name="plus" size={18} /></span>
-          </div>
-        </li>)}
-      </ul>
+    <div className="board-work">
+      {toolbar}
+      <div className="parsons-sheet">
+        {fixed(item.before, 'Код до твоей программы — менять не нужно')}
+        <div className="parsons-zone">
+          <div className="parsons-zone-head"><b>Твоя программа</b><small>{program.length ? `${program.length} ${plural(program.length, 'строка', 'строки', 'строк')}` : 'пока пусто'}</small></div>
+          <ol ref={list} className={`parsons-program ${dropAt !== null ? 'drop-target' : ''}`} aria-label="Твоя программа"
+            onDragOver={overProgram} onDrop={dropProgram} onDragLeave={e => leave(e, () => setDropAt(null))}>
+            {program.map((line, i) => <li key={line.id} data-placed={line.id} draggable={!locked} onDragStart={e => start(e, line.id)} onDragEnd={reset}
+              className={`parsons-row placed ${drag === line.id ? 'is-dragged' : ''} ${dropAt === i ? 'drop-before' : ''} ${dropAt === program.length && i === program.length - 1 ? 'drop-after' : ''}`}>
+              <span className="parsons-grip" aria-hidden="true">⋮⋮</span>
+              <CodeText text={line.text} />
+              <span className="parsons-tools">
+                <button type="button" data-act="up" disabled={locked || i === 0} onClick={() => move(i, -1)} aria-label={`Поднять строку ${i + 1}`} title="Поднять">↑</button>
+                <button type="button" data-act="down" disabled={locked || i === program.length - 1} onClick={() => move(i, 1)} aria-label={`Опустить строку ${i + 1}`} title="Опустить">↓</button>
+                <button type="button" data-act="remove" className="parsons-remove" disabled={locked} onClick={() => back(i)} aria-label={`Убрать строку ${i + 1} обратно в «Строки»`} title="Убрать в «Строки»">✕</button>
+              </span>
+            </li>)}
+            {!program.length && <li className={`parsons-empty ${dropAt !== null ? 'drop-before' : ''}`}>Нажми на строку ниже или перетащи её сюда</li>}
+          </ol>
+        </div>
+        {fixed(item.after, 'Код после твоей программы — менять не нужно')}
+      </div>
+      <div className={`parsons-pool ${overPool ? 'drop-target' : ''}`}
+        onDragOver={e => { if (drag && placed.includes(drag)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverPool(true) } }}
+        onDragLeave={e => leave(e, () => setOverPool(false))}
+        onDrop={e => { e.preventDefault(); const id = dragged(e); if (id && placed.includes(id)) onChange(placed.filter(x => x !== id)); reset() }}>
+        <div className="parsons-zone-head"><b>Строки</b><small>{pool.length ? 'нажми, чтобы добавить в конец программы' : 'все строки в программе'}</small></div>
+        {item.extraLines > 0 && <p className="parsons-extra-note"><Icon name="x" size={18} /> Одна строка лишняя — её не используй.</p>}
+        <ul className="parsons-pool-list" aria-label="Строки">
+          {pool.map(line => <li key={line.id}>
+            <div role="button" tabIndex={locked ? -1 : 0} aria-disabled={locked} data-pool={line.id} className="parsons-row pooled" draggable={!locked}
+              onDragStart={e => start(e, line.id)} onDragEnd={reset} aria-label={`Добавить строку: ${line.text.trim()}`}
+              onClick={() => !locked && add(line.id)} onKeyDown={e => { if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); add(line.id) } }}>
+              <span className="parsons-grip" aria-hidden="true">⋮⋮</span>
+              <CodeText text={line.text} />
+              <span className="parsons-add" aria-hidden="true"><Icon name="plus" size={18} /></span>
+            </div>
+          </li>)}
+        </ul>
+      </div>
     </div>
     <p className="sr-only" aria-live="polite">{said}</p>
   </div>
@@ -538,7 +574,11 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
 
   function chooseGroup(value: string) { if (value === group) return; setGroup(value); setOverview(null); setJournal(null); setOpenId(null) }
   function chooseCourse(value: CourseLanguage) { setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null) }
-  const open = (id: Id) => { setOpenId(id); requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
+  /** Opening a test scrolls to its detail as soon as it is rendered (the detail mounts with the new id). */
+  const scrollTo = useRef(false)
+  const scroll = () => { if (scrollTo.current && detailRef.current) { scrollTo.current = false; detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }
+  useEffect(scroll)
+  const open = (id: Id) => { scrollTo.current = true; setOpenId(id); requestAnimationFrame(scroll) }
 
   async function call(member: BoardMember) {
     if (!language) return
@@ -581,42 +621,30 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   </section>
 
   const present = overview?.members.filter(m => m.present).length ?? 0
-  return <section className="analytics board-admin">
-    <div className="analytics-head enter">
-      <div>
+  return <section className="analytics board-admin board-wide">
+    <div className="board-console">
+      <div className="card board-left enter">
         <p className="eyebrow">Преподаватель</p>
         <h1 className="display small">К доске</h1>
-        <p className="muted small">Вызови студента — он войдёт на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.</p>
-      </div>
-      <div className="period" role="group" aria-label="Курс">
-        {COURSES.map(([key, title]) => <button key={key} type="button" disabled={!language} className={key === language ? 'active' : ''} aria-pressed={key === language} onClick={() => key !== language && chooseCourse(key)}>{title}</button>)}
-      </div>
-    </div>
-
-    <div className="card progress-controls enter">
-      <div className="control-row">
-        <span className="control-label">Группа</span>
-        {!groups ? <span className="muted small">Загружаем…</span>
+        <p className="muted small board-lead">Вызови студента — он войдёт на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.</p>
+        {!groups ? <p className="muted small">Загружаем группы…</p>
           : <div className="topic-filters group-filters" role="group" aria-label="Группа">{groups.map(g =>
             <button key={g} type="button" className={g === group ? 'active' : ''} aria-pressed={g === group} onClick={() => chooseGroup(g)}>{g}</button>)}</div>}
-      </div>
-    </div>
-
-    <div className="board-grid">
-      <div className="card board-members">
-        <h2 className="card-title">Студенты{overview && <span className="muted small">{group} · {courseTitle(overview.language)} · на месте {present} из {overview.members.length}</span>}</h2>
+        <div className="period" role="group" aria-label="Курс">
+          {COURSES.map(([key, title]) => <button key={key} type="button" disabled={!language} className={key === language ? 'active' : ''} aria-pressed={key === language} onClick={() => key !== language && chooseCourse(key)}>{title}</button>)}
+        </div>
+        <fieldset className="board-kinds">
+          <legend>Задания теста</legend>
+          {KINDS.map(k => { const on = kinds.includes(k), last = on && kinds.length === 1
+            return <label key={k} className={`board-kind ${on ? 'on' : ''}`} title={last ? 'Нужно хотя бы одно задание' : undefined}>
+              <input type="checkbox" checked={on} disabled={last} onChange={() => toggleKind(k)} />
+              <span>{KIND[k].title} <small>· {KIND[k].minutes} мин</small></span>
+            </label> })}
+          <span className="board-kinds-total">тест <b className="tabular">{minutesText(minutesOf(kinds))}</b></span>
+        </fieldset>
+        <h2 className="card-title">Студенты{overview && <span className="muted small">на месте {present} из {overview.members.length}</span>}</h2>
         {!members ? <p className="muted">Загружаем…</p> : !members.length ? <p className="muted">В группе нет участников курса {language ? courseTitle(language) : ''}.</p>
-          : <>
-          <fieldset className="board-kinds">
-            <legend>Задания теста</legend>
-            {KINDS.map(k => { const on = kinds.includes(k), last = on && kinds.length === 1
-              return <label key={k} className={`board-kind ${on ? 'on' : ''}`} title={last ? 'Нужно хотя бы одно задание' : undefined}>
-                <input type="checkbox" checked={on} disabled={last} onChange={() => toggleKind(k)} />
-                <span>{KIND[k].title} <small>· {KIND[k].minutes} мин</small></span>
-              </label> })}
-            <span className="board-kinds-total">тест <b className="tabular">{minutesText(minutesOf(kinds))}</b></span>
-          </fieldset>
-          <ul className="board-member-list">{members.map(m => {
+          : <ul className="board-member-list">{members.map(m => {
             const suggested = m.userId === overview?.suggested, active = activeOf(m.userId)
             return <li key={m.userId} className={suggested ? 'suggested' : ''}>
               <span className={`presence ${m.present ? 'on' : ''}`} title={m.present ? 'На месте: занимается сейчас или был активен последний час' : 'Не активен последний час'}><span className="sr-only">{m.present ? 'на месте' : 'не на месте'}</span></span>
@@ -629,35 +657,35 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
               <button type="button" className={`${suggested ? 'primary' : 'ghost'} small-button`} disabled={busy === `call:${m.userId}`} onClick={() => call(m)}>
                 {busy === `call:${m.userId}` ? <span className="spinner" aria-hidden="true" /> : <Icon name="flag" size={15} />}Вызвать</button>
             </li>
-          })}</ul></>}
+          })}</ul>}
         <p className="muted small table-note">Предложение: сначала те, кто на месте, затем кто дольше всех не был у доски (случайно среди трёх). Решаешь ты.</p>
       </div>
 
-      <div className="board-side">
-        <div className="card board-active">
-          <h2 className="card-title"><span className="live-dot" aria-hidden="true" /> Сейчас у доски</h2>
-          {!overview ? <p className="muted">Загружаем…</p> : !overview.active.length ? <p className="muted">Никто не вызван. Нажми «Вызвать» у студента.</p>
-            : <ul className="board-active-list">{overview.active.map(t => <li key={t.id} className={openId === t.id ? 'selected' : ''}>
-              <div className="board-active-head">
-                <button type="button" className="row-link" onClick={() => open(t.id)}>{t.displayName}</button>
-                <BoardStatusTag status={t.status} />
-                <Countdown test={t} now={now} />
-                <KindsNote test={t} />
-                {t.status === 'FINISHED' && <span className="board-active-grade">{t.assessmentStatus === 'PENDING' ? <><span className="spinner" aria-hidden="true" /> LLM оценивает</> : <>предложено <GradeChip grade={t.suggestedGrade} small /></>}{t.finalGrade && <> · итог <GradeChip grade={t.finalGrade} small /></>}</span>}
-              </div>
-              <BoardActions test={t} busy={busy} onAct={act} />
-            </li>)}</ul>}
-        </div>
-        <div ref={detailRef} className="pair-anchor">
-          {openId !== null && <BoardTestDetail key={openId} id={openId} request={request} busy={busy} onAct={act} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />}
-        </div>
+      <div className="card board-active">
+        <h2 className="card-title"><span className="live-dot" aria-hidden="true" /> Сейчас у доски</h2>
+        {!overview ? <p className="muted">Загружаем…</p> : !overview.active.length ? <p className="muted">Никто не вызван. Нажми «Вызвать» у студента.</p>
+          : <ul className="board-active-list">{overview.active.map(t => <li key={t.id} className={openId === t.id ? 'selected' : ''}>
+            <div className="board-active-head">
+              <button type="button" className="row-link" onClick={() => open(t.id)}>{t.displayName}</button>
+              <BoardStatusTag status={t.status} />
+              <Countdown test={t} now={now} />
+              <KindsNote test={t} />
+              {t.status === 'FINISHED' && <span className="board-active-grade">{t.assessmentStatus === 'PENDING' ? <><span className="spinner" aria-hidden="true" /> LLM оценивает</> : <>предложено <GradeChip grade={t.suggestedGrade} small /></>}{t.finalGrade && <> · итог <GradeChip grade={t.finalGrade} small /></>}</span>}
+            </div>
+            <BoardActions test={t} busy={busy} onAct={act} />
+          </li>)}</ul>}
       </div>
+
+      {openId !== null
+        ? <BoardTestDetail key={openId} id={openId} anchor={detailRef} request={request} busy={busy} onAct={act} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />
+        : <aside className="card board-summary" aria-label="Итог"><h2 className="card-title">Итог</h2><p className="muted small">{SUMMARY_HINT}</p></aside>}
     </div>
 
     <BoardJournalCard journal={journal} openId={openId} onOpen={open} />
   </section>
 }
 
+const SUMMARY_HINT = 'Открой сданный тест — здесь будут баллы, оценка LLM и итоговая оценка.'
 
 /** Results of one item, whether the backend sends them aligned with items or keyed by kind. */
 function checkOf(test: BoardAdminTest, kind: BoardItemKind, index: number): BoardCheck | null {
@@ -669,57 +697,91 @@ function checkOf(test: BoardAdminTest, kind: BoardItemKind, index: number): Boar
 /** «1», «0,5», «0». */
 const decimal = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
 
-function BoardTestBody({ test, assess, saveGrade }: { test: BoardAdminTest; assess: () => Promise<void>; saveGrade: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
+/** The centre of an opened test: its items as tabs, one at a time, then the points and the runs. */
+function BoardTestItems({ test }: { test: BoardAdminTest }) {
   const items = test.items ?? []
-  const assessmentStatus = test.assessment?.status ?? test.assessmentStatus
   const explanation = (kind: BoardItemKind) => test.assessment?.status === 'DONE' ? test.assessment.items?.find(i => i.item === kind) : undefined
-  const score = test.score
+  const [tab, setTab] = useState(0)
+  const tabs = useRef<(HTMLButtonElement | null)[]>([])
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const to = e.key === 'ArrowRight' ? (i + 1) % items.length : e.key === 'ArrowLeft' ? (i - 1 + items.length) % items.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : null
+    if (to === null) return
+    e.preventDefault(); setTab(to); tabs.current[to]?.focus()
+  }
+  const shown = Math.min(tab, items.length - 1)
   return <>
-    <div className="panel-facts">
-      <span className="mini-stats-cell"><b><StatusChip status={test.paceStatus} /></b><small>темп к сессии · {test.paceCap ? `оценка не выше ${test.paceCap}` : 'без ограничения'}</small></span>
-      <span className="mini-stats-cell"><b>{score ? <span className="tabular">{Math.round(score.percent)}%</span> : '—'}</b><small>{score ? `баллы ${decimal(score.points)} из ${decimal(score.max)}` : 'баллы — после проверки'}</small></span>
-      <span className="mini-stats-cell"><b><GradeChip grade={test.ruleGrade} small /></b><small>по проверкам (без частичных)</small></span>
-      <span className="mini-stats-cell"><b>{assessmentStatus === 'PENDING' ? <span className="spinner" aria-hidden="true" /> : <GradeChip grade={test.suggestedGrade} small />}</b><small>предложено (с учётом LLM и темпа)</small></span>
-    </div>
-    <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — на экране у доски этого нет.</p>
-
+    {items.length > 0 && <div className="board-item-tabs" role="tablist" aria-label="Задания теста">
+      {items.map((item, i) => <button key={item.kind} ref={el => { tabs.current[i] = el }} type="button" role="tab" id={`board-review-tab-${test.id}-${item.kind}`}
+        aria-selected={i === shown} aria-controls={`board-review-${test.id}-${item.kind}`} tabIndex={i === shown ? 0 : -1}
+        className={`board-item-tab ${i === shown ? 'active' : ''}`} onClick={() => setTab(i)} onKeyDown={e => onTabKey(e, i)}>
+        <span className="board-num small">{i + 1}</span>{KIND[item.kind]?.title ?? item.kind}<CheckTag check={checkOf(test, item.kind, i)} />
+      </button>)}
+    </div>}
     {items.map((item, i) => {
       const check = checkOf(test, item.kind, i)
-      return <BoardItemBlock key={item.kind} n={i + 1} item={item} check={check} explanation={explanation(item.kind)}>
-        {item.statement && <details className="board-statement-small"><summary>Условие</summary><Markdown>{item.statement}</Markdown></details>}
+      return <BoardItemBlock key={item.kind} id={`board-review-${test.id}-${item.kind}`} labelledBy={`board-review-tab-${test.id}-${item.kind}`} hidden={i !== shown}
+        item={item} check={check} explanation={explanation(item.kind)}>
+        {item.statement && <div className="board-statement-open"><small>Условие</small><Markdown>{item.statement}</Markdown></div>}
         {item.kind === 'parsons' ? <ParsonsReview item={item} placed={test.answers?.parsons ?? null} assembled={check?.program ?? null} />
           : item.kind === 'fix' ? <>
             <div className="compare-grid">
-              <div><small>Программа с ошибкой</small><pre>{item.program || '—'}</pre></div>
               <div><small>Исправленный код студента</small><pre>{test.answers?.fix || '(пусто)'}</pre></div>
+              <div><small>{item.reference ? 'Эталонное решение' : 'Программа с ошибкой'}</small><pre>{item.reference || item.program || '—'}</pre></div>
             </div>
             {item.bugDescription && <p className="board-bug"><b>Ошибка:</b> {item.bugDescription}</p>}
-            {item.reference && <details className="board-statement-small"><summary>Эталонное решение</summary><pre>{item.reference}</pre></details>}
+            {item.reference && item.program && <details className="board-statement-small"><summary>Программа с ошибкой</summary><pre>{item.program}</pre></details>}
           </>
-            : <div className="board-code"><small>Код студента</small><pre>{test.answers?.code || '(пусто)'}</pre></div>}
+            : <div className="compare-grid">
+              <div><small>Код студента</small><pre>{test.answers?.code || '(пусто)'}</pre></div>
+              <div><small>Проверка</small><pre>{check ? check.feedback || check.output || (check.passed ? 'Все проверки пройдены.' : '—') : 'Ещё не проверено.'}</pre></div>
+            </div>}
       </BoardItemBlock>
     })}
 
-    {score && <ScoreTable score={score} />}
+    {test.score && <ScoreTable score={test.score} />}
     <Runs runs={test.runs ?? []} language={test.language ?? items[0]?.language ?? 'JAVA'} />
-    <Assessment assessment={test.assessment} status={assessmentStatus} finished={test.status === 'FINISHED'} onAssess={assess} />
-    {test.status === 'FINISHED' && <GradeForm key={`${test.id}:${test.gradedAt ?? ''}:${test.finalGrade ?? ''}`} test={test} onSave={saveGrade} />}
   </>
 }
 
-function BoardItemBlock({ n, item, check, explanation, children }: { n: number; item: BoardAdminItem; check: BoardCheck | null; explanation?: { verdict: string; explanation: string }; children: ReactNode }) {
+/** The right column of an opened test: the facts, the LLM assessment and the final grade. */
+function BoardSummary({ test, assess, saveGrade }: { test: BoardAdminTest; assess: () => Promise<void>; saveGrade: (grade: BoardGrade | null, comment: string) => Promise<boolean> }) {
+  const assessmentStatus = test.assessment?.status ?? test.assessmentStatus
+  const score = test.score
+  const ran = test.status === 'STARTED' || test.status === 'FINISHED'
+  return <aside className="card board-summary" aria-label={`Итог: ${test.displayName}`}>
+    <h2 className="card-title">Итог · {test.displayName}</h2>
+    {ran && <>
+      <div className="panel-facts">
+        <span className="mini-stats-cell"><b><StatusChip status={test.paceStatus} /></b><small>темп к сессии · {test.paceCap ? `оценка не выше ${test.paceCap}` : 'без ограничения'}</small></span>
+        <span className="mini-stats-cell"><b>{score ? <span className="tabular">{Math.round(score.percent)}%</span> : '—'}</b><small>{score ? `баллы ${decimal(score.points)} из ${decimal(score.max)}` : 'баллы — после проверки'}</small></span>
+        <span className="mini-stats-cell"><b><GradeChip grade={test.ruleGrade} small /></b><small>по проверкам (без LLM)</small></span>
+        <span className="mini-stats-cell"><b>{assessmentStatus === 'PENDING' ? <span className="spinner" aria-hidden="true" /> : <GradeChip grade={test.suggestedGrade} small />}</b><small>предложено (с учётом LLM и темпа)</small></span>
+      </div>
+      <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — на экране у доски этого нет.</p>
+    </>}
+    {test.status === 'FINISHED' ? <>
+      <Assessment assessment={test.assessment} status={assessmentStatus} finished onAssess={assess} />
+      <GradeForm key={`${test.id}:${test.gradedAt ?? ''}:${test.finalGrade ?? ''}`} test={test} onSave={saveGrade} />
+    </> : <p className="muted small">{test.status === 'STARTED' ? 'Тест идёт — оценка LLM и итоговая оценка появятся, когда студент сдаст тест.' : SUMMARY_HINT}</p>}
+  </aside>
+}
+
+function CheckTag({ check }: { check: BoardCheck | null }) {
+  return !check ? <span className="check-tag">не проверено</span>
+    : check.unavailable ? <span className="check-tag warn" title="Проверка не запускалась"><Icon name="x" size={14} />проверка недоступна</span>
+      : <span className={`check-tag ${check.passed ? 'ok' : 'bad'}`}><Icon name={check.passed ? 'check' : 'x'} size={14} />{check.passed ? 'верно' : 'не верно'}</span>
+}
+
+function BoardItemBlock({ id, labelledBy, hidden, item, check, explanation, children }: {
+  id: string; labelledBy: string; hidden: boolean; item: BoardAdminItem; check: BoardCheck | null; explanation?: { verdict: string; explanation: string }; children: ReactNode
+}) {
   const topic = item.skillTitle ?? item.skillCode
-  return <div className="board-detail-item">
-    <div className="board-detail-item-head">
-      <h3><span className="board-num small">{n}</span> {KIND[item.kind]?.title ?? item.kind}{item.title && <span className="muted"> · {item.title}</span>}</h3>
-      {!check ? <span className="check-tag">не проверено</span>
-        : check.unavailable ? <span className="check-tag warn" title="Проверка не запускалась"><Icon name="x" size={14} />проверка недоступна</span>
-          : <span className={`check-tag ${check.passed ? 'ok' : 'bad'}`}><Icon name={check.passed ? 'check' : 'x'} size={14} />{check.passed ? 'верно' : 'не верно'}</span>}
-    </div>
-    <p className="muted small board-item-ref">{[`вес ${KIND[item.kind]?.weight ?? '—'}`, topic && `тема: ${topic}`, item.difficulty != null && `сложность ${item.difficulty}`,
+  return <div className="board-detail-item" id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
+    <p className="muted small board-item-ref">{item.title && <><b>{item.title}</b> · </>}{[`вес ${KIND[item.kind]?.weight ?? '—'}`, topic && `тема: ${topic}`, item.difficulty != null && `сложность ${item.difficulty}`,
       item.externalKey ?? (item.taskId != null ? `задача #${item.taskId}` : null)].filter(Boolean).join(' · ')}</p>
     {children}
-    {check && (check.feedback || check.output) && <div className="board-code"><small>Проверка</small><pre>{check.feedback || check.output}</pre></div>}
+    {item.kind !== 'code' && check && (check.feedback || check.output) && <div className="board-code"><small>Проверка</small><pre>{check.feedback || check.output}</pre></div>}
     {check?.console && <ConsolePanel run={check.console} origin="attempt" language={item.language ?? 'JAVA'} />}
     {explanation && <div className={`board-llm-item ${verdictTone(explanation.verdict)}`}><b><Icon name="sparkle" size={14} /> {explanation.verdict}</b><p>{explanation.explanation}</p></div>}
   </div>
@@ -766,7 +828,7 @@ function ScoreTable({ score }: { score: BoardScore }) {
       </tr>)}</tbody>
       <tfoot><tr><td className="text"><b>Итого</b></td><td>{decimal(score.max)}</td><td /><td><b>{decimal(score.points)} из {decimal(score.max)} · {Math.round(score.percent)}%</b></td></tr></tfoot>
     </table></div>
-    <p className="muted small table-note">Верно — 1, «частично верно» по LLM — 0,5, иначе 0. Оценка по проценту: ≥ 90 — 5, ≥ 75 — 4, ≥ 50 — 3, ниже — 2.</p>
+    <p className="muted small table-note">Прошло проверку или «верно» по LLM (например, расходится только формат вывода) — 1, «частично верно» по LLM — 0,5, иначе 0. Оценка по проценту: ≥ 90 — 5, ≥ 75 — 4, ≥ 50 — 3, ниже — 2.</p>
   </div>
 }
 
@@ -795,20 +857,20 @@ function Assessment({ assessment, status, finished, onAssess }: { assessment: Bo
           {assessment.summary && <p className="board-assessment-summary">{assessment.summary}</p>}
           {!!assessment.items?.length && <ul className="board-verdicts">{assessment.items.map(v => <li key={v.item}>
             {KIND[v.item]?.title ?? v.item} <span className={`board-verdict ${verdictTone(v.verdict)}`}>{v.verdict}</span></li>)}</ul>}
-          <p className="muted small">Пояснения по каждому заданию — выше, под заданием.</p>
+          <p className="muted small">Пояснения по каждому заданию — во вкладках заданий.</p>
           {questions.length > 0 && <div className="board-questions">
             <b><Icon name="chat" size={15} /> Вопросы для устного разбора</b>
             <ol>{questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
           </div>}
         </>
-          : <p className="board-unavailable"><Icon name="x" size={15} /> LLM недоступна{assessment?.error ? `: ${assessment.error}` : ''}. Оцени сам — проверки и код выше.</p>}
+          : <p className="board-unavailable"><Icon name="x" size={15} /> LLM недоступна{assessment?.error ? `: ${assessment.error}` : ''}. Оцени сам — проверки и код во вкладках заданий.</p>}
     {again}
   </div>
 }
 
 
-function BoardTestDetail({ id, request, busy, onAct, onClose, register, onSaved }: {
-  id: Id; request: Request; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; onClose: () => void
+function BoardTestDetail({ id, anchor, request, busy, onAct, onClose, register, onSaved }: {
+  id: Id; anchor: RefObject<HTMLDivElement | null>; request: Request; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; onClose: () => void
   register: (update: ((test: BoardAdminTest) => void) | null) => void; onSaved: () => void
 }) {
   const [test, setTest] = useState<BoardAdminTest | null>(null)
@@ -840,29 +902,35 @@ function BoardTestDetail({ id, request, busy, onAct, onClose, register, onSaved 
     return true
   }
 
-  if (failed) return <section className="card board-detail"><div className="chart-head"><h2 className="card-title">Тест не найден</h2>
-    <button type="button" className="icon-button" aria-label="Закрыть" onClick={onClose}><Icon name="x" /></button></div><p className="muted">Возможно, его удалили.</p></section>
-  if (!test) return <section className="card board-detail"><p className="loading-note"><span className="spinner" aria-hidden="true" /> Загружаем тест…</p></section>
+  const hint = <aside className="card board-summary" aria-label="Итог"><h2 className="card-title">Итог</h2><p className="muted small">{SUMMARY_HINT}</p></aside>
+  if (failed) return <><div ref={anchor} className="pair-anchor board-detail-area"><section className="card board-detail"><div className="chart-head"><h2 className="card-title">Тест не найден</h2>
+    <button type="button" className="icon-button" aria-label="Закрыть" onClick={onClose}><Icon name="x" /></button></div><p className="muted">Возможно, его удалили.</p></section></div>{hint}</>
+  if (!test) return <><div ref={anchor} className="pair-anchor board-detail-area"><section className="card board-detail"><p className="loading-note"><span className="spinner" aria-hidden="true" /> Загружаем тест…</p></section></div>{hint}</>
 
   const duration = test.startedAt && test.finishedAt ? Math.round((ms(test.finishedAt) - ms(test.startedAt)) / 1000) : null
-  return <section className="card board-detail enter" aria-label={`Тест: ${test.displayName}`}>
-    <div className="chart-head">
-      <div>
-        <p className="eyebrow">Ответ у доски</p>
-        <h2 className="title">{test.displayName} <BoardStatusTag status={test.status} /></h2>
-        <p className="muted small">Вызван {dayTime(test.calledAt)}{test.login && ` · ${test.login}`}{test.language && ` · ${courseTitle(test.language)}`}
-          {duration !== null && ` · тест занял ${clock(duration * 1000)}`}</p>
-        <KindsNote test={test} />
-      </div>
-      <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
-    </div>
-    {live(test) && <div className="board-detail-live"><Countdown test={test} now={now} /></div>}
-    <BoardActions test={test} busy={busy} onAct={onAct} />
+  return <>
+    <div ref={anchor} className="pair-anchor board-detail-area">
+      <section className="card board-detail enter" aria-label={`Тест: ${test.displayName}`}>
+        <div className="chart-head">
+          <div>
+            <p className="eyebrow">Ответ у доски</p>
+            <h2 className="title">{test.displayName} <BoardStatusTag status={test.status} /></h2>
+            <p className="muted small">Вызван {dayTime(test.calledAt)}{test.login && ` · ${test.login}`}{test.language && ` · ${courseTitle(test.language)}`}
+              {duration !== null && ` · тест занял ${clock(duration * 1000)}`}</p>
+            <KindsNote test={test} />
+          </div>
+          <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {live(test) && <div className="board-detail-live"><Countdown test={test} now={now} /></div>}
+        <BoardActions test={test} busy={busy} onAct={onAct} />
 
-    {test.status === 'CALLED' || test.status === 'CANCELLED' || test.status === 'EXPIRED'
-      ? <p className="muted">{test.status === 'CALLED' ? 'Студент ещё не начал тест: задания выбираются, когда он нажмёт «Начать тест».' : 'Тест не проводился.'}</p>
-      : <BoardTestBody test={test} assess={assess} saveGrade={saveGrade} />}
-  </section>
+        {test.status === 'CALLED' || test.status === 'CANCELLED' || test.status === 'EXPIRED'
+          ? <p className="muted">{test.status === 'CALLED' ? 'Студент ещё не начал тест: задания выбираются, когда он нажмёт «Начать тест».' : 'Тест не проводился.'}</p>
+          : <BoardTestItems test={test} />}
+      </section>
+    </div>
+    <BoardSummary test={test} assess={assess} saveGrade={saveGrade} />
+  </>
 }
 
 

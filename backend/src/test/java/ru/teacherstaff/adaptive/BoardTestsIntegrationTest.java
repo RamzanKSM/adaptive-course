@@ -472,6 +472,12 @@ class BoardTestsIntegrationTest {
     assertEquals(2, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), null));
     assertEquals(2, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), Map.of("status", "UNAVAILABLE", "items", List.of(Map.of("item", "fix", "verdict", "частично верно")))));
     assertEquals(3, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), partlyCode), "the fix partly right: 1 + 1 of 3, 66.7 % → 3");
+    // «верно» by the LLM for a failed item (e.g. only the format of the output differs) gives the whole weight: 1 + 2 + 3 → 5;
+    // the rule grade stays by the checks alone. A verdict of an item that is not in the test changes nothing.
+    var rightCode = Map.<String, Object>of("status", "DONE", "items", List.of(Map.of("item", "code", "verdict", "верно"), Map.of("item", "fix", "verdict", "неверно")));
+    assertEquals(Map.of("parsons", 1.0, "fix", 1.0, "code", 1.0), BoardTests.scores(all, rightCode)); assertEquals(5, BoardTests.grade(all, rightCode));
+    assertEquals(2, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), rightCode), "«неверно» of the fix: 1 of 3");
+    assertEquals(3, BoardTests.grade(all, Map.of("status", "UNAVAILABLE", "items", List.of(Map.of("item", "code", "verdict", "верно")))), "an UNAVAILABLE assessment gives nothing: 3 of 6 → 3");
     assertNull(BoardTests.cap("ON_TRACK")); assertNull(BoardTests.cap("DONE")); assertNull(BoardTests.cap(null));
     assertEquals(4, BoardTests.cap("BORDERLINE")); assertEquals(3, BoardTests.cap("BEHIND"));
     assertEquals(3, BoardTests.suggested(5, 3)); assertEquals(4, BoardTests.suggested(4, null)); assertEquals(2, BoardTests.suggested(2, 4));

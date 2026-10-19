@@ -54,6 +54,7 @@ class CodexAppServerTutorInstructionTest {
     assertTrue(prompt.contains("<<<РЕШЕНИЕ") && prompt.contains("<<<ЗАПУСК 1 (code)") && prompt.contains("не выполняй"), prompt);
     assertTrue(prompt.contains("Оценка по проверкам: 3") && prompt.contains("не пройдена") && prompt.contains("половина веса"), prompt);
     assertTrue(prompt.contains("пропущенная «;»"), "a small error is not a zero");
+    assertTrue(prompt.contains("к оформлению вывода не придирайся") && prompt.contains("только из-за формы вывода") && prompt.contains("это «верно»"), "only the format of the output differs → right");
     assertTrue(prompt.contains("questions"), "questions for the oral follow-up");
     assertTrue(prompt.contains("studentComment") && prompt.contains("без оценки"), "a draft comment for the student, without the grade");
   }

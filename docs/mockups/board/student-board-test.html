@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тест у доски — макеты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--font-display:'Unbounded',system-ui,sans-serif;--font-body:'Manrope',system-ui,sans-serif;--font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+--bg:#f3f2ed;--surface:#fff;--surface-2:#f8f7f3;--ink:#15141a;--ink-2:#3a3944;--muted:#6b6a74;--line:#e5e3da;--line-strong:#d3d0c4;
+--brand:#5b3df5;--brand-2:#8b5cf6;--brand-ink:#3b23c4;--brand-soft:#eeeaff;--hud-a:#1b1830;--hud-b:#2a1f6b;
+--success:#10a067;--success-soft:#e2f6ec;--danger:#e5484d;--danger-soft:#fdeced;--danger-ink:#b42318;--warn-soft:#fff1d6;--warn-ink:#8a5300;
+--code:22px;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-variant-ligatures:none;font-family:var(--font-body);background:var(--bg);color:var(--ink);font-size:19px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+.screen{display:none;height:100vh;flex-direction:column;overflow:hidden}
+.screen.on{display:flex}
+
+/* mockup chrome (not part of the design) */
+.mock{position:fixed;left:12px;bottom:12px;z-index:99;display:flex;gap:6px;align-items:center;padding:6px;border-radius:14px;background:#15141aee;color:#fff;font-size:13px;box-shadow:0 8px 24px #0005}
+.mock b{padding:0 8px;font-weight:800}
+.mock button{padding:6px 12px;border-radius:9px;color:#cfcbe8;font-weight:700}
+.mock button.on{background:var(--brand);color:#fff}
+.mock.min .note,.mock.min [data-v]:not(.on){display:none}
+.mock .note{max-width:420px;padding:0 8px;color:#bdbac8;font-weight:600}
+
+/* shared pieces */
+.avatar{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;font-weight:800;font-size:15px;flex:none}
+.who{display:flex;align-items:center;gap:10px;min-width:0}
+.who small{display:block;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+.who b{display:block;font-size:19px;line-height:1.1;white-space:nowrap}
+.timer{display:inline-flex;align-items:center;gap:8px;padding:2px 18px;border-radius:16px;background:var(--ink);color:#fff;font-family:var(--font-display);font-weight:700;font-size:40px;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.timer.low{background:var(--danger)}
+.save{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:750;color:var(--success);white-space:nowrap}
+.primary{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:14px;background:var(--brand);color:#fff;font-weight:800;font-size:17px;white-space:nowrap;box-shadow:0 10px 24px -12px rgb(91 61 245/.7)}
+.ghost{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:12px;border:2px solid var(--line-strong);background:var(--surface);font-weight:800;font-size:16px;white-space:nowrap}
+.ghost:hover{border-color:var(--ink-2)}
+.run{border-color:var(--brand);color:var(--brand-ink)}
+.tabs{display:flex;gap:8px;min-width:0}
+.tab{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 7px;border-radius:14px;border:2px solid var(--line-strong);background:var(--surface);font-weight:800;font-size:16px;color:var(--ink-2);white-space:nowrap}
+.tab .n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--surface-2);border:2px solid var(--line-strong);font-family:var(--font-display);font-size:15px}
+.tab.on{border-color:var(--brand);background:var(--brand-soft);color:var(--ink)}
+.tab.on .n{background:var(--brand);border-color:var(--brand);color:#fff}
+.tab .ok{color:var(--success);font-size:18px}
+.kind{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--brand)}
+.task-title{margin:2px 0 10px;font-family:var(--font-display);font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+.statement p{margin:0 0 12px}
+.statement code{font-family:var(--font-mono);font-size:.9em;padding:1px 6px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line)}
+.example{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:6px 0 12px;padding:12px 14px;border-radius:12px;background:var(--surface-2);font-size:17px}
+.example span{color:var(--muted);font-weight:700}
+.example code{background:none;border:0;padding:0}
+.callout{display:flex;gap:10px;margin:0 0 12px;padding:12px 14px;border-radius:14px;background:var(--warn-soft);color:var(--warn-ink);font-weight:750;font-size:18px;line-height:1.4}
+.zoom{display:inline-flex;border:2px solid var(--line-strong);border-radius:11px;overflow:hidden;background:var(--surface)}
+.zoom button{padding:5px 11px;font-weight:800;font-size:15px}
+.zoom button+button{border-left:2px solid var(--line-strong)}
+.file{font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--muted)}
+
+/* editor */
+.editor{display:flex;min-height:0;flex:1;border:2px solid var(--line-strong);border-radius:16px;background:#fff;overflow:auto;font:var(--code)/1.55 var(--font-mono)}
+.gutter{flex:none;padding:12px 10px 12px 14px;text-align:right;color:#9a98a3;background:#f1efe8;user-select:none;white-space:pre}
+.code{flex:1;margin:0;padding:12px 16px;white-space:pre;outline:none;tab-size:4}
+.kw{color:#7c3aed;font-weight:600}.ty{color:#0e7490}.st{color:#15803d}.nu{color:#b45309}.cm{color:#8d8c95;font-style:italic}
+
+/* console */
+.console{display:flex;flex-direction:column;min-height:0;border-radius:16px;background:#16151c;color:#e9e7f2;overflow:hidden}
+.console-head{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #2b2935;font-size:14px;font-weight:750;color:#bdbac8}
+.console-head .st-ok{padding:2px 9px;border-radius:99px;background:#10a06733;color:#5ee0a8;font-size:12px;font-weight:800}
+.console-head .x{margin-left:auto;color:#8d8c95;font-size:18px}
+.console pre{margin:0;padding:12px 16px;overflow:auto;font:calc(var(--code) - 3px)/1.5 var(--font-mono)}
+.console .in{color:#8d8c95}
+
+/* parsons */
+.sheet{border:2px solid var(--line-strong);border-radius:16px;background:#fff;padding:8px 0;overflow:auto}
+.fixed{padding:0 14px 0 50px;font:var(--code)/1.6 var(--font-mono);white-space:pre;color:var(--ink-2)}
+.zone{margin:6px 10px;padding:8px;border:2px dashed var(--brand);border-radius:14px;background:#f6f3ff;display:grid;gap:6px}
+.zone-head,.pool-head{display:flex;gap:12px;align-items:baseline;padding:0 4px;font-size:14px;font-weight:700;color:var(--muted)}
+.zone-head b,.pool-head b{font-size:14px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--brand-ink)}
+.line{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:6px;min-height:46px;padding:2px 8px 2px 6px;border:2px solid var(--line-strong);border-radius:12px;background:#fff;font:var(--code)/1.45 var(--font-mono);white-space:pre}
+.line code{font:inherit;white-space:pre-wrap;min-width:0}
+.line .g{color:var(--muted);font-size:15px;letter-spacing:-.25em;font-family:var(--font-body)}
+.line .tools{display:flex;gap:5px}
+.line .tools button{width:38px;height:38px;border-radius:10px;border:2px solid var(--line-strong);background:var(--surface-2);font-size:18px;font-weight:800}
+.line .add{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--brand-soft);color:var(--brand);font-weight:800;font-size:22px}
+.pool{display:grid;gap:8px;align-content:start}
+.extra{padding:9px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn-ink);font-weight:800;font-size:16px}
+.nav{display:flex;justify-content:space-between;gap:10px;padding-top:12px;border-top:2px dashed var(--line);margin-top:auto}
+
+/* ── A: split ── */
+.barA{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:18px;padding:10px 18px;border-bottom:2px solid var(--line);background:var(--bg)}
+.barA .tabs{justify-content:center}
+.barA .right{display:flex;align-items:center;gap:14px}
+.A-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(380px,38%) 1fr;gap:16px;padding:16px 18px}
+.pane{display:flex;flex-direction:column;min-height:0;min-width:0}
+.card{padding:18px 20px;border:2px solid var(--line-strong);border-radius:20px;background:var(--surface);overflow:auto}
+.A-left{display:flex;flex-direction:column}
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.toolbar .sp{flex:1}
+.A-right .console{flex:0 0 30%;margin-top:10px}
+
+/* ── B: code first, collapsible statement ── */
+.barB{display:flex;align-items:center;gap:14px;padding:8px 18px;background:var(--surface);border-bottom:2px solid var(--line)}
+.barB .sp{flex:1}
+.barB .timer{font-size:34px;padding:0 14px;border-radius:12px}
+.strip{position:relative;margin:12px 18px 0;padding:12px 18px;border:2px solid var(--line-strong);border-radius:16px;background:var(--surface)}
+.strip-head{display:flex;align-items:center;gap:12px}
+.strip-head .t{font-weight:800;font-size:19px}
+.strip-head .sum{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2)}
+.strip .full{display:none;margin-top:10px}
+.strip.open .full{display:block}
+.strip.open .sum{display:none}
+.B-body{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 18px 14px;gap:10px}
+.B-body .console{flex:0 0 26%}
+.B-cols{flex:1;min-height:0;display:grid;grid-template-columns:1fr minmax(360px,40%);gap:14px}
+
+/* ── C: side rail ── */
+.screen.C{flex-direction:row}
+.rail{flex:0 0 270px;display:flex;flex-direction:column;gap:18px;padding:20px 16px;background:linear-gradient(170deg,var(--hud-a),var(--hud-b));color:#fff}
+.rail .who small{color:#b9adff}.rail .who b{white-space:normal}
+.rail .timer{justify-content:center;font-size:64px;padding:8px 0;border-radius:20px;background:#ffffff14;border:2px solid #ffffff22}
+.rail .timer-cap{margin-top:-12px;text-align:center;font-size:13px;font-weight:700;color:#b9adff}
+.vsteps{display:grid;gap:8px}
+.vstep{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;border:2px solid #ffffff22;color:#d8d3f5;font-weight:800;font-size:17px;text-align:left}
+.vstep .n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#ffffff1a;font-family:var(--font-display);font-size:14px}
+.vstep small{display:block;font-size:12px;font-weight:700;color:#a49ccf}
+.vstep.on{background:#fff;color:var(--ink);border-color:#fff}
+.vstep.on .n{background:var(--brand);color:#fff}
+.vstep.on small{color:var(--muted)}
+.vstep .ok{margin-left:auto;color:#5ee0a8}
+.rail .save{color:#5ee0a8}
+.rail .primary{justify-content:center;margin-top:auto;background:#fff;color:var(--brand-ink);box-shadow:none}
+.C-main{flex:1;min-width:0;display:flex;flex-direction:column;padding:16px 18px;gap:12px}
+.C-main .card{flex:0 1 auto;max-height:34vh}
+.C-work{flex:1;min-height:0;display:grid;grid-template-columns:1fr minmax(340px,34%);gap:14px}
+.C-work .console{height:100%}
+.console-run{margin-left:auto}
+</style>
+</head>
+<body>
+
+<div class="mock"><b>Тест у доски</b>
+  <button data-v="A" class="on">A · Условие | Редактор</button>
+  <button data-v="B">B · Код во весь экран</button>
+  <button data-v="C">C · Панель с таймером</button>
+  <span class="note" id="note"></span><button data-hide title="Скрыть панель макета">✕</button>
+</div>
+
+<!-- A -->
+<main class="screen A on" data-screen="A">
+  <header class="barA">
+    <div class="who"><span class="avatar">АС</span><span><small>Ответ у доски</small><b>Алина Смирнова</b></span></div>
+    <nav class="tabs" data-tabs></nav>
+    <div class="timer" data-timer>⏱ 5:42</div>
+    <div class="right"><span class="save">✓ Сохранено</span><button class="primary">⚑ Завершить тест</button></div>
+  </header>
+  <div class="A-body" data-body="A"></div>
+</main>
+
+<!-- B -->
+<main class="screen B" data-screen="B">
+  <header class="barB">
+    <div class="who"><span class="avatar">АС</span><span><small>Ответ у доски</small><b>Алина Смирнова</b></span></div>
+    <nav class="tabs" data-tabs style="margin-left:18px"></nav>
+    <span class="sp"></span>
+    <span class="save">✓ Сохранено</span>
+    <div class="timer" data-timer>5:42</div>
+    <button class="primary">⚑ Завершить</button>
+  </header>
+  <div data-body="B" style="display:contents"></div>
+</main>
+
+<!-- C -->
+<main class="screen C" data-screen="C">
+  <aside class="rail">
+    <div class="who"><span class="avatar">АС</span><span><small>Ответ у доски</small><b>Алина Смирнова</b></span></div>
+    <div class="timer" data-timer>5:42</div>
+    <div class="timer-cap">осталось из 7 минут</div>
+    <nav class="vsteps" data-vsteps></nav>
+    <span class="save">✓ Сохранено</span>
+    <button class="primary">⚑ Завершить тест</button>
+  </aside>
+  <div class="C-main" data-body="C"></div>
+</main>
+
+<script>
+const NOTES = {
+  A: 'Шапка в одну строку (≈70px) со вкладками и таймером; условие слева всегда на виду, справа редактор на всю высоту и консоль под ним. В «Собери программу» строки стоят рядом с программой.',
+  B: 'Максимум места коду: условие — свёрнутая полоса (одна строка, раскрывается по кнопке). Редактор на всю ширину, консоль снизу. Кнопки A−/A+ для шрифта на проекторе.',
+  C: 'Таймер, шаги и «Завершить» в тёмной боковой панели; справа условие (не выше трети экрана), под ним редактор и консоль рядом. Крупный шрифт кода по умолчанию.'
+}
+const ITEMS = [
+  { kind: 'parsons', title: 'Собери программу', task: 'Чётные числа',
+    statement: '<p>Собери программу, которая печатает все чётные числа от <code>2</code> до <code>n</code> через пробел.</p><div class="example"><span>Ввод</span><code>9</code><span>Вывод</span><code>2 4 6 8</code></div>',
+    short: 'Напечатай все чётные числа от 2 до n через пробел. Ввод 9 → вывод 2 4 6 8',
+    before: 'public class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);',
+    after: '    }\n}',
+    placed: ['        int n = in.nextInt();', '        for (int i = 1; i <= n; i++) {'],
+    pool: ['            if (i % 2 == 0) {', '                System.out.print(i + " ");', '            }', '        }', '        if (i % 2 == 1) {'] },
+  { kind: 'fix', title: 'Исправь ошибку', task: 'Сумма массива',
+    statement: '<p>Программа должна напечатать сумму элементов массива <code>nums</code>. Для массива <code>{3, 5, 7}</code> ожидается <code>15</code>, но программа падает.</p>',
+    short: 'Программа должна напечатать сумму элементов nums. Для {3, 5, 7} ожидается 15, но программа падает.',
+    code: 'public class Main {\n    public static void main(String[] args) {\n        int[] nums = {3, 5, 7};\n        int sum = 0;\n        for (int i = 0; i <= nums.length; i++) {\n            sum += nums[i];\n        }\n        System.out.println(sum);\n    }\n}',
+    console: '<span class="in">$ java Main</span>\nException in thread "main" java.lang.ArrayIndexOutOfBoundsException:\n  Index 3 out of bounds for length 3\n    at Main.main(Main.java:6)', status: 'Ошибка' },
+  { kind: 'code', title: 'Напиши код', task: 'Гласные в строке',
+    statement: '<p>Программа читает одну строку и печатает, сколько в ней гласных букв <code>a</code>, <code>e</code>, <code>i</code>, <code>o</code>, <code>u</code> (большие и маленькие).</p><div class="example"><span>Ввод</span><code>Hello World</code><span>Вывод</span><code>3</code></div><p>Если гласных нет, напечатай <code>0</code>.</p>',
+    short: 'Прочитай строку и напечатай, сколько в ней гласных a, e, i, o, u. Hello World → 3',
+    code: 'import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner in = new Scanner(System.in);\n        String line = in.nextLine().toLowerCase();\n        int count = 0;\n        for (char c : line.toCharArray()) {\n            if ("aeiou".indexOf(c) >= 0) {\n                count++;\n            }\n        }\n        System.out.println(count);\n    }\n}',
+    console: '<span class="in">$ java Main\n&gt; Hello World</span>\n3', status: 'OK' },
+]
+let step = 2, variant = 'A', size = 22
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const hl = s => esc(s)
+  .replace(/("[^"\n]*")/g, '\u0001st$1\u0002')
+  .replace(/\b(public|class|static|void|for|if|int|char|new|import|return|else)\b/g, '<span class="kw">$1</span>')
+  .replace(/\b(String|Scanner|System)\b/g, '<span class="ty">$1</span>')
+  .replace(/\b(\d+)\b/g, '<span class="nu">$1</span>')
+  .replace(/\u0001st(.*?)\u0002/g, '<span class="st">$1</span>')
+const editor = it => { const lines = it.code.split('\n'), html = hl(it.code)
+  return `<div class="editor"><div class="gutter">${lines.map((_, i) => i + 1).join('\n')}</div><pre class="code" contenteditable spellcheck="false">${html}</pre></div>` }
+const con = (it, close = true) => `<div class="console"><div class="console-head">Консоль · запуск 1 <span class="st-ok" style="${it.status === 'OK' ? '' : 'background:#e5484d33;color:#ff9b9e'}">${it.status}</span>${close ? '<button class="x" title="Скрыть">✕</button>' : '<button class="ghost run console-run" style="padding:4px 12px;font-size:14px;background:#ffffff10;color:#d9d3ff;border-color:#5b3df5">▶ Запустить</button>'}</div><pre>${it.console}</pre></div>`
+const zoom = () => `<span class="zoom"><button data-z="-2">A−</button><button data-z="2">A+</button></span>`
+const head = it => `<div class="kind">${ITEMS.indexOf(it) + 1} из 3 · ${it.title}</div><h2 class="task-title">${it.task}</h2>${it.kind === 'fix' ? '<p class="callout">◎ В программе есть ошибка: она работает не так, как требует условие. Найди и исправь её.</p>' : ''}`
+const sheet = it => `<div class="sheet"><div class="fixed">${hl(it.before)}</div><div class="zone"><div class="zone-head"><b>Твоя программа</b>${it.placed.length} строки</div>${it.placed.map((l, i) => `<div class="line"><span class="g">⋮⋮</span><code>${hl(l)}</code><span class="tools"><button>↑</button><button>↓</button><button>✕</button></span></div>`).join('')}</div><div class="fixed">${hl(it.after)}</div></div>`
+const pool = it => `<div class="pool"><div class="pool-head"><b>Строки</b>нажми, чтобы добавить в конец программы</div><div class="extra">✕ Одна строка лишняя — её не используй.</div>${it.pool.map(l => `<div class="line"><span class="g">⋮⋮</span><code>${hl(l.trimStart())}</code><span class="add">+</span></div>`).join('')}</div>`
+const nav = () => { const p = ITEMS[step - 1], n = ITEMS[step + 1]
+  return `<nav class="nav">${p ? `<button class="ghost" data-go="${step - 1}">← ${step}. ${p.title}</button>` : '<span></span>'}${n ? `<button class="ghost" data-go="${step + 1}">${step + 2}. ${n.title} →</button>` : ''}</nav>` }
+
+const LAYOUT = {
+  A(it) {
+    if (it.kind === 'parsons') return `<section class="pane"><div class="card A-left" style="flex:1">${head(it)}<div class="statement">${it.statement}</div>${pool(it)}${nav()}</div></section>
+      <section class="pane"><div class="toolbar"><span class="file">Main.java</span><span class="sp"></span>${zoom()}</div>${sheet(it)}</section>`
+    return `<section class="pane"><div class="card A-left" style="flex:1">${head(it)}<div class="statement">${it.statement}</div>${nav()}</div></section>
+      <section class="pane A-right"><div class="toolbar"><span class="file">Main.java</span><span class="sp"></span>${zoom()}<button class="ghost run">▶ Запустить</button></div>${editor(it)}${con(it)}</section>`
+  },
+  B(it) {
+    const strip = `<div class="strip" data-strip><div class="strip-head"><span class="t">${it.task}</span><span class="sum">${it.short}</span><button class="ghost" data-toggle style="padding:5px 12px;font-size:15px">Условие ▾</button></div><div class="full statement">${it.kind === 'fix' ? '<p class="callout">◎ В программе есть ошибка — найди и исправь её.</p>' : ''}${it.statement}</div></div>`
+    if (it.kind === 'parsons') return `${strip}<div class="B-body"><div class="B-cols">${sheet(it)}<div class="card">${pool(it)}</div></div></div>`
+    return `${strip}<div class="B-body"><div class="toolbar" style="margin:0"><span class="file">Main.java</span><span class="sp"></span>${zoom()}<button class="ghost run">▶ Запустить</button></div>${editor(it)}${con(it)}</div>`
+  },
+  C(it) {
+    const card = `<div class="card">${head(it)}<div class="statement">${it.statement}</div></div>`
+    if (it.kind === 'parsons') return `${card}<div class="C-work">${sheet(it)}<div class="card" style="max-height:none">${pool(it)}</div></div>`
+    return `${card}<div class="C-work"><div class="pane"><div class="toolbar"><span class="file">Main.java</span><span class="sp"></span>${zoom()}</div>${editor(it)}</div><div class="pane" style="padding-top:44px">${con(it, false)}</div></div>`
+  },
+}
+function render() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.dataset.screen === variant))
+  document.querySelectorAll('.mock [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === variant))
+  document.getElementById('note').textContent = NOTES[variant]
+  document.querySelectorAll('[data-tabs]').forEach(t => t.innerHTML = ITEMS.map((it, i) => `<button class="tab ${i === step ? 'on' : ''}" data-go="${i}"><span class="n">${i + 1}</span>${it.title}${i < 2 ? '<span class="ok">✓</span>' : ''}</button>`).join(''))
+  document.querySelectorAll('[data-vsteps]').forEach(t => t.innerHTML = ITEMS.map((it, i) => `<button class="vstep ${i === step ? 'on' : ''}" data-go="${i}"><span class="n">${i + 1}</span><span>${it.title}<small>${[2, 2, 3][i]} мин · ${i < 2 ? 'начато' : 'сейчас'}</small></span>${i < 2 ? '<span class="ok">✓</span>' : ''}</button>`).join(''))
+  const body = document.querySelector(`[data-body="${variant}"]`)
+  body.innerHTML = LAYOUT[variant](ITEMS[step])
+  document.documentElement.style.setProperty('--code', (variant === 'C' && size === 22 ? 24 : size) + 'px')
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return
+  if ('hide' in t.dataset) { const m = t.closest('.mock'); m.classList.toggle('min'); t.textContent = m.classList.contains('min') ? '⋯' : '✕' }
+  else if (t.dataset.v) { variant = t.dataset.v; size = 22; render() }
+  else if (t.dataset.go) { step = +t.dataset.go; render() }
+  else if (t.dataset.z) { size = Math.max(16, Math.min(32, (variant === 'C' && size === 22 ? 24 : size) + +t.dataset.z)); document.documentElement.style.setProperty('--code', size + 'px') }
+  else if ('toggle' in t.dataset) { const s = t.closest('[data-strip]'); s.classList.toggle('open'); t.textContent = s.classList.contains('open') ? 'Свернуть ▴' : 'Условие ▾' }
+})
+let left = 342
+setInterval(() => { left = left > 0 ? left - 1 : 342; document.querySelectorAll('[data-timer]').forEach(el => { const txt = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; el.textContent = (el.closest('.barA') ? '⏱ ' : '') + txt; el.classList.toggle('low', left < 60) }) }, 1000)
+render()
+</script>
+</body>
+</html>

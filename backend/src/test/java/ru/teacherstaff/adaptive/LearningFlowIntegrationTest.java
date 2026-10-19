@@ -961,6 +961,20 @@ class LearningFlowIntegrationTest {
     start(token); solve(token,2); assertProgress(student,2,0,0);
   }
 
+  @Test void anOverdueRepetitionDoesNotKeepTheLessonOnItsTopic() throws Exception {
+    String token=createStudentAndLogin("overdue-student"); long student=studentId("overdue-student"); submitDiagnostic(token,student,false);
+    db.update("update student_languages set starting_block=0 where user_id=?",student);
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,iteration_successes,mastered) select ?,code,3,0,1 from skills where code<>'BASIC_CODE_READING'",student);
+    for(int i=4;i<=9;i++) addTask("extra "+i);
+    int lesson1=start(token); solve(token,3); assertProgress(student,1,0,0); finish(token,lesson1);
+    finish(token,start(token)); finish(token,start(token)); // the repetition is done only in lesson N+3, when the last one is already due too
+    int lesson4=start(token); solve(token,2); assertProgress(student,2,0,0);
+    // The lesson has completed an iteration of the topic: it gets no more of its tasks, which could not count.
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("NO_DUE_SKILL",next.path("reason").asText()); finish(token,lesson4);
+    start(token); solve(token,1); assertProgress(student,3,1,0);
+  }
+
   @Test void switchingHardModeDoesNotWaitForATaskBeingPrepared() throws Exception {
     String token=createStudentAndLogin("hard-wait-student"); long student=studentId("hard-wait-student"); submitDiagnostic(token,student,false); passedCourseOnceExcept(student,"WHILE_LOOP_BASIC");
     db.update("update users set hard_mode_allowed=1, hard_mode_on=0 where id=?",student);

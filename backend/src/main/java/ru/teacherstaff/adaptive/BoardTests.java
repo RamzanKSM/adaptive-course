@@ -66,16 +66,19 @@ class BoardTests implements DisposableBean {
   static Integer cap(String paceStatus) { return "BORDERLINE".equals(paceStatus) ? Integer.valueOf(4) : "BEHIND".equals(paceStatus) ? Integer.valueOf(3) : null; }
   static int suggested(int grade, Integer cap) { return cap == null ? grade : Math.min(grade, cap); }
   /**
-   * Per item of a checked test (in its order) the score: passed → 1; else the LLM's verdict «частично верно» (a DONE
-   * assessment) → 0.5; else 0. Without an assessment — the grade by the checks alone.
+   * Per item of a checked test (in its order) the score: passed → 1; else the LLM's verdict (a DONE assessment) «верно» → 1
+   * (e.g. the logic is right and only the format of the output differs), «частично верно» → 0.5; else 0. Without an
+   * assessment — the grade by the checks alone.
    */
   static Map<String, Double> scores(List<Map<String, Object>> results, Map<?, ?> assessment) {
-    var partly = new HashSet<Object>();
+    var llm = new HashMap<Object, Double>();
     if (assessment != null && "DONE".equals(assessment.get("status")) && assessment.get("items") instanceof List<?> verdicts)
-      for (var v : verdicts) if (v instanceof Map<?, ?> m && BoardAssessment.PARTLY.equals(m.get("verdict"))) partly.add(m.get("item"));
+      for (var v : verdicts) if (v instanceof Map<?, ?> m) {
+        if (BoardAssessment.RIGHT.equals(m.get("verdict"))) llm.put(m.get("item"), 1.0); else if (BoardAssessment.PARTLY.equals(m.get("verdict"))) llm.put(m.get("item"), 0.5);
+      }
     var scores = new LinkedHashMap<String, Double>();
     // A test of the first version (2026-10-15) may hold an «output» item: no kind of today, no score.
-    for (var r : results) if (BoardItems.ALL.contains(r.get("kind"))) scores.put((String) r.get("kind"), Boolean.TRUE.equals(r.get("passed")) ? 1.0 : partly.contains(r.get("kind")) ? 0.5 : 0.0);
+    for (var r : results) if (BoardItems.ALL.contains(r.get("kind"))) scores.put((String) r.get("kind"), Boolean.TRUE.equals(r.get("passed")) ? 1.0 : llm.getOrDefault(r.get("kind"), 0.0));
     return scores;
   }
   static int grade(List<Map<String, Object>> results, Map<?, ?> assessment) { return BoardItems.grade(BoardItems.percent(scores(results, assessment))); }
