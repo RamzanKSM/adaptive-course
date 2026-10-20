@@ -60,6 +60,19 @@ function CodeText({ text }: { text: string }) {
 
 // ═════════ Student ═════════
 
+/**
+ * This browser's token for the test at the board (X-Board-Device): the browser that starts the test owns it, the
+ * student's other open sessions see «Тест идёт на другом компьютере» and cannot save, run or finish it.
+ */
+let memoryDevice = ''
+function boardDevice() {
+  const fresh = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  try { let value = localStorage.getItem('rmzn-board-device'); if (!value) { value = fresh(); localStorage.setItem('rmzn-board-device', value) } return value }
+  catch { return memoryDevice ||= fresh() }
+}
+const deviceHeaders = () => ({ 'X-Board-Device': boardDevice() })
+const boardPost = <T,>(path: string, body?: unknown) => api<T>(path, { method: 'POST', headers: deviceHeaders(), body: body === undefined ? undefined : JSON.stringify(body) })
+
 /** Polls GET /board/current while a student is signed in. set() replaces the state at once and drops answers already on the way. */
 export function useBoardCurrent(enabled: boolean) {
   const [current, setCurrent] = useState<BoardCurrent | null>(null)
@@ -69,7 +82,7 @@ export function useBoardCurrent(enabled: boolean) {
     let alive = true
     const tick = () => {
       const id = ++seq.current
-      api<BoardCurrent>('/board/current').then(value => { if (alive && id === seq.current) setCurrent(value) }, () => {})
+      api<BoardCurrent>('/board/current', { headers: deviceHeaders() }).then(value => { if (alive && id === seq.current) setCurrent(value) }, () => {})
     }
     tick()
     const timer = setInterval(tick, STUDENT_POLL_MS)
@@ -88,7 +101,7 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
   const kinds = canonical(call.kinds)
   async function start() {
     setBusy(true); setError('')
-    try { onStarted(await post<BoardStudentTest>(`/board/tests/${call.id}/start`)) }
+    try { onStarted(await boardPost<BoardStudentTest>(`/board/tests/${call.id}/start`)) }
     catch (e) { setError(e instanceof Error ? e.message : 'Не удалось начать тест'); setBusy(false) }
   }
   return <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-call-title">
@@ -167,12 +180,15 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
     if (!dirty.current || saving.current || done.current) return
     dirty.current = false; saving.current = true; setSave('saving')
     try {
-      await api<{ savedAt: string }>(`/board/tests/${test.id}/answers`, { method: 'PUT', body: JSON.stringify(latest.current) })
+      await api<{ savedAt: string }>(`/board/tests/${test.id}/answers`, { method: 'PUT', headers: deviceHeaders(), body: JSON.stringify(changedAnswers()) })
       setSave(dirty.current ? 'dirty' : 'saved')
     } catch { dirty.current = true; setSave('error') }
     finally { saving.current = false }
   }, [test.id])
-  const edited = () => { dirty.current = true; setSave('dirty') }
+  /** Only the items edited on this screen go to the server; the rest keep what is saved there. */
+  const changed = useRef(new Set<BoardItemKind>())
+  const changedAnswers = (): BoardAnswers => Object.fromEntries(Object.entries(latest.current).filter(([kind]) => changed.current.has(kind as BoardItemKind)))
+  const edited = (kind: BoardItemKind) => { changed.current.add(kind); dirty.current = true; setSave('dirty') }
   useEffect(() => {
     if (!dirty.current) return
     const timer = setTimeout(persist, AUTOSAVE_DEBOUNCE_MS)
@@ -183,7 +199,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   const finish = useCallback(async (auto: boolean) => {
     if (done.current) return
     done.current = true; setFinishing(true); setConfirming(false); setError('')
-    try { await post<{ finished: boolean }>(`/board/tests/${test.id}/finish`, latest.current); onFinished() }
+    try { await boardPost<{ finished: boolean }>(`/board/tests/${test.id}/finish`, changedAnswers()); onFinished() }
     catch (e) {
       // Time is up or the server already closed the test (e.g. the teacher finished it): the answers are on the server.
       if (auto || e instanceof ApiError) { onFinished(); return }
@@ -198,7 +214,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   async function runItem(item: RunKind, text: string) {
     setRunning(item); setError('')
     try {
-      const result = await post<{ console: ConsoleRun }>(`/board/tests/${test.id}/run`, { item, code: text })
+      const result = await boardPost<{ console: ConsoleRun }>(`/board/tests/${test.id}/run`, { item, code: text })
       setRuns(r => ({ ...r, [item]: { console: result.console, n: (r[item]?.n ?? 0) + 1 } }))
     }
     catch (e) { setError(e instanceof Error ? e.message : 'Не удалось запустить программу') }
@@ -259,14 +275,14 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
         </>
         return <section key={item.kind} id={`board-panel-${item.kind}`} className={`board-item ${items.length > 1 ? 'has-nav' : ''}`} hidden={item !== active}
           role={items.length > 1 ? 'tabpanel' : undefined} aria-labelledby={items.length > 1 ? `board-tab-${item.kind}` : undefined} aria-label={items.length > 1 ? undefined : KIND[item.kind].title}>
-          {item.kind === 'parsons' ? <Parsons item={item} placed={parsons} locked={locked} head={head} toolbar={toolbar(item)} onChange={ids => { setParsons(ids); edited() }} />
+          {item.kind === 'parsons' ? <Parsons item={item} placed={parsons} locked={locked} head={head} toolbar={toolbar(item)} onChange={ids => { setParsons(ids); edited('parsons') }} />
             : <>
               <div className="board-task">{head}</div>
               <div className="board-work">
                 {toolbar(item, <button type="button" className="ghost board-run-button" disabled={locked || running !== null || !(item.kind === 'fix' ? fix : code).trim()} onClick={() => runItem(item.kind, item.kind === 'fix' ? fix : code)}>
                   {running === item.kind ? <><span className="spinner" aria-hidden="true" /> Запускаем…</> : <><Icon name="terminal" size={18} /> Запустить</>}</button>)}
                 <CodeMirror className="code-editor board-editor" value={item.kind === 'fix' ? fix : code} extensions={EDITOR_EXTENSIONS[item.language]} editable={!locked} readOnly={locked}
-                  onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited() }}
+                  onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited(item.kind) }}
                   aria-label={item.kind === 'fix' ? `Программа с ошибкой на ${courseTitle(item.language)}` : `Редактор решения на ${courseTitle(item.language)}`} />
                 {runs[item.kind] && <ConsolePanel key={runs[item.kind]!.n} run={runs[item.kind]!.console} origin="run" language={item.language} />}
               </div>
@@ -418,6 +434,21 @@ function Parsons({ item, placed, locked, head, toolbar, onChange }: { item: Pars
 function SaveBadge({ state }: { state: SaveState }) {
   const text = { saved: 'Сохранено', dirty: 'Сохраняем…', saving: 'Сохраняем…', error: 'Не сохранено — повторим' }[state]
   return <span className={`board-save ${state}`} aria-live="polite">{state === 'saved' ? <Icon name="check" size={16} /> : state === 'error' ? <Icon name="x" size={16} /> : <span className="spinner" aria-hidden="true" />}{text}</span>
+}
+
+/** The student's other open session while the test runs on the board PC: nothing to edit, it goes back once the test is over. */
+export function BoardElsewhere({ test, name }: { test: BoardStudentTest; name: string }) {
+  const offset = useMemo(() => { const server = ms(test.now); return Number.isNaN(server) ? 0 : server - Date.now() }, [test.now])
+  const left = ms(test.endsAt) - (useNow() + offset)
+  return <main className="board-screen board-done">
+    <div className="board-done-card">
+      <span className="board-call-icon"><Icon name="flag" size={30} /></span>
+      <p className="eyebrow">Ответ у доски · {name}</p>
+      <h1 className="display small">Тест идёт на компьютере у доски</h1>
+      <p>Здесь ничего делать не нужно — отвечай за компьютером у доски. Эта страница вернётся к уроку, когда тест закончится.</p>
+      {left > 0 && <p className="board-done-count">Осталось <b className="tabular">{clock(left)}</b></p>}
+    </div>
+  </main>
 }
 
 /** After the test: no grade on this screen; the student is signed out after a short countdown. */

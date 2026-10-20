@@ -498,6 +498,32 @@ class BoardTestsIntegrationTest {
     assertEquals(0, BoardTests.minimum(0, start, session, start.plusDays(10)));
   }
 
+  @Test void theBrowserThatStartedTheTestOwnsItAndAnotherOneCannotOverwriteTheAnswers() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("dev-a", "Дина", "B-DEV"); long a = studentId("dev-a");
+    simpleBank(a, "BT_DEV");
+    long id = call(admin, a).path("id").asLong();
+    // The board PC starts the test; the student's own PC (another browser of the same account) only sees that it runs elsewhere.
+    var started = read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "board-pc"));
+    assertFalse(started.path("items").isMissingNode());
+    var other = read(token, get("/api/board/current").header("X-Board-Device", "own-pc")).path("test");
+    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "elsewhere"), fields(other)); assertTrue(other.path("elsewhere").asBoolean());
+    assertTrue(read(token, get("/api/board/current").header("X-Board-Device", "board-pc")).path("test").path("elsewhere").isMissingNode());
+    assertTrue(read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "own-pc")).path("elsewhere").asBoolean(), "a second start does not take it over");
+    read(token, put("/api/board/tests/{id}/answers", id).header("X-Board-Device", "board-pc").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"SOLVED\"}"));
+    // The race at 0:00: the idle screen submits its blank state — refused, and so are its saves and runs.
+    expect(token, post("/api/board/tests/{id}/finish", id).header("X-Board-Device", "own-pc").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"\",\"fix\":\"\",\"parsons\":[]}"), status().isBadRequest(), "BOARD_TEST_ELSEWHERE");
+    expect(token, put("/api/board/tests/{id}/answers", id).header("X-Board-Device", "own-pc").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"\"}"), status().isBadRequest(), "BOARD_TEST_ELSEWHERE");
+    expect(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"\"}"), status().isBadRequest(), "BOARD_TEST_ELSEWHERE");
+    expect(token, post("/api/board/tests/{id}/run", id).header("X-Board-Device", "own-pc").contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"code\",\"code\":\"x\"}"), status().isBadRequest(), "BOARD_TEST_ELSEWHERE");
+    assertEquals("SOLVED", adminTest(admin, id).path("answers").path("code").asText());
+    // The board PC finishes with only what it changed since the last autosave: the rest stays.
+    read(token, post("/api/board/tests/{id}/finish", id).header("X-Board-Device", "board-pc").contentType(MediaType.APPLICATION_JSON).content("{}"));
+    var view = checked(admin, id);
+    assertEquals("FINISHED", view.path("status").asText()); assertEquals("SOLVED", view.path("answers").path("code").asText());
+    assertTrue(read(token, get("/api/board/current").header("X-Board-Device", "own-pc")).path("test").isNull(), "the other screen goes back once the test is over");
+  }
+
   @Test void theWeightedGradeRule() {
     assertEquals(5, BoardItems.grade(90)); assertEquals(4, BoardItems.grade(89.9)); assertEquals(4, BoardItems.grade(75)); assertEquals(3, BoardItems.grade(50)); assertEquals(2, BoardItems.grade(49.9));
     var partlyCode = Map.<String, Object>of("status", "DONE", "items", List.of(Map.of("item", "code", "verdict", "частично верно"), Map.of("item", "fix", "verdict", "частично верно")));

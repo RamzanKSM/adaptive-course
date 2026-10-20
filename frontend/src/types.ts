@@ -154,6 +154,8 @@ export interface BoardAnswers { code?: string | null; fix?: string | null; parso
 export interface BoardStudentTest {
   id: Id; status: BoardStatus; startedAt: string; endsAt: string; now: string; durationSeconds?: number | null
   items: BoardStudentItem[]; answers: BoardAnswers
+  /** The test runs in another browser (the board PC): only id, status, startedAt, endsAt and now come with it. */
+  elsewhere?: boolean
 }
 /** GET /board/current: the student's active call or their running test. */
 export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null } | null; test: BoardStudentTest | null }

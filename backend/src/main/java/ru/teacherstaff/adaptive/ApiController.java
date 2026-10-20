@@ -599,9 +599,9 @@ public class ApiController {
    * «К доске»: the teacher calls a student, the student takes a timed test of the chosen items on the classroom PC, the teacher
    * grades it with the LLM's proposal (BoardTests; rules in README «К доске»). Not @Transactional: checks call Piston.
    */
-  @GetMapping("/board/current") public Map<String,Object> boardCurrent(HttpServletRequest r){ return boardTests.current(student(r)); }
-  @PostMapping("/board/tests/{id}/start") public Map<String,Object> startBoardTest(@PathVariable long id,HttpServletRequest r){ return boardTests.start(student(r),id); }
-  @PutMapping("/board/tests/{id}/answers") public Map<String,Object> saveBoardAnswers(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.saveAnswers(student(r),id,b); }
+  @GetMapping("/board/current") public Map<String,Object> boardCurrent(HttpServletRequest r){ return boardTests.current(student(r),boardDevice(r)); }
+  @PostMapping("/board/tests/{id}/start") public Map<String,Object> startBoardTest(@PathVariable long id,HttpServletRequest r){ return boardTests.start(student(r),id,boardDevice(r)); }
+  @PutMapping("/board/tests/{id}/answers") public Map<String,Object> saveBoardAnswers(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.saveAnswers(student(r),id,b,boardDevice(r)); }
   /** «Запустить» during the test: the same limits and answers as /run; the run is recorded in the test. */
   @PostMapping("/board/tests/{id}/run") public ResponseEntity<?> runBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){
     long u=student(r);
@@ -613,9 +613,11 @@ public class ApiController {
     if(!codeRunner.status(language).available()) return ResponseEntity.status(503).body(Map.of("error","RUNNER_UNAVAILABLE","message","Запуск "+language.title+" сейчас недоступен","runner",runner(language)));
     long retryAfter=runLimiter.retryAfterSeconds(u);
     if(retryAfter>0) return ResponseEntity.status(429).header("Retry-After",String.valueOf(retryAfter)).body(Map.of("error","RUN_RATE_LIMITED","message","Слишком много запусков подряд. Подожди "+retryAfter+" с."));
-    return ResponseEntity.ok(boardTests.run(u,id,b.get("item"),source));
+    return ResponseEntity.ok(boardTests.run(u,id,b.get("item"),source,boardDevice(r)));
   }
-  @PostMapping("/board/tests/{id}/finish") public Map<String,Object> finishBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.finish(student(r),id,b); }
+  @PostMapping("/board/tests/{id}/finish") public Map<String,Object> finishBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.finish(student(r),id,b,boardDevice(r)); }
+  /** The board test's browser token (X-Board-Device), see BoardTests.deviceHash. */
+  private static String boardDevice(HttpServletRequest r){ String d=r.getHeader("X-Board-Device"); return d==null||d.length()>200?null:d; }
   @GetMapping("/board/grades") public Map<String,Object> boardGrades(@RequestParam(name="language",required=false) String language,HttpServletRequest r){ return boardTests.studentGrades(student(r),Language.parse(language)); }
   @GetMapping("/admin/board") public Map<String,Object> board(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return boardTests.overview(group,language); }
   @PostMapping("/admin/board/call") public Map<String,Object> callToBoard(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.call(uid(r),b); }

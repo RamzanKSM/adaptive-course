@@ -125,20 +125,22 @@ class BoardTests implements DisposableBean {
   // ---------------------------------------------------------------- student
 
   /** GET /api/board/current: the student's active call and running test. */
-  Map<String, Object> current(long user) {
+  Map<String, Object> current(long user) { return current(user, null); }
+  Map<String, Object> current(long user, String device) {
     settle();
     var calls = db.queryForList("select id,called_at,call_expires_at,kinds,duration_seconds from board_tests where user_id=? and status='CALLED' order by id desc limit 1", user);
     var running = db.queryForList("select id from board_tests where user_id=? and status='STARTED' order by id desc limit 1", Long.class, user);
     var c = calls.isEmpty() ? null : calls.getFirst();
     var call = c == null ? null : obj("id", c.get("id"), "calledAt", c.get("called_at"), "expiresAt", c.get("call_expires_at"), "kinds", kinds(c), "durationSeconds", duration(c));
-    return obj("call", call, "test", running.isEmpty() ? null : studentView(load(running.getFirst())));
+    return obj("call", call, "test", running.isEmpty() ? null : studentView(load(running.getFirst()), device));
   }
 
   /** POST /api/board/tests/{id}/start: only the called student, while the call is active; the items are chosen now. */
-  Map<String, Object> start(long user, long id) {
+  Map<String, Object> start(long user, long id) { return start(user, id, null); }
+  Map<String, Object> start(long user, long id, String device) {
     Instant now = now(); settle(now);
     var t = own(user, id);
-    if ("STARTED".equals(t.get("status"))) return studentView(t);
+    if ("STARTED".equals(t.get("status"))) return studentView(t, device);
     requireCalled(t);
     Language lang = Language.of(t.get("language"));
     List<String> minimum = null;
@@ -156,12 +158,22 @@ class BoardTests implements DisposableBean {
         case "fix" -> answers.put("fix", item.get("program"));
         default -> answers.put("code", item.get("starterCode") == null ? "" : item.get("starterCode"));
       }
-    int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=? where id=? and status='CALLED' and call_expires_at>=?",
-        iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, id, iso(now));
+    int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=?,device=? where id=? and status='CALLED' and call_expires_at>=?",
+        iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), id, iso(now));
     var after = load(id);
     if (started == 0 && !"STARTED".equals(after.get("status"))) requireCalled(after);
     if (started > 0) log.info("Board test {} started by student {}: tasks {}, pace {}", id, user, items.stream().map(i -> i.get("kind") + " " + i.get("taskId")).toList(), pace);
-    return studentView(after);
+    return studentView(after, device);
+  }
+
+  /**
+   * The browser that started the test owns it (board_tests.device): another browser of the same student — e.g. his own PC
+   * left open while he answers at the board — sees only that the test runs elsewhere and cannot save, run or finish it.
+   */
+  private static String deviceHash(String device) { return device == null || device.isBlank() ? null : Hashing.sha256(device.strip()); }
+  private static boolean elsewhere(Map<String, Object> t, String device) { return t.get("device") != null && !t.get("device").equals(deviceHash(device)); }
+  private static void requireDevice(Map<String, Object> t, String device) {
+    if (elsewhere(t, device)) throw new ApiError("BOARD_TEST_ELSEWHERE", "Тест идёт на другом компьютере — у доски");
   }
   private static void requireCalled(Map<String, Object> t) {
     switch ((String) t.get("status")) {
@@ -173,9 +185,10 @@ class BoardTests implements DisposableBean {
   }
 
   /** PUT /api/board/tests/{id}/answers: autosave, while the test runs (its end + GRACE). */
-  Map<String, Object> saveAnswers(long user, long id, Map<String, Object> body) {
+  Map<String, Object> saveAnswers(long user, long id, Map<String, Object> body) { return saveAnswers(user, id, body, null); }
+  Map<String, Object> saveAnswers(long user, long id, Map<String, Object> body, String device) {
     Instant now = now(); settle(now);
-    var t = own(user, id); requireRunning(t, now);
+    var t = own(user, id); requireDevice(t, device); requireRunning(t, now);
     var set = answersUpdate(submitted(body, items(t)));
     var params = new ArrayList<Object>(set.params()); params.add(id);
     if (db.update("update board_tests set answers_json=" + set.sql() + " where id=? and status='STARTED'", params.toArray()) == 0) throw over();
@@ -183,9 +196,10 @@ class BoardTests implements DisposableBean {
   }
 
   /** POST /api/board/tests/{id}/run: «Запустить» for the code or fix item — the console, recorded in the test's runs with its item; that answer is saved too. */
-  Map<String, Object> run(long user, long id, Object item, String code) {
+  Map<String, Object> run(long user, long id, Object item, String code) { return run(user, id, item, code, null); }
+  Map<String, Object> run(long user, long id, Object item, String code, String device) {
     Instant now = now(); settle(now);
-    var t = own(user, id); requireRunning(t, now);
+    var t = own(user, id); requireDevice(t, device); requireRunning(t, now);
     String kind = item == null ? "code" : item instanceof String s ? s : "";
     if (!List.of("code", "fix").contains(kind) || !kinds(t).contains(kind)) throw new ApiError("INVALID_ITEM", "Запускать можно только код заданий этого теста «Исправь ошибку» и «Напиши код»");
     Language lang = Language.of(t.get("language"));
@@ -197,9 +211,10 @@ class BoardTests implements DisposableBean {
   }
 
   /** POST /api/board/tests/{id}/finish: the final answers (inside the time) and the checks now; the LLM later. */
-  Map<String, Object> finish(long user, long id, Map<String, Object> body) {
+  Map<String, Object> finish(long user, long id, Map<String, Object> body) { return finish(user, id, body, null); }
+  Map<String, Object> finish(long user, long id, Map<String, Object> body, String device) {
     Instant now = now(); settle(now);
-    var t = own(user, id);
+    var t = own(user, id); requireDevice(t, device);
     if ("STARTED".equals(t.get("status"))) {
       var answers = submitted(body, items(t));
       if (now.isAfter(instant(t.get("ends_at")).plus(GRACE))) answers = Map.of();
@@ -288,6 +303,11 @@ class BoardTests implements DisposableBean {
   }
 
   /** The student's view: the items as shown, the answers and the time — never the solution order, the extra line, the reference, the bug, checks, grades or the assessment. */
+  /** Another browser than the one that started the test gets only {id, status, startedAt, endsAt, now, elsewhere: true}. */
+  private Map<String, Object> studentView(Map<String, Object> t, String device) {
+    if (elsewhere(t, device)) return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "now", iso(now()), "elsewhere", true);
+    return studentView(t);
+  }
   private Map<String, Object> studentView(Map<String, Object> t) {
     var items = new ArrayList<Map<String, Object>>();
     var answers = answers(t); var shown = new LinkedHashMap<String, Object>();

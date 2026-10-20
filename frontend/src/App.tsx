@@ -7,7 +7,7 @@ import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from
 import { LlmAnalytics } from './analytics'
 import { ProgressAnalytics } from './progress'
 import { PairWork } from './pairs'
-import { BoardAdmin, BoardCallDialog, BoardDone, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
+import { BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
 import { StudentSessionCard } from './session'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
@@ -156,7 +156,8 @@ function Shell() {
   const [board, setBoard] = useBoardCurrent(isStudent && !boardDone)
   const boardTest = useRef<Id | null>(null)
   useEffect(() => {
-    if (board?.test) boardTest.current = board.test.id
+    // Only the test this browser runs ends in «Тест сдан» and the sign-out; another session simply goes back.
+    if (board?.test && !board.test.elsewhere) boardTest.current = board.test.id
     // The running test disappeared (the teacher finished or removed it, the server closed it): it is over for this screen too.
     else if (board && boardTest.current !== null) { boardTest.current = null; setBoardDone(true) }
   }, [board])
@@ -168,6 +169,7 @@ function Shell() {
   if (loading) return <div className="center"><Spinner /><span>Загружаем…</span></div>
   if (!me) return <Login onLogin={login} onError={setError} error={error} />
   if (isStudent && boardDone) return <BoardDone onLogout={boardLogout} />
+  if (isStudent && board?.test?.elsewhere) return <BoardElsewhere test={board.test} name={me.displayName} />
   if (isStudent && board?.test) return <BoardTestScreen key={board.test.id} test={board.test} name={me.displayName} onFinished={boardFinished} />
   return <main className={`app ${hardOn ? 'hard' : ''}`}>
     {hardOn && <DangerFrame />}

@@ -41,6 +41,11 @@ class the teacher calls students one by one to a short individual test, projecte
   check compares the output strictly): a program that prints the right values and fails only because of spaces, line
   breaks, case, punctuation, labels or separators is «верно», and an LLM «верно» of a failed item now counts fully (before,
   only «частично верно» gave anything — half). The rule grade stays by the checks alone; the teacher sets the final grade.
+- One PC per test (bug fixed 2026-10-20): the called student's own PC stays signed in, so the test opened there too and
+  at 0:00 both screens submitted — the idle one with blank answers could win. Now the browser that clicks «Начать тест»
+  owns the test (a random per-browser token); other sessions show «Тест идёт на компьютере у доски», cannot save or
+  submit, and return to the lesson afterwards (no sign-out there). Signing the other sessions out at the call was not
+  needed.
 - Topics of the items (owner, 2026-10-20): besides «по уровню» (the topics the student has reached) the teacher may call
   «по темпу на сегодня» — the minimum everyone should have covered by today, even topics the student has not reached.
   There was no such line in the analytics (the forecast is a per-student pace), so it is a uniform plan: the first
