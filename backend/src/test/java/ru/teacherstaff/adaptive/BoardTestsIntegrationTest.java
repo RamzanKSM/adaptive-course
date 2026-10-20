@@ -335,7 +335,7 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_CALL");
     var call = call(admin, a);
     assertEquals("CALLED", call.path("status").asText()); assertEquals(START.plus(Duration.ofMinutes(5)).toString(), call.path("expiresAt").asText());
-    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds"), fields(call));
+    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds", "source"), fields(call));
     long id = call.path("id").asLong();
     var current = read(token, get("/api/board/current"));
     assertEquals(id, current.path("call").path("id").asLong()); assertTrue(current.path("test").isNull());
@@ -457,6 +457,45 @@ class BoardTestsIntegrationTest {
     var view = adminTest(admin, id);
     assertEquals(1, view.path("score").path("items").size(), "the output item has no score today");
     assertEquals(100, view.path("score").path("percent").asDouble());
+  }
+
+  @Test void byPaceTheItemsComeFromTheMinimumForTodayEvenIfNotReached() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("pace-a", "Павел", "B-PACE"); long a = studentId("pace-a");
+    String reached = skill("BT_PACE_REACHED", 2); passed(a, reached, START.minus(Duration.ofDays(2))); long level = codeTask(reached, 1, "CURATED", "curated:bt-pace-reached:1");
+    String last = skill("BT_PACE_LAST", 999); long pace = codeTask(last, 1, "CURATED", "curated:bt-pace-last:1");
+    // Without a session date there is no plan: the call by pace is refused, the overview has no plan.
+    var body = Map.of("userId", a, "language", "JAVA", "kinds", List.of("code"), "source", "PACE");
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)), status().isBadRequest(), "BOARD_PACE_UNAVAILABLE");
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", a, "source", "SOMETHING"))), status().isBadRequest(), "INVALID_SOURCE");
+    assertTrue(read(admin, get("/api/admin/board").param("group", "B-PACE").param("language", "JAVA")).path("pace").isNull());
+    // The session today, the group's first lesson 30 days ago: the minimum is the whole course, its last topic first.
+    db.update("insert into app_settings(key,value) values('session_date',?) on conflict(key) do update set value=excluded.value", LocalDate.ofInstant(START, ZoneOffset.UTC).toString());
+    try {
+      var board = read(admin, get("/api/admin/board").param("group", "B-PACE").param("language", "JAVA"));
+      int total = count("select count(*) from skills where language='JAVA'");
+      assertEquals(total, board.path("pace").path("topics").asInt()); assertEquals(total, board.path("pace").path("total").asInt());
+      assertEquals("Тема BT_PACE_LAST", board.path("pace").path("lastTopic").asText());
+      var called = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
+      assertEquals("PACE", called.path("source").asText());
+      var test = read(token, post("/api/board/tests/{id}/start", called.path("id").asLong()));
+      assertEquals(pace, adminTest(admin, test.path("id").asLong()).path("items").get(0).path("taskId").asLong(), "a topic of the minimum the student has not reached");
+      assertEquals("PACE", adminTest(admin, test.path("id").asLong()).path("source").asText());
+      // By level (the default) — the topic the student has reached.
+      read(admin, post("/api/admin/board/tests/{id}/cancel", test.path("id").asLong()));
+      var byLevel = startTest(admin, token, a, List.of("code"));
+      assertEquals(level, adminTest(admin, byLevel.path("id").asLong()).path("items").get(0).path("taskId").asLong());
+      assertEquals("LEVEL", adminTest(admin, byLevel.path("id").asLong()).path("source").asText());
+    } finally { db.update("delete from app_settings where key='session_date'"); }
+  }
+
+  @Test void theMinimumForTodayIsAUniformPlanFromTheGroupsFirstLessonToTheSession() {
+    LocalDate start = LocalDate.parse("2041-09-01"), session = LocalDate.parse("2042-01-10");   // 131 days
+    assertEquals(1, BoardTests.minimum(44, start, session, start), "the first day: at least one topic");
+    assertEquals(22, BoardTests.minimum(44, start, session, start.plusDays(65)), "44 × 65 / 131 = 21.8 → 22");
+    assertEquals(44, BoardTests.minimum(44, start, session, session)); assertEquals(44, BoardTests.minimum(44, start, session, session.plusDays(3)));
+    assertEquals(1, BoardTests.minimum(44, start, session, start.plusDays(1)), "44 / 131 → 1");
+    assertEquals(0, BoardTests.minimum(0, start, session, start.plusDays(10)));
   }
 
   @Test void theWeightedGradeRule() {

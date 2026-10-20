@@ -41,6 +41,12 @@ class the teacher calls students one by one to a short individual test, projecte
   check compares the output strictly): a program that prints the right values and fails only because of spaces, line
   breaks, case, punctuation, labels or separators is «верно», and an LLM «верно» of a failed item now counts fully (before,
   only «частично верно» gave anything — half). The rule grade stays by the checks alone; the teacher sets the final grade.
+- Topics of the items (owner, 2026-10-20): besides «по уровню» (the topics the student has reached) the teacher may call
+  «по темпу на сегодня» — the minimum everyone should have covered by today, even topics the student has not reached.
+  There was no such line in the analytics (the forecast is a per-student pace), so it is a uniform plan: the first
+  ⌈total × (today − start) / (session − start)⌉ topics of the course, start = the group's first lesson in the course
+  (owner chose this over a separate «начало курса» date). Default «по уровню», the choice is remembered in the browser;
+  the grade and the pace cap do not depend on it.
 - Layout (owner chose variant A of the mockups `docs/mockups/board/`, 2026-10-19): the student's screen fills the
   viewport — one-line header with the tabs and the timer, the statement on the left, the editor full height on the
   right with the console under it, the Parsons pool next to the program; the teacher's tab is a full-width three-column

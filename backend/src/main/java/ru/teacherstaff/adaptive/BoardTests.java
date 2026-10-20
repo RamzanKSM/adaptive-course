@@ -34,6 +34,9 @@ class BoardTests implements DisposableBean {
   static final Duration CALL = Duration.ofMinutes(5), GRACE = Duration.ofSeconds(15);
   /** A topic passed by practice more than this many days ago is «older»: the parsons item comes preferably from it. */
   static final int RECENT_DAYS = 14;
+  /** PACE: the last topics of the minimum for today that «Собери программу» avoids. */
+  static final int PACE_RECENT = 3;
+  static final String SOURCE_LEVEL = "LEVEL", SOURCE_PACE = "PACE";
   /** A member is present with activity in the course within this many minutes or an open lesson. */
   static final int PRESENT_MINUTES = 60;
   /** Runs the LLM sees; the oldest of a longer history are left out. */
@@ -138,7 +141,13 @@ class BoardTests implements DisposableBean {
     if ("STARTED".equals(t.get("status"))) return studentView(t);
     requireCalled(t);
     Language lang = Language.of(t.get("language"));
-    var items = chooseItems(user, lang, kinds(t), now);
+    List<String> minimum = null;
+    if (SOURCE_PACE.equals(t.get("source"))) {
+      var plan = pacePlan((String) t.get("group_name"), lang, now);
+      if (plan == null) throw new ApiError("BOARD_PACE_UNAVAILABLE", "Нет плана по темпу: нужна дата сессии и уроки группы в курсе — попроси преподавателя вызвать снова");
+      minimum = plan.topics();
+    }
+    var items = chooseItems(user, lang, kinds(t), minimum, now);
     String pace = paceStatus(user, lang, now);
     var answers = new LinkedHashMap<String, Object>();
     for (var item : items)
@@ -315,7 +324,7 @@ class BoardTests implements DisposableBean {
    * topics, another topic than the code item's first; parsons: an «older» topic first (passed more than RECENT_DAYS ago).
    * Regular tasks only, so a hard-mode student gets the same kind of test; no task or story twice in a test.
    */
-  private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, Instant now) {
+  private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, List<String> minimum, Instant now) {
     var practiced = db.query("select s.code,s.block_no,coalesce("
         + "(select max(" + epoch("x.created_at") + ") from skill_iterations i join submissions x on x.lesson_id=i.lesson_id and x.passed=1 join task_target_skills ts on ts.task_id=x.task_id and ts.skill_code=i.skill_code where i.user_id=p.user_id and i.skill_code=s.code and i.iteration_number=1),"
         + "(select " + epoch("l.started_at") + " from skill_iterations i join lessons l on l.id=i.lesson_id where i.user_id=p.user_id and i.skill_code=s.code and i.iteration_number=1),0) as at "
@@ -336,6 +345,14 @@ class BoardTests implements DisposableBean {
     Set<Long> usedTasks = new HashSet<>(); Set<String> usedStories = new HashSet<>();
     Map<String, Fit> chosen = new HashMap<>();
 
+    if (minimum != null) chooseByPace(lang, kinds, minimum, course, byTopic, solvedTasks, solvedStories, usedTasks, usedStories, chosen);
+    else chooseByLevel(lang, kinds, practiced, practicedCodes, confirmed, course, byTopic, solvedTasks, solvedStories, usedTasks, usedStories, chosen, now);
+    return itemsOf(lang, kinds, chosen);
+  }
+
+  /** LEVEL: the topics the student has reached (see chooseItems). */
+  private void chooseByLevel(Language lang, List<String> kinds, List<Passed> practiced, List<String> practicedCodes, List<String> confirmed, List<String> course,
+                             Map<String, List<Candidate>> byTopic, Set<Long> solvedTasks, Set<String> solvedStories, Set<Long> usedTasks, Set<String> usedStories, Map<String, Fit> chosen, Instant now) {
     // Passed by practice (most recent first), confirmed by the diagnostic, then the course from its start (its first topics
     // may have no bank task with a reference and wrong solutions for «Исправь ошибку»).
     var passedTopics = new LinkedHashSet<String>(practicedCodes); passedTopics.addAll(confirmed);
@@ -357,7 +374,58 @@ class BoardTests implements DisposableBean {
       topics.addAll(shuffled(others)); topics.addAll(taken); topics.addAll(course);
       chosen.put("parsons", pick(lang, "parsons", topics, byTopic, solvedTasks, solvedStories, usedTasks, usedStories));
     }
+  }
 
+  /**
+   * PACE: the minimum for today (the first K topics of the course, pacePlan), whatever the student has reached. code: the
+   * last topic of the minimum, then back through it; fix: another of its last topics, the same way; parsons: an earlier
+   * topic of the minimum (not among its last PACE_RECENT), at random; then, as for LEVEL, the course from its start.
+   */
+  private void chooseByPace(Language lang, List<String> kinds, List<String> minimum, List<String> course, Map<String, List<Candidate>> byTopic,
+                            Set<Long> solvedTasks, Set<String> solvedStories, Set<Long> usedTasks, Set<String> usedStories, Map<String, Fit> chosen) {
+    var latest = new ArrayList<>(minimum); Collections.reverse(latest);
+    if (kinds.contains("code")) { var topics = new LinkedHashSet<String>(latest); topics.addAll(course); chosen.put("code", pick(lang, "code", topics, byTopic, solvedTasks, solvedStories, usedTasks, usedStories)); }
+    if (kinds.contains("fix")) {
+      var topics = new LinkedHashSet<String>(latest);
+      if (chosen.containsKey("code")) { String codeTopic = chosen.get("code").task().skill(); topics.remove(codeTopic); topics.add(codeTopic); }
+      topics.addAll(course);
+      chosen.put("fix", pick(lang, "fix", topics, byTopic, solvedTasks, solvedStories, usedTasks, usedStories));
+    }
+    if (kinds.contains("parsons")) {
+      var taken = chosen.values().stream().map(f -> f.task().skill()).toList();
+      int split = Math.max(0, minimum.size() - PACE_RECENT);
+      var recent = new ArrayList<>(minimum.subList(split, minimum.size())); recent.removeAll(taken);
+      var topics = new LinkedHashSet<String>(shuffled(minimum.subList(0, split))); topics.addAll(shuffled(recent)); topics.addAll(taken); topics.addAll(course);
+      chosen.put("parsons", pick(lang, "parsons", topics, byTopic, solvedTasks, solvedStories, usedTasks, usedStories));
+    }
+  }
+
+  /**
+   * The minimum for today of a group: K = ⌈total × (today − start) / (session − start)⌉ first topics of the course (in its
+   * order), start — the day of the group's first lesson in the course; at least 1, all topics on and after the session
+   * day. Null without a session date, without lessons of the group in the course or when the start is not before the session.
+   */
+  record PacePlan(List<String> topics, int total, LocalDate start, LocalDate session) {}
+  PacePlan pacePlan(String group, Language lang, Instant now) {
+    if (group == null) return null;
+    var session = db.queryForList("select value from app_settings where key=?", String.class, ProgressAnalytics.SESSION_DATE_KEY).stream().findFirst().map(LocalDate::parse).orElse(null);
+    // lessons.started_at is «YYYY-MM-DD HH:MM:SS» (UTC); date() reads it and the ISO form alike.
+    String first = db.queryForObject("select min(date(l.started_at)) from lessons l join users u on u.id=l.user_id where u.group_name=? and l.language=?", String.class, group, lang.name());
+    if (session == null || first == null) return null;
+    LocalDate start = LocalDate.parse(first), today = ProgressAnalytics.day(now);
+    if (!start.isBefore(session)) return null;
+    var course = db.queryForList("select code from skills where language=? order by block_no,sort_order,code", String.class, lang.name());
+    return new PacePlan(course.subList(0, minimum(course.size(), start, session, today)), course.size(), start, session);
+  }
+  /** K of the plan; see pacePlan. */
+  static int minimum(int total, LocalDate start, LocalDate session, LocalDate today) {
+    if (total == 0) return 0;
+    long span = session.toEpochDay() - start.toEpochDay(), passed = today.toEpochDay() - start.toEpochDay();
+    if (passed >= span) return total;
+    return (int) Math.max(1, Math.min(total, Math.ceilDiv(total * Math.max(0, passed), span)));
+  }
+
+  private List<Map<String, Object>> itemsOf(Language lang, List<String> kinds, Map<String, Fit> chosen) {
     Map<String, String> titles = new HashMap<>();
     db.query("select code,title from skills where language=?", (RowCallbackHandler) rs -> titles.put(rs.getString(1), rs.getString(2)), lang.name());
     var items = new ArrayList<Map<String, Object>>();
@@ -602,7 +670,10 @@ class BoardTests implements DisposableBean {
     Long suggestion = oldest.isEmpty() ? null : oldest.get(new SplittableRandom(seed).nextInt(oldest.size()));
     var active = db.queryForList("select id from board_tests where group_name=? and language=? and (status in ('CALLED','STARTED') or called_at>=? or (status='FINISHED' and final_grade is null)) order by called_at desc,id desc",
         Long.class, name, lang.name(), iso(now.minus(ACTIVE_RECENT))).stream().map(id -> summary(load(id))).toList();
-    return obj("group", name, "language", lang.name(), "members", view, "suggested", suggestion, "active", active);
+    var plan = pacePlan(name, lang, now);
+    var pace = plan == null ? null : obj("topics", plan.topics().size(), "total", plan.total(), "lastTopic", plan.topics().isEmpty() ? null : titleOf(plan.topics().getLast()),
+        "start", plan.start().toString(), "session", plan.session().toString());
+    return obj("group", name, "language", lang.name(), "members", view, "suggested", suggestion, "active", active, "pace", pace);
   }
 
   /** POST /api/admin/board/call: a new call with the kinds chosen (all three when absent); the student's earlier calls that were not started are cancelled. */
@@ -610,23 +681,27 @@ class BoardTests implements DisposableBean {
     if (body == null || !(body.get("userId") instanceof Number user)) throw new ApiError("INVALID_STUDENT", "Нужен userId студента");
     if (body.get("language") != null && !(body.get("language") instanceof String)) throw new ApiError("UNKNOWN_LANGUAGE", "Неизвестный язык курса");
     var kinds = BoardItems.parse(body.get("kinds"));
-    return summary(load(call(admin, user.longValue(), Language.parse((String) body.get("language")), kinds)));
+    Object source = body.get("source") == null ? SOURCE_LEVEL : body.get("source");
+    if (!SOURCE_LEVEL.equals(source) && !SOURCE_PACE.equals(source)) throw new ApiError("INVALID_SOURCE", "Источник заданий — LEVEL или PACE");
+    return summary(load(call(admin, user.longValue(), Language.parse((String) body.get("language")), kinds, (String) source)));
   }
-  private long call(long admin, long user, Language lang, List<String> kinds) {
+  private long call(long admin, long user, Language lang, List<String> kinds, String source) {
     var rows = db.queryForList("select group_name from users where id=? and role='STUDENT'", user);
     if (rows.isEmpty()) throw new NotFoundError("STUDENT_NOT_FOUND", "Студент не найден");
     Instant now = now(); settle(now);
+    if (SOURCE_PACE.equals(source) && pacePlan((String) rows.getFirst().get("group_name"), lang, now) == null)
+      throw new ApiError("BOARD_PACE_UNAVAILABLE", "По темпу вызвать нельзя: нужна дата сессии (вкладка «Прогресс») и уроки группы в этом курсе");
     db.update("update board_tests set status='CANCELLED' where user_id=? and status='CALLED'", user);
-    long id = db.queryForObject("insert into board_tests(user_id,group_name,language,status,called_at,called_by,call_expires_at,kinds,duration_seconds) values(?,?,?,'CALLED',?,?,?,?,?) returning id", Long.class,
-        user, rows.getFirst().get("group_name"), lang.name(), iso(now), admin, iso(now.plus(CALL)), write(kinds), BoardItems.seconds(kinds));
-    log.info("Student {} called to the board ({}, {}) by admin {}: test {}", user, lang, kinds, admin, id);
+    long id = db.queryForObject("insert into board_tests(user_id,group_name,language,status,called_at,called_by,call_expires_at,kinds,duration_seconds,source) values(?,?,?,'CALLED',?,?,?,?,?,?) returning id", Long.class,
+        user, rows.getFirst().get("group_name"), lang.name(), iso(now), admin, iso(now.plus(CALL)), write(kinds), BoardItems.seconds(kinds), source);
+    log.info("Student {} called to the board ({}, {}, {}) by admin {}: test {}", user, lang, kinds, source, admin, id);
     return id;
   }
 
   /** POST /api/admin/board/tests/{id}/recall: a new call for the same student, course and kinds. */
   Map<String, Object> recall(long admin, long id) {
     var t = load(id);
-    return adminView(load(call(admin, ((Number) t.get("user_id")).longValue(), Language.of(t.get("language")), kinds(t))));
+    return adminView(load(call(admin, ((Number) t.get("user_id")).longValue(), Language.of(t.get("language")), kinds(t), source(t))));
   }
 
   /** POST /api/admin/board/tests/{id}/cancel: a call or a running test; a finished test can only be deleted. */
@@ -726,7 +801,7 @@ class BoardTests implements DisposableBean {
     var assessment = t.get("assessment") instanceof Map<?, ?> a ? a.get("status") : null;
     return obj("id", t.get("id"), "userId", t.get("user_id"), "displayName", t.get("display_name"), "status", t.get("status"), "calledAt", t.get("called_at"),
         "expiresAt", t.get("call_expires_at"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "finishedAt", t.get("finished_at"),
-        "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t));
+        "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t), "source", source(t));
   }
   /** Everything for the teacher: the items with the solution and the task, the answers, checks, the score, runs, pace, grades. */
   private Map<String, Object> adminView(Map<String, Object> t) {
@@ -768,6 +843,8 @@ class BoardTests implements DisposableBean {
   @SuppressWarnings("unchecked")
   private static List<Map<String, Object>> lineList(Map<String, Object> item) { return item.get("lines") instanceof List<?> lines ? (List<Map<String, Object>>) lines : List.of(); }
   /** The test's kinds in the canonical order (a row without them: all three). */
+  private String titleOf(String skill) { return db.queryForList("select title from skills where code=?", String.class, skill).stream().findFirst().orElse(skill); }
+  private static String source(Map<String, Object> t) { return SOURCE_PACE.equals(t.get("source")) ? SOURCE_PACE : SOURCE_LEVEL; }
   private List<String> kinds(Map<String, Object> t) { return t.get("kinds") == null ? BoardItems.ALL : read((String) t.get("kinds"), new TypeReference<List<String>>() {}); }
   private int duration(Map<String, Object> t) { return t.get("duration_seconds") instanceof Number n ? n.intValue() : BoardItems.seconds(kinds(t)); }
   private List<Map<String, Object>> results(Map<String, Object> t) { return read((String) t.get("results_json"), new TypeReference<List<Map<String, Object>>>() {}); }

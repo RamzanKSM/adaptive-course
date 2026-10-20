@@ -169,10 +169,14 @@ export interface BoardTestSummary {
   id: Id; userId: Id; displayName: string; status: BoardStatus
   calledAt: string; expiresAt: string | null; startedAt: string | null; endsAt: string | null; finishedAt: string | null
   suggestedGrade: BoardGrade | null; finalGrade: BoardGrade | null; assessmentStatus: AssessmentStatus | null
-  kinds?: BoardItemKind[] | null; durationSeconds?: number | null
+  kinds?: BoardItemKind[] | null; durationSeconds?: number | null; source?: BoardSource
 }
 export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null }
-export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[] }
+/** Where the items come from: the topics the student has reached, or the minimum for today (a uniform plan to the session). */
+export type BoardSource = 'LEVEL' | 'PACE'
+/** The minimum for today of the group: the first `topics` of `total` topics; null without a session date or lessons. */
+export interface BoardPacePlan { topics: number; total: number; lastTopic: string | null; start: string; session: string }
+export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[]; pace?: BoardPacePlan | null }
 /** An item with full data: parsons — before/after, lines, solution (ids in the reference order), extraLineId, reference;
  *  fix — program (the buggy one), bugDescription, reference; code — statement and starter. */
 export interface BoardAdminItem {

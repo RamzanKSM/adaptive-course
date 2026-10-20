@@ -10,7 +10,7 @@ import { NO_GROUP, useGroupFilter } from './groups'
 import { dayNumber, plural, shortDay, StatusChip } from './session'
 import type {
   BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardCheck, BoardCurrent, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
-  BoardMember, BoardOverview, BoardReportItem, BoardRun, BoardScore, BoardStatus, BoardStudentGrade, BoardStudentItem, BoardStudentTest, BoardTestSummary,
+  BoardMember, BoardOverview, BoardReportItem, BoardRun, BoardScore, BoardSource, BoardStatus, BoardStudentGrade, BoardStudentItem, BoardStudentTest, BoardTestSummary,
   ConsoleRun, CourseLanguage, Id,
 } from './types'
 
@@ -502,6 +502,14 @@ const live = (t: BoardTestSummary) => t.status === 'CALLED' || t.status === 'STA
 
 /** The kinds the teacher calls with, remembered in this browser (default: all three, never empty). */
 const KINDS_KEY = 'rmzn-board-kinds'
+/** Where the items come from (default: the student's level), remembered in this browser. */
+const SOURCE_KEY = 'rmzn-board-source'
+function useBoardSource() {
+  const [source, setSource] = useState<BoardSource>(() => { try { return localStorage.getItem(SOURCE_KEY) === 'PACE' ? 'PACE' : 'LEVEL' } catch { return 'LEVEL' } })
+  const choose = useCallback((value: BoardSource) => { setSource(value); try { localStorage.setItem(SOURCE_KEY, value) } catch { /* private mode: not remembered */ } }, [])
+  return [source, choose] as const
+}
+
 function useBoardKinds() {
   const [kinds, setKinds] = useState<BoardItemKind[]>(() => {
     try { const stored = JSON.parse(localStorage.getItem(KINDS_KEY) ?? 'null'); return Array.isArray(stored) ? canonical(stored) : [...KINDS] } catch { return [...KINDS] }
@@ -516,10 +524,10 @@ function useBoardKinds() {
 }
 
 /** «Собери программу · Исправь ошибку · 7 мин» for a call or test; nothing for tests without kinds. */
-function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationSeconds'> }) {
+function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationSeconds' | 'source'> }) {
   if (!test.kinds?.length) return null
   const kinds = canonical(test.kinds)
-  return <small className="board-kinds-note">{kinds.map(k => KIND[k].title).join(' · ')} · {minutesOf(kinds, test.durationSeconds)} мин</small>
+  return <small className="board-kinds-note">{kinds.map(k => KIND[k].title).join(' · ')} · {minutesOf(kinds, test.durationSeconds)} мин{test.source === 'PACE' && ' · по темпу'}</small>
 }
 
 /** What is counting down: the call's expiry or the end of the test. */
@@ -570,6 +578,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [kinds, toggleKind] = useBoardKinds()
+  const [source, chooseSource] = useBoardSource()
   const toast = useToast()
   const now = useNow()
   /** The detail view registers here to receive the test an action returns. */
@@ -613,7 +622,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   async function call(member: BoardMember) {
     if (!language) return
     setBusy(`call:${member.userId}`)
-    const test = await request(() => post<BoardTestSummary>('/admin/board/call', { userId: member.userId, language, kinds }))
+    const test = await request(() => post<BoardTestSummary>('/admin/board/call', { userId: member.userId, language, kinds, source: pace ? source : 'LEVEL' }))
     setBusy(null)
     if (!test) return
     setReload(n => n + 1); open(test.id)
@@ -651,6 +660,7 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
   </section>
 
   const present = overview?.members.filter(m => m.present).length ?? 0
+  const pace = overview?.pace ?? null
   return <section className="analytics board-admin board-wide">
     <div className="board-console">
       <div className="card board-left enter">
@@ -671,6 +681,17 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
               <span>{KIND[k].title} <small>· {KIND[k].minutes} мин</small></span>
             </label> })}
           <span className="board-kinds-total">тест <b className="tabular">{minutesText(minutesOf(kinds))}</b></span>
+        </fieldset>
+        <fieldset className="board-kinds board-source">
+          <legend>Темы заданий</legend>
+          <div className="period" role="group" aria-label="Темы заданий">
+            <button type="button" className={source === 'LEVEL' || !pace ? 'active' : ''} aria-pressed={source === 'LEVEL' || !pace} onClick={() => chooseSource('LEVEL')}>По уровню</button>
+            <button type="button" className={source === 'PACE' && pace ? 'active' : ''} aria-pressed={source === 'PACE' && !!pace} disabled={!pace} onClick={() => chooseSource('PACE')}
+              title={pace ? undefined : 'Нужна дата сессии (вкладка «Прогресс») и уроки группы в этом курсе'}>По темпу на сегодня</button>
+          </div>
+          <small className="board-kinds-note">{!overview ? '' : !pace ? 'По темпу — когда есть дата сессии и уроки группы в курсе.'
+            : source === 'PACE' ? `Минимум к сегодня: ${pace.topics} ${plural(pace.topics, 'тема', 'темы', 'тем')} из ${pace.total}${pace.lastTopic ? `, до «${pace.lastTopic}»` : ''} — даже если студент до них не дошёл.`
+              : 'Из тем, которые студент прошёл.'}</small>
         </fieldset>
         <h2 className="card-title">Студенты{overview && <span className="muted small">на месте {present} из {overview.members.length}</span>}</h2>
         {!members ? <p className="muted">Загружаем…</p> : !members.length ? <p className="muted">В группе нет участников курса {language ? courseTitle(language) : ''}.</p>
