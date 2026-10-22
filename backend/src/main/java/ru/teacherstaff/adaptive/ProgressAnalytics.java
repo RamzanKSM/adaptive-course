@@ -23,8 +23,8 @@ import java.util.*;
 class ProgressAnalytics {
   /** Pace: topics closed by practice in the last PACE_DAYS, per week of the student's course, at most PACE_MAX_WEEKS weeks. */
   static final int PACE_DAYS = 21, PACE_MAX_WEEKS = 3;
-  /** Pace below needed is BORDERLINE down to this share of the needed pace, BEHIND under it. */
-  static final double BORDERLINE_SHARE = 0.75;
+  /** Behind the plan line by at most this many topics is BORDERLINE, by more BEHIND. */
+  static final int BORDERLINE_LAG = 2;
   /** A member silent this many days is GONE; this many failed submissions in a row on the current task is STUCK. */
   static final int GONE_DAYS = 7, STUCK_FAILURES = 5;
   /** The classroom shows no totals for fewer members: in a tiny group they would identify people. */
@@ -54,6 +54,30 @@ class ProgressAnalytics {
     else db.update("insert into app_settings(key,value) values(?,?) on conflict(key) do update set value=excluded.value", SESSION_DATE_KEY, date.toString());
   }
   static double weeksLeft(LocalDate session, LocalDate day) { return (session.toEpochDay() - day.toEpochDay()) / 7.0; }
+
+  /**
+   * The plan line to the session, the same for everybody of a group: from 0 topics at `start` to all `total` at the
+   * session, K(day) = BoardTests.minimum. The pace status and «К доске» by pace both use it.
+   */
+  record Plan(LocalDate start, LocalDate session, int total) {
+    int topics(LocalDate day) { return BoardTests.minimum(total, start, session, day); }
+  }
+  /** Null without a session date, without a start or when the start is not before the session. */
+  static Plan plan(LocalDate session, LocalDate start, int total) { return session == null || start == null || !start.isBefore(session) ? null : new Plan(start, session, total); }
+  Plan plan(String group, Language lang) {
+    return plan(sessionDate(), planStart(group, lang), db.queryForObject("select count(*) from skills where language=?", Integer.class, lang.name()));
+  }
+  /**
+   * The start of the plan: the UTC day of the first lesson in the course of any student of the group; without a group
+   * (null or blank), of any student of the course. Null when there is no such lesson.
+   */
+  LocalDate planStart(String group, Language lang) {
+    boolean all = group == null || group.isBlank();
+    // lessons.started_at is «YYYY-MM-DD HH:MM:SS» (UTC); date() reads it and the ISO form alike.
+    String first = db.queryForObject("select min(date(l.started_at)) from lessons l join users u on u.id=l.user_id where u.role='STUDENT' and l.language=?" + (all ? "" : " and u.group_name=?"),
+        String.class, all ? new Object[]{lang.name()} : new Object[]{lang.name(), group});
+    return first == null ? null : LocalDate.parse(first);
+  }
   private static Map<String, Object> sessionView(LocalDate session, LocalDate today) {
     return obj("date", session == null ? null : session.toString(), "weeksLeft", session == null ? null : round(weeksLeft(session, today), 1));
   }
@@ -68,13 +92,15 @@ class ProgressAnalytics {
   Map<String, Object> course(Language lang, LocalDate from, LocalDate to, Instant at) {
     long now = at.getEpochSecond(); LocalDate today = day(now), session = sessionDate();
     var course = load(lang, Scope.ALL);
+    Map<String, Optional<LocalDate>> starts = new HashMap<>();
     var firstLesson = course.students().stream().map(s -> s.firstLessonAt).filter(Objects::nonNull).min(Long::compare).map(ProgressAnalytics::day).orElse(null);
     LocalDate start = firstLesson != null && !firstLesson.isAfter(to) ? firstLesson : from;
     if (start.isBefore(to.minusDays(MAX_DAYS - 1))) start = to.minusDays(MAX_DAYS - 1);
     var days = new ArrayList<LocalDate>();
     for (var d = start; !d.isAfter(to); d = d.plusDays(1)) days.add(d);
     var students = new ArrayList<Map<String, Object>>();
-    for (var s : course.students()) students.add(studentView(course, s, days, from, to, now, today, session));
+    for (var s : course.students()) students.add(studentView(course, s, days, from, to, now, today, session,
+        starts.computeIfAbsent(groupOf(s), g -> Optional.ofNullable(planStart(g, lang))).orElse(null)));
     return obj("language", lang.name(), "from", from.toString(), "to", to.toString(), "today", today.toString(),
         "days", days.stream().map(LocalDate::toString).toList(), "session", sessionView(session, today),
         "topics", course.topics().stream().map(t -> obj("code", t.code(), "title", t.title(), "block", t.block())).toList(),
@@ -90,14 +116,14 @@ class ProgressAnalytics {
     if (course.students().isEmpty() || !member(course.students().getFirst(), lang)) return null;
     var s = course.students().getFirst();
     long now = at.getEpochSecond(); LocalDate today = day(now), session = sessionDate();
-    var f = forecast(course, s, now, today, session);
+    var f = forecast(course, s, now, today, session, planStart(groupOf(s), lang));
     Long first = s.firstLessonAt == null ? s.diagnosticAt : s.diagnosticAt == null ? s.firstLessonAt : (Long) Math.min(s.firstLessonAt, s.diagnosticAt);
     LocalDate start = first == null || day(first).isAfter(today) ? today : day(first);
     var days = new ArrayList<String>(); var closed = new ArrayList<Integer>(); var cursor = new Cursor(s);
     for (var d = start; !d.isAfter(today); d = d.plusDays(1)) { cursor.at(startOf(d.plusDays(1))); days.add(d.toString()); closed.add(cursor.closed()); }
     return obj("date", session == null ? null : session.toString(), "weeksLeft", f.weeksLeft() == null ? null : round(f.weeksLeft(), 1),
         "total", f.total(), "closed", f.closed(), "remaining", f.remaining(), "pace", round(f.pace(), 2),
-        "neededPace", f.neededPace() == null ? null : round(f.neededPace(), 2), "status", f.status(),
+        "planStart", f.planStart() == null ? null : f.planStart().toString(), "planToday", f.planToday(), "lag", f.lag(), "status", f.status(),
         "forecastDate", f.forecastDate() == null ? null : f.forecastDate().toString(), "days", days, "closedSeries", closed);
   }
 
@@ -119,13 +145,14 @@ class ProgressAnalytics {
 
     // Topics closed by practice (a first iteration of a topic the diagnostic did not confirm), by moment.
     LocalDate monday = today.with(DayOfWeek.MONDAY); long weekStart = startOf(monday);
-    var closures = new ArrayList<Long>(); int remainingAtWeekStart = 0;
+    var plan = plan(session, planStart(group.strip(), lang), total);
+    var closures = new ArrayList<Long>(); int behindBySunday = 0;
     for (var s : members) {
-      remainingAtWeekStart += total - new Cursor(s).at(weekStart).closed();
+      // The goal of the week: what each member lacks at the week start to be on the plan line on Sunday.
+      if (plan != null) behindBySunday += Math.max(0, plan.topics(monday.plusDays(6)) - new Cursor(s).at(weekStart).closed());
       for (int i = 0; i < total; i++) if (!s.confirmed[i] && s.firstIteration[i] != Long.MAX_VALUE) closures.add(s.firstIteration[i]);
     }
-    Integer goal = null;
-    if (session != null && weeksLeft(session, monday) > 0) goal = (int) Math.ceil(remainingAtWeekStart / weeksLeft(session, monday) - 1e-9);
+    Integer goal = plan == null ? null : behindBySunday;
     view.put("week", obj("from", monday.toString(), "closedTopics", closures.stream().filter(t -> t >= weekStart && t <= now).count(), "goal", goal));
 
     Map<Long, Integer> perDay = new HashMap<>();
@@ -160,7 +187,7 @@ class ProgressAnalytics {
     return view;
   }
 
-  private Map<String, Object> studentView(Course course, Student s, List<LocalDate> days, LocalDate from, LocalDate to, long now, LocalDate today, LocalDate session) {
+  private Map<String, Object> studentView(Course course, Student s, List<LocalDate> days, LocalDate from, LocalDate to, long now, LocalDate today, LocalDate session, LocalDate planStart) {
     int n = course.topics().size();
     double[] skills = new double[days.size()], withDiagnostic = new double[days.size()]; int[] solved = new int[days.size()], xp = new int[days.size()], closed = new int[days.size()];
     var cursor = new Cursor(s);
@@ -187,7 +214,7 @@ class ProgressAnalytics {
     long submissions = s.submissions.stream().filter(x -> x.at() >= fromAt && x.at() < toAt).count();
 
     boolean member = member(s, course.language());
-    var forecast = member ? forecast(course, s, now, today, session) : null;
+    var forecast = member ? forecast(course, s, now, today, session, planStart) : null;
     return obj("id", s.id, "login", s.login, "displayName", s.name, "group", s.group, "participant", s.participant,
         "sessionCourse", s.sessionCourse == null ? null : s.sessionCourse.name(), "member", member,
         "firstLessonDay", s.firstLessonAt == null ? null : day(s.firstLessonAt).toString(),
@@ -199,6 +226,8 @@ class ProgressAnalytics {
   }
 
   // ---------------------------------------------------------------- definitions
+
+  private static String groupOf(Student s) { return s.group == null || s.group.isBlank() ? null : s.group; }
 
   /** A member of a course's statistics: takes the session, and this is the course of their session. */
   static boolean member(Student s, Language lang) { return s.participant && s.sessionCourse == lang; }
@@ -229,33 +258,38 @@ class ProgressAnalytics {
     return (solved - hard) * XP_TASK + hard * XP_HARD_TASK + iterations * XP_ITERATION + mastered * XP_MASTERY + confirmedNotMastered * XP_CONFIRMED;
   }
 
-  /** Where the student stands against the session. weeksLeft and neededPace are null without a date; see README. */
+  /**
+   * Where the student stands against the session. weeksLeft is null without a date; planStart, planToday (K today) and
+   * lag (K today − closed: positive behind, negative ahead) are null without a plan; see README.
+   */
   record Forecast(int total, int closed, int closedByPractice, int closedByDiagnostic, int remaining, double pace, double paceWeeks,
-                  Double weeksLeft, Double neededPace, String status, LocalDate forecastDate) {
+                  Double weeksLeft, LocalDate planStart, Integer planToday, Integer lag, String status, LocalDate forecastDate) {
     Map<String, Object> view() {
       return obj("total", total, "closed", closed, "closedByPractice", closedByPractice, "closedByDiagnostic", closedByDiagnostic, "remaining", remaining,
-          "pace", round(pace, 2), "paceWeeks", round(paceWeeks, 2), "neededPace", neededPace == null ? null : round(neededPace, 2),
+          "pace", round(pace, 2), "paceWeeks", round(paceWeeks, 2), "planStart", planStart == null ? null : planStart.toString(), "planToday", planToday, "lag", lag,
           "status", status, "forecastDate", forecastDate == null ? null : forecastDate.toString());
     }
   }
 
   /**
    * The forecast rules. recentClosures — topics whose first iteration was completed by practice in the last PACE_DAYS;
-   * weeksSinceFirstLesson — the student's time in the course, which caps the pace window for newcomers.
+   * weeksSinceFirstLesson — the student's time in the course, which caps the pace window for newcomers; planStart — the
+   * start of the group's plan line (planStart(group, lang)). The status compares the closed topics with the plan line
+   * today; the pace gives only the forecast date.
    */
-  static Forecast forecast(int total, int closedByPractice, int closedByDiagnostic, int recentClosures, double weeksSinceFirstLesson, LocalDate today, LocalDate session) {
+  static Forecast forecast(int total, int closedByPractice, int closedByDiagnostic, int recentClosures, double weeksSinceFirstLesson, LocalDate today, LocalDate session, LocalDate planStart) {
     int closed = closedByPractice + closedByDiagnostic, remaining = Math.max(0, total - closed);
     double paceWeeks = Math.min(PACE_MAX_WEEKS, Math.max(1, weeksSinceFirstLesson)), pace = recentClosures / paceWeeks;
     Double weeksLeft = session == null ? null : weeksLeft(session, today);
-    Double needed = weeksLeft == null || weeksLeft <= 0 ? null : remaining / weeksLeft;
-    String status = remaining == 0 ? "DONE" : session == null ? null : needed == null ? "BEHIND"
-        : pace >= needed ? "ON_TRACK" : pace >= BORDERLINE_SHARE * needed ? "BORDERLINE" : "BEHIND";
+    var plan = plan(session, planStart, total);
+    Integer planToday = plan == null ? null : plan.topics(today), lag = plan == null ? null : planToday - closed;
+    String status = remaining == 0 ? "DONE" : lag == null ? null : lag <= 0 ? "ON_TRACK" : lag <= BORDERLINE_LAG ? "BORDERLINE" : "BEHIND";
     // remaining / pace * 7 days, written so that exact quotients stay exact
     LocalDate date = remaining == 0 || recentClosures == 0 ? null : today.plusDays((long) Math.ceil(remaining * paceWeeks * 7 / recentClosures - 1e-9));
-    return new Forecast(total, closed, closedByPractice, closedByDiagnostic, remaining, pace, paceWeeks, weeksLeft, needed, status, date);
+    return new Forecast(total, closed, closedByPractice, closedByDiagnostic, remaining, pace, paceWeeks, weeksLeft, plan == null ? null : plan.start(), planToday, lag, status, date);
   }
 
-  private static Forecast forecast(Course course, Student s, long now, LocalDate today, LocalDate session) {
+  private static Forecast forecast(Course course, Student s, long now, LocalDate today, LocalDate session, LocalDate planStart) {
     var cursor = new Cursor(s).at(now + 1);
     int n = course.topics().size(), byPractice = 0, byDiagnostic = 0, recent = 0;
     for (int i = 0; i < n; i++) {
@@ -264,7 +298,7 @@ class ProgressAnalytics {
       if (s.firstIteration[i] > now - PACE_DAYS * DAY && s.firstIteration[i] <= now) recent++;
     }
     double weeks = s.firstLessonAt == null ? 0 : (now - s.firstLessonAt) / (7.0 * DAY);
-    return forecast(n, byPractice, byDiagnostic, recent, weeks, today, session);
+    return forecast(n, byPractice, byDiagnostic, recent, weeks, today, session, planStart);
   }
 
   private static List<String> flags(Student s, Forecast forecast, long now) {

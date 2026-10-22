@@ -6,7 +6,7 @@ import { ClassroomScreen } from './classroom'
 import { Icon, initials, useToast } from './fx'
 import { parseDate } from './game'
 import { GroupFilter, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
-import { dayNumber, dayString, decimal, plural, SessionChart, sessionText, shortDay, StatusChip, STATUS_ORDER, todayUtc, topics } from './session'
+import { dayNumber, dayString, decimal, lagText, plural, SessionChart, sessionText, shortDay, signedLag, StatusChip, STATUS_ORDER, todayUtc, topics } from './session'
 import type { CourseLanguage, Id, ProgressFlag, ProgressReport, ProgressStudent } from './types'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
@@ -268,7 +268,7 @@ function SessionEditor({ request, onSaved }: { request: Request; onSaved: () => 
     setBusy(false)
     if (!value) return
     setSaved(value.date); setDraft(value.date ?? ''); onSaved()
-    toast({ tone: 'info', icon: 'flag', title: value.date ? 'Дата сессии сохранена' : 'Дата сессии убрана', text: value.date ? sessionText(value.date) : 'Статус и нужный темп не считаются, пока дата не задана' })
+    toast({ tone: 'info', icon: 'flag', title: value.date ? 'Дата сессии сохранена' : 'Дата сессии убрана', text: value.date ? sessionText(value.date) : 'Статус и план к сессии не считаются, пока дата не задана' })
   }
   const submit = (e: FormEvent) => { e.preventDefault(); if (draft) save(draft) }
   return <form className="control-row session-editor" onSubmit={submit}>
@@ -276,7 +276,7 @@ function SessionEditor({ request, onSaved }: { request: Request; onSaved: () => 
     <input type="date" aria-label="Дата сессии" value={draft} min={todayUtc()} disabled={saved === undefined || busy} onChange={e => setDraft(e.target.value)} />
     <button className="primary" disabled={busy || !draft || draft === saved}>{busy ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : 'Сохранить'}</button>
     {saved && <button type="button" className="ghost" disabled={busy} onClick={() => save(null)}>Убрать дату</button>}
-    <span className="muted small">{saved === undefined ? 'Загружаем…' : saved ? sessionText(saved) : 'Дата не задана: статус и нужный темп не считаются'}</span>
+    <span className="muted small">{saved === undefined ? 'Загружаем…' : saved ? sessionText(saved) : 'Дата не задана: статус и план к сессии не считаются'}</span>
   </form>
 }
 
@@ -456,13 +456,14 @@ function BlockHeat({ cohorts: list, report, diagnostic }: { cohorts: Cohort[]; r
   </div>
 }
 
-type SortKey = 'name' | 'group' | 'closed' | 'pace' | 'needed' | 'status' | 'forecast' | 'last' | 'active' | 'solved' | 'xp' | 'flags'
+type SortKey = 'name' | 'group' | 'closed' | 'pace' | 'plan' | 'lag' | 'status' | 'forecast' | 'last' | 'active' | 'solved' | 'xp' | 'flags'
 const COLUMNS: { key: SortKey; title: string; hint?: string; asc?: boolean; text?: boolean }[] = [
   { key: 'name', title: 'Студент', asc: true, text: true },
   { key: 'group', title: 'Группа', asc: true, text: true },
   { key: 'closed', title: 'Пройдено', hint: 'Темы с завершённой итерацией или подтверждённые диагностикой — из всех тем курса' },
   { key: 'pace', title: 'Темп', hint: 'Тем в неделю: первые итерации за последние 3 недели' },
-  { key: 'needed', title: 'Нужно', hint: 'Тем в неделю, чтобы закрыть курс к сессии' },
+  { key: 'plan', title: 'План', hint: 'Сколько тем по плану нужно пройти к сегодня: равномерно от первого урока группы до сессии' },
+  { key: 'lag', title: 'Отставание', hint: 'План к сегодня минус пройдено: +3 — отстаёт на 3 темы, −2 — опережает на 2. Статус: 0 и меньше — успевает, до +2 — на грани, больше — не успевает' },
   { key: 'status', title: 'Статус', asc: true, text: true },
   { key: 'forecast', title: 'Прогноз', hint: 'Когда курс будет закрыт при текущем темпе', asc: true },
   { key: 'last', title: 'Активность', hint: 'Последняя активность на этом курсе' },
@@ -479,7 +480,8 @@ function sortValue(s: ProgressStudent, key: SortKey): number | string | null {
     case 'group': return s.group ?? null
     case 'closed': return f ? f.closed / (f.total || 1) : null
     case 'pace': return f ? f.pace : null
-    case 'needed': return f?.neededPace ?? null
+    case 'plan': return f?.planToday ?? null
+    case 'lag': return f?.lag ?? null
     case 'status': return f?.status ? STATUS_ORDER[f.status] : null
     case 'forecast': return f?.forecastDate ? dayNumber(f.forecastDate) : null
     case 'last': return s.lastActivityAt ? parseDate(s.lastActivityAt).getTime() : null
@@ -529,7 +531,8 @@ function StudentTable({ rows, report, selectedId, onSelect, rangeLabel }: { rows
           <td className="text">{s.group ?? <span className="muted">—</span>}</td>
           <td>{f ? `${f.closed}/${f.total}` : '—'}</td>
           <td>{f ? decimal(f.pace) : '—'}</td>
-          <td>{f?.neededPace != null ? decimal(f.neededPace) : '—'}</td>
+          <td>{f?.planToday != null ? f.planToday : '—'}</td>
+          <td className={f?.lag != null && f.lag > 0 ? `lag-cell ${f.status === 'BEHIND' ? 'bad' : 'warn'}` : 'lag-cell'} title={f?.lag != null ? lagText(f.lag) : undefined}>{f?.lag != null ? signedLag(f.lag) : '—'}</td>
           <td className="text">{f ? <StatusChip status={f.status} /> : <span className="muted">—</span>}</td>
           <td className={late ? 'late' : ''} title={late ? 'Позже сессии' : f && !f.forecastDate && f.remaining > 0 ? 'За последние 3 недели новых тем не было — при таком темпе курс не будет закрыт' : undefined}>
             {f?.forecastDate ? shortDay(dayNumber(f.forecastDate)) : f && f.remaining === 0 ? 'закрыт' : '—'}</td>
@@ -541,7 +544,7 @@ function StudentTable({ rows, report, selectedId, onSelect, rangeLabel }: { rows
         </tr>
       })}</tbody>
     </table></div>}
-    {!sessionDate && <p className="muted small table-note">Дата сессии не задана — статус, нужный темп и сравнение с ним не считаются.</p>}
+    {!sessionDate && <p className="muted small table-note">Дата сессии не задана — статус, план и отставание от него не считаются.</p>}
   </div>
 }
 
@@ -572,7 +575,8 @@ function StudentPanel({ student, ctx, diagnostic, onClose, onOpenStudent }: { st
     <div className="panel-facts">
       <span className="mini-stats-cell"><b>{student.lessons}</b><small>{plural(student.lessons, 'урок', 'урока', 'уроков')}{student.firstLessonDay ? ` · с ${shortDay(dayNumber(student.firstLessonDay))}` : ''}</small></span>
       {f && <span className="mini-stats-cell" title={`практикой ${f.closedByPractice}, диагностикой ${f.closedByDiagnostic}`}><b>{f.closed}/{f.total}</b><small>пройдено тем · диагностикой {f.closedByDiagnostic}</small></span>}
-      {f && <span className="mini-stats-cell"><b>{decimal(f.pace)}</b><small>тем в неделю{f.neededPace !== null ? ` · нужно ${decimal(f.neededPace)}` : ''}</small></span>}
+      {f && f.planToday !== null && <span className="mini-stats-cell" title="План к сегодня: равномерно от первого урока группы до сессии"><b>{f.planToday}</b><small>по плану к сегодня{f.lag !== null ? ` · ${lagText(f.lag)}` : ''}</small></span>}
+      {f && <span className="mini-stats-cell"><b>{decimal(f.pace)}</b><small>тем в неделю</small></span>}
       <span className="mini-stats-cell" title={`с первой попытки ${student.period.firstTry} · отправок ${student.period.submissions}`}><b>{student.period.solved}</b><small>решено за период · дней {student.period.activeDays}</small></span>
     </div>
     {(f || chipFlags(student).length > 0) && <p className="panel-status">
@@ -588,8 +592,8 @@ function StudentPanel({ student, ctx, diagnostic, onClose, onOpenStudent }: { st
       </div>
       {f && (report.session.date || f.pace > 0) && f.remaining > 0 && <div>
         <div className="chart-head"><h3 className="card-title">К сессии</h3>{report.session.date && <span className="muted small">{sessionText(report.session.date, report.today)}</span>}</div>
-        <SessionChart plan={{ today: report.today, sessionDate: report.session.date, total: f.total, closed: f.closed, pace: f.pace, history: { days: report.days, values: student.series.closed } }} height={220} label={`Прогноз до сессии: ${student.displayName}`} />
-        <p className="muted small">{topics(f.remaining)} осталось · темп {decimal(f.pace)} в неделю{f.neededPace !== null ? `, нужно ${decimal(f.neededPace)}` : ''}</p>
+        <SessionChart plan={{ today: report.today, sessionDate: report.session.date, total: f.total, closed: f.closed, pace: f.pace, planStart: f.planStart, history: { days: report.days, values: student.series.closed } }} height={220} label={`Прогноз до сессии: ${student.displayName}`} />
+        <p className="muted small">{topics(f.remaining)} осталось · темп {decimal(f.pace)} в неделю{f.planToday !== null ? ` · по плану к сегодня ${topics(f.planToday)}${f.lag !== null ? `, ${lagText(f.lag)}` : ''}` : ''}</p>
       </div>}
     </div>
   </section>

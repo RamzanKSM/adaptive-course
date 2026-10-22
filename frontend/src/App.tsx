@@ -9,6 +9,7 @@ import { ProgressAnalytics } from './progress'
 import { PairWork } from './pairs'
 import { BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
 import { StudentSessionCard } from './session'
+import { StationScreen } from './station'
 import { LlmSettingsView } from './settings'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
 import { DangerFrame, HardModeDialog, HardModeSwitch, HeaderTapes } from './hardmode'
@@ -60,6 +61,27 @@ const storeLanguage = (language: CourseLanguage) => { try { localStorage.setItem
 
 const Spinner = () => <span className="spinner" aria-hidden="true" />
 
+/** The signed-in user's id, for what this browser keeps per user (drafts of the lesson code). */
+const UserContext = createContext<Id | null>(null)
+
+// ───────── Drafts of the lesson code: localStorage «rmzn-draft:<userId>:<taskId>» → { code, savedAt } ─────────
+const DRAFT_PREFIX = 'rmzn-draft:', DRAFT_DAYS = 30
+type Draft = { code: string; savedAt: string }
+const draftKey = (userId: Id, taskId: Id) => `${DRAFT_PREFIX}${userId}:${taskId}`
+function readDraft(key: string): Draft | null {
+  try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value && typeof value.code === 'string' ? value : null } catch { return null }
+}
+const writeDraft = (key: string, code: string) => { try { localStorage.setItem(key, JSON.stringify({ code, savedAt: new Date().toISOString() })) } catch { /* full or private mode: no draft */ } }
+const dropDraft = (key: string) => { try { localStorage.removeItem(key) } catch { /* private mode */ } }
+/** Drafts older than 30 days (or unreadable) are removed when the app starts. */
+function pruneDrafts() {
+  try {
+    const oldest = Date.now() - DRAFT_DAYS * 86_400_000
+    const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((k): k is string => !!k?.startsWith(DRAFT_PREFIX))
+    for (const key of keys) { const saved = Date.parse(readDraft(key)?.savedAt ?? ''); if (!(saved >= oldest)) localStorage.removeItem(key) }
+  } catch { /* private mode: nothing stored */ }
+}
+
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 
 export default function App() {
@@ -70,6 +92,15 @@ function Shell() {
   const [me, setMe] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  /** This browser is the board station (it answers /station/current): without a signed-in user it shows the station screen. */
+  const [station, setStation] = useState(false)
+  /** «Войти как преподаватель» on the station: the usual login form instead of the station screen. */
+  const [stationLogin, setStationLogin] = useState(false)
+  /** The session expired (a 401): the re-login form over the current screen, nothing unmounted. */
+  const [expired, setExpired] = useState(false)
+  /** Bumped when another user signs in through the re-login form: the pages mount afresh. */
+  const [epoch, setEpoch] = useState(0)
+  const detectStation = useCallback(() => api<unknown>('/station/current').then(() => true, () => false).then(found => { setStation(found); setStationLogin(false); return found }), [])
   const [language, setLanguage] = useState<CourseLanguage | null>(storedLanguage)
   const chooseLanguage = (value: CourseLanguage) => { storeLanguage(value); setLanguage(value); window.scrollTo({ top: 0 }) }
   const isStudent = me?.role === 'STUDENT'
@@ -83,16 +114,21 @@ function Shell() {
     try { return await action() } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось выполнить запрос'); return undefined }
   }, [])
   useEffect(() => {
+    pruneDrafts()
     api<MeResponse>('/auth/me')
       .then(value => setMe(value.user))
-      .catch(err => { if (!(err instanceof ApiError && err.status === 401)) setError(err instanceof Error ? err.message : 'Не удалось проверить сессию') })
+      .catch(async err => {
+        if (!(err instanceof ApiError && err.status === 401)) setError(err instanceof Error ? err.message : 'Не удалось проверить сессию')
+        else await detectStation()
+      })
       .finally(() => setLoading(false))
-  }, [])
+  }, [detectStation])
+  const signedIn = !!me
   useEffect(() => {
-    if (!me) return
-    onUnauthorized(() => { setMe(null); setError('Сессия истекла. Войдите снова.') })
+    if (!signedIn) return
+    onUnauthorized(() => setExpired(true))
     return () => onUnauthorized(null)
-  }, [me])
+  }, [signedIn])
   // The header stays on top; sticky panels below it (chat, student card, messages) are offset by its real height.
   const header = useRef<HTMLElement>(null)
   const [scrolled, setScrolled] = useState(false)
@@ -149,8 +185,21 @@ function Shell() {
     const left = course ? `: осталось тем — ${course.remaining}` : ''
     toast({ tone: 'info', icon: 'lock', title: 'Hard mode пока закрыт', text: `Пройди хотя бы одну итерацию по каждой теме курса ${COURSES[language].title}${left}. Темы, подтверждённые диагностикой, уже засчитаны.` })
   }
-  const login = (user: User) => { setError(''); setMe(user) }
-  const logout = async () => { await request(() => post<void>('/auth/logout')); setError(''); setMe(null) }
+  const login = (user: User) => { setError(''); setStationLogin(false); setMe(user) }
+  /** After a sign-out the station screen comes back on a station browser. */
+  const signedOut = useCallback(() => { setExpired(false); setError(''); setMe(null); detectStation() }, [detectStation])
+  const logout = async () => { await request(() => post<void>('/auth/logout')); signedOut() }
+  /** The re-login form: the same user — just close it (the screen keeps its state); another user — the pages start afresh. */
+  const relogin = (user: User) => {
+    setExpired(false); setError('')
+    if (user.id === me?.id) { setMe(user); return }
+    setMe(user); setEpoch(n => n + 1); setBoardDone(false); setBoard(null); boardTest.current = null
+  }
+  /** «Сделать этот компьютер компьютером у доски»: the station cookie is set; the teacher signs out here and the station screen shows. */
+  const becomeStation = useCallback(async () => {
+    await post<void>('/auth/logout').catch(() => {})
+    setError(''); setMe(null); setStation(true); setStationLogin(false)
+  }, [])
   // Test at the board: the called student sees the call on any page; the test and its «Тест сдан» replace the whole screen.
   const [boardDone, setBoardDone] = useState(false)
   const [board, setBoard] = useBoardCurrent(isStudent && !boardDone)
@@ -162,16 +211,22 @@ function Shell() {
     else if (board && boardTest.current !== null) { boardTest.current = null; setBoardDone(true) }
   }, [board])
   const boardFinished = useCallback(() => { boardTest.current = null; setBoardDone(true) }, [])
+  // After a test taken from the student's own account on the classroom PC: signed out, the lessons stay open (they may be on the student's PC).
   const boardLogout = useCallback(async () => {
-    await post<void>('/auth/logout').catch(() => {})
-    boardTest.current = null; setBoardDone(false); setError(''); setMe(null)
-  }, [])
+    await post<void>('/auth/logout?keepLessons=true').catch(() => {})
+    boardTest.current = null; setBoardDone(false); signedOut()
+  }, [signedOut])
+  const leaveStation = useCallback(() => { setStation(false); setStationLogin(false) }, [])
+  const openStationLogin = useCallback(() => { setError(''); setStationLogin(true) }, [])
   if (loading) return <div className="center"><Spinner /><span>Загружаем…</span></div>
-  if (!me) return <Login onLogin={login} onError={setError} error={error} />
-  if (isStudent && boardDone) return <BoardDone onLogout={boardLogout} />
-  if (isStudent && board?.test?.elsewhere) return <BoardElsewhere test={board.test} name={me.displayName} />
-  if (isStudent && board?.test) return <BoardTestScreen key={board.test.id} test={board.test} name={me.displayName} onFinished={boardFinished} />
-  return <main className={`app ${hardOn ? 'hard' : ''}`}>
+  if (!me) return station && !stationLogin ? <StationScreen onTeacherLogin={openStationLogin} onGone={leaveStation} />
+    : <Login onLogin={login} onError={setError} error={error} onBack={station ? () => { setError(''); setStationLogin(false) } : undefined} />
+  const reloginForm = expired && <Relogin user={me} onLogin={relogin} onLogout={logout} />
+  if (isStudent && boardDone) return <>{reloginForm}<BoardDone onLogout={boardLogout} /></>
+  if (isStudent && board?.test?.elsewhere) return <>{reloginForm}<BoardElsewhere test={board.test} name={me.displayName} /></>
+  if (isStudent && board?.test) return <>{reloginForm}<BoardTestScreen key={board.test.id} test={board.test} name={me.displayName} onFinished={boardFinished} /></>
+  return <UserContext.Provider value={me.id}><main className={`app ${hardOn ? 'hard' : ''}`}>
+    {reloginForm}
     {hardOn && <DangerFrame />}
     {isStudent && board?.call && <BoardCallDialog key={board.call.id} call={board.call} onStarted={test => setBoard({ call: null, test })} />}
     {hardDialog && <HardModeDialog onConfirm={() => setHardMode(true)} onCancel={() => setHardDialog(false)} />}
@@ -187,10 +242,32 @@ function Shell() {
       </div>
     </header>
     {error && <div className="flash error" role="alert"><span>{error}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setError('')}><Icon name="x" size={16} /></button></div>}
-    {!isStudent ? <TeacherPage request={request} />
-      : !language ? <LanguagePicker request={request} onPick={chooseLanguage} />
-        : <CourseContext.Provider value={COURSES[language]}><StudentPage key={`${language}:${lessonReload}`} request={request} /></CourseContext.Provider>}
-  </main>
+    {!isStudent ? <TeacherPage key={epoch} request={request} onBecomeStation={becomeStation} />
+      : !language ? <LanguagePicker key={epoch} request={request} onPick={chooseLanguage} />
+        : <CourseContext.Provider value={COURSES[language]}><StudentPage key={`${language}:${lessonReload}:${epoch}`} request={request} /></CourseContext.Provider>}
+  </main></UserContext.Provider>
+}
+
+/** «Сессия истекла»: signs in again over the current screen; nothing under it is unmounted, so the code on screen stays. */
+function Relogin({ user, onLogin, onLogout }: { user: User; onLogin: (me: User) => void; onLogout: () => void }) {
+  const [login, setLogin] = useState(user.login); const [password, setPassword] = useState(''); const [sending, setSending] = useState(false); const [error, setError] = useState('')
+  async function submit(e: FormEvent) {
+    e.preventDefault(); setSending(true); setError('')
+    try { onLogin((await post<MeResponse>('/auth/login', { login: login.trim(), password })).user) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Не удалось войти'); setSending(false) }
+  }
+  return <div className="board-call-backdrop relogin" role="dialog" aria-modal="true" aria-labelledby="relogin-title">
+    <form className="card login-card relogin-card" onSubmit={submit}>
+      <span className="board-call-icon"><Icon name="lock" size={28} /></span>
+      <h2 id="relogin-title" className="title">{user.role === 'STUDENT' ? 'Сессия истекла — войди снова, твой код сохранён' : 'Сессия истекла — войдите снова'}</h2>
+      <p className="muted">{user.role === 'STUDENT' ? 'Всё на экране останется как было. После входа повтори последнее действие.' : 'Экран останется как был. После входа повторите последнее действие.'}</p>
+      <label>Логин<input required value={login} onChange={e => setLogin(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} /></label>
+      <label>Пароль<input required type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" autoFocus /></label>
+      {error && <p className="form-error shake" role="alert" key={error}>{error}</p>}
+      <button className="primary big" disabled={sending}>{sending ? <><Spinner /> Входим…</> : <>Войти <Icon name="arrow" /></>}</button>
+      <button type="button" className="ghost small-button" onClick={onLogout}><Icon name="logout" size={15} /> Выйти</button>
+    </form>
+  </div>
 }
 
 function LanguageSwitch({ value, onChange }: { value: CourseLanguage; onChange: (language: CourseLanguage) => void }) {
@@ -228,7 +305,7 @@ function LanguagePicker({ request, onPick }: { request: Request; onPick: (langua
   </section>
 }
 
-function Login({ onLogin, onError, error }: { onLogin: (me: User) => void; onError: (message: string) => void; error: string }) {
+function Login({ onLogin, onError, error, onBack }: { onLogin: (me: User) => void; onError: (message: string) => void; error: string; onBack?: () => void }) {
   const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [sending, setSending] = useState(false)
   async function submit(e: FormEvent) {
     e.preventDefault(); setSending(true); onError('')
@@ -256,6 +333,7 @@ function Login({ onLogin, onError, error }: { onLogin: (me: User) => void; onErr
         <label>Пароль<input required type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label>
         {error && <p className="form-error shake" role="alert" key={error}>{error}</p>}
         <button className="primary big" disabled={sending}>{sending ? <><Spinner /> Входим…</> : <>Войти <Icon name="arrow" /></>}</button>
+        {onBack && <button type="button" className="ghost small-button" onClick={onBack}><Icon name="back" size={15} /> Назад к компьютеру у доски</button>}
       </form>
     </section>
   </main>
@@ -592,14 +670,29 @@ type ConsoleState = { run: ConsoleRun; origin: ConsoleOrigin }
 
 function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress }: { task: Task; skillProgress?: SkillProgress; llm?: LlmStatus; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void }) {
   const course = useCourse()
-  const [code, setCode] = useState(task.starterCode || course.fallback)
+  const starter = task.starterCode || course.fallback
+  // The code survives a reload or a re-login: a draft in this browser, per user and task, until the task is accepted.
+  const userId = useContext(UserContext)
+  const key = userId !== null ? draftKey(userId, task.id) : null
+  const [draft] = useState(() => key ? readDraft(key) : null)
+  const [restored, setRestored] = useState(!!draft && draft.code !== starter)
+  const [code, setCode] = useState(restored && draft ? draft.code : starter)
+  const accepted = useRef(false)
+  useEffect(() => {
+    if (!key || accepted.current) return
+    const timer = setTimeout(() => { if (code === starter) dropDraft(key); else writeDraft(key, code) }, 500)
+    return () => clearTimeout(timer)
+  }, [key, code, starter])
+  const onAccepted = useCallback(() => { accepted.current = true; if (key) dropDraft(key) }, [key])
+  const startOver = useCallback(() => { if (key) dropDraft(key); setCode(starter); setRestored(false) }, [key, starter])
   // The console on screen; the assistant sees the same text when the student asks about it.
   const [screen, setScreen] = useState<ConsoleState | null>(null)
   // «Разобрать с помощником»: the check says why a solution was rejected, the assistant helps to understand it.
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | undefined>()
   const askAssistant = useCallback((text: string) => setPrefill({ text, nonce: Date.now() }), [])
   return <div className="lesson-grid enter">
-    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} onAskAssistant={llm?.available ? askAssistant : undefined} />
+    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} onAskAssistant={llm?.available ? askAssistant : undefined}
+      restored={restored} onStartOver={startOver} onAccepted={onAccepted} />
     <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} consoleOutput={screen ? consoleText(screen.run) : undefined} prefill={prefill} />
   </div>
 }
@@ -612,7 +705,12 @@ function IterationSteps({ done, iteration, pulse }: { done: number; iteration: n
   </div>
 }
 
-function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole, onAskAssistant }: { task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void; console: ConsoleState | null; onConsole: (console: ConsoleState) => void; onAskAssistant?: (text: string) => void }) {
+function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole, onAskAssistant, restored, onStartOver, onAccepted }: {
+  task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void
+  console: ConsoleState | null; onConsole: (console: ConsoleState) => void; onAskAssistant?: (text: string) => void
+  /** The code came from this browser's draft; «Начать заново» goes back to the starter. onAccepted — the draft is no longer needed. */
+  restored: boolean; onStartOver: () => void; onAccepted: () => void
+}) {
   // Hard tasks read their input: the student types it here to try the program with «Запустить».
   const [stdin, setStdin] = useState('')
   const [attempt, setAttempt] = useState<Attempt | null>(null); const [sending, setSending] = useState(false); const [tries, setTries] = useState(0)
@@ -629,6 +727,7 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     setSending(false); activity(!!result)
     if (!result) return
     setAttempt(result); setTries(t => t + 1)
+    if (result.passed) onAccepted()
     // A hard task reads input: a run without it shows only an input error, so its console is not shown here.
     if (result.console && !task.hard) onConsole({ run: result.console, origin: 'attempt' })
     if (result.progress) onProgress(result.progress)
@@ -659,6 +758,8 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
     {task.redo && <p className="redo-note"><Icon name="refresh" size={15} /> Преподаватель попросил решить эту задачу заново — прежнее решение не засчитано.</p>}
     <h2 className="title">{task.title}</h2>
     <Markdown>{task.statement}</Markdown>
+    {restored && !passed && <p className="draft-note" role="status"><Icon name="refresh" size={15} /><span>Восстановлен твой код — он сохранился в этом браузере.</span>
+      <button type="button" className="ghost small-button" onClick={() => { if (window.confirm('Вернуть начальный код задачи? Твой код будет удалён.')) onStartOver() }}>Начать заново</button></p>}
     <div className="code-label"><span>Решение на {course.title}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
     {task.hard && !passed && <label className="stdin-field">
       <span>Входные данные для «Запустить»</span>
@@ -859,7 +960,7 @@ function Stat({ icon, label, value, suffix }: { icon: Parameters<typeof Icon>[0]
   return <div className="card stat"><span className="chip-icon"><Icon name={icon} size={18} /></span><b className="tabular">{shown}{suffix && <small> {suffix}</small>}</b><span className="muted small">{label}</span></div>
 }
 
-function TeacherPage({ request }: { request: Request }) {
+function TeacherPage({ request, onBecomeStation }: { request: Request; onBecomeStation: () => void }) {
   const [students, setStudents] = useState<Student[] | null>(null); const [selected, setSelected] = useState<Student | null>(null)
   const [globalLlm, setGlobalLlm] = useState<LlmStatus | null>(null)
   const [name, setName] = useState(''); const [login, setLogin] = useState(''); const [password, setPassword] = useState(''); const [group, setGroup] = useState(''); const [creating, setCreating] = useState(false)
@@ -934,7 +1035,7 @@ function TeacherPage({ request }: { request: Request }) {
   const groupList = students ? groupCounts(students, s => s.group).groups.map(g => g.name) : null
   if (view === 'progress') return <>{tabs}<ProgressAnalytics request={request} onOpenStudent={openStudent} focus={progressFocus} /></>
   if (view === 'pairs') return <>{tabs}<PairWork request={request} groups={groupList} /></>
-  if (view === 'board') return <>{tabs}<BoardAdmin request={request} groups={groupList} /></>
+  if (view === 'board') return <>{tabs}<BoardAdmin request={request} groups={groupList} onBecomeStation={onBecomeStation} /></>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
   if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
   const counts = groupCounts(students ?? [], s => s.group)

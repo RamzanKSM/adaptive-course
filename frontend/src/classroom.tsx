@@ -109,7 +109,7 @@ function ClassroomBoard({ data }: { data: Classroom }) {
           <div className="classroom-meter" role="progressbar" aria-label="Цель недели" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={week.closedTopics}>
             <i style={{ width: `${goal ? Math.min(100, (week.closedTopics / goal) * 100) : 100}%` }} />
           </div>
-          <p className="classroom-caption">{reached ? 'Цель недели выполнена!' : `Цель недели — ${topics(goal)}: столько нужно группе, чтобы успеть к сессии. Осталось ${week ? goal - week.closedTopics : goal}.`}</p>
+          <p className="classroom-caption">{reached ? 'Цель недели выполнена!' : `Цель недели — ${topics(goal)}: столько нужно группе к воскресенью, чтобы идти по плану к сессии. Осталось ${week ? goal - week.closedTopics : goal}.`}</p>
         </>}
         {goal === null && <p className="classroom-caption muted">Цели недели нет: дата сессии не задана.</p>}
       </> : <p className="muted">Нет данных.</p>}

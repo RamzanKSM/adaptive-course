@@ -18,7 +18,7 @@ public class ApiController {
   private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(ApiController.class);
   /** Verification is strict (reference must pass, wrong solutions must fail), so the generator gets three tries. */
   static final int GENERATION_ATTEMPTS=3;
-  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairWork pairWork; private final BoardTests boardTests;
+  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairWork pairWork; private final BoardTests boardTests; private final BoardStations boardStations;
   /**
    * Serializes /learning/next per student and course. It replaces what the long transaction never really gave:
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
@@ -26,14 +26,15 @@ public class ApiController {
    */
   private final ConcurrentHashMap<String,java.util.concurrent.locks.ReentrantLock> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests, BoardStations boardStations) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; this.boardStations=boardStations; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled,hard_mode_allowed,hard_mode_on from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
     var u=rows.getFirst(); if("STUDENT".equals(u.get("role")))LogContext.student(u.get("id"),u.get("login"));else LogContext.admin(u.get("login")); String token=randomToken(); db.update("insert into sessions(token_hash,user_id,expires_at) values(?,?,?)",Hashing.sha256(token),u.get("id"),Instant.now().plus(Duration.ofHours(sessionHours)).toString());
-    Cookie c=new Cookie("adaptive_session",token); c.setHttpOnly(true); c.setPath("/api"); c.setMaxAge((int)Duration.ofHours(sessionHours).toSeconds()); c.setSecure(secureCookie); response.addCookie(c); return status(u);
+    response.addCookie(AuthFilter.sessionCookie(token,Duration.ofHours(sessionHours),secureCookie)); return status(u);
   }
-  @PostMapping("/auth/logout") @ResponseStatus(HttpStatus.NO_CONTENT) public void logout(HttpServletRequest r,HttpServletResponse p) { finishOpenLessons(r); cookie(r).ifPresent(t->db.update("delete from sessions where token_hash=?",Hashing.sha256(t))); Cookie c=new Cookie("adaptive_session","");c.setPath("/api");c.setMaxAge(0);p.addCookie(c); }
+  /** keepLessons=true: the student's open lessons stay open (a board test taken from his own account on the classroom PC). */
+  @PostMapping("/auth/logout") @ResponseStatus(HttpStatus.NO_CONTENT) public void logout(@RequestParam(name="keepLessons",required=false) boolean keepLessons,HttpServletRequest r,HttpServletResponse p) { if(!keepLessons)finishOpenLessons(r); cookie(r).ifPresent(t->db.update("delete from sessions where token_hash=?",Hashing.sha256(t))); Cookie c=new Cookie("adaptive_session","");c.setPath("/api");c.setMaxAge(0);p.addCookie(c); }
   @GetMapping("/auth/me") public Map<String,Object> me(HttpServletRequest r) { return status(user(r)); }
 
   @GetMapping("/diagnostic") public Map<String,Object> diagnostic(@RequestParam(name="language",required=false) String language,HttpServletRequest r) { long id=uid(r); Language lang=Language.parse(language); boolean done=diagnosticDone(id,lang); var qs=db.queryForList("select id,ordinal,skill_code,prompt,options_json from diagnostic_questions where language=? order by ordinal",lang.name()); return Map.of("completed",done,"questions",done?List.of():qs.stream().map(q->Map.of("id",q.get("id"),"ordinal",q.get("ordinal"),"skillCode",q.get("skill_code"),"prompt",q.get("prompt"),"options",json(q.get("options_json")),"unknownOption",Map.of("label","Не знаю"))).toList()); }
@@ -603,8 +604,9 @@ public class ApiController {
   @PostMapping("/board/tests/{id}/start") public Map<String,Object> startBoardTest(@PathVariable long id,HttpServletRequest r){ return boardTests.start(student(r),id,boardDevice(r)); }
   @PutMapping("/board/tests/{id}/answers") public Map<String,Object> saveBoardAnswers(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.saveAnswers(student(r),id,b,boardDevice(r)); }
   /** «Запустить» during the test: the same limits and answers as /run; the run is recorded in the test. */
-  @PostMapping("/board/tests/{id}/run") public ResponseEntity<?> runBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){
-    long u=student(r);
+  @PostMapping("/board/tests/{id}/run") public ResponseEntity<?> runBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return runBoardTest(student(r),id,b,boardDevice(r)); }
+  /** u: the test's student (rate limit per student); device: the browser's token, or the station's (BoardTests.stationDevice). */
+  private ResponseEntity<?> runBoardTest(long u,long id,Map<String,Object> b,String device){
     if(b==null||!(b.get("code") instanceof String source)||source.isBlank()) throw bad("EMPTY_SOURCE","Напиши код, чтобы его запустить");
     if(source.length()>SOURCE_LIMIT) throw bad("SOURCE_TOO_LONG","Код длиннее "+SOURCE_LIMIT+" символов");
     var lang=db.queryForList("select language from board_tests where id=? and user_id=?",String.class,id,u);
@@ -613,11 +615,11 @@ public class ApiController {
     if(!codeRunner.status(language).available()) return ResponseEntity.status(503).body(Map.of("error","RUNNER_UNAVAILABLE","message","Запуск "+language.title+" сейчас недоступен","runner",runner(language)));
     long retryAfter=runLimiter.retryAfterSeconds(u);
     if(retryAfter>0) return ResponseEntity.status(429).header("Retry-After",String.valueOf(retryAfter)).body(Map.of("error","RUN_RATE_LIMITED","message","Слишком много запусков подряд. Подожди "+retryAfter+" с."));
-    return ResponseEntity.ok(boardTests.run(u,id,b.get("item"),source,boardDevice(r)));
+    return ResponseEntity.ok(boardTests.run(u,id,b.get("item"),source,device,b.get("revision")));
   }
   @PostMapping("/board/tests/{id}/finish") public Map<String,Object> finishBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.finish(student(r),id,b,boardDevice(r)); }
-  /** The board test's browser token (X-Board-Device), see BoardTests.deviceHash. */
-  private static String boardDevice(HttpServletRequest r){ String d=r.getHeader("X-Board-Device"); return d==null||d.length()>200?null:d; }
+  /** The board test's browser token (X-Board-Device), see BoardTests.deviceHash; a station's token is not accepted from a browser. */
+  private static String boardDevice(HttpServletRequest r){ String d=r.getHeader("X-Board-Device"); return d==null||d.length()>200||d.strip().startsWith("station:")?null:d; }
   @GetMapping("/board/grades") public Map<String,Object> boardGrades(@RequestParam(name="language",required=false) String language,HttpServletRequest r){ return boardTests.studentGrades(student(r),Language.parse(language)); }
   @GetMapping("/admin/board") public Map<String,Object> board(@RequestParam(name="group",required=false) String group,@RequestParam(name="language",required=false) String language,HttpServletRequest r){ admin(r); return boardTests.overview(group,language); }
   @PostMapping("/admin/board/call") public Map<String,Object> callToBoard(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.call(uid(r),b); }
@@ -629,6 +631,22 @@ public class ApiController {
   @PostMapping("/admin/board/tests/{id}/finish") public Map<String,Object> finishBoardTestNow(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.finishNow(id); }
   @PatchMapping("/admin/board/tests/{id}") public Map<String,Object> gradeBoardTest(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var test=boardTests.grade(id,b); log.info("Board test {} graded by admin {}: {}",id,uid(r),test.get("finalGrade")); return test; }
   @PostMapping("/admin/board/tests/{id}/assess") public Map<String,Object> assessBoardTest(@PathVariable long id,HttpServletRequest r){ admin(r); return boardTests.reassess(id); }
+  @PatchMapping("/admin/board/tests/{id}/call") public Map<String,Object> editBoardCall(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.editCall(id,b); }
+  @PostMapping("/admin/board/tests/{id}/items/{kind}/replace") public Map<String,Object> replaceBoardItem(@PathVariable long id,@PathVariable String kind,HttpServletRequest r){ admin(r); return boardTests.replaceItem(id,kind); }
+  @GetMapping("/admin/board/settings") public Map<String,Object> boardSettings(HttpServletRequest r){ admin(r); return boardTests.settings(); }
+  @PutMapping("/admin/board/settings") public Map<String,Object> saveBoardSettings(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.saveSettings(uid(r),b); }
+  /** «Компьютер у доски» (BoardStations): the teacher makes this browser a station; the student starts his test there without signing in. */
+  @PostMapping("/admin/board/stations") public Map<String,Object> createBoardStation(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r,HttpServletResponse p){ admin(r); return boardStations.create(uid(r),b,p); }
+  @GetMapping("/admin/board/stations") public Map<String,Object> boardStations(HttpServletRequest r){ admin(r); return boardStations.list(); }
+  @DeleteMapping("/admin/board/stations/{id}") public Map<String,Object> revokeBoardStation(@PathVariable long id,HttpServletRequest r){ admin(r); var result=boardStations.revoke(id); log.info("Board station {} revoked by admin {}",id,uid(r)); return result; }
+  /** /api/station/**: authenticated by the station cookie (AuthFilter), request attribute «station» = {id, name}. */
+  @DeleteMapping("/station") @ResponseStatus(HttpStatus.NO_CONTENT) public void leaveBoardStation(HttpServletRequest r,HttpServletResponse p){ boardStations.leave(station(r),p); }
+  @GetMapping("/station/current") @SuppressWarnings("unchecked") public Map<String,Object> stationCurrent(HttpServletRequest r){ return boardTests.stationCurrent((Map<String,Object>)r.getAttribute("station")); }
+  @PostMapping("/station/tests/{id}/start") public Map<String,Object> stationStart(@PathVariable long id,HttpServletRequest r){ return boardTests.stationStart(station(r),id); }
+  @PutMapping("/station/tests/{id}/answers") public Map<String,Object> stationAnswers(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.stationAnswers(station(r),id,b); }
+  @PostMapping("/station/tests/{id}/run") public ResponseEntity<?> stationRun(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ long s=station(r); return runBoardTest(boardTests.stationUser(s,id),id,b,BoardTests.stationDevice(s)); }
+  @PostMapping("/station/tests/{id}/finish") public Map<String,Object> stationFinish(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.stationFinish(station(r),id,b); }
+  private static long station(HttpServletRequest r){ return ((Number)((Map<?,?>)r.getAttribute("station")).get("id")).longValue(); }
   @DeleteMapping("/admin/board/tests/{id}") public Map<String,Object> deleteBoardTest(@PathVariable long id,HttpServletRequest r){ admin(r); var result=boardTests.delete(id); log.info("Board test {} deleted by admin {}",id,uid(r)); return result; }
 
   /** Reasoning levels per purpose and LLM rate limits; options come from the model when the App Server can tell. */

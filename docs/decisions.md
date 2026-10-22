@@ -6,6 +6,18 @@ the reasoning and the open questions so a new agent does not re-ask settled poin
 ## Test at the board («вызов к доске», in design since 2026-10-15)
 The owner finds grades for work during the pair inappropriate. New model: students study at home on the platform; in
 class the teacher calls students one by one to a short individual test, projected for the group.
+- «Компьютер у доски» (owner, 2026-10-22: logging students in and out on the classroom PC for every call is tedious): the
+  teacher turns a browser into a board station once (button in «К доске»; a separate station cookie, no login/password —
+  the owner chose a separate board account over a student test inside the admin account, because the admin session would
+  leave the reference solutions and grades in the student's hands). The station shows only active calls and the running
+  test; the student presses «Начать тест» at his name; nobody is signed out, the student's own lessons stay open.
+  This replaces the 2026-10-15 «no board device» decision.
+- Starting the test from the student's own account is off by default (setting «Студент может начать тест из своего
+  аккаунта»); off — the student only sees that he is called.
+- Editing a call (owner, 2026-10-22: delete + call again was frequent): the kinds and the topic source can be changed until
+  the test starts. During the test the teacher can «Заменить задание» (another task of the kind, that answer reset, the
+  timer goes on). Adding/removing items mid-test is not offered (the same time for the same set). Changing the student is
+  not needed (cancel + call).
 - Two criteria: the pace (above the session line) is required for a 5; the test gives the grade.
 - Not every student every pair; the platform should suggest whom to call (longest not asked + randomness), the teacher
   decides — fair rotation, no impression of bias.
@@ -72,6 +84,13 @@ class the teacher calls students one by one to a short individual test, projecte
   `pair_results`) — don't bring them back; grades come from the test at the board.
 
 ## Teacher analytics and the session (since 2026-10-13)
+- Status by a global plan line (owner, 2026-10-22): the individual needed pace (remaining / weeks left vs the recent
+  practice pace) was unfair — a student who closed 90% by the diagnostic and rested two weeks was «не успевает» and capped
+  at 3 at the board. Now the plan is one line from 0 topics at the group's start (its first lesson in the course) to all
+  topics at the session; status by the lag = plan for today − topics closed (diagnostic included): ≤ 0 on track, 1–2
+  borderline (the owner chose an absolute lag over 75%: early in the course percentages jump), ≥ 3 behind. The same line is
+  the board's «по темпу на сегодня» minimum and the classroom's week goal. The forecast at the current pace (dotted line,
+  date) stays for display only, computed as before.
 - Tab «Прогресс»: growth per day (skills %, solved, XP — same formula as the student sees), a line per group member +
   median (mean in the tooltip), group comparison per member (never totals), blocks heat map, students table with flags.
 - One session date for everyone. «Course closed» = every topic passed at least once (≥ 1 iteration or confirmed by the
@@ -108,6 +127,12 @@ class the teacher calls students one by one to a short individual test, projecte
   «Юнус Алиев Л.»). No group labels inside names — the group is its own field. `mteacher` is a colleague's test account.
 
 ## Student UI
+- «Сессия истекла» (2026-10-21: students were signed out in class and lost their code): sign-in lasted exactly 7 days from
+  the login, so a login at a weekly class expired in the middle of the next one, and the lesson code lived only in the
+  page's memory. Now (2026-10-22) sessions slide (30 days without any request), the lesson code is kept as a draft in the
+  browser per task, an expired session asks to sign in again over the screen without resetting it, and the sign-out after
+  a board test does not finish the student's lessons.
+- No ligatures in code (owner, 2026-10-22): JetBrains Mono drew `!=` as `≠`; beginners must see what they type.
 - After a failed check, «Запустить» on edited code hides the old verdict (it confused students); the attempt counter stays.
 - Java editor hints (keywords, types, System.out.println, members after a dot, words from the code); no construct
   templates — beginners should type `for`/`if` themselves.

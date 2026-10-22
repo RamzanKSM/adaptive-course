@@ -136,15 +136,19 @@ class ProgressAnalyticsIntegrationTest {
     assertEquals(confirmed + closed, forecast.path("closed").asInt()); assertEquals(topics - confirmed - closed, forecast.path("remaining").asInt());
     assertEquals(forecast.path("closed").asInt(), series.path("closed").get(last).asInt(), "the closed line ends at the forecast's closed");
     assertEquals(1.0, forecast.path("pace").asDouble(), "one topic closed by practice, a newcomer's week"); assertEquals(1.0, forecast.path("paceWeeks").asDouble());
-    assertEquals(3.9, forecast.path("neededPace").asDouble()); assertEquals("BEHIND", forecast.path("status").asText());
+    // The group's plan from its first lesson two days ago to the session in 70 days: ⌈44 × 2 / 72⌉ = 2 topics today, 5 closed.
+    assertEquals(today.minusDays(2).toString(), forecast.path("planStart").asText()); assertEquals(2, forecast.path("planToday").asInt());
+    assertEquals(-3, forecast.path("lag").asInt()); assertEquals("ON_TRACK", forecast.path("status").asText(), "ahead of the plan line, whatever the pace");
+    assertTrue(forecast.path("neededPace").isMissingNode());
     assertEquals(today.plusDays(39 * 7).toString(), forecast.path("forecastDate").asText());
-    assertEquals(List.of("BEHIND"), strings(me.path("flags")), "the open lesson's last task is solved: not stuck");
+    assertEquals(List.of(), strings(me.path("flags")), "on track, and the open lesson's last task is solved: not stuck");
 
     // The student sees the same forecast and their own closed topics per day.
     var session = live.path("session");
     assertEquals(today.plusDays(70).toString(), session.path("date").asText()); assertEquals(10.0, session.path("weeksLeft").asDouble());
     assertEquals(confirmed + closed, session.path("closed").asInt()); assertEquals(forecast.path("remaining").asInt(), session.path("remaining").asInt());
-    assertEquals("BEHIND", session.path("status").asText()); assertEquals(3.9, session.path("neededPace").asDouble());
+    assertEquals("ON_TRACK", session.path("status").asText()); assertTrue(session.path("neededPace").isMissingNode());
+    assertEquals(today.minusDays(2).toString(), session.path("planStart").asText()); assertEquals(2, session.path("planToday").asInt()); assertEquals(-3, session.path("lag").asInt());
     assertEquals(today.toString(), session.path("days").get(session.path("days").size() - 1).asText());
     assertEquals(session.path("days").size(), session.path("closedSeries").size());
     assertEquals(confirmed + closed, session.path("closedSeries").get(session.path("closedSeries").size() - 1).asInt());
@@ -154,7 +158,7 @@ class ProgressAnalyticsIntegrationTest {
 
   @Test void forecastCountsPracticeClosuresOfTheLastThreeWeeks() throws Exception {
     fixedNow.set(NOW); String admin = login("admin", "admin-pass"); setSession(admin, TODAY.plusDays(70));
-    long id = studentRow("pace-student", "Темп", null); diagnostic(id, "JAVA", NOW.minus(Duration.ofDays(31)));
+    long id = studentRow("pace-student", "Темп", "Темп-1"); diagnostic(id, "JAVA", NOW.minus(Duration.ofDays(31)));
     lesson(id, "JAVA", 1, NOW.minus(Duration.ofDays(30)), false);
     long older = lesson(id, "JAVA", 2, NOW.minus(Duration.ofDays(22)), false), recent = lesson(id, "JAVA", 3, NOW.minus(Duration.ofDays(20)), false);
     for (int i = 0; i < 3; i++) { long t = task("VARIABLE_BASIC", "JAVA"); submit(older, t, true, NOW.minus(Duration.ofDays(22)).plusSeconds(60 * i)); credit(id, t); }
@@ -176,7 +180,9 @@ class ProgressAnalyticsIntegrationTest {
     assertEquals(forecast.path("closed").asInt(), series.path("closed").get(series.path("closed").size() - 1).asInt());
     assertEquals(3.0, forecast.path("paceWeeks").asDouble(), "a month in the course: the whole three-week window");
     assertEquals(0.33, forecast.path("pace").asDouble(), "only the topic closed 20 days ago is in the window");
-    assertEquals(4.2, forecast.path("neededPace").asDouble()); assertEquals("BEHIND", forecast.path("status").asText());
+    // The plan of the group from its first lesson 30 days ago to the session in 70: ⌈44 × 30 / 100⌉ = 14 topics today, 2 closed.
+    assertEquals(TODAY.minusDays(30).toString(), forecast.path("planStart").asText()); assertEquals(14, forecast.path("planToday").asInt());
+    assertEquals(12, forecast.path("lag").asInt()); assertEquals("BEHIND", forecast.path("status").asText());
     assertEquals(TODAY.plusDays(42 * 3 * 7).toString(), forecast.path("forecastDate").asText());
     assertEquals(10.0, view.path("session").path("weeksLeft").asDouble());
   }
@@ -288,7 +294,7 @@ class ProgressAnalyticsIntegrationTest {
     var week = view.path("week");
     assertEquals("2030-03-11", week.path("from").asText(), "the UTC week from Monday");
     assertEquals(3, week.path("closedTopics").asInt(), "three first iterations this week");
-    assertEquals(22, week.path("goal").asInt(), "220 topics left at the week start over 73 days");
+    assertEquals(20, week.path("goal").asInt(), "the plan from Tuesday's first lesson to the session (72 days) is ⌈44 × 5 / 72⌉ = 4 topics on Sunday; 5 members × 4, nothing closed on Monday");
     var daily = view.path("daily");
     assertEquals(28, daily.size()); assertEquals("2030-03-14", daily.get(27).path("day").asText());
     assertEquals("2030-03-12", daily.get(25).path("day").asText()); assertEquals(3, daily.get(25).path("closedTopics").asInt());

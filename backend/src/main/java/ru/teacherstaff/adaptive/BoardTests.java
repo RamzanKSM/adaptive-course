@@ -19,7 +19,8 @@ import java.util.concurrent.Executors;
 
 /**
  * «К доске»: the teacher calls a student from his laptop with the kinds of items he chose (BoardItems: parsons «Собери
- * программу», fix «Исправь ошибку», code «Напиши код»); the student starts the test on the classroom PC within CALL; one
+ * программу», fix «Исправь ошибку», code «Напиши код»); the student starts the test within CALL at the board station
+ * (BoardStations, no sign-in) or, when the teacher allows it, from his own account; one
  * timer — the sum of the kinds' minutes. The answers are autosaved; the client submits at 0, and the server finishes a
  * test whose time is over (after GRACE) with the last autosaved answers — lazily on every board request and every 15 s
  * (BoardTestFinisher).
@@ -45,6 +46,8 @@ class BoardTests implements DisposableBean {
   /** Recent finished, cancelled and expired tests stay in the teacher's «active» panel this long. */
   static final Duration ACTIVE_RECENT = Duration.ofHours(2);
   static final List<String> GRADES = List.of("2", "3", "4", "5");
+  /** app_settings: "true" — a student may start his test from his own account; else only at a board station (BoardStations). */
+  static final String STUDENT_START_KEY = "board_student_start";
 
   private final JdbcTemplate db; private final Clock clock; private final ObjectMapper json; private final PistonCodeRunner runner; private final TaskVerifier verifier;
   private final LearningContentGenerator generator; private final ProgressAnalytics analytics; private final PairWork pairs;
@@ -131,40 +134,126 @@ class BoardTests implements DisposableBean {
     var calls = db.queryForList("select id,called_at,call_expires_at,kinds,duration_seconds from board_tests where user_id=? and status='CALLED' order by id desc limit 1", user);
     var running = db.queryForList("select id from board_tests where user_id=? and status='STARTED' order by id desc limit 1", Long.class, user);
     var c = calls.isEmpty() ? null : calls.getFirst();
-    var call = c == null ? null : obj("id", c.get("id"), "calledAt", c.get("called_at"), "expiresAt", c.get("call_expires_at"), "kinds", kinds(c), "durationSeconds", duration(c));
+    var call = c == null ? null : obj("id", c.get("id"), "calledAt", c.get("called_at"), "expiresAt", c.get("call_expires_at"), "kinds", kinds(c), "durationSeconds", duration(c), "canStart", studentStart());
     return obj("call", call, "test", running.isEmpty() ? null : studentView(load(running.getFirst()), device));
   }
 
-  /** POST /api/board/tests/{id}/start: only the called student, while the call is active; the items are chosen now. */
+  /**
+   * POST /api/board/tests/{id}/start: only the called student, while the call is active, and only when the teacher lets
+   * students start from their own account (studentStart; else the test starts at a board station); the items are chosen now.
+   */
   Map<String, Object> start(long user, long id) { return start(user, id, null); }
   Map<String, Object> start(long user, long id, String device) {
     Instant now = now(); settle(now);
     var t = own(user, id);
     if ("STARTED".equals(t.get("status"))) return studentView(t, device);
     requireCalled(t);
-    Language lang = Language.of(t.get("language"));
-    List<String> minimum = null;
-    if (SOURCE_PACE.equals(t.get("source"))) {
-      var plan = pacePlan((String) t.get("group_name"), lang, now);
-      if (plan == null) throw new ApiError("BOARD_PACE_UNAVAILABLE", "Нет плана по темпу: нужна дата сессии и уроки группы в курсе — попроси преподавателя вызвать снова");
-      minimum = plan.topics();
-    }
-    var items = chooseItems(user, lang, kinds(t), minimum, now);
-    String pace = paceStatus(user, lang, now);
-    var answers = new LinkedHashMap<String, Object>();
-    for (var item : items)
-      switch ((String) item.get("kind")) {
-        case "parsons" -> answers.put("parsons", List.of());
-        case "fix" -> answers.put("fix", item.get("program"));
-        default -> answers.put("code", item.get("starterCode") == null ? "" : item.get("starterCode"));
-      }
-    int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=?,device=? where id=? and status='CALLED' and call_expires_at>=?",
-        iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), id, iso(now));
-    var after = load(id);
-    if (started == 0 && !"STARTED".equals(after.get("status"))) requireCalled(after);
-    if (started > 0) log.info("Board test {} started by student {}: tasks {}, pace {}", id, user, items.stream().map(i -> i.get("kind") + " " + i.get("taskId")).toList(), pace);
-    return studentView(after, device);
+    if (!studentStart()) throw new ApiError("BOARD_START_AT_STATION", "Тест начинается на компьютере у доски — подойди к нему");
+    return studentView(begin(t, device, null, now), device);
   }
+
+  /**
+   * CALLED → STARTED: the items, the initial answers, the pace status, the browser (device) and the station (null — the
+   * student's own account). The update requires the kinds and the source read here, so a teacher's edit of the call in
+   * between is never lost: the items are chosen again (once). A station starts only while no other test runs at it.
+   */
+  private Map<String, Object> begin(Map<String, Object> t, String device, Long station, Instant now) {
+    long id = ((Number) t.get("id")).longValue(), user = ((Number) t.get("user_id")).longValue();
+    for (int attempt = 0; ; attempt++) {
+      Language lang = Language.of(t.get("language"));
+      List<String> minimum = null;
+      if (SOURCE_PACE.equals(t.get("source"))) {
+        var plan = pacePlan((String) t.get("group_name"), lang, now);
+        if (plan == null) throw new ApiError("BOARD_PACE_UNAVAILABLE", "Нет плана по темпу: нужна дата сессии и уроки группы в курсе — попроси преподавателя вызвать снова");
+        minimum = plan.topics();
+      }
+      var items = chooseItems(user, lang, kinds(t), minimum, now);
+      String pace = paceStatus(user, lang, now);
+      var answers = new LinkedHashMap<String, Object>();
+      for (var item : items) answers.put((String) item.get("kind"), initialAnswer(item));
+      var params = new ArrayList<Object>(Arrays.asList(iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), station, id, iso(now), t.get("kinds"), t.get("source")));
+      if (station != null) params.add(station);
+      int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=?,device=?,station_id=? "
+          + "where id=? and status='CALLED' and call_expires_at>=? and kinds is ? and source is ?"
+          + (station == null ? "" : " and not exists(select 1 from board_tests x where x.station_id=? and x.status='STARTED')"), params.toArray());
+      var after = load(id);
+      var tasks = items.stream().map(i -> i.get("kind") + " " + i.get("taskId")).toList();
+      if (started > 0) {
+        if (station == null) log.info("Board test {} started by student {}: tasks {}, pace {}", id, user, tasks, pace);
+        else log.info("Board test {} started at station {} for student {}: tasks {}, pace {}", id, station, user, tasks, pace);
+        return after;
+      }
+      if ("STARTED".equals(after.get("status"))) {
+        if (station != null && !station.equals(station(after))) throw elsewhere();
+        return after;
+      }
+      requireCalled(after);
+      if (station != null && busy(station)) throw new ApiError("BOARD_STATION_BUSY", "На этом компьютере уже идёт тест");
+      if (attempt > 0) throw new ApiError("BOARD_CALL_CHANGED", "Вызов только что изменился — начни тест ещё раз");
+      log.info("Board test {}: the call changed while starting, choosing the items again", id);
+      t = after;
+    }
+  }
+  /** The answer an item starts with: parsons — nothing placed, fix — the program with the bug, code — the starter. */
+  private static Object initialAnswer(Map<String, Object> item) {
+    return switch ((String) item.get("kind")) {
+      case "parsons" -> List.of();
+      case "fix" -> item.get("program");
+      default -> item.get("starterCode") == null ? "" : item.get("starterCode");
+    };
+  }
+
+  /** Whether students may start their test from their own account (app_settings board_student_start; off by default). */
+  boolean studentStart() { return db.queryForList("select value from app_settings where key=?", String.class, STUDENT_START_KEY).stream().anyMatch("true"::equals); }
+  /** GET /api/admin/board/settings. */
+  Map<String, Object> settings() { return obj("studentStart", studentStart()); }
+  /** PUT /api/admin/board/settings {studentStart: boolean}. */
+  Map<String, Object> saveSettings(long admin, Map<String, Object> body) {
+    if (body == null || !(body.get("studentStart") instanceof Boolean on)) throw new ApiError("INVALID_SETTINGS", "studentStart — true или false");
+    db.update("insert into app_settings(key,value) values(?,?) on conflict(key) do update set value=excluded.value", STUDENT_START_KEY, on.toString());
+    log.info("Board settings changed by admin {}: students start from their own account {}", admin, on);
+    return settings();
+  }
+
+  // ---------------------------------------------------------------- board station
+
+  /**
+   * GET /api/station/current: every active call (newest first) — the student whose name it is starts it here — and the
+   * test running at this station (the newest), as the student sees it, with his name.
+   */
+  Map<String, Object> stationCurrent(Map<String, Object> station) {
+    Instant now = now(); settle(now);
+    var calls = db.queryForList("select b.*,u.display_name from board_tests b join users u on u.id=b.user_id where b.status='CALLED' and b.call_expires_at>=? order by b.called_at desc,b.id desc", iso(now)).stream()
+        .map(c -> obj("id", c.get("id"), "displayName", c.get("display_name"), "group", c.get("group_name"), "language", c.get("language"), "kinds", kinds(c), "durationSeconds", duration(c),
+            "calledAt", c.get("called_at"), "expiresAt", c.get("call_expires_at"), "canStart", true)).toList();
+    var running = db.queryForList("select id from board_tests where station_id=? and status='STARTED' order by id desc limit 1", Long.class, station.get("id"));
+    return obj("station", station, "now", iso(now), "calls", calls, "test", running.isEmpty() ? null : stationView(load(running.getFirst())));
+  }
+  /** POST /api/station/tests/{id}/start: a call started at this station for its student; refused while another test runs here. */
+  Map<String, Object> stationStart(long station, long id) {
+    Instant now = now(); settle(now);
+    var t = load(id);
+    LogContext.student(t.get("user_id"), t.get("login"));
+    if ("STARTED".equals(t.get("status"))) { if (Long.valueOf(station).equals(station(t))) return stationView(t); throw elsewhere(); }
+    requireCalled(t);
+    if (busy(station)) throw new ApiError("BOARD_STATION_BUSY", "На этом компьютере уже идёт тест");
+    return stationView(begin(t, stationDevice(station), station, now));
+  }
+  /** The student of a test started at this station; any other test is «not found» to it. */
+  long stationUser(long station, long id) {
+    var t = load(id);
+    if (!Long.valueOf(station).equals(station(t))) throw new NotFoundError("BOARD_TEST_NOT_FOUND", "Тест не найден");
+    LogContext.student(t.get("user_id"), t.get("login"));
+    return ((Number) t.get("user_id")).longValue();
+  }
+  /** The device of a station's tests (board_tests.device = its SHA-256): the student's own browser sees them «elsewhere». */
+  static String stationDevice(long station) { return "station:" + station; }
+  Map<String, Object> stationAnswers(long station, long id, Map<String, Object> body) { return saveAnswers(stationUser(station, id), id, body, stationDevice(station)); }
+  Map<String, Object> stationFinish(long station, long id, Map<String, Object> body) { return finish(stationUser(station, id), id, body, stationDevice(station)); }
+  private Map<String, Object> stationView(Map<String, Object> t) { var view = studentView(t); view.put("displayName", t.get("display_name")); return view; }
+  private boolean busy(long station) { return count("select count(*) from board_tests where station_id=? and status='STARTED'", station) > 0; }
+  private static Long station(Map<String, Object> t) { return t.get("station_id") instanceof Number n ? n.longValue() : null; }
+  private static ApiError elsewhere() { return new ApiError("BOARD_TEST_ELSEWHERE", "Тест идёт на другом компьютере — у доски"); }
 
   /**
    * The browser that started the test owns it (board_tests.device): another browser of the same student — e.g. his own PC
@@ -173,7 +262,7 @@ class BoardTests implements DisposableBean {
   private static String deviceHash(String device) { return device == null || device.isBlank() ? null : Hashing.sha256(device.strip()); }
   private static boolean elsewhere(Map<String, Object> t, String device) { return t.get("device") != null && !t.get("device").equals(deviceHash(device)); }
   private static void requireDevice(Map<String, Object> t, String device) {
-    if (elsewhere(t, device)) throw new ApiError("BOARD_TEST_ELSEWHERE", "Тест идёт на другом компьютере — у доски");
+    if (elsewhere(t, device)) throw elsewhere();
   }
   private static void requireCalled(Map<String, Object> t) {
     switch ((String) t.get("status")) {
@@ -197,15 +286,19 @@ class BoardTests implements DisposableBean {
 
   /** POST /api/board/tests/{id}/run: «Запустить» for the code or fix item — the console, recorded in the test's runs with its item; that answer is saved too. */
   Map<String, Object> run(long user, long id, Object item, String code) { return run(user, id, item, code, null); }
-  Map<String, Object> run(long user, long id, Object item, String code, String device) {
+  Map<String, Object> run(long user, long id, Object item, String code, String device) { return run(user, id, item, code, device, null); }
+  /** revision: the screen's revision of the test; a run of a replaced item's old code is shown but not saved as the answer. */
+  Map<String, Object> run(long user, long id, Object item, String code, String device, Object revision) {
     Instant now = now(); settle(now);
     var t = own(user, id); requireDevice(t, device); requireRunning(t, now);
     String kind = item == null ? "code" : item instanceof String s ? s : "";
     if (!List.of("code", "fix").contains(kind) || !kinds(t).contains(kind)) throw new ApiError("INVALID_ITEM", "Запускать можно только код заданий этого теста «Исправь ошибку» и «Напиши код»");
+    boolean stale = items(t).stream().anyMatch(i -> kind.equals(i.get("kind")) && stale(i, revision));
     Language lang = Language.of(t.get("language"));
     long started = System.nanoTime(); var console = runner.console(lang, code, "");
     log.info("Board test {} console run ({}, {}): {} in {} ms", id, lang, kind, console.status(), (System.nanoTime() - started) / 1_000_000);
-    db.update("update board_tests set runs_json=json_insert(coalesce(runs_json,'[]'),'$[#]',json(?)),answers_json=json_set(coalesce(answers_json,'{}'),'$." + kind + "',?) where id=? and status='STARTED'",
+    if (stale) log.info("Board test {}: a run of the replaced {} item, not saved as the answer", id, kind);
+    else db.update("update board_tests set runs_json=json_insert(coalesce(runs_json,'[]'),'$[#]',json(?)),answers_json=json_set(coalesce(answers_json,'{}'),'$." + kind + "',?) where id=? and status='STARTED'",
         write(obj("at", iso(now), "item", kind, "code", code, "console", console.view())), code, id);
     return obj("console", console.view());
   }
@@ -275,6 +368,13 @@ class BoardTests implements DisposableBean {
    * The answers of a request body, validated against the test's items: code and fix — text; parsons — ids of the item's
    * lines, each at most once. A field of a kind the test does not have is an error; absent and null fields are left out.
    */
+  /**
+   * An answer typed on a screen built before the item was replaced (the body's revision is older than the item's
+   * replacedRevision) belongs to the old task: it is dropped. A body without a revision (an older client) is taken as is.
+   */
+  private static boolean stale(Map<String, Object> item, Object seen) {
+    return seen instanceof Number n && item.get("replacedRevision") instanceof Number replacedAt && n.intValue() < replacedAt.intValue();
+  }
   private static Map<String, Object> submitted(Map<String, Object> body, List<Map<String, Object>> items) {
     var answers = new HashMap<String, Object>();
     if (body == null) return answers;
@@ -283,6 +383,7 @@ class BoardTests implements DisposableBean {
       if (value == null) continue;
       var item = items.stream().filter(i -> key.equals(i.get("kind"))).findFirst().orElse(null);
       if (item == null) throw new ApiError("INVALID_ANSWER", "В этом тесте нет задания «" + BoardItems.kind(key).title() + "»");
+      if (stale(item, body.get("revision"))) continue;
       if ("parsons".equals(key)) {
         if (!(value instanceof List<?> list)) throw new ApiError("INVALID_ANSWER", "parsons — список строк программы");
         var known = new HashSet<Object>(); for (var line : lineList(item)) known.add(line.get("id"));
@@ -325,7 +426,7 @@ class BoardTests implements DisposableBean {
       items.add(view); shown.put(kind, answers.get(kind));
     }
     return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "now", iso(now()), "durationSeconds", duration(t),
-        "items", items, "answers", shown);
+        "items", items, "answers", shown, "revision", revision(t));
   }
 
   // ---------------------------------------------------------------- items
@@ -345,6 +446,11 @@ class BoardTests implements DisposableBean {
    * Regular tasks only, so a hard-mode student gets the same kind of test; no task or story twice in a test.
    */
   private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, List<String> minimum, Instant now) {
+    return chooseItems(user, lang, kinds, minimum, now, new HashMap<>(), new HashSet<>(), new HashSet<>());
+  }
+  /** chosen, usedTasks, usedStories — what the test already holds (replaceItem): the new items avoid them and order their topics by them. */
+  private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, List<String> minimum, Instant now,
+                                                Map<String, Fit> chosen, Set<Long> usedTasks, Set<String> usedStories) {
     var practiced = db.query("select s.code,s.block_no,coalesce("
         + "(select max(" + epoch("x.created_at") + ") from skill_iterations i join submissions x on x.lesson_id=i.lesson_id and x.passed=1 join task_target_skills ts on ts.task_id=x.task_id and ts.skill_code=i.skill_code where i.user_id=p.user_id and i.skill_code=s.code and i.iteration_number=1),"
         + "(select " + epoch("l.started_at") + " from skill_iterations i join lessons l on l.id=i.lesson_id where i.user_id=p.user_id and i.skill_code=s.code and i.iteration_number=1),0) as at "
@@ -362,8 +468,6 @@ class BoardTests implements DisposableBean {
     for (var c : db.query("select t.id,ts.skill_code,t.title,t.statement,t.starter_code,t.difficulty,t.source='CURATED',t.external_key,t.reference_code,t.wrong_json from tasks t join task_target_skills ts on ts.task_id=t.id "
         + "where t.language=? and t.active=1 and t.mode='NORMAL' and coalesce(t.goal_json,'') not like '%IO_BEHAVIOR%'", (rs, i) -> candidate(rs), lang.name()))
       byTopic.computeIfAbsent(c.skill(), k -> new ArrayList<>()).add(c);
-    Set<Long> usedTasks = new HashSet<>(); Set<String> usedStories = new HashSet<>();
-    Map<String, Fit> chosen = new HashMap<>();
 
     if (minimum != null) chooseByPace(lang, kinds, minimum, course, byTopic, solvedTasks, solvedStories, usedTasks, usedStories, chosen);
     else chooseByLevel(lang, kinds, practiced, practicedCodes, confirmed, course, byTopic, solvedTasks, solvedStories, usedTasks, usedStories, chosen, now);
@@ -421,23 +525,17 @@ class BoardTests implements DisposableBean {
   }
 
   /**
-   * The minimum for today of a group: K = ⌈total × (today − start) / (session − start)⌉ first topics of the course (in its
-   * order), start — the day of the group's first lesson in the course; at least 1, all topics on and after the session
-   * day. Null without a session date, without lessons of the group in the course or when the start is not before the session.
+   * The minimum for today of a group: the first K topics of the course (in its order), K — the group's plan line today
+   * (ProgressAnalytics.plan: from the group's first lesson in the course to the session). Null without a plan.
    */
   record PacePlan(List<String> topics, int total, LocalDate start, LocalDate session) {}
   PacePlan pacePlan(String group, Language lang, Instant now) {
-    if (group == null) return null;
-    var session = db.queryForList("select value from app_settings where key=?", String.class, ProgressAnalytics.SESSION_DATE_KEY).stream().findFirst().map(LocalDate::parse).orElse(null);
-    // lessons.started_at is «YYYY-MM-DD HH:MM:SS» (UTC); date() reads it and the ISO form alike.
-    String first = db.queryForObject("select min(date(l.started_at)) from lessons l join users u on u.id=l.user_id where u.group_name=? and l.language=?", String.class, group, lang.name());
-    if (session == null || first == null) return null;
-    LocalDate start = LocalDate.parse(first), today = ProgressAnalytics.day(now);
-    if (!start.isBefore(session)) return null;
+    var plan = analytics.plan(group, lang);
+    if (plan == null) return null;
     var course = db.queryForList("select code from skills where language=? order by block_no,sort_order,code", String.class, lang.name());
-    return new PacePlan(course.subList(0, minimum(course.size(), start, session, today)), course.size(), start, session);
+    return new PacePlan(course.subList(0, minimum(course.size(), plan.start(), plan.session(), ProgressAnalytics.day(now))), course.size(), plan.start(), plan.session());
   }
-  /** K of the plan; see pacePlan. */
+  /** K of the plan: ⌈total × (day − start) / (session − start)⌉, at least 1, all topics on and after the session day. */
   static int minimum(int total, LocalDate start, LocalDate session, LocalDate today) {
     if (total == 0) return 0;
     long span = session.toEpochDay() - start.toEpochDay(), passed = today.toEpochDay() - start.toEpochDay();
@@ -693,7 +791,7 @@ class BoardTests implements DisposableBean {
     var plan = pacePlan(name, lang, now);
     var pace = plan == null ? null : obj("topics", plan.topics().size(), "total", plan.total(), "lastTopic", plan.topics().isEmpty() ? null : titleOf(plan.topics().getLast()),
         "start", plan.start().toString(), "session", plan.session().toString());
-    return obj("group", name, "language", lang.name(), "members", view, "suggested", suggestion, "active", active, "pace", pace);
+    return obj("group", name, "language", lang.name(), "members", view, "suggested", suggestion, "active", active, "pace", pace, "settings", settings());
   }
 
   /** POST /api/admin/board/call: a new call with the kinds chosen (all three when absent); the student's earlier calls that were not started are cancelled. */
@@ -722,6 +820,75 @@ class BoardTests implements DisposableBean {
   Map<String, Object> recall(long admin, long id) {
     var t = load(id);
     return adminView(load(call(admin, ((Number) t.get("user_id")).longValue(), Language.of(t.get("language")), kinds(t), source(t))));
+  }
+
+  /**
+   * PATCH /api/admin/board/tests/{id}/call {kinds?, source?}: another set of kinds and/or source of a call not started yet
+   * (CALLED or EXPIRED); the time of the test follows the kinds, the expiry stays (the teacher has «Продлить»).
+   */
+  Map<String, Object> editCall(long id, Map<String, Object> body) {
+    Instant now = now(); settle(now); var t = load(id);
+    requireEditable(t);
+    var kinds = body != null && body.get("kinds") != null ? BoardItems.parse(body.get("kinds")) : kinds(t);
+    Object source = body == null || body.get("source") == null ? source(t) : body.get("source");
+    if (!SOURCE_LEVEL.equals(source) && !SOURCE_PACE.equals(source)) throw new ApiError("INVALID_SOURCE", "Источник заданий — LEVEL или PACE");
+    if (SOURCE_PACE.equals(source) && pacePlan((String) t.get("group_name"), Language.of(t.get("language")), now) == null)
+      throw new ApiError("BOARD_PACE_UNAVAILABLE", "По темпу вызвать нельзя: нужна дата сессии (вкладка «Прогресс») и уроки группы в этом курсе");
+    if (db.update("update board_tests set kinds=?,source=?,duration_seconds=? where id=? and status in ('CALLED','EXPIRED')", write(kinds), source, BoardItems.seconds(kinds), id) == 0) requireEditable(load(id));
+    log.info("Board test {} call edited: {} {} → {} {}", id, kinds(t), source(t), kinds, source);
+    return adminView(load(id));
+  }
+  private static void requireEditable(Map<String, Object> t) {
+    if (!List.of("CALLED", "EXPIRED").contains(t.get("status"))) throw new ApiError("BOARD_CALL_NOT_EDITABLE", "Тест уже начат — менять вызов поздно");
+  }
+
+  /**
+   * POST /api/admin/board/tests/{id}/items/{kind}/replace: another task for one item of a running test — the same kind and
+   * source rules, never a task or story the test holds or held (the item keeps them in replacedTaskIds); the item's answer
+   * starts over, the timer goes on, items_revision grows so that the test screen reloads the item.
+   */
+  Map<String, Object> replaceItem(long id, String kind) {
+    Instant now = now(); settle(now);
+    for (int attempt = 0; ; attempt++) {
+      var t = load(id);
+      if (!"STARTED".equals(t.get("status")) || now.isAfter(instant(t.get("ends_at")).plus(GRACE))) throw new ApiError("BOARD_TEST_NOT_RUNNING", "Заменить задание можно только в идущем тесте");
+      var items = new ArrayList<>(items(t));
+      int index = -1;
+      for (int i = 0; i < items.size(); i++) if (items.get(i).get("kind").equals(kind)) index = i;
+      if (!BoardItems.ALL.contains(kind) || index < 0) throw new ApiError("INVALID_ITEM", "В этом тесте нет такого задания");
+      Language lang = Language.of(t.get("language")); long user = ((Number) t.get("user_id")).longValue();
+      List<String> minimum = null;
+      if (SOURCE_PACE.equals(t.get("source"))) {
+        var plan = pacePlan((String) t.get("group_name"), lang, now);
+        if (plan == null) throw new ApiError("BOARD_PACE_UNAVAILABLE", "Нет плана по темпу: нужна дата сессии и уроки группы в курсе");
+        minimum = plan.topics();
+      }
+      // Every task the test holds or held is excluded, with its story; the other items keep their topics for the order of topics.
+      Set<Long> usedTasks = new HashSet<>(); Map<String, Fit> chosen = new HashMap<>();
+      for (var item : items) {
+        long task = ((Number) item.get("taskId")).longValue(); usedTasks.add(task);
+        if (item.get("replacedTaskIds") instanceof List<?> earlier) for (Object e : earlier) usedTasks.add(((Number) e).longValue());
+        if (!kind.equals(item.get("kind")) && BoardItems.ALL.contains(item.get("kind")))
+          chosen.put((String) item.get("kind"), new Fit(new Candidate(task, (String) item.get("skillCode"), null, null, null, null, false, null, null, null, null), null, 0));
+      }
+      Set<String> usedStories = new HashSet<>();
+      db.query("select id,source='CURATED',external_key from tasks where id in " + in(usedTasks.size()), (RowCallbackHandler) rs -> {
+        String key = rs.getString(3);
+        usedStories.add(rs.getInt(2) == 1 && key != null && key.matches("curated:[^:]+:.+") ? story(key) : "task:" + rs.getLong(1));
+      }, usedTasks.toArray());
+      var old = items.get(index);
+      var fresh = chooseItems(user, lang, List.of(kind), minimum, now, chosen, usedTasks, usedStories).getFirst();
+      var replaced = new ArrayList<Object>(old.get("replacedTaskIds") instanceof List<?> earlier ? earlier : List.of()); replaced.add(old.get("taskId"));
+      fresh.put("replacedTaskIds", replaced); fresh.put("replacedRevision", revision(t) + 1);
+      items.set(index, fresh);
+      var set = answersUpdate(Map.of(kind, initialAnswer(fresh)));
+      var params = new ArrayList<Object>(); params.add(write(items)); params.addAll(set.params()); params.add(id); params.add(revision(t));
+      if (db.update("update board_tests set items_json=?,answers_json=" + set.sql() + ",items_revision=items_revision+1 where id=? and status='STARTED' and items_revision=?", params.toArray()) > 0) {
+        log.info("Board test {}: the {} item replaced, task {} → {}", id, kind, old.get("taskId"), fresh.get("taskId"));
+        return adminView(load(id));
+      }
+      if (attempt > 0) throw new ApiError("BOARD_TEST_CHANGED", "Тест только что изменился — попробуй ещё раз");
+    }
   }
 
   /** POST /api/admin/board/tests/{id}/cancel: a call or a running test; a finished test can only be deleted. */
@@ -821,7 +988,8 @@ class BoardTests implements DisposableBean {
     var assessment = t.get("assessment") instanceof Map<?, ?> a ? a.get("status") : null;
     return obj("id", t.get("id"), "userId", t.get("user_id"), "displayName", t.get("display_name"), "status", t.get("status"), "calledAt", t.get("called_at"),
         "expiresAt", t.get("call_expires_at"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "finishedAt", t.get("finished_at"),
-        "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t), "source", source(t));
+        "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t), "source", source(t),
+        "stationId", t.get("station_id"), "stationName", t.get("station_name"));
   }
   /** Everything for the teacher: the items with the solution and the task, the answers, checks, the score, runs, pace, grades. */
   private Map<String, Object> adminView(Map<String, Object> t) {
@@ -846,7 +1014,7 @@ class BoardTests implements DisposableBean {
   // ---------------------------------------------------------------- loading and helpers
 
   private Map<String, Object> load(long id) {
-    var rows = db.queryForList("select b.*,u.login,u.display_name from board_tests b join users u on u.id=b.user_id where b.id=?", id);
+    var rows = db.queryForList("select b.*,u.login,u.display_name,s.name as station_name from board_tests b join users u on u.id=b.user_id left join board_stations s on s.id=b.station_id where b.id=?", id);
     if (rows.isEmpty()) throw new NotFoundError("BOARD_TEST_NOT_FOUND", "Тест не найден");
     var t = rows.getFirst();
     t.put("assessment", t.get("assessment_json") == null ? null : read((String) t.get("assessment_json"), new TypeReference<LinkedHashMap<String, Object>>() {}));
@@ -866,6 +1034,7 @@ class BoardTests implements DisposableBean {
   private String titleOf(String skill) { return db.queryForList("select title from skills where code=?", String.class, skill).stream().findFirst().orElse(skill); }
   private static String source(Map<String, Object> t) { return SOURCE_PACE.equals(t.get("source")) ? SOURCE_PACE : SOURCE_LEVEL; }
   private List<String> kinds(Map<String, Object> t) { return t.get("kinds") == null ? BoardItems.ALL : read((String) t.get("kinds"), new TypeReference<List<String>>() {}); }
+  private static int revision(Map<String, Object> t) { return t.get("items_revision") instanceof Number n ? n.intValue() : 0; }
   private int duration(Map<String, Object> t) { return t.get("duration_seconds") instanceof Number n ? n.intValue() : BoardItems.seconds(kinds(t)); }
   private List<Map<String, Object>> results(Map<String, Object> t) { return read((String) t.get("results_json"), new TypeReference<List<Map<String, Object>>>() {}); }
   private List<Map<String, Object>> runs(Map<String, Object> t) { return t.get("runs_json") == null ? List.of() : read((String) t.get("runs_json"), new TypeReference<List<Map<String, Object>>>() {}); }

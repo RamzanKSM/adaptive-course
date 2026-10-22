@@ -1521,3 +1521,71 @@ button.ghost.board-run-button { padding: 9px 16px; border: 2px solid var(--brand
 .board-report-toggle small { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .board-statement-small > summary::before, .board-report-statement > summary::before, .board-runs > summary::before, .board-run > summary::before { content: '▸'; color: var(--muted); transition: transform var(--fast); }
 .board-statement-small[open] > summary::before, .board-report-statement[open] > summary::before, .board-runs[open] > summary::before, .board-run[open] > summary::before { transform: rotate(90deg); }
+
+/* ───────── Pace against the plan ───────── */
+.data-table td.lag-cell.warn { color: var(--warn-ink); font-weight: 750; }
+.data-table td.lag-cell.bad { color: var(--danger-ink); font-weight: 750; }
+.lag-phrase { font-weight: 750; }
+.lag-phrase.behind { color: var(--danger-ink); }
+
+/* ───────── «К доске»: editing a call, replacing an item, the board station ───────── */
+.board-call-editor { display: grid; gap: 8px; padding: 12px; border-radius: 14px; border: 1.5px solid var(--brand); background: var(--surface); }
+.board-call-editor .board-kinds { margin: 0; }
+.board-call-editor .password-row small { flex-basis: 100%; }
+.board-call-editor .small-button { margin: 0; }
+.board-station-note { display: inline-flex; align-items: center; gap: 4px; flex-basis: auto; }
+.board-replace-button { justify-self: start; margin: 0; }
+.board-replace { margin: 0; }
+.board-stations { display: grid; gap: 12px; margin-top: 14px; max-width: 760px; }
+.board-stations .card-title, .board-stations > p { margin: 0; }
+.board-stations > .small-button { justify-self: start; margin: 0; }
+.board-station-confirm { margin: 0; }
+.board-station-here { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-radius: 14px; background: var(--success-soft); color: #0b6b44; font-weight: 650; font-size: 14px; }
+.board-station-here > span { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 260px; }
+.board-station-here .small-button { margin: 0; }
+.board-station-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.board-station-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+.board-station-list .small-button { margin: 0; flex: none; }
+.board-station-setting { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.board-station-setting > div { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.board-station-setting b { font-size: 14.5px; }
+.board-station-setting small { font-size: 12.5px; font-weight: 600; }
+/* The student's test screen: a notice when the teacher replaced an item. */
+.board-notice { display: flex; align-items: center; gap: 10px; flex: none; margin: 10px 0 0; padding: 10px 16px; border-radius: 14px; background: var(--warn-soft); color: var(--warn-ink); font-weight: 750; animation: drop-in var(--mid) var(--ease-out); }
+
+/* The station: waiting for a call (projector — large type). */
+.station-screen { display: flex; flex-direction: column; }
+.station-bar { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 2px solid var(--line); }
+.station-bar .small-button { margin: 0 0 0 auto; }
+.station-name { font-size: 15px; font-weight: 700; color: var(--muted); }
+.station-body { display: grid; gap: 18px; width: min(980px, 100%); margin: 0 auto; padding: clamp(24px, 6vh, 64px) 0 32px; }
+.station-body .eyebrow, .station-body .display { margin: 0; }
+.station-body .board-error { margin: 0; }
+.station-empty { display: grid; justify-items: center; gap: 12px; padding: 48px 24px; border-radius: 28px; border: 2px dashed var(--line-strong); background: var(--surface); text-align: center; }
+.station-empty .title { margin: 6px 0 0; font-size: 30px; }
+.station-empty p { margin: 0; max-width: 560px; color: var(--ink-2); }
+.station-calls { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.station-call { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; padding: 18px 22px; border-radius: 22px; border: 2px solid var(--brand); background: var(--surface); box-shadow: var(--shadow); animation: fade-up 240ms var(--ease-out); }
+.station-call .avatar { width: 56px; height: 56px; font-size: 20px; }
+.station-call-meta { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.station-call-meta b { font-family: var(--font-display); font-size: 28px; line-height: 1.2; letter-spacing: -.02em; }
+.station-call-meta small { font-size: 16px; font-weight: 650; color: var(--muted); }
+.station-call .board-countdown { margin: 0; }
+.station-call .board-countdown b { font-size: 26px; }
+.station-call .primary.big { margin: 0; }
+
+/* «Сессия истекла»: the login form over the current screen. */
+.relogin { z-index: 90; }
+.relogin-card { justify-items: stretch; text-align: left; }
+.relogin-card .board-call-icon { justify-self: center; }
+.relogin-card .title { font-size: 22px; text-align: center; }
+.relogin-card .muted { margin: -6px 0 2px; text-align: center; }
+.relogin-card .small-button, .login-card > .small-button { justify-self: center; margin: 0; }
+.draft-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--brand-soft); color: var(--brand-ink); font-size: 14px; font-weight: 650; }
+.draft-note span { flex: 1 1 220px; }
+.draft-note .small-button { margin: 0; }
+
+/* No ligatures in program text: JetBrains Mono would draw «!=» as «≠», «->» as an arrow. After every rule that sets the font. */
+html :is(code, pre, kbd, samp, .code-editor, .cm-editor, .console-out, .parsons-code, .board-file, .review-line, .code-card, .stdin-field textarea, .password-row input, .danger-zone input) {
+  font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
+}

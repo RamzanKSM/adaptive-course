@@ -21,7 +21,7 @@ spring:
   flyway:
     enabled: true
 app:
-  session-hours: ${APP_SESSION_HOURS:168}
+  session-hours: ${APP_SESSION_HOURS:720}
   cookie-secure: ${APP_COOKIE_SECURE:false}
   bootstrap-admin-login: ${APP_BOOTSTRAP_ADMIN_LOGIN:}
   bootstrap-admin-password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:}

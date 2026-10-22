@@ -10,8 +10,8 @@ import { NO_GROUP, useGroupFilter } from './groups'
 import { dayNumber, plural, shortDay, StatusChip } from './session'
 import type {
   BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardCheck, BoardCurrent, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
-  BoardMember, BoardOverview, BoardReportItem, BoardRun, BoardScore, BoardSource, BoardStatus, BoardStudentGrade, BoardStudentItem, BoardStudentTest, BoardTestSummary,
-  ConsoleRun, CourseLanguage, Id,
+  BoardMember, BoardOverview, BoardPacePlan, BoardReportItem, BoardRun, BoardScore, BoardSettings, BoardSource, BoardStation, BoardStatus, BoardStudentGrade, BoardStudentItem,
+  BoardStudentTest, BoardTestSummary, ConsoleRun, CourseLanguage, Id, StationCurrent,
 } from './types'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
@@ -23,25 +23,25 @@ const STUDENT_POLL_MS = 5_000, ADMIN_POLL_MS = 2_000, AUTOSAVE_MS = 5_000, AUTOS
 
 /** The kinds of items in their fixed order: title, the phrase of the call dialog, minutes and weight (as the backend). */
 const KINDS: BoardItemKind[] = ['parsons', 'fix', 'code']
-const KIND: Record<BoardItemKind, { title: string; phrase: string; minutes: number; weight: number }> = {
+export const KIND: Record<BoardItemKind, { title: string; phrase: string; minutes: number; weight: number }> = {
   parsons: { title: 'Собери программу', phrase: 'собери программу', minutes: 2, weight: 1 },
   fix: { title: 'Исправь ошибку', phrase: 'исправь ошибку', minutes: 2, weight: 2 },
   code: { title: 'Напиши код', phrase: 'напиши код', minutes: 3, weight: 3 },
 }
 /** Known kinds in the canonical order; missing or empty → all three (as the backend's default). */
-const canonical = (kinds: readonly string[] | null | undefined) => { const known = KINDS.filter(k => kinds?.includes(k)); return known.length ? known : [...KINDS] }
-const minutesOf = (kinds: BoardItemKind[], durationSeconds?: number | null) => durationSeconds ? Math.round(durationSeconds / 60) : kinds.reduce((sum, k) => sum + KIND[k].minutes, 0)
-const minutesText = (n: number) => `${n} ${plural(n, 'минуту', 'минуты', 'минут')}`
+export const canonical = (kinds: readonly string[] | null | undefined) => { const known = KINDS.filter(k => kinds?.includes(k)); return known.length ? known : [...KINDS] }
+export const minutesOf = (kinds: BoardItemKind[], durationSeconds?: number | null) => durationSeconds ? Math.round(durationSeconds / 60) : kinds.reduce((sum, k) => sum + KIND[k].minutes, 0)
+export const minutesText = (n: number) => `${n} ${plural(n, 'минуту', 'минуты', 'минут')}`
 
-const ms = (value: string | null | undefined) => value ? parseDate(value).getTime() : NaN
+export const ms = (value: string | null | undefined) => value ? parseDate(value).getTime() : NaN
 /** «5:07», never negative. */
-const clock = (left: number) => { const s = Math.max(0, Math.ceil(left / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
+export const clock = (left: number) => { const s = Math.max(0, Math.ceil(left / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 /** «15 окт · 11:20» in Moscow time. */
 const dayTime = (value: string | null | undefined) => { if (!value) return '—'; const m = moscow(value); return `${shortDay(dayNumber(m.date))} · ${m.time}` }
 const dayOnly = (value: string | null | undefined) => value ? shortDay(dayNumber(moscow(value).date)) : '—'
 
 /** Re-renders every `step` ms and returns the client clock. */
-function useNow(step = 1000) {
+export function useNow(step = 1000) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), step); return () => clearInterval(timer) }, [step])
   return now
@@ -73,6 +73,11 @@ function boardDevice() {
 const deviceHeaders = () => ({ 'X-Board-Device': boardDevice() })
 const boardPost = <T,>(path: string, body?: unknown) => api<T>(path, { method: 'POST', headers: deviceHeaders(), body: body === undefined ? undefined : JSON.stringify(body) })
 
+/** Where the test screen saves answers, runs and finishes: the student's own account (this browser's device token) or the board station. */
+export interface BoardTestApi { base: string; headers: () => Record<string, string> }
+export const STUDENT_BOARD_API: BoardTestApi = { base: '/board/tests', headers: deviceHeaders }
+export const STATION_BOARD_API: BoardTestApi = { base: '/station/tests', headers: () => ({}) }
+
 /** Polls GET /board/current while a student is signed in. set() replaces the state at once and drops answers already on the way. */
 export function useBoardCurrent(enabled: boolean) {
   const [current, setCurrent] = useState<BoardCurrent | null>(null)
@@ -99,6 +104,18 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
   const [error, setError] = useState('')
   const left = ms(call.expiresAt) - now
   const kinds = canonical(call.kinds)
+  const test = `Тест на ${minutesText(minutesOf(kinds, call.durationSeconds))}: ${kinds.map(k => KIND[k].phrase).join(', ')}.`
+  // The test starts at the board station: this browser only tells the student to go there.
+  if (call.canStart === false) return <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-call-title">
+    <div className="board-call">
+      <span className="board-call-icon"><Icon name="flag" size={30} /></span>
+      <p className="eyebrow">Ответ у доски</p>
+      <h2 id="board-call-title" className="display small">Тебя вызывают к доске</h2>
+      <p>Подойди к компьютеру у доски и нажми «Начать тест» рядом со своим именем. {test}</p>
+      <p className="muted small">Здесь ничего нажимать не нужно — твой урок на этом компьютере останется открытым.</p>
+      {left > 0 && <small className="muted tabular">Вызов действует ещё {clock(left)}</small>}
+    </div>
+  </div>
   async function start() {
     setBusy(true); setError('')
     try { onStarted(await boardPost<BoardStudentTest>(`/board/tests/${call.id}/start`)) }
@@ -109,7 +126,7 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
       <span className="board-call-icon"><Icon name="flag" size={30} /></span>
       <p className="eyebrow">Ответ у доски</p>
       <h2 id="board-call-title" className="display small">Тебя вызвали к доске</h2>
-      <p>Тест на {minutesText(minutesOf(kinds, call.durationSeconds))}: {kinds.map(k => KIND[k].phrase).join(', ')}. Таймер запустится, когда нажмёшь «Начать тест».</p>
+      <p>{test} Таймер запустится, когда нажмёшь «Начать тест».</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button type="button" className="primary big" disabled={busy} onClick={start} autoFocus>{busy ? <><span className="spinner" aria-hidden="true" /> Начинаем…</> : <>Начать тест <Icon name="arrow" /></>}</button>
       {left > 0 && <small className="muted tabular">Вызов действует ещё {clock(left)}</small>}
@@ -142,18 +159,16 @@ type RunKind = 'code' | 'fix'
  * «Завершить тест». At 0 the answers lock and are submitted; the server would finish the test with the last autosave anyway.
  * Nothing here shows the solution, the checks or a grade.
  */
-export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudentTest; name: string; onFinished: () => void }) {
-  const items = test.items
+export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BOARD_API }: { test: BoardStudentTest; name: string; onFinished: () => void; endpoints?: BoardTestApi }) {
+  // The items are the ones the screen was built with; a replaced item comes with a new revision of the test (see below).
+  const [items, setItems] = useState(test.items)
   const parsonsItem = items.find((i): i is ParsonsItem => i.kind === 'parsons')
   const fixItem = items.find((i): i is FixItem => i.kind === 'fix')
   const codeItem = items.find((i): i is CodeItem => i.kind === 'code')
-  const initialCode = codeItem ? codeItem.starterCode || FALLBACK_CODE[codeItem.language] : ''
+  const initialCode = codeItem ? starterOf(codeItem) : ''
   const [code, setCode] = useState(() => test.answers.code ?? initialCode)
   const [fix, setFix] = useState(() => test.answers.fix ?? fixItem?.program ?? '')
-  const [parsons, setParsons] = useState<string[]>(() => {
-    const known = new Set(parsonsItem?.lines.map(l => l.id))
-    return [...new Set(test.answers.parsons ?? [])].filter(id => known.has(id))
-  })
+  const [parsons, setParsons] = useState<string[]>(() => placedOf(parsonsItem, test.answers.parsons))
   /** Only the chosen kinds go to the server. */
   const payload = (): BoardAnswers => ({ ...(parsonsItem && { parsons }), ...(fixItem && { fix }), ...(codeItem && { code }) })
   const latest = useRef(payload())
@@ -173,6 +188,11 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   const locked = over || finishing
   const done = useRef(false)
 
+  /** The revision of the test this screen shows; saves carry it, so the server drops answers typed for a replaced item. */
+  const revision = useRef(test.revision ?? 0)
+  const send = <T,>(action: string, method: string, body?: unknown) =>
+    api<T>(`${endpoints.base}/${test.id}/${action}`, { method, headers: endpoints.headers(), body: body === undefined ? undefined : JSON.stringify(body) })
+
   // ───── autosave: shortly after an edit stops and every few seconds while something is unsaved ─────
   const [save, setSave] = useState<SaveState>('saved')
   const dirty = useRef(false), saving = useRef(false)
@@ -180,7 +200,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
     if (!dirty.current || saving.current || done.current) return
     dirty.current = false; saving.current = true; setSave('saving')
     try {
-      await api<{ savedAt: string }>(`/board/tests/${test.id}/answers`, { method: 'PUT', headers: deviceHeaders(), body: JSON.stringify(changedAnswers()) })
+      await send<{ savedAt: string }>('answers', 'PUT', { ...changedAnswers(), revision: revision.current })
       setSave(dirty.current ? 'dirty' : 'saved')
     } catch { dirty.current = true; setSave('error') }
     finally { saving.current = false }
@@ -199,7 +219,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   const finish = useCallback(async (auto: boolean) => {
     if (done.current) return
     done.current = true; setFinishing(true); setConfirming(false); setError('')
-    try { await boardPost<{ finished: boolean }>(`/board/tests/${test.id}/finish`, changedAnswers()); onFinished() }
+    try { await send<{ finished: boolean }>('finish', 'POST', { ...changedAnswers(), revision: revision.current }); onFinished() }
     catch (e) {
       // Time is up or the server already closed the test (e.g. the teacher finished it): the answers are on the server.
       if (auto || e instanceof ApiError) { onFinished(); return }
@@ -214,12 +234,33 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
   async function runItem(item: RunKind, text: string) {
     setRunning(item); setError('')
     try {
-      const result = await boardPost<{ console: ConsoleRun }>(`/board/tests/${test.id}/run`, { item, code: text })
+      const result = await send<{ console: ConsoleRun }>('run', 'POST', { item, code: text, revision: revision.current })
       setRuns(r => ({ ...r, [item]: { console: result.console, n: (r[item]?.n ?? 0) + 1 } }))
     }
     catch (e) { setError(e instanceof Error ? e.message : 'Не удалось запустить программу') }
     finally { setRunning(null) }
   }
+
+  // ───── the teacher replaced an item: a new revision; the replaced items start over, the others keep the local answers ─────
+  const [replaced, setReplaced] = useState<{ kinds: BoardItemKind[]; n: number } | null>(null)
+  useEffect(() => {
+    const next = test.revision ?? 0
+    if (next === revision.current || !test.items?.length) return
+    revision.current = next
+    const before = new Map(items.map(i => [i.kind, JSON.stringify(i)]))
+    const fresh = test.items.filter(i => before.get(i.kind) !== JSON.stringify(i))
+    setItems(test.items)
+    for (const item of fresh) {
+      changed.current.delete(item.kind)
+      if (item.kind === 'code') setCode(test.answers.code ?? starterOf(item))
+      else if (item.kind === 'fix') setFix(test.answers.fix ?? item.program)
+      else setParsons(placedOf(item, test.answers.parsons))
+    }
+    if (!fresh.length) return
+    setRuns(r => Object.fromEntries(Object.entries(r).filter(([kind]) => !fresh.some(i => i.kind === kind))))
+    setReplaced(current => ({ kinds: fresh.map(i => i.kind), n: (current?.n ?? 0) + 1 }))
+  }, [test.revision]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!replaced) return; const timer = setTimeout(() => setReplaced(null), 10_000); return () => clearTimeout(timer) }, [replaced])
 
   // Steps: ← → between the tabs (WAI-ARIA tabs pattern).
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
@@ -264,6 +305,7 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
       </div>
     </header>
     {error && <p className="board-error" role="alert">{error}</p>}
+    {replaced && <p key={replaced.n} className="board-notice" role="status"><Icon name="refresh" size={20} /> Задание заменено: {replaced.kinds.map(k => `«${KIND[k].title}»`).join(', ')}. Начни его заново — таймер идёт дальше.</p>}
     <div className="board-body">
       {items.map((item, i) => {
         const next = items[i + 1], prev = items[i - 1]
@@ -307,6 +349,13 @@ export function BoardTestScreen({ test, name, onFinished }: { test: BoardStudent
     </div>}
     {finishing && <div className="board-call-backdrop" role="status"><div className="board-call"><span className="spinner big-spinner" aria-hidden="true" /><h2 className="title">{over ? 'Время вышло — сдаём тест…' : 'Сдаём тест…'}</h2></div></div>}
   </main>
+}
+
+const starterOf = (item: CodeItem) => item.starterCode || FALLBACK_CODE[item.language]
+/** The saved order of «Собери программу» without unknown or repeated ids. */
+const placedOf = (item: ParsonsItem | undefined, saved: string[] | null | undefined) => {
+  const known = new Set(item?.lines.map(l => l.id))
+  return [...new Set(saved ?? [])].filter(id => known.has(id))
 }
 
 /**
@@ -541,17 +590,75 @@ function useBoardSource() {
   return [source, choose] as const
 }
 
+/** The kinds with one switched on or off, in the canonical order; the last one cannot be switched off. */
+const toggled = (current: BoardItemKind[], kind: BoardItemKind) => {
+  const next = current.includes(kind) ? current.filter(k => k !== kind) : KINDS.filter(k => k === kind || current.includes(k))
+  return next.length ? next : current
+}
+
 function useBoardKinds() {
   const [kinds, setKinds] = useState<BoardItemKind[]>(() => {
     try { const stored = JSON.parse(localStorage.getItem(KINDS_KEY) ?? 'null'); return Array.isArray(stored) ? canonical(stored) : [...KINDS] } catch { return [...KINDS] }
   })
   const toggle = useCallback((kind: BoardItemKind) => setKinds(current => {
-    const next = current.includes(kind) ? current.filter(k => k !== kind) : KINDS.filter(k => k === kind || current.includes(k))
-    if (!next.length) return current
+    const next = toggled(current, kind)
     try { localStorage.setItem(KINDS_KEY, JSON.stringify(next)) } catch { /* private mode: not remembered */ }
     return next
   }), [])
   return [kinds, toggle] as const
+}
+
+/** «Задания теста»: the kinds of items as chips and the total time. */
+function KindPicker({ kinds, onToggle }: { kinds: BoardItemKind[]; onToggle: (kind: BoardItemKind) => void }) {
+  return <fieldset className="board-kinds">
+    <legend>Задания теста</legend>
+    {KINDS.map(k => { const on = kinds.includes(k), last = on && kinds.length === 1
+      return <label key={k} className={`board-kind ${on ? 'on' : ''}`} title={last ? 'Нужно хотя бы одно задание' : undefined}>
+        <input type="checkbox" checked={on} disabled={last} onChange={() => onToggle(k)} />
+        <span>{KIND[k].title} <small>· {KIND[k].minutes} мин</small></span>
+      </label> })}
+    <span className="board-kinds-total">тест <b className="tabular">{minutesText(minutesOf(kinds))}</b></span>
+  </fieldset>
+}
+
+/** «Темы заданий»: the student's level or the minimum for today (only with a plan of the group). */
+function SourcePicker({ source, pace, loaded, onChoose }: { source: BoardSource; pace: BoardPacePlan | null; loaded: boolean; onChoose: (source: BoardSource) => void }) {
+  return <fieldset className="board-kinds board-source">
+    <legend>Темы заданий</legend>
+    <div className="period" role="group" aria-label="Темы заданий">
+      <button type="button" className={source === 'LEVEL' || !pace ? 'active' : ''} aria-pressed={source === 'LEVEL' || !pace} onClick={() => onChoose('LEVEL')}>По уровню</button>
+      <button type="button" className={source === 'PACE' && pace ? 'active' : ''} aria-pressed={source === 'PACE' && !!pace} disabled={!pace} onClick={() => onChoose('PACE')}
+        title={pace ? undefined : 'Нужна дата сессии (вкладка «Прогресс») и уроки группы в этом курсе'}>По темпу на сегодня</button>
+    </div>
+    <small className="board-kinds-note">{!loaded ? '' : !pace ? 'По темпу — когда есть дата сессии и уроки группы в курсе.'
+      : source === 'PACE' ? `Минимум к сегодня: ${pace.topics} ${plural(pace.topics, 'тема', 'темы', 'тем')} из ${pace.total}${pace.lastTopic ? `, до «${pace.lastTopic}»` : ''} — даже если студент до них не дошёл.`
+        : 'Из тем, которые студент прошёл.'}</small>
+  </fieldset>
+}
+
+/** «Изменить» on a call that has not started: the same kinds and source as the call panel; the expiry stays. */
+function CallEditor({ test, pace, onSave, onClose }: { test: BoardTestSummary; pace: BoardPacePlan | null; onSave: (kinds: BoardItemKind[], source: BoardSource) => Promise<string | null>; onClose: () => void }) {
+  const [kinds, setKinds] = useState(() => canonical(test.kinds))
+  const [source, setSource] = useState<BoardSource>(test.source === 'PACE' ? 'PACE' : 'LEVEL')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  async function save() {
+    setSaving(true); setError('')
+    const message = await onSave(kinds, pace ? source : 'LEVEL')
+    setSaving(false)
+    if (message) setError(message); else onClose()
+  }
+  return <div className="board-call-editor">
+    <b>Изменить вызов — {test.displayName}</b>
+    <KindPicker kinds={kinds} onToggle={kind => setKinds(current => toggled(current, kind))} />
+    <SourcePicker source={source} pace={pace} loaded onChoose={setSource} />
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="password-row">
+      <button type="button" className="primary small-button" disabled={saving} onClick={save}>{saving ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : <><Icon name="check" size={15} />Сохранить</>}</button>
+      <button type="button" className="ghost small-button" disabled={saving} onClick={onClose}>Отмена</button>
+      <small className="muted">Время вызова не меняется — для этого «+1 мин».</small>
+    </div>
+  </div>
 }
 
 /** «Собери программу · Исправь ошибку · 7 мин» for a call or test; nothing for tests without kinds. */
@@ -567,15 +674,20 @@ function Countdown({ test, now }: { test: BoardTestSummary; now: number }) {
   if (Number.isNaN(target)) return null
   const left = target - now
   return <span className={`board-countdown ${left < 60_000 ? 'low' : ''}`} title={test.status === 'CALLED' ? 'Вызов истекает через' : 'До конца теста'}>
-    <Icon name="clock" size={15} /><b className="tabular">{left > 0 ? clock(left) : '0:00'}</b><small>{test.status === 'CALLED' ? (left > 0 ? 'ждём входа' : 'вызов истёк') : (left > 0 ? 'до конца' : 'время вышло')}</small>
+    <Icon name="clock" size={15} /><b className="tabular">{left > 0 ? clock(left) : '0:00'}</b><small>{test.status === 'CALLED' ? (left > 0 ? 'ждём начала' : 'вызов истёк') : (left > 0 ? 'до конца' : 'время вышло')}</small>
   </span>
 }
 
 type Act = 'cancel' | 'recall' | 'extend' | 'finish' | 'delete' | 'assess'
 
+type EditCall = (test: BoardTestSummary, kinds: BoardItemKind[], source: BoardSource) => Promise<string | null>
+
 /** Every action the teacher may take on a call or test; nothing is hidden behind the status except what has no meaning. */
-function BoardActions({ test, busy, onAct }: { test: BoardTestSummary; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void }) {
+function BoardActions({ test, busy, onAct, pace, onEdit }: { test: BoardTestSummary; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; pace: BoardPacePlan | null; onEdit: EditCall }) {
   const [confirm, setConfirm] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const editable = test.status === 'CALLED' || test.status === 'EXPIRED'
+  if (editing && editable) return <CallEditor test={test} pace={pace} onSave={(kinds, source) => onEdit(test, kinds, source)} onClose={() => setEditing(false)} />
   const mine = busy?.endsWith(`:${test.id}`) ? busy.split(':')[0] : null
   const button = (act: Act, icon: Parameters<typeof Icon>[0]['name'], text: string, className = 'ghost') =>
     <button type="button" className={`${className} small-button`} disabled={!!mine} onClick={() => act === 'delete' ? setConfirm(true) : onAct(act, test)}>
@@ -591,6 +703,7 @@ function BoardActions({ test, busy, onAct }: { test: BoardTestSummary; busy: str
   return <div className="board-actions">
     {live(test) && button('extend', 'plus', '+1 мин')}
     {test.status === 'STARTED' && button('finish', 'flag', 'Завершить сейчас')}
+    {editable && <button type="button" className="ghost small-button" disabled={!!mine} onClick={() => setEditing(true)}><Icon name="target" size={15} />Изменить</button>}
     {test.status === 'CALLED' && button('cancel', 'x', 'Отменить')}
     {button('recall', 'refresh', 'Вызвать снова')}
     {button('delete', 'x', 'Удалить', 'ghost danger')}
@@ -598,7 +711,7 @@ function BoardActions({ test, busy, onAct }: { test: BoardTestSummary; busy: str
 }
 
 /** Teacher: «К доске» — call a student to the board, follow the test live, read the checks and the LLM assessment, set the grade. */
-export function BoardAdmin({ request, groups }: { request: Request; groups: string[] | null }) {
+export function BoardAdmin({ request, groups, onBecomeStation }: { request: Request; groups: string[] | null; onBecomeStation: () => void }) {
   const [stored, setGroup] = useGroupFilter('rmzn-board-group', groups)
   const group = groups && stored && stored !== NO_GROUP && groups.includes(stored) ? stored : groups?.[0] ?? ''
   const [course, setCourse] = useState<{ group: string; language: CourseLanguage } | null>(null)
@@ -657,8 +770,19 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
     setBusy(null)
     if (!test) return
     setReload(n => n + 1); open(test.id)
-    toast({ tone: 'info', icon: 'flag', title: `Вызван к доске: ${member.displayName}`, text: 'Пусть войдёт в свой аккаунт на компьютере у доски — вызов действует 5 минут' })
+    toast({ tone: 'info', icon: 'flag', title: `Вызван к доске: ${member.displayName}`, text: overview?.settings?.studentStart
+      ? 'Пусть нажмёт «Начать тест» на компьютере у доски или в своём аккаунте — вызов действует 5 минут'
+      : 'Пусть подойдёт к компьютеру у доски и нажмёт «Начать тест» — вызов действует 5 минут' })
   }
+  const editCall = useCallback<EditCall>(async (test, kinds, source) => {
+    try {
+      const view = await patch<BoardAdminTest>(`/admin/board/tests/${test.id}/call`, { kinds, source })
+      setReload(n => n + 1)
+      if (view?.id === openId) detailUpdate.current?.(view)
+      toast({ tone: 'info', icon: 'check', title: `Вызов изменён: ${test.displayName}`, text: `${kinds.map(k => KIND[k].title).join(' · ')}${source === 'PACE' ? ' · по темпу' : ''}` })
+      return null
+    } catch (e) { return e instanceof Error ? e.message : 'Не удалось изменить вызов' }
+  }, [openId, toast])
   const act = useCallback(async (action: Act, test: BoardTestSummary) => {
     setBusy(`${action}:${test.id}`)
     const path = `/admin/board/tests/${test.id}`
@@ -697,33 +821,15 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
       <div className="card board-left enter">
         <p className="eyebrow">Преподаватель</p>
         <h1 className="display small">К доске</h1>
-        <p className="muted small board-lead">Вызови студента — он войдёт на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.</p>
+        <p className="muted small board-lead">Вызови студента — он нажмёт «Начать тест» на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.</p>
         {!groups ? <p className="muted small">Загружаем группы…</p>
           : <div className="topic-filters group-filters" role="group" aria-label="Группа">{groups.map(g =>
             <button key={g} type="button" className={g === group ? 'active' : ''} aria-pressed={g === group} onClick={() => chooseGroup(g)}>{g}</button>)}</div>}
         <div className="period" role="group" aria-label="Курс">
           {COURSES.map(([key, title]) => <button key={key} type="button" disabled={!language} className={key === language ? 'active' : ''} aria-pressed={key === language} onClick={() => key !== language && chooseCourse(key)}>{title}</button>)}
         </div>
-        <fieldset className="board-kinds">
-          <legend>Задания теста</legend>
-          {KINDS.map(k => { const on = kinds.includes(k), last = on && kinds.length === 1
-            return <label key={k} className={`board-kind ${on ? 'on' : ''}`} title={last ? 'Нужно хотя бы одно задание' : undefined}>
-              <input type="checkbox" checked={on} disabled={last} onChange={() => toggleKind(k)} />
-              <span>{KIND[k].title} <small>· {KIND[k].minutes} мин</small></span>
-            </label> })}
-          <span className="board-kinds-total">тест <b className="tabular">{minutesText(minutesOf(kinds))}</b></span>
-        </fieldset>
-        <fieldset className="board-kinds board-source">
-          <legend>Темы заданий</legend>
-          <div className="period" role="group" aria-label="Темы заданий">
-            <button type="button" className={source === 'LEVEL' || !pace ? 'active' : ''} aria-pressed={source === 'LEVEL' || !pace} onClick={() => chooseSource('LEVEL')}>По уровню</button>
-            <button type="button" className={source === 'PACE' && pace ? 'active' : ''} aria-pressed={source === 'PACE' && !!pace} disabled={!pace} onClick={() => chooseSource('PACE')}
-              title={pace ? undefined : 'Нужна дата сессии (вкладка «Прогресс») и уроки группы в этом курсе'}>По темпу на сегодня</button>
-          </div>
-          <small className="board-kinds-note">{!overview ? '' : !pace ? 'По темпу — когда есть дата сессии и уроки группы в курсе.'
-            : source === 'PACE' ? `Минимум к сегодня: ${pace.topics} ${plural(pace.topics, 'тема', 'темы', 'тем')} из ${pace.total}${pace.lastTopic ? `, до «${pace.lastTopic}»` : ''} — даже если студент до них не дошёл.`
-              : 'Из тем, которые студент прошёл.'}</small>
-        </fieldset>
+        <KindPicker kinds={kinds} onToggle={toggleKind} />
+        <SourcePicker source={source} pace={pace} loaded={!!overview} onChoose={chooseSource} />
         <h2 className="card-title">Студенты{overview && <span className="muted small">на месте {present} из {overview.members.length}</span>}</h2>
         {!members ? <p className="muted">Загружаем…</p> : !members.length ? <p className="muted">В группе нет участников курса {language ? courseTitle(language) : ''}.</p>
           : <ul className="board-member-list">{members.map(m => {
@@ -752,19 +858,108 @@ export function BoardAdmin({ request, groups }: { request: Request; groups: stri
               <BoardStatusTag status={t.status} />
               <Countdown test={t} now={now} />
               <KindsNote test={t} />
+              {t.stationName && <small className="board-kinds-note board-station-note" title={t.stationName}><Icon name="flag" size={13} /> на компьютере у доски</small>}
               {t.status === 'FINISHED' && <span className="board-active-grade">{t.assessmentStatus === 'PENDING' ? <><span className="spinner" aria-hidden="true" /> LLM оценивает</> : <>предложено <GradeChip grade={t.suggestedGrade} small /></>}{t.finalGrade && <> · итог <GradeChip grade={t.finalGrade} small /></>}</span>}
             </div>
-            <BoardActions test={t} busy={busy} onAct={act} />
+            <BoardActions test={t} busy={busy} onAct={act} pace={pace} onEdit={editCall} />
           </li>)}</ul>}
       </div>
 
       {openId !== null
-        ? <BoardTestDetail key={openId} id={openId} anchor={detailRef} request={request} busy={busy} onAct={act} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />
+        ? <BoardTestDetail key={openId} id={openId} anchor={detailRef} request={request} busy={busy} onAct={act} pace={pace} onEdit={editCall} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />
         : <aside className="card board-summary" aria-label="Итог"><h2 className="card-title">Итог</h2><p className="muted small">{SUMMARY_HINT}</p></aside>}
     </div>
 
     <BoardJournalCard journal={journal} openId={openId} onOpen={open} />
+    <BoardStations request={request} onBecomeStation={onBecomeStation} />
   </section>
+}
+
+const STATION_NAME = 'Компьютер у доски'
+
+/**
+ * «Компьютер у доски»: turns this browser into the board station (it then shows only the calls and the running test, the
+ * teacher is signed out here), lists the stations to switch them off, and the setting «Студент может начать тест из своего аккаунта».
+ */
+function BoardStations({ request, onBecomeStation }: { request: Request; onBecomeStation: () => void }) {
+  const [stations, setStations] = useState<BoardStation[] | null>(null)
+  const [settings, setSettings] = useState<BoardSettings | null>(null)
+  /** This browser holds a station cookie (the cookie goes only to /api/station, so the station endpoint tells). */
+  const [here, setHere] = useState<StationCurrent['station'] | null>(null)
+  const [confirm, setConfirm] = useState(false)
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
+  const toast = useToast()
+  useEffect(() => {
+    let alive = true
+    request(() => api<{ stations: BoardStation[] }>('/admin/board/stations')).then(v => { if (alive && v) setStations(v.stations) })
+    api<StationCurrent>('/station/current').then(v => { if (alive) setHere(v.station) }, () => { if (alive) setHere(null) })
+    return () => { alive = false }
+  }, [request, reload])
+  useEffect(() => {
+    let alive = true
+    request(() => api<BoardSettings>('/admin/board/settings')).then(v => { if (alive && v) setSettings(v) })
+    return () => { alive = false }
+  }, [request])
+
+  async function become() {
+    setBusy('create')
+    const created = await request(() => post<BoardStation>('/admin/board/stations', { name: name.trim() || STATION_NAME }))
+    setBusy(null)
+    if (created) onBecomeStation()
+  }
+  async function revoke(station: BoardStation) {
+    setBusy(`revoke:${station.id}`)
+    const done = await request(() => remove<{ revoked: boolean }>(`/admin/board/stations/${station.id}`))
+    setBusy(null)
+    if (done) { setReload(n => n + 1); toast({ tone: 'info', icon: 'x', title: 'Компьютер у доски отключён', text: station.name }) }
+  }
+  async function leave() {
+    setBusy('leave')
+    const done = await request(() => remove<void>('/station').then(() => true))
+    setBusy(null)
+    if (done) { setHere(null); setReload(n => n + 1); toast({ tone: 'info', icon: 'x', title: 'Этот компьютер больше не у доски', text: 'Вызовы и тесты здесь больше не показываются' }) }
+  }
+  async function toggleStart() {
+    if (!settings) return
+    setBusy('settings')
+    const value = await request(() => api<BoardSettings>('/admin/board/settings', { method: 'PUT', body: JSON.stringify({ studentStart: !settings.studentStart }) }))
+    setBusy(null)
+    if (value) setSettings(value)
+  }
+
+  return <div className="card board-stations">
+    <h2 className="card-title"><span className="chip-icon"><Icon name="flag" size={16} /></span> Компьютер у доски</h2>
+    <p className="muted small">Браузер компьютера у доски показывает только вызовы и идущий тест: студент подходит, нажимает «Начать тест» рядом со своим именем — без логина и пароля, его уроки на своём компьютере остаются открытыми.</p>
+    {here ? <div className="board-station-here">
+      <span><Icon name="check" size={16} /> Этот браузер — <b>{here.name}</b>. Выйди из аккаунта, чтобы снова показать вызовы.</span>
+      <button type="button" className="ghost small-button danger" disabled={busy === 'leave'} onClick={leave}>{busy === 'leave' ? <span className="spinner" aria-hidden="true" /> : <Icon name="x" size={15} />}Отключить этот компьютер</button>
+    </div>
+      : confirm ? <div className="danger-zone open board-station-confirm">
+        <b>Сделать этот компьютер компьютером у доски?</b>
+        <p className="muted small">Этот браузер будет показывать только вызовы и тесты. Вы выйдете из аккаунта преподавателя на этом компьютере.</p>
+        <label>Название<input value={name} maxLength={60} placeholder={STATION_NAME} onChange={e => setName(e.target.value)} /></label>
+        <div className="password-row">
+          <button type="button" className="primary" disabled={busy === 'create'} onClick={become}>{busy === 'create' ? <><span className="spinner" aria-hidden="true" /> Настраиваем…</> : 'Сделать и выйти'}</button>
+          <button type="button" className="ghost" onClick={() => setConfirm(false)}>Отмена</button>
+        </div>
+      </div>
+        : <button type="button" className="secondary small-button" onClick={() => setConfirm(true)}><Icon name="flag" size={15} />Сделать этот компьютер компьютером у доски</button>}
+    {stations && stations.length > 0 && <ul className="board-station-list">{stations.map(st => <li key={st.id}>
+      <span className="board-member-meta"><b>{st.name}{here?.id === st.id && <span className="suggest-tag">этот браузер</span>}</b>
+        <small>подключён {dayOnly(st.createdAt)}{st.lastSeenAt ? ` · на связи ${dayTime(st.lastSeenAt)}` : ' · ещё не был на связи'}</small></span>
+      <button type="button" className="ghost small-button danger" disabled={busy === `revoke:${st.id}`} onClick={() => revoke(st)}>
+        {busy === `revoke:${st.id}` ? <span className="spinner" aria-hidden="true" /> : <Icon name="x" size={15} />}Отключить</button>
+    </li>)}</ul>}
+    {stations && !stations.length && <p className="muted small">Компьютеров у доски пока нет.</p>}
+    <div className="board-station-setting">
+      <div><b>Студент может начать тест из своего аккаунта</b>
+        <small className="muted">{settings?.studentStart ? 'Вызванный студент видит «Начать тест» и в своём аккаунте — например, если он сам вошёл на компьютере у доски.' : 'Выключено: тест начинается только на компьютере у доски, в своём аккаунте студент видит «подойди к компьютеру у доски».'}</small></div>
+      <button type="button" role="switch" aria-checked={!!settings?.studentStart} aria-label="Студент может начать тест из своего аккаунта" className={`switch ${settings?.studentStart ? 'on' : ''}`}
+        disabled={!settings || busy === 'settings'} onClick={toggleStart}><span /></button>
+    </div>
+  </div>
 }
 
 const SUMMARY_HINT = 'Открой сданный тест — здесь будут баллы, оценка LLM и итоговая оценка.'
@@ -780,7 +975,7 @@ function checkOf(test: BoardAdminTest, kind: BoardItemKind, index: number): Boar
 const decimal = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
 
 /** The centre of an opened test: its items as tabs, one at a time, then the points and the runs. */
-function BoardTestItems({ test }: { test: BoardAdminTest }) {
+function BoardTestItems({ test, onReplace }: { test: BoardAdminTest; onReplace?: (kind: BoardItemKind) => Promise<boolean> }) {
   const items = test.items ?? []
   const explanation = (kind: BoardItemKind) => test.assessment?.status === 'DONE' ? test.assessment.items?.find(i => i.item === kind) : undefined
   const [tab, setTab] = useState(0)
@@ -804,6 +999,7 @@ function BoardTestItems({ test }: { test: BoardAdminTest }) {
       const check = checkOf(test, item.kind, i)
       return <BoardItemBlock key={item.kind} id={`board-review-${test.id}-${item.kind}`} labelledBy={`board-review-tab-${test.id}-${item.kind}`} hidden={i !== shown}
         item={item} check={check} explanation={explanation(item.kind)}>
+        {onReplace && <ReplaceItem key={`${item.kind}:${item.taskId ?? ''}`} kind={item.kind} onReplace={onReplace} />}
         {item.statement && <div className="board-statement-open"><small>Условие</small><Markdown>{item.statement}</Markdown></div>}
         {item.kind === 'parsons' ? <ParsonsReview item={item} placed={test.answers?.parsons ?? null} assembled={check?.program ?? null} />
           : item.kind === 'fix' ? <>
@@ -855,13 +1051,29 @@ function CheckTag({ check }: { check: BoardCheck | null }) {
       : <span className={`check-tag ${check.passed ? 'ok' : 'bad'}`}><Icon name={check.passed ? 'check' : 'x'} size={14} />{check.passed ? 'верно' : 'не верно'}</span>
 }
 
+/** «Заменить задание» while the test runs: another task of the same kind; the student's answer to it starts over. */
+function ReplaceItem({ kind, onReplace }: { kind: BoardItemKind; onReplace: (kind: BoardItemKind) => Promise<boolean> }) {
+  const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  if (!confirm) return <button type="button" className="ghost small-button board-replace-button" onClick={() => setConfirm(true)}><Icon name="refresh" size={15} />Заменить задание</button>
+  return <div className="danger-zone open board-replace">
+    <b>Заменить «{KIND[kind].title}»?</b>
+    <p className="muted small">Ответ на это задание сбросится, таймер идёт дальше.</p>
+    <div className="password-row">
+      <button type="button" className="danger-solid" disabled={busy} onClick={async () => { setBusy(true); const ok = await onReplace(kind); setBusy(false); if (ok) setConfirm(false) }}>
+        {busy ? <><span className="spinner" aria-hidden="true" /> Заменяем…</> : 'Заменить'}</button>
+      <button type="button" className="ghost" disabled={busy} onClick={() => setConfirm(false)}>Отмена</button>
+    </div>
+  </div>
+}
+
 function BoardItemBlock({ id, labelledBy, hidden, item, check, explanation, children }: {
   id: string; labelledBy: string; hidden: boolean; item: BoardAdminItem; check: BoardCheck | null; explanation?: { verdict: string; explanation: string }; children: ReactNode
 }) {
   const topic = item.skillTitle ?? item.skillCode
   return <div className="board-detail-item" id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <p className="muted small board-item-ref">{item.title && <><b>{item.title}</b> · </>}{[`вес ${KIND[item.kind]?.weight ?? '—'}`, topic && `тема: ${topic}`, item.difficulty != null && `сложность ${item.difficulty}`,
-      item.externalKey ?? (item.taskId != null ? `задача #${item.taskId}` : null)].filter(Boolean).join(' · ')}</p>
+      item.externalKey ?? (item.taskId != null ? `задача #${item.taskId}` : null), item.replacedTaskIds?.length && `заменено: ${item.replacedTaskIds.length}`].filter(Boolean).join(' · ')}</p>
     {children}
     {item.kind !== 'code' && check && (check.feedback || check.output) && <div className="board-code"><small>Проверка</small><pre>{check.feedback || check.output}</pre></div>}
     {check?.console && <ConsolePanel run={check.console} origin="attempt" language={item.language ?? 'JAVA'} />}
@@ -951,8 +1163,9 @@ function Assessment({ assessment, status, finished, onAssess }: { assessment: Bo
 }
 
 
-function BoardTestDetail({ id, anchor, request, busy, onAct, onClose, register, onSaved }: {
-  id: Id; anchor: RefObject<HTMLDivElement | null>; request: Request; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; onClose: () => void
+function BoardTestDetail({ id, anchor, request, busy, onAct, pace, onEdit, onClose, register, onSaved }: {
+  id: Id; anchor: RefObject<HTMLDivElement | null>; request: Request; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void
+  pace: BoardPacePlan | null; onEdit: EditCall; onClose: () => void
   register: (update: ((test: BoardAdminTest) => void) | null) => void; onSaved: () => void
 }) {
   const [test, setTest] = useState<BoardAdminTest | null>(null)
@@ -983,6 +1196,14 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, onClose, register, 
     toast({ tone: 'info', icon: 'award', title: finalGrade ? `Оценка ${finalGrade} сохранена` : 'Оценка снята', text: `${value.displayName} · студент увидит её в «Моём прогрессе»` })
     return true
   }
+  async function replace(kind: BoardItemKind) {
+    if (!test) return false
+    const value = await request(() => post<BoardAdminTest>(`/admin/board/tests/${test.id}/items/${kind}/replace`))
+    if (!value) return false
+    setTest(value)
+    toast({ tone: 'info', icon: 'refresh', title: `Задание заменено: ${KIND[kind].title}`, text: `${value.displayName} увидит новое задание, таймер идёт дальше` })
+    return true
+  }
 
   const hint = <aside className="card board-summary" aria-label="Итог"><h2 className="card-title">Итог</h2><p className="muted small">{SUMMARY_HINT}</p></aside>
   if (failed) return <><div ref={anchor} className="pair-anchor board-detail-area"><section className="card board-detail"><div className="chart-head"><h2 className="card-title">Тест не найден</h2>
@@ -998,17 +1219,17 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, onClose, register, 
             <p className="eyebrow">Ответ у доски</p>
             <h2 className="title">{test.displayName} <BoardStatusTag status={test.status} /></h2>
             <p className="muted small">Вызван {dayTime(test.calledAt)}{test.login && ` · ${test.login}`}{test.language && ` · ${courseTitle(test.language)}`}
-              {duration !== null && ` · тест занял ${clock(duration * 1000)}`}</p>
+              {duration !== null && ` · тест занял ${clock(duration * 1000)}`}{test.stationName && ` · на компьютере у доски «${test.stationName}»`}</p>
             <KindsNote test={test} />
           </div>
           <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
         </div>
         {live(test) && <div className="board-detail-live"><Countdown test={test} now={now} /></div>}
-        <BoardActions test={test} busy={busy} onAct={onAct} />
+        <BoardActions test={test} busy={busy} onAct={onAct} pace={pace} onEdit={onEdit} />
 
         {test.status === 'CALLED' || test.status === 'CANCELLED' || test.status === 'EXPIRED'
           ? <p className="muted">{test.status === 'CALLED' ? 'Студент ещё не начал тест: задания выбираются, когда он нажмёт «Начать тест».' : 'Тест не проводился.'}</p>
-          : <BoardTestItems test={test} />}
+          : <BoardTestItems test={test} onReplace={test.status === 'STARTED' ? replace : undefined} />}
       </section>
     </div>
     <BoardSummary test={test} assess={assess} saveGrade={saveGrade} />

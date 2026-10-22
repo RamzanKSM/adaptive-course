@@ -24,14 +24,19 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) }
   })
-  if (!response.ok) throw await failure(response)
+  if (!response.ok) throw await failure(response, path)
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
-async function failure(response: Response): Promise<ApiError> {
+/**
+ * A 401 means the user's session has expired — except for /station (the board station's own cookie, never the user's
+ * session) and the login itself; those report their own error and leave the app as it is.
+ */
+async function failure(response: Response, path: string): Promise<ApiError> {
   const body = await response.json().catch(() => null) as { message?: string } | null
-  if (response.status === 401) {
+  if (response.status === 401 && path.startsWith('/station')) return new ApiError('Компьютер у доски отключён', 401)
+  if (response.status === 401 && !path.startsWith('/auth/login')) {
     unauthorizedHandler?.()
     return new ApiError('Сессия истекла. Войдите снова.', 401)
   }
@@ -41,7 +46,7 @@ async function failure(response: Response): Promise<ApiError> {
 /** Fetches a file (same session cookie and error handling as api) and saves it through a temporary download link. */
 export async function download(path: string, fallbackName: string): Promise<string> {
   const response = await fetch(`/api${path}`, { credentials: 'include' })
-  if (!response.ok) throw await failure(response)
+  if (!response.ok) throw await failure(response, path)
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const name = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1] ?? /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? fallbackName
   const filename = decodeURIComponent(name)

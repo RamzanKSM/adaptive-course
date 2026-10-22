@@ -221,6 +221,32 @@ class LearningFlowIntegrationTest {
     assertNotNull(other);
   }
 
+  @Test void logoutWithKeepLessonsLeavesTheLessonsOpen() throws Exception {
+    String token=createStudentAndLogin("keep-student"); long student=studentId("keep-student");
+    db.update("insert into lessons(user_id,lesson_number,language,language_lesson_number) values(?,1,'JAVA',1)",student);
+    mvc.perform(post("/api/auth/logout").param("keepLessons","true").cookie(cookie(token))).andExpect(status().isNoContent());
+    assertEquals(1,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,student),"a board test from the own account keeps the lesson");
+    mvc.perform(get("/api/auth/me").cookie(cookie(token))).andExpect(status().isUnauthorized());
+    mvc.perform(post("/api/auth/logout").param("keepLessons","false").cookie(cookie(login("keep-student","student-pass")))).andExpect(status().isNoContent());
+    assertEquals(0,db.queryForObject("select count(*) from lessons where user_id=? and finished_at is null",Integer.class,student));
+  }
+
+  @Test void anActiveSessionSlidesAndAnIdleOneExpires() throws Exception {
+    String token=createStudentAndLogin("slide-student"); Duration lifetime=Duration.ofHours(720);
+    String hash=Hashing.sha256(token);
+    Instant end=Instant.parse(db.queryForObject("select expires_at from sessions where token_hash=?",String.class,hash));
+    assertTrue(end.isAfter(Instant.now().plus(lifetime).minusSeconds(60)),"30 days by default");
+    var fresh=mvc.perform(get("/api/auth/me").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse();
+    assertNull(fresh.getCookie("adaptive_session"),"a fresh session is not re-sent on every request");
+    // Ten hours left: the next request moves the end to now + 30 days and re-sends the cookie as the login does.
+    db.update("update sessions set expires_at=? where token_hash=?",Instant.now().plus(Duration.ofHours(10)).toString(),hash);
+    var slid=mvc.perform(get("/api/auth/me").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getCookie("adaptive_session");
+    assertEquals(token,slid.getValue()); assertEquals((int)lifetime.toSeconds(),slid.getMaxAge()); assertEquals("/api",slid.getPath()); assertTrue(slid.isHttpOnly());
+    assertTrue(Instant.parse(db.queryForObject("select expires_at from sessions where token_hash=?",String.class,hash)).isAfter(Instant.now().plus(lifetime).minusSeconds(60)));
+    db.update("update sessions set expires_at=? where token_hash=?",Instant.now().minusSeconds(1).toString(),hash);
+    mvc.perform(get("/api/auth/me").cookie(cookie(token))).andExpect(status().isUnauthorized());
+  }
+
   @Test void aLessonWithoutActivityIsFinishedAfterTwentyMinutes() throws Exception {
     String token=createStudentAndLogin("idle-student"); long student=studentId("idle-student"); submitDiagnostic(token,student,false);
     start(token); long lesson=db.queryForObject("select id from lessons where user_id=? and finished_at is null",Long.class,student);

@@ -45,6 +45,15 @@ export function topics(n: number) {
 }
 /** «из 44 тем», «из 21 темы». */
 export const ofTopics = (n: number) => `из ${n} ${plural(n, 'темы', 'тем', 'тем')}`
+/** «+3», «−2», «0»: the lag against the plan, positive — behind. */
+export const signedLag = (lag: number) => lag > 0 ? `+${lag}` : lag < 0 ? `−${-lag}` : '0'
+/** «отстаёшь на 3 темы» / «опережаешь на 2 темы» / «идёшь по плану» (teacher: «отстаёт…»). */
+export function lagText(lag: number, who: 'teacher' | 'student' = 'teacher') {
+  const n = Math.abs(lag), count = `${n} ${plural(n, 'тему', 'темы', 'тем')}`
+  if (lag > 0) return `${who === 'student' ? 'отстаёшь' : 'отстаёт'} на ${count}`
+  if (lag < 0) return `${who === 'student' ? 'опережаешь' : 'опережает'} на ${count}`
+  return who === 'student' ? 'идёшь по плану' : 'идёт по плану'
+}
 
 // ───────── Status ─────────
 const STATUS: Record<SessionStatus, { tone: string; teacher: string; student: string }> = {
@@ -63,20 +72,23 @@ export function StatusChip({ status, who = 'teacher' }: { status: SessionStatus 
   return <span className={`status-chip ${STATUS[status].tone}`}><i aria-hidden="true" />{STATUS[status][who]}</span>
 }
 
-// ───────── Session chart: closed topics, the needed line and the forecast ─────────
+// ───────── Session chart: closed topics, the plan line and the forecast ─────────
 export interface SessionPlan {
   today: string; sessionDate: string | null
   total: number; closed: number; pace: number
+  /** The start of the plan line (0 topics); without it there is no plan line. */
+  planStart?: string | null
   /** Closed topics at the end of each day, when the history is known. */
   history?: { days: string[]; values: number[] }
 }
 
 /**
- * The lines of a session chart. Needed: from today's value to all topics at the session date.
+ * The lines of a session chart. The plan: from 0 topics at planStart to all topics at the session date (the same line for the
+ * whole group); when the chart begins later than planStart, the line begins there with its value on that day.
  * Forecast at the current pace: up to the day all topics would be closed, or to the session date (without a date —
  * at most half a year ahead), whichever comes first; a zero pace is a flat line.
  */
-export function sessionLines({ today, sessionDate, total, closed, pace, history }: SessionPlan) {
+export function sessionLines({ today, sessionDate, total, closed, pace, history, planStart }: SessionPlan) {
   const now = dayNumber(today)
   const session = sessionDate ? dayNumber(sessionDate) : null
   const series: ChartSeries[] = []
@@ -84,8 +96,11 @@ export function sessionLines({ today, sessionDate, total, closed, pace, history 
   if (!past.length || past[past.length - 1].x < now) past.push({ x: now, y: closed })
   series.push({ id: 'closed', label: 'пройдено тем', points: past, color: 'var(--brand)', width: 2.5, dot: true, sticky: true })
   const remaining = Math.max(0, total - closed)
-  if (remaining > 0 && session !== null && session > now)
-    series.push({ id: 'needed', label: 'нужно, чтобы успеть', points: [{ x: now, y: closed }, { x: session, y: total }], color: 'var(--ink-2)', width: 1.75, dash: 'dashed', sticky: true })
+  const start = planStart ? dayNumber(planStart) : null
+  if (start !== null && session !== null && session > start) {
+    const from = Math.max(start, past[0].x)
+    if (from < session) series.push({ id: 'plan', label: 'план к сессии', points: [{ x: from, y: (total * (from - start)) / (session - start) }, { x: session, y: total }], color: 'var(--ink-2)', width: 1.75, dash: 'dashed', sticky: true })
+  }
   const horizon = session !== null && session > now ? session : pace > 0 ? now + 182 : null
   if (remaining > 0 && horizon !== null) {
     const reach = pace > 0 ? now + (remaining / pace) * 7 : Infinity
@@ -110,7 +125,7 @@ export function SessionChart({ plan, height = 220, label = 'Пройденные
 }
 
 // ───────── The student's own session card («Мой прогресс») ─────────
-/** Only the student's own numbers: status, pace against the needed pace, forecast and their own line. Never others' data. */
+/** Only the student's own numbers: status, position against the plan, pace, forecast and their own line. Never others' data. */
 export function StudentSessionCard({ session }: { session: StudentSession }) {
   const today = session.days.length ? session.days[session.days.length - 1] : todayUtc()
   const done = session.status === 'DONE' || session.remaining <= 0
@@ -131,8 +146,11 @@ export function StudentSessionCard({ session }: { session: StudentSession }) {
         <div className="cover-bar" role="progressbar" aria-label="Пройдено тем курса" aria-valuemin={0} aria-valuemax={session.total} aria-valuenow={session.closed}><i style={{ width: `${share * 100}%` }} /></div>
       </div>
       {done ? <p className="session-line">Все темы курса пройдены — отличная работа!</p> : <>
-        {session.date && session.neededPace !== null
-          ? <p className="session-line">Нужно <b>{topics(session.neededPace)}</b> в неделю, сейчас у тебя <b>{decimal(session.pace)}</b></p>
+        {session.date && session.planToday !== null && !passed
+          ? <>
+            <p className="session-line">По плану к сегодня — <b>{topics(session.planToday)}</b>, у тебя <b>{session.closed}</b>{session.lag !== null && <> — <span className={`lag-phrase ${session.lag > 0 ? 'behind' : 'ahead'}`}>{lagText(session.lag, 'student')}</span></>}</p>
+            <p className="session-line">Твой темп — <b>{topics(session.pace)}</b> в неделю, осталось <b>{topics(session.remaining)}</b></p>
+          </>
           : session.date && passed
             ? <p className="session-line">Дата сессии наступила, осталось <b>{topics(session.remaining)}</b>. Сейчас у тебя <b>{topics(session.pace)}</b> в неделю</p>
             : <p className="session-line">Твой темп — <b>{topics(session.pace)}</b> в неделю, осталось <b>{topics(session.remaining)}</b></p>}
@@ -142,7 +160,7 @@ export function StudentSessionCard({ session }: { session: StudentSession }) {
       </>}
     </div>
     {session.days.length > 0 && <SessionChart height={200} label="Твои пройденные темы и прогноз"
-      plan={{ today, sessionDate: session.date, total: session.total, closed: session.closed, pace: session.date ? session.pace : 0, history: { days: session.days, values: session.closedSeries } }} />}
-    <p className="muted small session-note">Тема пройдена, когда в ней завершена хотя бы одна итерация или её подтвердила диагностика. Темп — сколько тем в неделю ты проходишь практикой, по последним трём неделям.</p>
+      plan={{ today, sessionDate: session.date, total: session.total, closed: session.closed, pace: session.date ? session.pace : 0, planStart: session.planStart, history: { days: session.days, values: session.closedSeries } }} />}
+    <p className="muted small session-note">Тема пройдена, когда в ней завершена хотя бы одна итерация или её подтвердила диагностика. План — равномерно от начала курса в группе до сессии. Темп — сколько тем в неделю ты проходишь практикой, по последним трём неделям.</p>
   </section>
 }

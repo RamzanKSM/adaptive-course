@@ -71,10 +71,16 @@ export interface ProgressTopic { code: string; title: string; block: number }
 /** Values at the end of each day of ProgressReport.days: skills in percent (one decimal), solved tasks, XP. */
 /** closed: topics closed for the session at the end of each day (see SessionForecast). */
 export interface ProgressSeries { skills: number[]; skillsWithDiagnostic: number[]; solved: number[]; xp: number[]; closed: number[] }
-/** Topics «closed» for the session: at least one completed iteration, mastered, or confirmed by the diagnostic. Pace and needed pace in topics per week. */
-export interface SessionForecast {
+/**
+ * The uniform plan to the session: from 0 topics on planStart (the group's first lesson in the course) to all topics on the
+ * session day; planToday — topics the plan asks for by today; lag = planToday − closed (positive — behind, negative — ahead).
+ * All three are null without a plan (no session date or no lessons yet).
+ */
+export interface SessionPlanFields { planStart: string | null; planToday: number | null; lag: number | null }
+/** Topics «closed» for the session: at least one completed iteration, mastered, or confirmed by the diagnostic. Pace in topics per week. */
+export interface SessionForecast extends SessionPlanFields {
   total: number; closed: number; closedByPractice: number; closedByDiagnostic: number; remaining: number
-  pace: number; paceWeeks: number; neededPace: number | null; status: SessionStatus | null; forecastDate: string | null
+  pace: number; paceWeeks: number; status: SessionStatus | null; forecastDate: string | null
 }
 /** Activity within [from, to]: distinct active days, tasks first credited, of them solved with the first submission, submissions. */
 export interface ProgressPeriod { activeDays: number; solved: number; firstTry: number; submissions: number }
@@ -105,10 +111,10 @@ export interface Classroom {
   hardTopics: { code: string; title: string; attemptsPerSolve: number; students: number }[] | null
 }
 /** The student's own pace to the session (GET /progress → session). closedSeries: closed topics at the end of each of `days`. */
-export interface StudentSession {
+export interface StudentSession extends SessionPlanFields {
   date: string | null; weeksLeft: number | null
   total: number; closed: number; remaining: number
-  pace: number; neededPace: number | null; status: SessionStatus | null; forecastDate: string | null
+  pace: number; status: SessionStatus | null; forecastDate: string | null
   days: string[]; closedSeries: number[]
 }
 
@@ -156,9 +162,23 @@ export interface BoardStudentTest {
   items: BoardStudentItem[]; answers: BoardAnswers
   /** The test runs in another browser (the board PC): only id, status, startedAt, endsAt and now come with it. */
   elsewhere?: boolean
+  /** Bumped when the teacher replaces an item: the screen reloads the replaced items from this view. */
+  revision?: number
+  /** The student's name (station views only). */
+  displayName?: string
 }
-/** GET /board/current: the student's active call or their running test. */
-export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null } | null; test: BoardStudentTest | null }
+/** GET /board/current: the student's active call or their running test. canStart false — the test starts only at the board station. */
+export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null; canStart?: boolean } | null; test: BoardStudentTest | null }
+/** A call shown on the board station. */
+export interface StationCall {
+  id: Id; displayName: string; group: string | null; language: CourseLanguage; kinds?: BoardItemKind[] | null; durationSeconds?: number | null
+  calledAt: string; expiresAt: string; canStart: boolean
+}
+/** GET /station/current: the active calls and the test running on this station (at most one). now — the server clock. */
+export interface StationCurrent { station: { id: Id; name: string }; now: string; calls: StationCall[]; test: BoardStudentTest | null }
+/** A board station (a browser of the classroom PC that shows only the calls and the tests). */
+export interface BoardStation { id: Id; name: string; createdAt: string; lastSeenAt: string | null; current?: boolean }
+export interface BoardSettings { studentStart: boolean }
 /** The student's own board grades in «Мой прогресс»: Moscow date, the teacher's final grade and comment. */
 /** One item of the report a student sees for a graded test (when the teacher shows it): never the reference or the scores. */
 export interface BoardReportItem {
@@ -172,13 +192,15 @@ export interface BoardTestSummary {
   calledAt: string; expiresAt: string | null; startedAt: string | null; endsAt: string | null; finishedAt: string | null
   suggestedGrade: BoardGrade | null; finalGrade: BoardGrade | null; assessmentStatus: AssessmentStatus | null
   kinds?: BoardItemKind[] | null; durationSeconds?: number | null; source?: BoardSource
+  /** The station the test was started at; null — from the student's own account. */
+  stationId?: Id | null; stationName?: string | null
 }
 export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null }
 /** Where the items come from: the topics the student has reached, or the minimum for today (a uniform plan to the session). */
 export type BoardSource = 'LEVEL' | 'PACE'
 /** The minimum for today of the group: the first `topics` of `total` topics; null without a session date or lessons. */
 export interface BoardPacePlan { topics: number; total: number; lastTopic: string | null; start: string; session: string }
-export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[]; pace?: BoardPacePlan | null }
+export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[]; pace?: BoardPacePlan | null; settings?: BoardSettings }
 /** An item with full data: parsons — before/after, lines, solution (ids in the reference order), extraLineId, reference;
  *  fix — program (the buggy one), bugDescription, reference; code — statement and starter. */
 export interface BoardAdminItem {
@@ -186,6 +208,8 @@ export interface BoardAdminItem {
   program?: string | null; bugDescription?: string | null; reference?: string | null
   before?: string | null; after?: string | null; lines?: BoardLine[] | null; solution?: string[] | null; extraLineId?: string | null
   taskId?: Id | null; externalKey?: string | null; skillCode?: string | null; skillTitle?: string | null; difficulty?: number | null
+  /** Tasks the teacher replaced in this item during the test. */
+  replacedTaskIds?: Id[] | null
 }
 /** The check of one item; program — the assembled program of parsons. */
 export interface BoardCheck { kind?: BoardItemKind; passed: Flag; output?: string | null; outcome?: string | null; feedback?: string | null; console?: ConsoleRun | null; unavailable?: Flag | null; program?: string | null }
