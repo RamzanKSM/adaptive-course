@@ -91,16 +91,21 @@ class FortuneWheelIntegrationTest {
     assertEquals(List.of("TOP", "TOP", "TOP", "BOARD"), wheel.path("candidates").findValuesAsText("reason"));
     assertEquals(List.of("w-b4"), wheel.path("called").findValuesAsText("login"));
     assertEquals(Set.of("w-5", "w-3", "w-0", "w-cancel", "w-absent", "w-early"), new HashSet<>(wheel.path("others").findValuesAsText("login")));
-    assertTrue(wheel.path("spins").isEmpty());
+    assertTrue(wheel.path("spins").isEmpty()); assertEquals("Шоколадка", wheel.path("prize").asText(), "the default before the first spin");
 
     var ids = List.of(nine, tie, outsider, boardFive, five);
     var spin = read(admin, post("/api/admin/pairs/{id}/wheel/spin", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids))));
     long winner = spin.path("winner").path("userId").asLong();
     assertEquals(ids.get(spin.path("index").asInt()), winner);
     assertEquals(1, spin.path("spins").size()); assertEquals(winner, spin.path("spins").get(0).path("userId").asLong()); assertEquals(5, spin.path("spins").get(0).path("names").asInt());
+    assertEquals("Шоколадка", spin.path("prize").asText()); assertEquals("Шоколадка", spin.path("spins").get(0).path("prize").asText());
     assertEquals(1, read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("spins").size());
+    // A named prize is kept with the spin and offered again next time.
+    var named = read(admin, post("/api/admin/pairs/{id}/wheel/spin", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids, "prize", "  Пятёрка   автоматом "))));
+    assertEquals("Пятёрка автоматом", named.path("prize").asText()); assertEquals(List.of("Шоколадка", "Пятёрка автоматом"), named.path("spins").findValuesAsText("prize"));
+    assertEquals("Пятёрка автоматом", read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("prize").asText());
 
-    for (var bad : List.of(Map.of("userIds", List.of()), Map.of("userIds", List.of(nine, nine)), Map.of("userIds", List.of(nine, other)), Map.of("userIds", List.of("w-9a")), Map.of()))
+    for (var bad : List.of(Map.of("userIds", List.of()), Map.of("userIds", List.of(nine, nine)), Map.of("userIds", List.of(nine, other)), Map.of("userIds", List.of("w-9a")), Map.of(), Map.of("userIds", ids, "prize", "п".repeat(61)), Map.of("userIds", ids, "prize", 5)))
       expect(admin, post("/api/admin/pairs/{id}/wheel/spin", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(bad)), status().isBadRequest(), "INVALID_WHEEL");
     expect(admin, get("/api/admin/pairs/{id}/wheel", 987_654), status().isNotFound(), "PAIR_NOT_FOUND");
     String student = createStudent("w-student", "Студент", "WH-3");

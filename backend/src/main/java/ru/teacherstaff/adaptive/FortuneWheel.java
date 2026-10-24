@@ -12,15 +12,17 @@ import java.util.*;
 import java.util.random.RandomGenerator;
 
 /**
- * «Колесо фортуны» of a saved pair: a chocolate for one student among those who earned a chance — a 5 at the board in the
- * pair's window, or the top {@link #TOP_PERCENT}% by the pair's points among the attended students not called to the
- * board (at least one point; ties at the border pass). Every student of the group takes part, whether in the session or
- * not. The teacher may add or remove names before the spin; the server picks the winner and keeps the spin. Teacher
- * starts it, the projected wheel shows names only. The rules: backend/README.md, «Колесо фортуны».
+ * «Колесо фортуны» of a saved pair: a prize (a chocolate unless the teacher names another) for one student among those
+ * who earned a chance — a 5 at the board in the pair's window, or the top {@link #TOP_PERCENT}% by the pair's points
+ * among the attended students not called to the board (at least one point; ties at the border pass). Every student of
+ * the group takes part, whether in the session or not. The teacher may add or remove names before the spin; the server
+ * picks the winner and keeps the spin. The projected wheel shows names and the prize only. The rules:
+ * backend/README.md, «Колесо фортуны».
  */
 @Component
 class FortuneWheel {
-  static final int TOP_PERCENT = 20, MAX_NAMES = 60;
+  static final int TOP_PERCENT = 20, MAX_NAMES = 60, MAX_PRIZE = 60;
+  static final String DEFAULT_PRIZE = "Шоколадка";
 
   private final JdbcTemplate db; private final PairWork pairs; private final Clock clock; private final ObjectMapper json;
   private final RandomGenerator random = new SecureRandom();
@@ -64,10 +66,10 @@ class FortuneWheel {
     return obj("pairId", pairId, "group", head.group(), "language", head.language().name(),
         "startsAt", PairWork.iso(head.window().start()), "endsAt", PairWork.iso(head.window().end()),
         "topPercent", TOP_PERCENT, "pool", pool.size(), "topCount", topCount(pool.size()), "threshold", threshold,
-        "candidates", candidates, "called", called, "others", others, "spins", spins(pairId));
+        "candidates", candidates, "called", called, "others", others, "spins", spins(pairId), "prize", lastPrize());
   }
 
-  /** POST /api/admin/pairs/{id}/wheel/spin {userIds}: the names in wheel order; one wins at random and the spin is kept. */
+  /** POST /api/admin/pairs/{id}/wheel/spin {userIds, prize}: the names in wheel order; one wins at random and the spin is kept. */
   Map<String, Object> spin(long pairId, Map<String, Object> body, long adminId) {
     var head = pairs.saved(pairId);
     if (body == null || !(body.get("userIds") instanceof List<?> list) || list.isEmpty()) throw new ApiError("INVALID_WHEEL", "На колесе нет ни одного имени");
@@ -77,14 +79,18 @@ class FortuneWheel {
       if (ids.contains(n.longValue())) throw new ApiError("INVALID_WHEEL", "Имя на колесе повторяется");
       ids.add(n.longValue());
     }
+    if (body.get("prize") != null && !(body.get("prize") instanceof String)) throw new ApiError("INVALID_WHEEL", "prize — название приза");
+    String prize = body.get("prize") == null ? "" : ((String) body.get("prize")).strip().replaceAll("\\s+", " ");
+    if (prize.length() > MAX_PRIZE) throw new ApiError("INVALID_WHEEL", "Название приза — не длиннее " + MAX_PRIZE + " символов");
     if (ids.size() > MAX_NAMES) throw new ApiError("INVALID_WHEEL", "На колесе не больше " + MAX_NAMES + " имён");
     int known = db.queryForObject("select count(*) from users where role='STUDENT' and group_name=? and id in (" + String.join(",", Collections.nCopies(ids.size(), "?")) + ")",
         Integer.class, concat(head.group(), ids));
     if (known != ids.size()) throw new ApiError("INVALID_WHEEL", "На колесе только студенты группы " + head.group());
     int index = random.nextInt(ids.size()); long winner = ids.get(index);
-    db.update("insert into wheel_spins(pair_id,user_id,candidates_json,spun_by,spun_at) values(?,?,?,?,?)", pairId, winner, write(ids), adminId, PairWork.iso(clock.instant()));
+    db.update("insert into wheel_spins(pair_id,user_id,candidates_json,prize,spun_by,spun_at) values(?,?,?,?,?,?)", pairId, winner, write(ids), prize.isEmpty() ? null : prize, adminId, PairWork.iso(clock.instant()));
     var person = db.queryForMap("select id as userId,login,display_name as displayName from users where id=?", winner);
-    return obj("winner", obj("userId", winner, "login", person.get("login"), "displayName", person.get("displayName")), "index", index, "spins", spins(pairId));
+    return obj("winner", obj("userId", winner, "login", person.get("login"), "displayName", person.get("displayName")), "index", index,
+        "prize", prize.isEmpty() ? DEFAULT_PRIZE : prize, "spins", spins(pairId));
   }
 
   /** The window's board tests of the given students by student: a 5 if any test got one, else the latest grade. */
@@ -100,9 +106,15 @@ class FortuneWheel {
     return result;
   }
 
+  /** The prize of the teacher's latest spin in any pair, so it need not be typed again; the default before the first. */
+  private String lastPrize() {
+    var last = db.queryForList("select coalesce(prize,?) from wheel_spins order by id desc limit 1", String.class, DEFAULT_PRIZE);
+    return last.isEmpty() ? DEFAULT_PRIZE : last.getFirst();
+  }
+
   private List<Map<String, Object>> spins(long pairId) {
-    return db.query("select w.id,w.user_id,u.login,u.display_name,w.candidates_json,w.spun_at from wheel_spins w join users u on u.id=w.user_id where w.pair_id=? order by w.id",
-        (rs, i) -> obj("id", rs.getLong(1), "userId", rs.getLong(2), "login", rs.getString(3), "displayName", rs.getString(4), "names", read(rs.getString(5)).size(), "spunAt", rs.getString(6)), pairId);
+    return db.query("select w.id,w.user_id,u.login,u.display_name,w.candidates_json,w.spun_at,coalesce(w.prize,?) from wheel_spins w join users u on u.id=w.user_id where w.pair_id=? order by w.id",
+        (rs, i) -> obj("id", rs.getLong(1), "userId", rs.getLong(2), "login", rs.getString(3), "displayName", rs.getString(4), "names", read(rs.getString(5)).size(), "spunAt", rs.getString(6), "prize", rs.getString(7)), DEFAULT_PRIZE, pairId);
   }
 
   private static Object[] concat(Object first, List<Long> middle, Object... rest) {

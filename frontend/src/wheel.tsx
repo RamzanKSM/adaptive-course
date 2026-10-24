@@ -7,9 +7,12 @@ import './wheel.css'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 type Person = { userId: Id; login: string; displayName: string; attended: boolean; points: number; grade: string | null; reason?: 'BOARD' | 'TOP' }
-type Spin = { id: Id; userId: Id; login: string; displayName: string; names: number; spunAt: string }
-type Wheel = { pairId: Id; topPercent: number; pool: number; topCount: number; threshold: number | null; candidates: Person[]; called: Person[]; others: Person[]; spins: Spin[] }
-type SpinResult = { winner: { userId: Id; login: string; displayName: string }; index: number; spins: Spin[] }
+type Spin = { id: Id; userId: Id; login: string; displayName: string; names: number; spunAt: string; prize: string }
+type Wheel = { pairId: Id; topPercent: number; pool: number; topCount: number; threshold: number | null; candidates: Person[]; called: Person[]; others: Person[]; spins: Spin[]; prize: string }
+type SpinResult = { winner: { userId: Id; login: string; displayName: string }; index: number; prize: string; spins: Spin[] }
+
+const DEFAULT_PRIZE = 'Шоколадка'
+const prizeIcon = (prize: string) => prize.toLowerCase().includes('шоколад') ? '🍫' : '🎁'
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })
 const reasonText = (p: Person) => p.reason === 'BOARD' ? '5 у доски' : p.reason === 'TOP' ? `топ: ${p.points} ${plural(p.points, 'балл', 'балла', 'баллов')}`
@@ -20,10 +23,12 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
   const [wheel, setWheel] = useState<Wheel | null>(null)
   const [chosen, setChosen] = useState<Id[]>([])
   const [stage, setStage] = useState(false)
+  /** The prize: the one of the latest spin, as the backend offers it; the teacher may rename it. */
+  const [prize, setPrize] = useState('')
 
   useEffect(() => {
     let alive = true
-    request(() => api<Wheel>(`/admin/pairs/${pair.id}/wheel`)).then(v => { if (alive && v) { setWheel(v); setChosen(v.candidates.map(c => c.userId)) } })
+    request(() => api<Wheel>(`/admin/pairs/${pair.id}/wheel`)).then(v => { if (alive && v) { setWheel(v); setChosen(v.candidates.map(c => c.userId)); setPrize(v.prize) } })
     return () => { alive = false }
   }, [pair.id, request])
 
@@ -34,18 +39,21 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
   const addable = [...wheel.called, ...wheel.others].filter(p => !chosen.includes(p.userId))
   const toggle = (id: Id) => setChosen(c => c.includes(id) ? c.filter(x => x !== id) : [...c, id])
   const names = chosen.map(id => byId.get(id)).filter((p): p is Person => !!p)
+  const prizeName = prize.trim().replace(/\s+/g, ' ') || DEFAULT_PRIZE
 
   return <section className="card wheel-panel enter" aria-label="Колесо фортуны">
     <div className="chart-head">
       <div>
         <p className="eyebrow">Колесо фортуны</p>
-        <h2 className="card-title">Кто крутится за шоколадку</h2>
+        <h2 className="card-title">Кто крутится за приз</h2>
       </div>
       <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
     </div>
     <p className="muted small">На колесе: все с пятёркой у доски за эту пару и топ‑{wheel.topPercent}% по баллам за пару среди тех, кого не вызывали
       ({wheel.pool} {plural(wheel.pool, 'студент', 'студента', 'студентов')} → {wheel.topCount}{wheel.threshold !== null ? `, порог ${wheel.threshold} ${plural(wheel.threshold, 'балл', 'балла', 'баллов')}, при равенстве проходят все` : ', ни у кого нет баллов'}).
-      На проекторе видны только имена.</p>
+      На проекторе видны только имена и приз.</p>
+    <label className="wheel-add">Приз
+      <input type="text" value={prize} maxLength={60} placeholder={DEFAULT_PRIZE} onChange={e => setPrize(e.target.value)} /></label>
     {!wheel.candidates.length && !added.length && <p className="muted">Пока никто не заработал место на колесе. Можно добавить студента вручную.</p>}
     <ul className="wheel-people">
       {[...wheel.candidates, ...added].map(p => <li key={p.userId}>
@@ -60,11 +68,11 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
         {addable.map(p => <option key={p.userId} value={p.userId}>{p.displayName} — {reasonText(p)}</option>)}
       </select></label>}
     {wheel.spins.length > 0 && <div className="wheel-history"><span className="control-label">Победители этой пары</span>
-      {wheel.spins.map(s => <span key={s.id} className="pill wheel-winner-pill">🍫 {s.displayName} · {time(s.spunAt)}</span>)}</div>}
+      {wheel.spins.map(s => <span key={s.id} className="pill wheel-winner-pill">{prizeIcon(s.prize)} {s.displayName} · {s.prize} · {time(s.spunAt)}</span>)}</div>}
     <div className="pair-actions">
       <button type="button" className="primary" disabled={!names.length} onClick={() => setStage(true)}><Icon name="sparkle" size={16} /> Открыть колесо · {names.length}</button>
     </div>
-    {stage && <WheelStage pairId={pair.id!} people={names} request={request}
+    {stage && <WheelStage pairId={pair.id!} people={names} prize={prizeName} request={request}
       onSpun={spins => setWheel(w => w && { ...w, spins })} onClose={() => setStage(false)} />}
   </section>
 }
@@ -80,8 +88,8 @@ function shuffle<T>(items: T[]) { const a = [...items]; for (let i = a.length - 
 const point = (deg: number, r = R) => { const a = deg * Math.PI / 180; return `${C + r * Math.sin(a)} ${C - r * Math.cos(a)}` }
 const short = (name: string, max: number) => name.length <= max ? name : name.slice(0, max - 1) + '…'
 
-/** The projected wheel: names only, the server picks the winner, the disc lands on it. «Ещё раз» spins without the winner. */
-function WheelStage({ pairId, people, request, onSpun, onClose }: { pairId: Id; people: Person[]; request: Request; onSpun: (spins: Spin[]) => void; onClose: () => void }) {
+/** The projected wheel: names and the prize only, the server picks the winner, the disc lands on it. «Ещё раз» spins without the winner. */
+function WheelStage({ pairId, people, prize, request, onSpun, onClose }: { pairId: Id; people: Person[]; prize: string; request: Request; onSpun: (spins: Spin[]) => void; onClose: () => void }) {
   const [names, setNames] = useState(() => shuffle(people))
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
@@ -104,7 +112,7 @@ function WheelStage({ pairId, people, request, onSpun, onClose }: { pairId: Id; 
   async function spin() {
     if (spinning || !names.length) return
     setWinner(null); setSpinning(true)
-    const result = await request(() => post<SpinResult>(`/admin/pairs/${pairId}/wheel/spin`, { userIds: names.map(p => p.userId) }))
+    const result = await request(() => post<SpinResult>(`/admin/pairs/${pairId}/wheel/spin`, { userIds: names.map(p => p.userId), prize }))
     if (!result) { setSpinning(false); return }
     onSpun(result.spins)
     const n = names.length, seg = 360 / n
@@ -128,7 +136,7 @@ function WheelStage({ pairId, people, request, onSpun, onClose }: { pairId: Id; 
   const font = Math.max(11, Math.min(30, Math.floor(seg * 1.6), Math.floor(560 / Math.max(...names.map(p => p.displayName.length), 8))))
   return <div ref={ref} className="wheel-stage" role="dialog" aria-modal="true" aria-label="Колесо фортуны">
     <button type="button" className="wheel-close" aria-label="Закрыть колесо" onClick={close}><Icon name="x" size={22} /></button>
-    <h2 className="wheel-title">Колесо фортуны <span>🍫</span></h2>
+    <div className="wheel-head"><h2 className="wheel-title">Колесо фортуны <span>{prizeIcon(prize)}</span></h2><p className="wheel-prize">Разыгрываем: <b>{prize}</b></p></div>
     <div className="wheel-area">
       <div className="wheel-pointer" aria-hidden="true" />
       <div className="wheel-disc" style={{ transform: `rotate(${rotation}deg)`, transitionDuration: reduced ? '0ms' : `${SPIN_MS}ms` } as CSSProperties}
@@ -149,7 +157,7 @@ function WheelStage({ pairId, people, request, onSpun, onClose }: { pairId: Id; 
     <div className="wheel-bottom">
       {winner ? <div className="wheel-result" aria-live="polite">
         <Burst trigger={burst} count={40} />
-        <span className="wheel-result-label">Шоколадка достаётся</span>
+        <span className="wheel-result-label">Приз «{prize}» получает</span>
         <b className="wheel-result-name">{winner.displayName}</b>
         <div className="wheel-buttons">
           {names.length > 1 && <button type="button" className="ghost" onClick={again} title="Если победителя нет в аудитории: колесо без него">Крутить ещё без него</button>}
