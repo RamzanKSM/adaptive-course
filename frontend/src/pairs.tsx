@@ -5,6 +5,7 @@ import { parseDate } from './game'
 import { NO_GROUP, useGroupFilter } from './groups'
 import { dayNumber, dayString, plural, shortDay } from './session'
 import type { CourseLanguage, Id, Pair, PairCell, PairJournal, PairResult } from './types'
+import { WheelPanel } from './wheel'
 
 type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 
@@ -72,6 +73,8 @@ export function PairWork({ request, groups }: { request: Request; groups: string
   const [list, setList] = useState<Pair[] | null>(null)
   const [journal, setJournal] = useState<PairJournal | null>(null)
   const [reload, setReload] = useState(0)
+  /** The wheel of fortune of the open pair. */
+  const [wheel, setWheel] = useState(false)
   const toast = useToast()
   const pairRef = useRef<HTMLDivElement>(null)
 
@@ -92,6 +95,7 @@ export function PairWork({ request, groups }: { request: Request; groups: string
   }, [group, language, reload, request])
 
   const shown = preview ?? open
+  useEffect(() => setWheel(false), [open?.id, preview])
   useEffect(() => { if (shown) pairRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [shown?.id, preview]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function chooseGroup(value: string) { if (value === group) return; setGroup(value); setOpen(null); setList(null); setJournal(null) }
@@ -198,7 +202,8 @@ export function PairWork({ request, groups }: { request: Request; groups: string
           <button type="button" className="ghost" onClick={() => setPreview(null)}>Отмена</button>
         </>} />}
       {!preview && open && <PairCard key={open.id} pair={open} onClose={() => setOpen(null)}
-        actions={<SavedActions pair={open} busy={busy} onRecalculate={() => recalculate(open)} onDelete={() => deletePair(open)} />} />}
+        actions={<SavedActions pair={open} busy={busy} onWheel={() => setWheel(true)} onRecalculate={() => recalculate(open)} onDelete={() => deletePair(open)} />} />}
+      {!preview && open && wheel && <WheelPanel key={`wheel-${open.id}`} pair={open} request={request} onClose={() => setWheel(false)} />}
     </div>
 
     <div className="list-stack">
@@ -222,7 +227,7 @@ export function PairWork({ request, groups }: { request: Request; groups: string
   </section>
 }
 
-function SavedActions({ pair, busy, onRecalculate, onDelete }: { pair: Pair; busy: string | null; onRecalculate: () => void; onDelete: () => void }) {
+function SavedActions({ pair, busy, onWheel, onRecalculate, onDelete }: { pair: Pair; busy: string | null; onWheel: () => void; onRecalculate: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false)
   if (confirming) return <div className="danger-zone open pair-delete">
     <b>Удалить пару {windowText(pair)}?</b>
@@ -233,6 +238,7 @@ function SavedActions({ pair, busy, onRecalculate, onDelete }: { pair: Pair; bus
     </div>
   </div>
   return <>
+    <button type="button" className="primary" disabled={!!busy} onClick={onWheel} title="Шоколадка: колесо из пятёрок у доски и топ‑20% по задачам за пару"><Icon name="sparkle" size={16} />Колесо фортуны</button>
     <button type="button" className="ghost" disabled={!!busy} onClick={onRecalculate} title="Заново посчитать задачи, посещение, активность и медиану (например, после отзыва зачёта)">
       {busy === 'recalculate' ? <span className="spinner" aria-hidden="true" /> : <Icon name="refresh" size={16} />}Пересчитать</button>
     <button type="button" className="ghost danger" disabled={!!busy} onClick={() => setConfirming(true)}><Icon name="x" size={16} />Удалить</button>

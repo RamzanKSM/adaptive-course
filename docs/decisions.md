@@ -82,6 +82,12 @@ class the teacher calls students one by one to a short individual test, projecte
 - 2026-10-14…15 a pair also carried grades (thresholds on that median, manual grades, «без оценки», publishing). The owner
   found grading the work in class inappropriate; they were removed completely (V27 dropped the columns, the table is now
   `pair_results`) — don't bring them back; grades come from the test at the board.
+- «Колесо фортуны» (owner, 2026-10-25): too many 5s at the board made a chocolate per 5 too costly, so one chocolate per
+  pair goes to a wheel: the 5s at the board in the pair + the top 20% by the pair's points of those not called (owner's
+  numbers). Agreed details: points rather than the number of tasks (easy tasks shouldn't pay), at least 1 point, 20%
+  rounded up, ties at the border pass, the projected wheel shows names only (no ranking for students), the teacher may
+  add or remove names, the server picks and keeps the winner. Test accounts and students outside the session take part
+  (owner's choice) — unlike the pair's own analytics.
 
 ## Teacher analytics and the session (since 2026-10-13)
 - Status by a global plan line (owner, 2026-10-22): the individual needed pace (remaining / weeks left vs the recent

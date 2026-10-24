@@ -18,7 +18,7 @@ public class ApiController {
   private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(ApiController.class);
   /** Verification is strict (reference must pass, wrong solutions must fail), so the generator gets three tries. */
   static final int GENERATION_ATTEMPTS=3;
-  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairWork pairWork; private final BoardTests boardTests; private final BoardStations boardStations;
+  private final JdbcTemplate db; private final PistonCodeRunner codeRunner; private final LlmTutor tutor; private final LearningContentGenerator contentGenerator; private final TaskVerifier verifier; private final DiagnosticProfile diagnostics; private final TransactionTemplate tx; private final LlmSettings llmSettings; private final ProgressAnalytics analytics; private final PairWork pairWork; private final BoardTests boardTests; private final BoardStations boardStations; private final FortuneWheel wheel;
   /**
    * Serializes /learning/next per student and course. It replaces what the long transaction never really gave:
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
@@ -26,7 +26,7 @@ public class ApiController {
    */
   private final ConcurrentHashMap<String,java.util.concurrent.locks.ReentrantLock> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests, BoardStations boardStations) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; this.boardStations=boardStations; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests, BoardStations boardStations, FortuneWheel wheel) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; this.boardStations=boardStations; this.wheel=wheel; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled,hard_mode_allowed,hard_mode_on from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
@@ -595,6 +595,8 @@ public class ApiController {
   @GetMapping("/admin/pairs/{id}") public Map<String,Object> pair(@PathVariable long id,HttpServletRequest r){ admin(r); return pairWork.pair(id); }
   @PostMapping("/admin/pairs/{id}/recalculate") @Transactional public Map<String,Object> recalculatePair(@PathVariable long id,HttpServletRequest r){ admin(r); var pair=pairWork.recalculate(id); log.info("Pair {} recalculated by admin {}",id,uid(r)); return pair; }
   @DeleteMapping("/admin/pairs/{id}") @Transactional public Map<String,Object> deletePair(@PathVariable long id,HttpServletRequest r){ admin(r); var result=pairWork.delete(id); log.info("Pair {} deleted by admin {}",id,uid(r)); return result; }
+  @GetMapping("/admin/pairs/{id}/wheel") public Map<String,Object> pairWheel(@PathVariable long id,HttpServletRequest r){ admin(r); return wheel.wheel(id); }
+  @PostMapping("/admin/pairs/{id}/wheel/spin") @Transactional public Map<String,Object> spinWheel(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var spin=wheel.spin(id,b,uid(r)); log.info("Wheel of pair {} spun by admin {}: user {} of {}",id,uid(r),((Map<?,?>)spin.get("winner")).get("userId"),((List<?>)b.get("userIds")).size()); return spin; }
 
   /**
    * «К доске»: the teacher calls a student, the student takes a timed test of the chosen items on the classroom PC, the teacher

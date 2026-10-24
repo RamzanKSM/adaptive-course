@@ -109,6 +109,10 @@ class PairWork {
     return new Computed(rows, median);
   }
   private record Computed(List<Row> rows, Median median) {}
+  /** Rows of the given students in a window, nothing saved: the wheel of fortune ranks any students of the group by them. */
+  List<Row> rowsOf(Language lang, Window w, Collection<Long> users) { return compute(lang, w, users, null).rows(); }
+  /** A saved pair without its rows. */
+  Head saved(long id) { return head(id); }
 
   /**
    * The activity of the given students in a window, in this course: 5-minute slots (counted from the window's start) with
