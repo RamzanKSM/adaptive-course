@@ -83,10 +83,17 @@ const INK = new Set(['#ffb224', '#7cf2c8', '#c6f24e'])
 const colorOf = (i: number, n: number) => COLORS[(n > 1 && i === n - 1 && i % COLORS.length === 0 ? 1 : i) % COLORS.length]
 const SPIN_MS = 6500
 const C = 300, R = 290
+/** Room for a name along the radius: from the rim's inner margin (22) to past the hub (r 34 + 14). */
+const NAME_SPACE = R - 22 - 48
 
 function shuffle<T>(items: T[]) { const a = [...items]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return a }
 const point = (deg: number, r = R) => { const a = deg * Math.PI / 180; return `${C + r * Math.sin(a)} ${C - r * Math.cos(a)}` }
 const short = (name: string, max: number) => name.length <= max ? name : name.slice(0, max - 1) + '…'
+/** A name too long for one large line goes on two (surname, then the rest), each at most 20 characters. */
+function nameLines(name: string, fits: (lines: string[]) => boolean) {
+  const words = name.trim().split(/\s+/), one = [short(name, 24)]
+  return words.length < 2 || fits(one) ? one : [short(words[0], 20), short(words.slice(1).join(' '), 20)]
+}
 
 /** The projected wheel: names and the prize only, the server picks the winner, the disc lands on it. «Ещё раз» spins without the winner. */
 function WheelStage({ pairId, people, prize, request, onSpun, onClose }: { pairId: Id; people: Person[]; prize: string; request: Request; onSpun: (spins: Spin[]) => void; onClose: () => void }) {
@@ -133,7 +140,9 @@ function WheelStage({ pairId, people, prize, request, onSpun, onClose }: { pairI
   }
 
   const n = names.length, seg = 360 / Math.max(n, 1)
-  const font = Math.max(11, Math.min(30, Math.floor(seg * 1.6), Math.floor(560 / Math.max(...names.map(p => p.displayName.length), 8))))
+  /** Per name: as large as the segment allows, but the name must fit between the hub and the rim (bold glyph ≈ 0.68 em). */
+  const fontOf = (lines: string[]) => Math.max(11, Math.min(30, Math.floor(seg * 1.6 / lines.length),
+    Math.floor(NAME_SPACE / (0.62 * Math.max(...lines.map(l => l.length), 4)))))
   return <div ref={ref} className="wheel-stage" role="dialog" aria-modal="true" aria-label="Колесо фортуны">
     <button type="button" className="wheel-close" aria-label="Закрыть колесо" onClick={close}><Icon name="x" size={22} /></button>
     <div className="wheel-head"><h2 className="wheel-title">Колесо фортуны <span>{prizeIcon(prize)}</span></h2><p className="wheel-prize">Разыгрываем: <b>{prize}</b></p></div>
@@ -147,7 +156,11 @@ function WheelStage({ pairId, people, prize, request, onSpun, onClose }: { pairI
           {names.map((p, i) => {
             const color = colorOf(i, n)
             return <g key={`n${p.userId}`} transform={`rotate(${(i + 0.5) * seg - 90} ${C} ${C})`}>
-              <text x={C + R - 22} y={C} textAnchor="end" dominantBaseline="middle" fontSize={font} fill={INK.has(color) ? '#15141a' : '#fff'} className="wheel-name">{short(p.displayName, 24)}</text>
+              {(() => {
+                const lines = nameLines(p.displayName, one => fontOf(one) >= 22), size = fontOf(lines)
+                return <text x={C + R - 22} y={C} textAnchor="end" dominantBaseline="middle" fontSize={size} fill={INK.has(color) ? '#15141a' : '#fff'} className="wheel-name">
+                  {lines.map((line, k) => <tspan key={k} x={C + R - 22} dy={k === 0 ? `${-(lines.length - 1) * 0.55}em` : '1.1em'}>{line}</tspan>)}</text>
+              })()}
             </g>
           })}
           <circle cx={C} cy={C} r={34} fill="#1b1830" stroke="#fff" strokeWidth="4" />
