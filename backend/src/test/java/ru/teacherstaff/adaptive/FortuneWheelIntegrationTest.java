@@ -26,8 +26,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * «Колесо фортуны» of a saved pair: who gets on the wheel (a 5 at the board, the top 20% by points of those not called,
- * ties at the border, at least a point; everyone of the group, in the session or not), the spin and its validation.
+ * «Жребий» of a saved pair: who gets on the wheel (a grade at the board, the top share by points of those not called,
+ * ties at the border, a minimum of points; everyone of the group, in the session or not), the settings, runs of steps in
+ * both modes, an absent winner's replacement, deleting a run, validation.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -55,14 +56,18 @@ class FortuneWheelIntegrationTest {
     when(tutor.status(anyLong())).thenReturn(new LlmStatus(false, false, false, "DISABLED", "gpt-6-luna"));
     when(clock.instant()).thenReturn(NOW);
     when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+    db.update("delete from app_settings where key=?", DrawSettings.KEY);
   }
 
   @Test void theTopRule() {
-    assertEquals(0, FortuneWheel.topCount(0)); assertEquals(1, FortuneWheel.topCount(1)); assertEquals(1, FortuneWheel.topCount(5));
-    assertEquals(2, FortuneWheel.topCount(6)); assertEquals(2, FortuneWheel.topCount(10)); assertEquals(3, FortuneWheel.topCount(11));
-    assertNull(FortuneWheel.threshold(List.of()));
-    assertEquals(9, FortuneWheel.threshold(List.of(3, 10, 9, 0, 9, 5, 0, 1)), "8 → top 2: 10 and 9, the other 9 ties");
-    assertEquals(1, FortuneWheel.threshold(List.of(0, 0, 0)), "nobody with a point makes the top");
+    assertEquals(0, FortuneWheel.topCount(0, 20)); assertEquals(1, FortuneWheel.topCount(1, 20)); assertEquals(1, FortuneWheel.topCount(5, 20));
+    assertEquals(2, FortuneWheel.topCount(6, 20)); assertEquals(2, FortuneWheel.topCount(10, 20)); assertEquals(3, FortuneWheel.topCount(11, 20));
+    assertEquals(3, FortuneWheel.topCount(10, 30), "no rounding up of 3.0000000004"); assertEquals(0, FortuneWheel.topCount(10, 0)); assertEquals(10, FortuneWheel.topCount(10, 100));
+    assertNull(FortuneWheel.threshold(List.of(), 20, 1));
+    assertEquals(9, FortuneWheel.threshold(List.of(3, 10, 9, 0, 9, 5, 0, 1), 20, 1), "8 → top 2: 10 and 9, the other 9 ties");
+    assertEquals(1, FortuneWheel.threshold(List.of(0, 0, 0), 20, 1), "nobody with a point makes the top");
+    assertEquals(0, FortuneWheel.threshold(List.of(0, 0, 0), 20, 0), "with no minimum everybody ties at 0");
+    assertEquals(5, FortuneWheel.threshold(List.of(3, 10, 9, 0, 9, 5, 0, 1), 50, 1));
   }
 
   @Test void whoIsOnTheWheel() throws Exception {
@@ -77,9 +82,10 @@ class FortuneWheelIntegrationTest {
     long zero = studentRow("w-0", "Ноль", "WH-1"); earn(zero, "JAVA", start, 0);
     long cancelled = studentRow("w-cancel", "Отменённый", "WH-1"); earn(cancelled, "JAVA", start, 1);
     board(cancelled, "CANCELLED", at(start, 20), null);
-    long absent = studentRow("w-absent", "Не пришёл", "WH-1");
+    studentRow("w-absent", "Не пришёл", "WH-1");
     long boardFive = studentRow("w-b5", "Пятёрка у доски", "WH-1"); earn(boardFive, "JAVA", start, 1); board(boardFive, "FINISHED", at(start, 30), "5");
     long boardFour = studentRow("w-b4", "Четвёрка у доски", "WH-1"); earn(boardFour, "JAVA", start, 30); board(boardFour, "FINISHED", at(start, 40), "4");
+    long twice = studentRow("w-b45", "Дважды у доски", "WH-1"); board(twice, "FINISHED", at(start, 41), "5"); board(twice, "FINISHED", at(start, 50), "3");
     long early = studentRow("w-early", "Пятёрка вчера", "WH-1"); earn(early, "JAVA", start, 2); board(early, "FINISHED", start.minus(Duration.ofDays(1)), "5");
     long other = studentRow("w-other", "Чужой", "WH-2"); earn(other, "JAVA", start, 50);
 
@@ -87,33 +93,131 @@ class FortuneWheelIntegrationTest {
     var wheel = read(admin, get("/api/admin/pairs/{id}/wheel", id));
     // Pool (attended, not called): 10, 9, 9, 5, 3, 0, 1 (the cancelled call), 2 (yesterday's 5) → 8 → the top 2 and the tie.
     assertEquals(8, wheel.path("pool").asInt()); assertEquals(2, wheel.path("topCount").asInt()); assertEquals(9, wheel.path("threshold").asInt());
-    assertEquals(List.of("w-out", "w-9a", "w-9b", "w-b5"), wheel.path("candidates").findValuesAsText("login"), "the top by name, then the 5s at the board");
-    assertEquals(List.of("TOP", "TOP", "TOP", "BOARD"), wheel.path("candidates").findValuesAsText("reason"));
+    assertEquals(List.of("w-out", "w-9a", "w-9b", "w-b45", "w-b5"), wheel.path("candidates").findValuesAsText("login"), "the top by name, then the grades at the board");
+    assertEquals(List.of("TOP", "TOP", "TOP", "BOARD", "BOARD"), wheel.path("candidates").findValuesAsText("reason"));
+    assertEquals("5", wheel.path("candidates").get(3).path("grade").asText(), "the best grade of the pair counts");
     assertEquals(List.of("w-b4"), wheel.path("called").findValuesAsText("login"));
     assertEquals(Set.of("w-5", "w-3", "w-0", "w-cancel", "w-absent", "w-early"), new HashSet<>(wheel.path("others").findValuesAsText("login")));
-    assertTrue(wheel.path("spins").isEmpty()); assertEquals("Шоколадка", wheel.path("prize").asText(), "the default before the first spin");
+    assertTrue(wheel.path("runs").isEmpty()); assertEquals("Шоколадка", wheel.path("prize").asText()); assertEquals("ARROW", wheel.path("settings").path("mode").asText());
 
-    var ids = List.of(nine, tie, outsider, boardFive, five);
-    var spin = read(admin, post("/api/admin/pairs/{id}/wheel/spin", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids))));
-    long winner = spin.path("winner").path("userId").asLong();
-    assertEquals(ids.get(spin.path("index").asInt()), winner);
-    assertEquals(1, spin.path("spins").size()); assertEquals(winner, spin.path("spins").get(0).path("userId").asLong()); assertEquals(5, spin.path("spins").get(0).path("names").asInt());
-    assertEquals("Шоколадка", spin.path("prize").asText()); assertEquals("Шоколадка", spin.path("spins").get(0).path("prize").asText());
-    assertEquals(1, read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("spins").size());
-    // A named prize is kept with the spin and offered again next time.
-    var named = read(admin, post("/api/admin/pairs/{id}/wheel/spin", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids, "prize", "  Пятёрка   автоматом "))));
-    assertEquals("Пятёрка автоматом", named.path("prize").asText()); assertEquals(List.of("Шоколадка", "Пятёрка автоматом"), named.path("spins").findValuesAsText("prize"));
-    assertEquals("Пятёрка автоматом", read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("prize").asText());
+    // Settings: a 4 at the board is enough, the top half, no minimum of points.
+    settings(admin, Map.of("boardMinGrade", 4, "topPercent", 50, "minPoints", 0));
+    wheel = read(admin, get("/api/admin/pairs/{id}/wheel", id));
+    assertEquals(4, wheel.path("topCount").asInt()); assertEquals(5, wheel.path("threshold").asInt());
+    assertEquals(List.of("w-out", "w-9a", "w-9b", "w-5", "w-b45", "w-b5", "w-b4"), wheel.path("candidates").findValuesAsText("login"));
 
-    for (var bad : List.of(Map.of("userIds", List.of()), Map.of("userIds", List.of(nine, nine)), Map.of("userIds", List.of(nine, other)), Map.of("userIds", List.of("w-9a")), Map.of(), Map.of("userIds", ids, "prize", "п".repeat(61)), Map.of("userIds", ids, "prize", 5)))
-      expect(admin, post("/api/admin/pairs/{id}/wheel/spin", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(bad)), status().isBadRequest(), "INVALID_WHEEL");
     expect(admin, get("/api/admin/pairs/{id}/wheel", 987_654), status().isNotFound(), "PAIR_NOT_FOUND");
     String student = createStudent("w-student", "Студент", "WH-3");
     expect(student, get("/api/admin/pairs/{id}/wheel", id), status().isBadRequest(), "FORBIDDEN");
-
-    read(admin, delete("/api/admin/pairs/{id}", id));
-    assertEquals(0, count("select count(*) from wheel_spins where pair_id=?", id), "the spins go with the pair");
+    expect(student, get("/api/admin/draw/settings"), status().isBadRequest(), "FORBIDDEN");
+    expect(student, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", List.of(nine)))), status().isBadRequest(), "FORBIDDEN");
   }
+
+  @Test void settingsHaveDefaultsAndNoLimits() throws Exception {
+    String admin = login("admin", "admin-pass");
+    var s = read(admin, get("/api/admin/draw/settings"));
+    assertEquals(6.5, s.path("spinSeconds").asDouble()); assertEquals("ARROW", s.path("mode").asText()); assertEquals(2.0, s.path("eliminationSeconds").asDouble());
+    assertEquals(1, s.path("winners").asInt()); assertFalse(s.path("autoNext").asBoolean()); assertEquals(20.0, s.path("topPercent").asDouble());
+    assertEquals(1, s.path("minPoints").asInt()); assertEquals(5, s.path("boardMinGrade").asInt()); assertEquals("Шоколадка", s.path("defaultPrize").asText());
+    assertTrue(s.path("surprisePrize").asBoolean()); assertTrue(s.path("sound").asBoolean()); assertEquals(70, s.path("volume").asInt());
+    assertEquals(6.5, s.path("defaults").path("spinSeconds").asDouble());
+
+    var saved = settings(admin, Map.of("spinSeconds", 600, "eliminationSeconds", 0.3, "winners", 40, "mode", "ELIMINATION", "autoNext", true, "defaultPrize", "  Кофе  ", "unknown", 1));
+    assertEquals(600.0, saved.path("spinSeconds").asDouble()); assertEquals(0.3, saved.path("eliminationSeconds").asDouble()); assertEquals(40, saved.path("winners").asInt());
+    assertEquals("ELIMINATION", saved.path("mode").asText()); assertTrue(saved.path("autoNext").asBoolean()); assertEquals("Кофе", saved.path("defaultPrize").asText());
+    assertFalse(saved.has("unknown"));
+    assertEquals(600.0, read(admin, get("/api/admin/draw/settings")).path("spinSeconds").asDouble(), "kept");
+    assertEquals("Шоколадка", settings(admin, Map.of("defaultPrize", " ")).path("defaultPrize").asText(), "an empty prize is the chocolate");
+
+    for (var bad : List.<Map<String, Object>>of(Map.of("spinSeconds", -1), Map.of("winners", 0), Map.of("winners", 1.5), Map.of("mode", "SLOT"), Map.of("topPercent", 101),
+        Map.of("boardMinGrade", 6), Map.of("volume", 120), Map.of("sound", "да"), Map.of("spinSeconds", "fast")))
+      expect(admin, put("/api/admin/draw/settings").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(bad)), status().isBadRequest(), "INVALID_DRAW_SETTINGS");
+    assertEquals(600.0, read(admin, get("/api/admin/draw/settings")).path("spinSeconds").asDouble(), "a refused save changes nothing");
+  }
+
+  @Test void arrowRunsPickWinnersOneByOneAndReplaceAnAbsentOne() throws Exception {
+    String admin = login("admin", "admin-pass");
+    Instant start = Instant.parse("2042-03-05T08:00:00Z");
+    var ids = new ArrayList<Long>(); for (int i = 0; i < 5; i++) ids.add(studentRow("ar-" + i, "Стрелка " + i, "AR-1"));
+    long id = save(admin, "AR-1", "JAVA", start);
+    settings(admin, Map.of("winners", 2));
+
+    var run = read(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids, "prize", "  Кофе   с преподавателем ")))).path("run");
+    long runId = run.path("id").asLong();
+    assertEquals("ARROW", run.path("mode").asText()); assertEquals(2, run.path("winners").asInt()); assertEquals("Кофе с преподавателем", run.path("prize").asText());
+    assertEquals(ids, longs(run.path("wheel"))); assertFalse(run.path("finished").asBoolean());
+
+    var first = step(admin, id, runId); long w1 = first.path("pick").path("userId").asLong();
+    assertEquals("WIN", first.path("pick").path("kind").asText()); assertEquals(List.of(w1), longs(first.path("won")));
+    assertFalse(longs(first.path("run").path("wheel")).contains(w1), "a winner leaves the wheel"); assertFalse(first.path("run").path("finished").asBoolean());
+    var second = step(admin, id, runId); long w2 = second.path("pick").path("userId").asLong();
+    assertNotEquals(w1, w2); assertTrue(second.path("run").path("finished").asBoolean()); assertEquals(3, second.path("run").path("wheel").size());
+    expect(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/step", id, runId), status().isBadRequest(), "DRAW_FINISHED");
+
+    // The first winner is not in class: one more step draws a replacement among those who have not won.
+    var absent = read(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/absent", id, runId).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", w1)))).path("run");
+    assertFalse(absent.path("finished").asBoolean()); assertEquals(3, absent.path("wheel").size());
+    long w3 = step(admin, id, runId).path("pick").path("userId").asLong();
+    assertFalse(List.of(w1, w2).contains(w3));
+    var runs = read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("runs");
+    assertEquals(1, runs.size()); assertEquals(List.of(w1, w2, w3), longs(runs.get(0).path("wins").findValues("userId")));
+    assertEquals(List.of(true, false, false), runs.get(0).path("wins").findValues("absent").stream().map(JsonNode::asBoolean).toList());
+    expect(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/absent", id, runId).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", w1))), status().isBadRequest(), "INVALID_WHEEL");
+
+    for (var bad : List.<Map<String, Object>>of(Map.of("userIds", List.of()), Map.of("userIds", List.of(ids.get(0), ids.get(0))), Map.of("userIds", List.of("ar-0")), Map.of(),
+        Map.of("userIds", ids, "prize", "п".repeat(201)), Map.of("userIds", ids, "prize", 5)))
+      expect(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(bad)), status().isBadRequest(), "INVALID_WHEEL");
+    long stranger = studentRow("ar-other", "Чужой", "AR-2");
+    expect(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", List.of(stranger)))), status().isBadRequest(), "INVALID_WHEEL");
+    expect(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/step", id, 987_654), status().isNotFound(), "DRAW_NOT_FOUND");
+
+    // Deleting a run deletes its steps; deleting the pair deletes its runs.
+    var deleted = read(admin, delete("/api/admin/pairs/{id}/wheel/runs/{run}", id, runId));
+    assertTrue(deleted.path("runs").isEmpty()); assertEquals(0, count("select count(*) from draw_steps where run_id=?", runId));
+    long again = read(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids)))).path("run").path("id").asLong();
+    step(admin, id, again);
+    read(admin, delete("/api/admin/pairs/{id}", id));
+    assertEquals(0, count("select count(*) from draw_runs where pair_id=?", id)); assertEquals(0, count("select count(*) from draw_steps where run_id=?", again));
+  }
+
+  @Test void eliminationDropsNamesUntilTheWinnersAreLeft() throws Exception {
+    String admin = login("admin", "admin-pass");
+    Instant start = Instant.parse("2043-04-05T08:00:00Z");
+    var ids = new ArrayList<Long>(); for (int i = 0; i < 6; i++) ids.add(studentRow("el-" + i, "Выбывание " + i, "EL-1"));
+    long id = save(admin, "EL-1", "JAVA", start);
+    settings(admin, Map.of("mode", "ELIMINATION", "winners", 2, "defaultPrize", "Кофе"));
+    var run = read(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids)))).path("run");
+    long runId = run.path("id").asLong(); assertEquals("Кофе", run.path("prize").asText(), "the default prize of the settings");
+    var outs = new ArrayList<Long>();
+    for (int k = 0; k < 3; k++) {
+      var s = step(admin, id, runId);
+      assertEquals("OUT", s.path("pick").path("kind").asText()); assertTrue(s.path("won").isEmpty()); outs.add(s.path("pick").path("userId").asLong());
+      assertEquals(5 - k, s.path("run").path("wheel").size()); assertFalse(s.path("run").path("finished").asBoolean());
+    }
+    var last = step(admin, id, runId); outs.add(last.path("pick").path("userId").asLong());
+    assertEquals("OUT", last.path("pick").path("kind").asText()); assertEquals(2, last.path("won").size(), "the two left win with the decisive drop-out");
+    assertTrue(last.path("run").path("finished").asBoolean()); assertEquals(outs, longs(last.path("run").path("outs")));
+    var winners = longs(last.path("won")); assertTrue(Collections.disjoint(winners, outs));
+
+    // A winner is absent: every name that has not won is back on the wheel and the next step picks a winner.
+    var absent = read(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/absent", id, runId).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", winners.get(0))))).path("run");
+    assertTrue(absent.path("replacing").asBoolean()); assertEquals(new HashSet<>(outs), new HashSet<>(longs(absent.path("wheel"))));
+    var replacement = step(admin, id, runId);
+    assertEquals("WIN", replacement.path("pick").path("kind").asText()); assertTrue(outs.contains(replacement.path("pick").path("userId").asLong()));
+    assertTrue(replacement.path("run").path("finished").asBoolean());
+
+    // Fewer names than winners: the first step makes them all winners without a drop-out.
+    var small = read(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", ids.subList(0, 2))))).path("run").path("id").asLong();
+    var all = step(admin, id, small);
+    assertTrue(all.path("pick").isNull()); assertEquals(2, all.path("won").size()); assertTrue(all.path("run").path("finished").asBoolean());
+  }
+
+  private JsonNode settings(String admin, Map<String, Object> values) throws Exception {
+    return read(admin, put("/api/admin/draw/settings").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(values)));
+  }
+  private JsonNode step(String admin, long pair, long run) throws Exception { return read(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/step", pair, run)); }
+  private static List<Long> longs(JsonNode array) { var list = new ArrayList<Long>(); array.forEach(n -> list.add(n.asLong())); return list; }
+  private static List<Long> longs(List<JsonNode> nodes) { return nodes.stream().map(JsonNode::asLong).toList(); }
 
   private void board(long user, String status, Instant calledAt, String grade) {
     db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade) values(?,'WH-1','JAVA',?,?,?,?)",

@@ -11,6 +11,7 @@ import { BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen
 import { StudentSessionCard } from './session'
 import { StationScreen } from './station'
 import { LlmSettingsView } from './settings'
+import { DrawSettingsView } from './wheel'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
 import { DangerFrame, HardModeDialog, HardModeSwitch, HeaderTapes } from './hardmode'
 import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
@@ -1030,14 +1031,14 @@ function TeacherPage({ request, onBecomeStation }: { request: Request; onBecomeS
     {tab('pairs', 'chart', 'Работа на паре', 'На паре')}
     {tab('board', 'flag', 'К доске', 'К доске')}
     {tab('llm', 'chart', 'Аналитика LLM', 'LLM')}
-    {tab('settings', 'sparkle', 'Настройки LLM', 'Настройки')}
+    {tab('settings', 'sparkle', 'Настройки LLM и жребия', 'Настройки')}
   </nav>
   const groupList = students ? groupCounts(students, s => s.group).groups.map(g => g.name) : null
   if (view === 'progress') return <>{tabs}<ProgressAnalytics request={request} onOpenStudent={openStudent} focus={progressFocus} /></>
   if (view === 'pairs') return <>{tabs}<PairWork request={request} groups={groupList} /></>
   if (view === 'board') return <>{tabs}<BoardAdmin request={request} groups={groupList} onBecomeStation={onBecomeStation} /></>
   if (view === 'llm') return <>{tabs}<LlmAnalytics request={request} /></>
-  if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /></>
+  if (view === 'settings') return <>{tabs}<LlmSettingsView request={request} /><DrawSettingsView request={request} /></>
   const counts = groupCounts(students ?? [], s => s.group)
   const groupNames = counts.groups.map(g => g.name)
   const visible = students?.filter(s => inGroup(groupFilter, s.group)) ?? null

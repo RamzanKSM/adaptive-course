@@ -90,6 +90,13 @@ class the teacher calls students one by one to a short individual test, projecte
   (owner's choice) — unlike the pair's own analytics. The teacher names the prize (owner, same day; default «Шоколадка»,
   the last one is offered again); it is shown on the wheel and kept with the spin. Renamed «Жребий» the same day: the
   owner wanted a halal name instead of «Колесо фортуны» (drawing lots, no stake; code names stay `FortuneWheel`, `wheel_*`).
+- Settings of «Жребий» (owner, same day): spin time, format «Стрелка» / «Выбывание» (the name under the arrow drops out
+  until the winners are left; the decisive drop-out takes the full spin time), drop-out time, number of winners, every
+  spin started by the teacher's button (or «сама»), top share, minimum points, the grade at the board, default prize,
+  «приз-сюрприз» (hidden on the projector until the winners are known — the owner's idea), sounds and volume. The owner
+  wants no limits on the values, only defaults, and rejected leaving out recent winners. A winner not in class is marked
+  «Нет на паре» and a replacement is drawn from every name that has not won; runs can be deleted. Every step is picked by
+  the server when it is spun (`draw_runs`, `draw_steps`, V34).
 
 ## Teacher analytics and the session (since 2026-10-13)
 - Status by a global plan line (owner, 2026-10-22): the individual needed pace (remaining / weeks left vs the recent

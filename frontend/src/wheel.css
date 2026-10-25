@@ -1,4 +1,4 @@
-/* «Жребий» of a saved pair: the teacher's list (.wheel-panel) and the projected wheel (.wheel-stage). */
+/* «Жребий» of a saved pair: the teacher's list (.wheel-panel), the settings and the projected wheel (.wheel-stage). */
 .wheel-panel { margin-top: 16px; display: grid; gap: 12px; }
 .wheel-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .wheel-people li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
@@ -11,7 +11,6 @@
 .wheel-add input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px rgb(var(--brand-rgb) / .14); }
 .wheel-add select { padding: 9px 12px; border-radius: 11px; font-size: 14px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font-weight: 650; cursor: pointer; }
 .wheel-add select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px rgb(var(--brand-rgb) / .14); }
-.wheel-history { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pill.wheel-winner-pill { background: var(--warn-soft); color: var(--warn-ink); font-size: 12px; }
 
 .wheel-stage { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-rows: auto 1fr auto; justify-items: center; gap: 12px; padding: 20px 16px 28px;
@@ -22,7 +21,7 @@
 .wheel-prize { margin: 0; font-size: clamp(15px, 1.8vw, 22px); opacity: .9; }
 .wheel-prize b { color: #ffd43b; }
 .wheel-title { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 3.4vw, 40px); letter-spacing: -.01em; }
-.wheel-area { position: relative; width: min(62vh, 88vw); aspect-ratio: 1; align-self: center; margin-top: 14px; }
+.wheel-area { position: relative; width: min(58vh, 88vw); aspect-ratio: 1; align-self: center; margin-top: 14px; }
 .wheel-disc { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 0 0 8px #fff, 0 0 60px 10px rgb(255 107 214 / .35);
   transition-property: transform; transition-timing-function: cubic-bezier(.12, .62, .08, 1); will-change: transform; }
 .wheel-disc svg { width: 100%; height: 100%; display: block; }
@@ -32,7 +31,6 @@
 .wheel-bottom { min-height: 150px; display: grid; place-items: center; }
 .wheel-spin { font-size: clamp(20px, 2.6vw, 30px); padding: 16px 48px; border-radius: 18px; }
 .wheel-result { position: relative; display: grid; justify-items: center; gap: 8px; text-align: center; animation: wheel-pop 420ms var(--ease-spring); }
-.wheel-result .burst { left: 50%; top: 40%; }
 .wheel-result-label { font-size: clamp(14px, 1.6vw, 20px); opacity: .8; }
 .wheel-result-name { font-family: var(--font-display); font-size: clamp(28px, 4.4vw, 56px); line-height: 1.05; color: #ffd43b; }
 .wheel-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 6px; }
@@ -40,3 +38,41 @@
 @keyframes wheel-pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .wheel-result { animation: none; } }
 @media (max-width: 520px) { .wheel-people li { flex-wrap: wrap; } }
+
+/* Settings, the run history and the stage's steps (2026-10-25). */
+.draw-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.draw-summary .row-link { margin-left: 4px; }
+.draw-settings-inline { border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 16px 12px; }
+.draw-settings-page { margin-top: 18px; }
+.draw-prize-input { padding: 9px 12px; border-radius: 11px; font-size: 14px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font-weight: 650; min-width: 220px; }
+.draw-volume { display: flex; align-items: center; gap: 10px; }
+.draw-volume input[type=range] { width: 160px; accent-color: var(--brand); }
+.draw-history { display: grid; gap: 6px; }
+.draw-run { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.draw-run-winners { display: flex; flex-wrap: wrap; gap: 4px 10px; font-weight: 700; }
+.draw-run-winners .absent { text-decoration: line-through; color: var(--muted); font-weight: 500; }
+.draw-run > .icon-button, .draw-run-confirm { margin-left: auto; }
+.draw-run-confirm { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.draw-run-confirm button { padding: 5px 10px; font-size: 13px; }
+
+.wheel-full { position: absolute; top: 14px; left: 14px; padding: 9px 14px; border-radius: 99px; background: rgb(255 255 255 / .1); color: #fff;
+  border: 1px solid rgb(255 255 255 / .25); font-weight: 700; font-size: 14px; }
+.wheel-seg-leaving { animation: wheel-leave 900ms ease-in-out; }
+@keyframes wheel-leave { 0%, 100% { opacity: 1; } 25%, 75% { opacity: .25; } 50% { opacity: 1; } }
+.wheel-prize.revealed b { display: inline-block; animation: wheel-pop 520ms var(--ease-spring); }
+.wheel-progress { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.wheel-message { margin: 0; font-size: clamp(18px, 2.4vw, 30px); }
+.wheel-message b { color: #ffd43b; }
+.wheel-so-far { margin: 0; font-size: clamp(14px, 1.6vw, 20px); opacity: .85; }
+.wheel-auto { opacity: .7; }
+.wheel-bottom { position: relative; }
+.wheel-bottom > .burst { left: 50%; top: 30%; }
+.wheel-winners { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 28px; }
+.wheel-winner { display: flex; align-items: center; gap: 10px; }
+.wheel-result-name.small { font-size: clamp(22px, 3vw, 38px); }
+.wheel-seg-dim { opacity: .3; transition: opacity 600ms; }
+.wheel-seg-win { animation: wheel-glow 1.4s ease-in-out infinite; }
+@keyframes wheel-glow { 50% { filter: brightness(1.25); } }
+.wheel-result-prize { color: #ffd43b; }
+.wheel-absent { padding: 3px 10px; border-radius: 99px; font-size: 12px; background: transparent; color: rgb(255 255 255 / .7); border: 1px solid rgb(255 255 255 / .3); }
+@media (prefers-reduced-motion: reduce) { .wheel-seg-leaving, .wheel-seg-win, .wheel-prize.revealed b { animation: none; } }
