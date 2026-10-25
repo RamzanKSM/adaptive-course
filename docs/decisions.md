@@ -88,7 +88,8 @@ class the teacher calls students one by one to a short individual test, projecte
   rounded up, ties at the border pass, the projected wheel shows names only (no ranking for students), the teacher may
   add or remove names, the server picks and keeps the winner. Test accounts and students outside the session take part
   (owner's choice) — unlike the pair's own analytics. The teacher names the prize (owner, same day; default «Шоколадка»,
-  the last one is offered again); it is shown on the wheel and kept with the spin.
+  the last one is offered again); it is shown on the wheel and kept with the spin. Renamed «Жребий» the same day: the
+  owner wanted a halal name instead of «Колесо фортуны» (drawing lots, no stake; code names stay `FortuneWheel`, `wheel_*`).
 
 ## Teacher analytics and the session (since 2026-10-13)
 - Status by a global plan line (owner, 2026-10-22): the individual needed pace (remaining / weeks left vs the recent

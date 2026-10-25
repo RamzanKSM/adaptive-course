@@ -238,7 +238,7 @@ function SavedActions({ pair, busy, onWheel, onRecalculate, onDelete }: { pair: 
     </div>
   </div>
   return <>
-    <button type="button" className="primary" disabled={!!busy} onClick={onWheel} title="Шоколадка: колесо из пятёрок у доски и топ‑20% по задачам за пару"><Icon name="sparkle" size={16} />Колесо фортуны</button>
+    <button type="button" className="primary" disabled={!!busy} onClick={onWheel} title="Шоколадка: колесо из пятёрок у доски и топ‑20% по задачам за пару"><Icon name="sparkle" size={16} />Жребий</button>
     <button type="button" className="ghost" disabled={!!busy} onClick={onRecalculate} title="Заново посчитать задачи, посещение, активность и медиану (например, после отзыва зачёта)">
       {busy === 'recalculate' ? <span className="spinner" aria-hidden="true" /> : <Icon name="refresh" size={16} />}Пересчитать</button>
     <button type="button" className="ghost danger" disabled={!!busy} onClick={() => setConfirming(true)}><Icon name="x" size={16} />Удалить</button>

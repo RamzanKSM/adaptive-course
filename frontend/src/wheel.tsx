@@ -41,10 +41,10 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
   const names = chosen.map(id => byId.get(id)).filter((p): p is Person => !!p)
   const prizeName = prize.trim().replace(/\s+/g, ' ') || DEFAULT_PRIZE
 
-  return <section className="card wheel-panel enter" aria-label="Колесо фортуны">
+  return <section className="card wheel-panel enter" aria-label="Жребий">
     <div className="chart-head">
       <div>
-        <p className="eyebrow">Колесо фортуны</p>
+        <p className="eyebrow">Жребий</p>
         <h2 className="card-title">Кто крутится за приз</h2>
       </div>
       <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
@@ -143,9 +143,9 @@ function WheelStage({ pairId, people, prize, request, onSpun, onClose }: { pairI
   /** Per name: as large as the segment allows, but the name must fit between the hub and the rim (bold glyph ≈ 0.68 em). */
   const fontOf = (lines: string[]) => Math.max(11, Math.min(30, Math.floor(seg * 1.6 / lines.length),
     Math.floor(NAME_SPACE / (0.62 * Math.max(...lines.map(l => l.length), 4)))))
-  return <div ref={ref} className="wheel-stage" role="dialog" aria-modal="true" aria-label="Колесо фортуны">
+  return <div ref={ref} className="wheel-stage" role="dialog" aria-modal="true" aria-label="Жребий">
     <button type="button" className="wheel-close" aria-label="Закрыть колесо" onClick={close}><Icon name="x" size={22} /></button>
-    <div className="wheel-head"><h2 className="wheel-title">Колесо фортуны <span>{prizeIcon(prize)}</span></h2><p className="wheel-prize">Разыгрываем: <b>{prize}</b></p></div>
+    <div className="wheel-head"><h2 className="wheel-title">Жребий <span>{prizeIcon(prize)}</span></h2><p className="wheel-prize">Разыгрываем: <b>{prize}</b></p></div>
     <div className="wheel-area">
       <div className="wheel-pointer" aria-hidden="true" />
       <div className="wheel-disc" style={{ transform: `rotate(${rotation}deg)`, transitionDuration: reduced ? '0ms' : `${SPIN_MS}ms` } as CSSProperties}

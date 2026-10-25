@@ -12,12 +12,12 @@ import java.util.*;
 import java.util.random.RandomGenerator;
 
 /**
- * «Колесо фортуны» of a saved pair: a prize (a chocolate unless the teacher names another) for one student among those
+ * «Жребий» (a wheel; «Колесо фортуны» before the owner renamed it) of a saved pair: a prize (a chocolate unless the teacher names another) for one student among those
  * who earned a chance — a 5 at the board in the pair's window, or the top {@link #TOP_PERCENT}% by the pair's points
  * among the attended students not called to the board (at least one point; ties at the border pass). Every student of
  * the group takes part, whether in the session or not. The teacher may add or remove names before the spin; the server
  * picks the winner and keeps the spin. The projected wheel shows names and the prize only. The rules:
- * backend/README.md, «Колесо фортуны».
+ * backend/README.md, «Жребий».
  */
 @Component
 class FortuneWheel {
