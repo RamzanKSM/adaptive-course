@@ -49,6 +49,7 @@ public class Verify {
         TaskVerifier.Verified verified = verifier.verify(language, task);
         ObjectNode row = out.addObject();
         row.put("key", key); row.put("language", language.name()); row.put("skill", skill); row.put("difficulty", t.path("difficulty").asInt());
+        row.put("mode", t.path("mode").asText("NORMAL")); // RETAKE: the re-take pool, only «Повторить тему» takes it
         row.put("title", t.path("title").asText()); row.put("statement", t.path("statement").asText()); row.put("starter", t.path("starter").asText());
         row.put("testSource", verified.testSource()); row.put("testFileName", t.path("testFileName").asText()); row.put("goalJson", verified.goalJson());
         row.put("reference", t.path("reference").asText()); // the test at the board: «Собери программу», «Исправь ошибку»

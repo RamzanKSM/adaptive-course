@@ -151,6 +151,14 @@ class the teacher calls students one by one to a short individual test, projecte
 - Visibility (pedagogy agreed with the owner): projected «Показ группе» = anonymous group aggregates only, no counts of
   students behind; students never get rankings or group medians; no CSV export (not needed).
 
+## Topic re-take («Повторить тему», 2026-10-27…28)
+Several students asked to go through topics again. Agreed with the owner:
+- Any closed topic, mastered by practice or confirmed by the diagnostic. A re-take is a series of 3 tasks, difficulty 1 → 2 → 3, inside the current lesson. It is allowed at any moment, with no caps. A student behind the plan line gets a soft hint («сначала лучше пройти новые») and is not blocked.
+- A re-take never changes the topic's practice progress. That means iterations, mastery, closed topics, pace, the plan line, the forecast, the board range, hard-mode readiness and grades all stay as they are. Its solved tasks count in the solved number and XP (+10 each, no iteration/mastery bonus), and in the pair's points and «Жребий» (owner: «считать в очках пары»).
+- Topics confirmed by the diagnostic have 0 iterations; a re-take of one must not start them either.
+- «Заполни банк ещё и для повторного прохождения»: a separate re-take pool, 3 new stories per topic (one per difficulty) × 3 variants (`tasks.mode='RETAKE'`). Regular lessons and «К доске» never take it, otherwise mastery would use it up and re-takes would get «the same task with other numbers» again. Order: the pool's and the bank's unsolved stories, then generation, then a variant of the story solved longest ago, marked «похожая на решённую».
+- The lesson's unsolved task waits during a re-take and comes back afterwards. Teacher screens change minimally: a chip on re-take tasks in the lesson review and a count in the student card.
+
 ## Task bank and selection
 - 2026-10-14: a second story per topic and difficulty (18 tasks per topic, 1224 total) and story-aware selection:
   students complained about «the same task again with other numbers». Variants of a story are per student, so

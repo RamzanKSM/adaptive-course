@@ -2,7 +2,7 @@ import { createContext, CSSProperties, FormEvent, KeyboardEvent, useCallback, us
 import CodeMirror from '@uiw/react-codemirror'
 import { EDITOR_EXTENSIONS, FALLBACK_CODE, Markdown } from './editor'
 import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './api'
-import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, iterationTasks, parseDate, skillPercent, skillStarted, streak, XP } from './game'
+import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, iterationTasks, parseDate, skillClosed, skillPercent, skillStarted, streak, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
 import { ProgressAnalytics } from './progress'
@@ -15,7 +15,7 @@ import { DrawSettingsView } from './wheel'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
 import { DangerFrame, HardModeDialog, HardModeSwitch, HeaderTapes } from './hardmode'
 import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
-import type { ActiveLesson, Attempt, BoardFormat, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
+import type { ActiveLesson, Attempt, BoardFormat, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, Retake, RetakeHistory, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
 
 const UNKNOWN = 'Не знаю'
 const fmt = (value?: string | null) => {
@@ -406,8 +406,14 @@ function StudentPage({ request }: { request: Request }) {
     if (!next) return setState('failed')
     // Finished elsewhere (another tab, the teacher, a logout, inactivity) while the task was being prepared.
     if (next.reason === 'LESSON_FINISHED') { setLesson(null); setEnded({ reason: next.lesson?.finishReason ?? null, minutes: next.lesson?.idleMinutes || idleMinutes.current }); return setState('ready') }
+    if (next.retakeDone) { toast(retakeToast(next.retakeDone)); loadProgress() }
     armIdle(next.lesson); setEnded(null); setLesson(next); setState('ready')
-  }, [request, loadProgress, course.id, armIdle])
+  }, [request, loadProgress, course.id, armIdle, toast])
+  /** «Повторить»: starts a re-take of a closed topic (and a lesson if none is open) and shows its first task. */
+  const startRetake = useCallback(async (skillCode: string) => {
+    const started = await request(() => post<{ retake: Retake }>('/retakes', { language: course.id, skillCode }))
+    if (started) { setTab('lesson'); load() }
+  }, [request, course.id, load])
   useEffect(() => { load() }, [load])
   // Responses that arrive after the page is gone (logout, course switch) are ignored.
   useEffect(() => () => { loadId.current++ }, [])
@@ -488,11 +494,11 @@ function StudentPage({ request }: { request: Request }) {
     {idleWarning && openId !== null && <div className="lesson-notice warn" role="alert"><Icon name="clock" size={18} /><span>Урок завершится через 3 минуты: нет запусков кода, отправок и сообщений помощнику. Запусти код или напиши помощнику, чтобы продолжить.</span></div>}
     {ended && !lesson && <div className="lesson-notice" role="status"><Icon name="flag" size={18} /><span>{lessonEndText(ended)}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setEnded(null)}><Icon name="x" size={16} /></button></div>}
     {/* Both tabs stay mounted so switching to progress does not discard the code in the editor. */}
-    <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} otherProgress={otherProgress} /></div>
+    <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} otherProgress={otherProgress} onRetake={startRetake} /></div>
     <div hidden={tab !== 'lesson'} className={tab === 'lesson' ? 'enter' : ''}>
       {state === 'loading' ? <LessonSkeleton lesson={preparing} request={request} onFinished={load} />
         : state === 'failed' ? <section className="empty-state enter"><h2 className="title">Не удалось загрузить урок</h2><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
-          : <LessonActivity.Provider value={activity}><LessonView lesson={lesson} skillProgress={currentSkill} request={request} refresh={load} onProgress={onProgress} /></LessonActivity.Provider>}
+          : <LessonActivity.Provider value={activity}><LessonView lesson={lesson} skillProgress={currentSkill} progress={progress} request={request} refresh={load} onProgress={onProgress} onRetake={startRetake} /></LessonActivity.Provider>}
     </div>
   </>
 }
@@ -621,9 +627,14 @@ function LessonSkeleton({ lesson, request, onFinished }: { lesson: Lesson | null
   </section>
 }
 
-function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { lesson: LearningNext | null; skillProgress?: SkillProgress; request: Request; refresh: () => void; onProgress: (skills: SkillProgress[]) => void }) {
+function LessonView({ lesson, skillProgress, progress, request, refresh, onProgress, onRetake }: { lesson: LearningNext | null; skillProgress?: SkillProgress; progress: Progress | null; request: Request; refresh: () => void; onProgress: (skills: SkillProgress[]) => void; onRetake: (skillCode: string) => void }) {
   const [working, setWorking] = useState(false)
   const course = useCourse()
+  const toast = useToast()
+  async function endRetake(retake: Retake) {
+    setWorking(true); const ended = await request(() => post<{ retake: Retake }>(`/retakes/${retake.id}/finish`)); setWorking(false)
+    if (ended) { toast(retakeToast(ended.retake)); refresh() }
+  }
   async function start() { setWorking(true); const started = await request(() => post<{ lesson: Lesson }>(withCourse('/lessons/start', course.id))); setWorking(false); if (started) refresh() }
   async function finish(current: Lesson, hasTask: boolean) {
     if (hasTask && !window.confirm('Текущая задача ещё не решена. Завершить урок?')) return
@@ -653,12 +664,18 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
       </div>
       <button className="ghost" disabled={working} onClick={() => finish(lesson.lesson, !!lesson.task)}>{working ? <><Spinner /> Завершаем…</> : <><Icon name="flag" size={16} /> Завершить урок</>}</button>
     </div>
+    {lesson.retake && <div className="retake-plate enter" role="status">
+      <Icon name="refresh" size={18} />
+      <span><b>Повторение</b> · {lesson.retake.skillTitle} · {Math.min(lesson.retake.given, lesson.retake.total)} из {lesson.retake.total}
+        {lesson.retake.similar && <span className="retake-similar" title="Новых задач по этой теме пока нет — это та же история с другими числами">похожая на решённую</span>}</span>
+      <button className="ghost small-button" disabled={working} onClick={() => endRetake(lesson.retake!)}>Закончить повторение</button>
+    </div>}
     {lesson.explanation && <article className="card explanation enter">
       <h2 className="card-title"><span className="chip-icon"><Icon name="book" size={16} /></span> Объяснение</h2>
       <Markdown>{lesson.explanation.content}</Markdown>
     </article>}
     {lesson.task
-      ? <TaskWorkspace key={lesson.task.id} task={lesson.task} skillProgress={skillProgress} llm={lesson.llm} request={request} onNext={refresh} onProgress={onProgress} />
+      ? <TaskWorkspace key={lesson.task.id} task={lesson.task} skillProgress={lesson.retake ? undefined : skillProgress} llm={lesson.llm} request={request} onNext={refresh} onProgress={onProgress} />
       : <div className="lesson-grid enter">
         <article className={`card task empty-task ${finished ? 'done' : ''}`}>
           {finished && <span className="empty-icon success"><Icon name={lesson.reason === 'COURSE_COMPLETE' ? 'award' : 'check'} size={28} /></span>}
@@ -666,6 +683,7 @@ function LessonView({ lesson, skillProgress, request, refresh, onProgress }: { l
           <h2 className="title">{lesson.reason === 'COURSE_COMPLETE' ? 'Курс пройден' : finished ? 'Урок можно завершить' : 'Задача ещё не подготовлена'}</h2>
           <p className="muted">{emptyMessage}</p>
           {retryable && <button className="secondary" onClick={refresh}><Icon name="refresh" /> Повторить</button>}
+          {(lesson.reason === 'NO_DUE_SKILL' || lesson.reason === 'COURSE_COMPLETE') && progress && <RetakeChoices progress={progress} onRetake={onRetake} />}
         </article>
         <Chat llm={lesson.llm} request={request} />
       </div>}
@@ -902,7 +920,7 @@ const TOPIC_FILTERS: { id: 'todo' | 'confirmed' | 'mastered' | 'all'; label: str
   { id: 'all', label: 'Все', match: () => true },
 ]
 
-function ProgressView({ progress, otherProgress }: { progress: Progress | null; otherProgress: Partial<Record<CourseLanguage, Progress>> }) {
+function ProgressView({ progress, otherProgress, onRetake }: { progress: Progress | null; otherProgress: Partial<Record<CourseLanguage, Progress>>; onRetake: (skillCode: string) => void }) {
   const [filter, setFilter] = useState<(typeof TOPIC_FILTERS)[number]['id']>('todo')
   const course = useCourse()
   const list = useMemo(() => progress ? achievements(progress, course.id) : [], [progress, course.id])
@@ -931,14 +949,15 @@ function ProgressView({ progress, otherProgress }: { progress: Progress | null; 
     <h2 className="section-title">Темы</h2>
     <div className="topic-filters" role="tablist" aria-label="Темы">{TOPIC_FILTERS.map(f => <button key={f.id} role="tab" aria-selected={f.id === filter} className={f.id === filter ? 'active' : ''} onClick={() => setFilter(f.id)}>
       {f.label}<span className="tabular">{counts[f.id]}</span></button>)}</div>
+    {skills.some(skillClosed) && <RetakeLagHint progress={progress} />}
     <div className="card skills">{skills.length
-      ? skills.map(skill => <TopicRow key={skill.skillCode} skill={skill} />)
+      ? skills.map(skill => <TopicRow key={skill.skillCode} skill={skill} retake={progress.retakes?.find(r => r.skillCode === skill.skillCode)} lag={lagOf(progress)} onRetake={onRetake} />)
       : <p className="muted">{filter === 'todo' ? 'Все темы закрыты — практикой или диагностикой. Отличная работа!' : filter === 'confirmed' ? 'Диагностика пока не подтвердила ни одной темы.' : filter === 'mastered' ? 'Пока ни одна тема не освоена полностью: для этого нужны три итерации на разных уроках.' : 'Тем пока нет.'}</p>}</div>
   </section>
 }
 
 /** Practice progress and the diagnostic result side by side; a confirmed topic is never drawn as practiced. */
-function TopicRow({ skill }: { skill: SkillProgress }) {
+function TopicRow({ skill, retake, lag, onRetake }: { skill: SkillProgress; retake?: RetakeHistory; lag: number; onRetake: (skillCode: string) => void }) {
   const state = skillState(skill)
   const diagnostic = skill.diagnosticTotal ? `${skill.diagnosticCorrect ?? 0}/${skill.diagnosticTotal}` : null
   return <div className={`skill-row ${state}`}>
@@ -949,7 +968,41 @@ function TopicRow({ skill }: { skill: SkillProgress }) {
     <small className="tabular topic-meta">
       {state === 'mastered' ? 'Освоено практикой' : state === 'confirmed' ? null : `Итерации ${skill.completedIterations}/${ITERATIONS} · задачи ${skill.iterationSuccesses}/${iterationTasks(skill.completedIterations)}`}
       {diagnostic && <span className={`diag-chip ${skill.confirmedByDiagnostic ? 'ok' : 'gap'}`} title="Результат первичной диагностики по теме">диагностика {diagnostic}</span>}
+      {retake && <span className="retake-meta">{retakeTimes(retake)}</span>}
+      {skillClosed(skill) && <button className="secondary retake-button" onClick={() => onRetake(skill.skillCode)} title={lag > 0 ? lagText(lag) : 'Три задачи по теме: от простой к сложной. На освоение темы не влияет.'}><Icon name="refresh" size={14} /> Повторить</button>}
     </small>
+  </div>
+}
+
+/** The plan line's lag of the student (positive — topics behind), 0 without a plan. */
+const lagOf = (progress: Progress) => Math.max(0, progress.session?.lag ?? 0)
+const lagText = (lag: number) => `Ты отстаёшь от плана на ${lag} ${plural(lag, 'тему', 'темы', 'тем')} — сначала лучше пройти новые.`
+function plural(n: number, one: string, few: string, many: string) { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many }
+const retakeTimes = (r: RetakeHistory) => `Повторено ${r.times} ${plural(r.times, 'раз', 'раза', 'раз')} · последний раз ${parseDate(r.lastAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`
+const retakeToast = (r: Retake) => ({ tone: 'reward' as const, icon: 'refresh' as const, title: `Повторение пройдено: ${r.passed} из ${r.total}`, text: r.skillTitle })
+
+/** A soft hint for a student behind the plan line: re-takes are allowed, new topics come first. */
+function RetakeLagHint({ progress }: { progress: Progress }) {
+  const lag = lagOf(progress)
+  return lag > 0 ? <p className="retake-hint"><Icon name="clock" size={15} /> {lagText(lag)} Повторить пройденную тему можно в любой момент.</p> : null
+}
+
+/** Closed topics to re-take when the lesson has nothing due: the ones re-taken least recently (never first) on top. */
+function RetakeChoices({ progress, onRetake }: { progress: Progress; onRetake: (skillCode: string) => void }) {
+  const [all, setAll] = useState(false)
+  const last = (code: string) => progress.retakes?.find(r => r.skillCode === code)?.lastAt ?? ''
+  const closed = progress.skills.filter(skillClosed).sort((a, b) => last(a.skillCode).localeCompare(last(b.skillCode)))
+  if (!closed.length) return null
+  const shown = all ? closed : closed.slice(0, 5)
+  return <div className="retake-choices">
+    <h3 className="card-title">Повторить пройденную тему</h3>
+    <RetakeLagHint progress={progress} />
+    <ul>{shown.map(s => {
+      const r = progress.retakes?.find(x => x.skillCode === s.skillCode)
+      return <li key={s.skillCode}><span>{s.title}{r && <small className="muted"> · {retakeTimes(r)}</small>}</span>
+        <button className="secondary retake-button" onClick={() => onRetake(s.skillCode)}><Icon name="refresh" size={14} /> Повторить</button></li>
+    })}</ul>
+    {closed.length > shown.length && <button className="ghost small-button" onClick={() => setAll(true)}>Показать все ({closed.length})</button>}
   </div>
 }
 
@@ -1219,6 +1272,7 @@ function EditStudent({ student, groups, request, onUpdated }: { student: Student
 function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlmStatus, onUpdated, onDeleted }: { student: Student; groups: string[]; request: Request; toggle: () => void; onOpenProgress?: () => void; onLlmStatus: (llm: LlmStatus) => void; onUpdated: (student: Student) => void; onDeleted: () => void }) {
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
+  const [retakes, setRetakes] = useState<Partial<Record<CourseLanguage, number>>>({})
   const [hardCourses, setHardCourses] = useState<Student['hardModeCourses']>(student.hardModeCourses)
   const [openLesson, setOpenLesson] = useState<Id | null>(null)
   const [detail, setDetail] = useState<LessonDetail | null>(null)
@@ -1227,7 +1281,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
     let alive = true
     setLessons(null); setDetail(null); setOpenLesson(null); openRef.current = null
     request(() => api<{ lessons: Lesson[] }>(`/admin/students/${student.id}/lessons`)).then(value => { if (alive && value) setLessons(value.lessons) })
-    request(() => api<{ llm: LlmStatus; student?: Student; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }); if (value.student?.hardModeCourses) setHardCourses(value.student.hardModeCourses) } })
+    request(() => api<{ llm: LlmStatus; student?: Student; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>>; retakesByLanguage?: Partial<Record<CourseLanguage, number>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }); setRetakes(value.retakesByLanguage ?? {}); if (value.student?.hardModeCourses) setHardCourses(value.student.hardModeCourses) } })
     return () => { alive = false }
   }, [student.id, request, onLlmStatus])
   const toast = useToast()
@@ -1292,6 +1346,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
         <span className="mini-stats-cell"><b>{level.level}</b><small>уровень</small></span>
         <span className="mini-stats-cell"><b>{level.iterations}</b><small>итераций</small></span>
         <span className="mini-stats-cell"><b>{level.mastered}</b><small>тем освоено</small></span>
+        {!!retakes[language] && <span className="mini-stats-cell" title="Повторений пройденных тем с хотя бы одной решённой задачей"><b>{retakes[language]}</b><small>повторений тем</small></span>}
         <DiagnosticSummary skills={progress[language]!} />
       </div>
     })}</div>}
@@ -1309,7 +1364,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
         </div>
         <h3 className="section-title">Задачи и попытки</h3>
         {detail.tasks.length ? detail.tasks.map(t => <article key={t.id} className="detail-task">
-          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{t.title}{!!t.replaced && <span className="replaced-chip" title="Студент переключил hard mode, и вместо этой задачи выдана задача нового режима">заменена при смене режима</span>}</b>
+          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{t.retakeSkill && <span className="retake-chip" title="Задача из повторения пройденной темы: на итерации и освоение не влияет">повторение · {t.retakeSkill}</span>}{t.title}{!!t.replaced && <span className="replaced-chip" title={t.retakeSkill ? 'Повторение закончилось раньше, чем задача была решена' : 'Студент переключил hard mode или начал повторение темы — задача снята с урока'}>{t.retakeSkill ? 'снята в конце повторения' : 'снята с урока'}</span>}</b>
             {t.submissions.some(a => a.passed && !a.revokedAt) && <button className="ghost danger small-button" onClick={() => revoke(detail.lesson, t)} title="Студенту придётся решить задачу заново"><Icon name="refresh" size={14} /> Отменить зачёт</button>}
           </div>
           <Markdown>{t.statement}</Markdown>

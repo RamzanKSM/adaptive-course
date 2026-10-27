@@ -1,6 +1,7 @@
 """Imports verified curated tasks (Verify.java output) into the course database, in one transaction.
 
-A task is matched by its external key («curated:<slug>:<n>»): a new task is inserted, an existing one is updated in
+A task of the re-take pool («mode»: «RETAKE», see build.py) is stored with tasks.mode='RETAKE', so only «Повторить
+тему» takes it. A task is matched by its external key («curated:<slug>:<n>»): a new task is inserted, an existing one is updated in
 place, so submissions and credit stay attached and a re-run adds no duplicates. Run it as the application's user so
 SQLite's -wal/-shm files keep their owner:
 
@@ -33,18 +34,21 @@ def main(bank_path: str, db_path: str) -> None:
                 raise SystemExit(f"unknown topic {t['skill']} ({t['key']})")
             row = db.execute("select id from tasks where external_key=?", (t["key"],)).fetchone()
             # reference and wrong: the full program and the wrong solutions, used by the test at the board.
+            mode = t.get("mode", "NORMAL")
+            if mode not in ("NORMAL", "RETAKE"):
+                raise SystemExit(f"unknown mode {mode} ({t['key']})")
             values = (t["skill"], t["title"], t["statement"], t["starter"], t["testSource"], t["testFileName"], t["difficulty"], t["goalJson"], QUALITY_VERSION, language,
-                      t.get("reference"), wrong_json(t))
+                      t.get("reference"), wrong_json(t), mode)
             if row:
                 task_id = row[0]
                 db.execute("update tasks set skill_code=?, title=?, statement=?, starter_code=?, test_source=?, test_file_name=?, difficulty=?, goal_json=?, "
-                           "quality_version=?, language=?, reference_code=?, wrong_json=?, source='CURATED', mode='NORMAL', active=1 where id=?", values + (task_id,))
+                           "quality_version=?, language=?, reference_code=?, wrong_json=?, mode=?, source='CURATED', active=1 where id=?", values + (task_id,))
                 db.execute("delete from task_target_skills where task_id=?", (task_id,))
                 db.execute("delete from task_cases where task_id=?", (task_id,))
                 updated += 1
             else:
                 task_id = db.execute("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,goal_json,quality_version,"
-                                     "language,reference_code,wrong_json,source,mode,active,external_key) values(?,?,?,?,?,?,?,?,?,?,?,?,'CURATED','NORMAL',1,?) returning id",
+                                     "language,reference_code,wrong_json,mode,source,active,external_key) values(?,?,?,?,?,?,?,?,?,?,?,?,?,'CURATED',1,?) returning id",
                                      values + (t["key"],)).fetchone()[0]
                 inserted += 1
             db.execute("insert into task_target_skills(task_id,skill_code) values(?,?)", (task_id, t["skill"]))

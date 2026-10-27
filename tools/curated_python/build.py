@@ -13,7 +13,10 @@ Each family (a template) is one formulation of a task with several value sets; e
 The script checks every task locally (reference passes, wrong solutions fail) and writes bank.json. The Java
 verifier (Verify.java) then runs each task through the platform's TaskVerifier on the real Piston before import.
 
-Usage: python3 tools/curated_python/build.py [--only SKILL,...] [--out bank.json]
+The re-take pool (retake/ for Python, retake_java/ for Java) is written the same way; its tasks get «mode»: «RETAKE»,
+so regular lessons and the test at the board never take them — only «Повторить тему» does.
+
+Usage: python3 tools/curated_python/build.py [--only SKILL,...] [--pool all|normal|retake] [--out bank.json]
 """
 from __future__ import annotations
 
@@ -309,11 +312,15 @@ def build_function(task: FunctionTask) -> list[dict]:
 
 # ───────── Main ─────────
 
-def load_tasks() -> list:
-    """Python topics from topics/, Java topics from topics_java/."""
+POOLS = {"normal": ("topics", "topics_java"), "retake": ("retake", "retake_java")}
+
+
+def load_tasks(pool: str = "normal") -> list:
+    """Python topics from topics/, Java topics from topics_java/; the re-take pool from retake/ and retake_java/."""
     sys.path.insert(0, str(HERE))
     found = []
-    for package, folder in (("topics", TOPICS), ("topics_java", HERE / "topics_java")):
+    for package in POOLS[pool]:
+        folder = HERE / package
         if not folder.is_dir():
             continue
         for module in sorted(pkgutil.iter_modules([str(folder)]), key=lambda m: m.name):
@@ -344,19 +351,24 @@ def self_check(task: dict) -> list[str]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", default="")
+    parser.add_argument("--pool", default="all", choices=("all", *POOLS))
     parser.add_argument("--out", default=str(HERE / "bank.json"))
     args = parser.parse_args()
     only = {s for s in args.only.split(",") if s}
     tasks = []
-    for template in load_tasks():
-        if only and template.skill not in only:
-            continue
-        if isinstance(template, java_tasks.JavaOutputTask):
-            tasks.extend(java_tasks.build_output(template, newline_note))
-        elif isinstance(template, java_tasks.JavaFunctionTask):
-            tasks.extend(java_tasks.build_function(template))
-        else:
-            tasks.extend(build_output(template) if isinstance(template, OutputTask) else build_function(template))
+    for pool in POOLS if args.pool == "all" else (args.pool,):
+        for template in load_tasks(pool):
+            if only and template.skill not in only:
+                continue
+            if isinstance(template, java_tasks.JavaOutputTask):
+                built = java_tasks.build_output(template, newline_note)
+            elif isinstance(template, java_tasks.JavaFunctionTask):
+                built = java_tasks.build_function(template)
+            else:
+                built = build_output(template) if isinstance(template, OutputTask) else build_function(template)
+            for task in built:
+                task["mode"] = "RETAKE" if pool == "retake" else "NORMAL"
+            tasks.extend(built)
     keys = [t["key"] for t in tasks]
     assert len(keys) == len(set(keys)), "duplicate keys"
     failed = 0
@@ -367,7 +379,7 @@ def main():
             print(f"✗ {task['key']}: " + "; ".join(problems))
     by_skill: dict[str, list[int]] = {}
     for t in tasks:
-        by_skill.setdefault(t["skill"], []).append(t["difficulty"])
+        by_skill.setdefault(t["skill"] + (" (re-take pool)" if t["mode"] == "RETAKE" else ""), []).append(t["difficulty"])
     for skill, diffs in by_skill.items():
         print(f"{skill}: {len(diffs)} tasks, difficulties {sorted(diffs)}")
     if failed:

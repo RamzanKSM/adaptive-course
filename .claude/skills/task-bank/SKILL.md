@@ -10,6 +10,9 @@ description: Add, fix or translate tasks of the curated task bank (tools/curated
   A family = one story in 3 `variants` (same wording, different values); each topic has two families per difficulty
   1/2/3 (18 tasks). Key in the database: `curated:<slug>:<variant>` — never rename a slug (import updates by key, so
   students' credit and the story-aware selection stay attached).
+- The re-take pool («Повторить тему»): `retake/tNN_*.py` and `retake_java/tNN_*.py`, same format, 3 families per topic
+  (difficulty 1, 2, 3) × 3 variants, imported with `tasks.mode='RETAKE'` (lessons and the board never take it). Authoring:
+  `RETAKE_POOL_GUIDE.md`; `build.py --pool retake|normal|all` (default all; every task carries «mode»).
 - `build.py` (Python dataclasses `OutputTask`, `FunctionTask`; loads all topics), `java_tasks.py` (`JavaOutputTask`,
   `JavaFunctionTask`), authoring guides `NEW_STORIES_GUIDE.md` and `JAVA_TASKS_GUIDE.md`, `check_ascii.py`,
   `Verify.java` (platform verification), `import_bank.py` (production import).

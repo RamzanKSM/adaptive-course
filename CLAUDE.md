@@ -56,6 +56,9 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
   3 iterations = mastered; the diagnostic may confirm topics. Rule in `IterationRule` (shared by crediting and analytics).
 - Task selection: unsolved bank stories first (curated key `curated:<slug>:<n>`), then generation, a variant of a solved
   story only as the last resort; variants are ordered per student. Hard mode is a separate track over the hard bank.
+- «Повторить тему» (`TopicRetakes`): a closed topic can be re-taken any time — 3 tasks (difficulty 1→2→3) from its own
+  pool (`tasks.mode='RETAKE'`, `tools/curated_python/retake*/`, never in lessons or at the board); a re-take never moves
+  iterations/mastery/pace (`lesson_tasks.retake_id` is skipped by the iteration rule), its tasks count as solved and in pair points.
 - Task text: everything a student types or reads as program text/output is plain English ASCII; statements, hints and
   check messages are Russian and quote the English strings. Applies to the curated bank, hard bank, seeds and the LLM
   generator prompt.

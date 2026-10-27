@@ -18,7 +18,9 @@ export interface Task { id: Id; title: string; statement: string; starterCode?: 
 export type LessonFinishReason = 'STUDENT' | 'LOGOUT' | 'IDLE' | 'TEACHER'
 /** lastActivityAt + idleMinutes: the server finishes the lesson (finishReason 'IDLE') once that moment has passed. */
 export interface Lesson { id: Id; number: number; language?: CourseLanguage; startedAt: string; finishedAt?: string | null; finishReason?: LessonFinishReason | null; lastActivityAt?: string | null; idleMinutes?: number }
-export interface LearningNext { lesson: Lesson; skill: { code: string; title: string; blockNo: number } | null; explanation: { content: string; source: string } | null; task: Task | null; reason?: string; llm?: LlmStatus }
+export interface LearningNext { lesson: Lesson; skill: { code: string; title: string; blockNo: number } | null; explanation: { content: string; source: string } | null; task: Task | null; reason?: string; llm?: LlmStatus
+  /** retake — the task belongs to an open re-take; retakeDone — the re-take that was open and is over now. */
+  retake?: Retake; retakeDone?: Retake }
 /** The program run as is, without hidden checks (POST /run, or alongside a check). */
 export interface ConsoleRun { status: 'OK' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'LIMIT' | 'NO_MAIN' | 'UNAVAILABLE'; stdout: string; error?: string | null; truncated: boolean }
 /** The LLM reviewer's verdict (experimental grading). A rejection always says why: summary plus issues. */
@@ -30,12 +32,17 @@ export interface Attempt { id: Id; passed: Flag; output?: string | null; console
 export interface ChatMessage { id: Id | string; role: 'STUDENT' | 'ASSISTANT'; content: string; createdAt?: string }
 /** Practice progress and, separately, the diagnostic result. confirmedByDiagnostic skips practice; it is not practice credit. */
 export interface SkillProgress { skillCode: string; title: string; blockNo?: number; completedIterations: number; iterationSuccesses: number; mastered: Flag; diagnosticCorrect?: number | null; diagnosticTotal?: number | null; confirmedByDiagnostic?: Flag }
-export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; hardSolved?: number; activity?: string[]; session?: StudentSession | null }
+/** «Повторить тему» (POST /retakes): a series of `total` tasks on a closed topic; given — tasks given so far (the current one
+ *  included), passed — solved; similar — the current task is a variant of a story the student solved («похожая на решённую»). */
+export interface Retake { id: Id; skillCode: string; skillTitle: string; total: number; given: number; passed: number; finished: boolean; similar?: boolean }
+/** Re-takes of a topic with at least one solved task: how many and when the last one started. */
+export interface RetakeHistory { skillCode: string; times: number; lastAt: string }
+export interface Progress { language?: CourseLanguage; skills: SkillProgress[]; solvedTasks?: number; hardSolved?: number; activity?: string[]; session?: StudentSession | null; retakes?: RetakeHistory[] }
 export interface ActiveLesson { language: CourseLanguage; number: number; startedAt: string }
 /** sessionParticipant — counted in the progress statistics (the teacher switches it off for themself, volunteers, test accounts). */
 export interface Student { id: Id; login: string; role?: Role; displayName: string; llmEnabled: Flag; group?: string | null; activeLessons?: ActiveLesson[]; hardModeAllowed?: Flag; hardModeOn?: Flag; hardModeCourses?: Partial<Record<CourseLanguage, HardModeCourse>>; sessionParticipant?: boolean }
 export interface Submission extends Attempt { sourceCode: string; createdAt: string; revokedAt?: string | null }
-export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; hard?: Flag; replaced?: Flag; submissions: Submission[] }[] }
+export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; hard?: Flag; replaced?: Flag; retakeSkill?: string | null; submissions: Submission[] }[] }
 export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
 export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR' | 'REVIEW'
 export interface LlmUsage {

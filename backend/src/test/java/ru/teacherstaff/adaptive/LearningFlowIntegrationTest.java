@@ -126,6 +126,65 @@ class LearningFlowIntegrationTest {
     int lesson4=start(token); solve(token,1); assertProgress(student,3,1,0);
   }
 
+  @Test void aRetakeOfAMasteredTopicGivesThreePoolTasksWithoutChangingProgressAndTheWaitingTaskComesBack() throws Exception {
+    String token=createStudentAndLogin("retake-student"); long student=studentId("retake-student"); submitDiagnostic(token,student,false);
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,mastered) values(?,'BASIC_CODE_READING',3,1)",student);
+    for(int d=1;d<=3;d++) addPoolTask("BASIC_CODE_READING","rt-read-"+d,d);
+    addPoolTask("VARIABLE_BASIC","rt-var-1",1);
+    addTask("VARIABLE_BASIC","variables practice");
+    start(token);
+    var regular=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    long waiting=regular.path("task").path("id").asLong();
+    assertEquals("NORMAL",db.queryForObject("select mode from tasks where id=?",String.class,waiting),"regular lessons never take the re-take pool");
+    var started=json.readTree(mvc.perform(post("/api/retakes").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("language","JAVA","skillCode","BASIC_CODE_READING")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(3,started.path("retake").path("total").asInt());
+    int iterationsBefore=db.queryForObject("select count(*) from skill_iterations where user_id=?",Integer.class,student);
+    for(int d=1;d<=3;d++){
+      var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+      long task=next.path("task").path("id").asLong();
+      assertEquals("curated:rt-read-"+d+":1",db.queryForObject("select external_key from tasks where id=?",String.class,task),"the pool, difficulty "+d);
+      assertEquals(d,next.path("retake").path("given").asInt()); assertFalse(next.path("retake").path("similar").asBoolean());
+      var result=attempt(token,task,"public class Solution {}");
+      assertEquals(d,result.path("retake").path("passed").asInt());
+    }
+    var after=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(3,after.path("retakeDone").path("passed").asInt());
+    assertEquals(waiting,after.path("task").path("id").asLong(),"the task that waited comes back");
+    assertTrue(after.path("retake").isMissingNode());
+    assertEquals(iterationsBefore,db.queryForObject("select count(*) from skill_iterations where user_id=?",Integer.class,student));
+    assertEquals(3,db.queryForObject("select completed_iterations from student_skills where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+    var progress=json.readTree(mvc.perform(get("/api/progress").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(3,progress.path("solvedTasks").asInt(),"re-take tasks count as solved");
+    assertEquals("BASIC_CODE_READING",progress.path("retakes").get(0).path("skillCode").asText()); assertEquals(1,progress.path("retakes").get(0).path("times").asInt());
+  }
+
+  @Test void aRetakeOfAConfirmedTopicStartsNoIterationsAndAnOpenTopicCannotBeRetaken() throws Exception {
+    String token=createStudentAndLogin("retake-confirmed"); long student=studentId("retake-confirmed"); submitDiagnostic(token,student,true);
+    var refused=json.readTree(mvc.perform(post("/api/retakes").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("language","JAVA","skillCode","VARIABLE_BASIC")))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("RETAKE_NOT_ALLOWED",refused.path("error").asText());
+    long retake=json.readTree(mvc.perform(post("/api/retakes").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("language","JAVA","skillCode","BASIC_CODE_READING")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("retake").path("id").asLong();
+    for(int i=0;i<3;i++){ var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()); assertEquals("BASIC_CODE_READING",next.path("skill").path("code").asText()); attempt(token,next.path("task").path("id").asLong(),"public class Solution {}"); }
+    assertEquals(0,db.queryForObject("select count(*) from skill_iterations where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student),"a re-take is not practice of the topic");
+    assertEquals(0,db.queryForObject("select coalesce(max(completed_iterations),0) from student_skills where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+    // Revoking a re-take's task recalculates nothing into iterations either.
+    long lesson=db.queryForObject("select lesson_id from topic_retakes where id=?",Long.class,retake); long solved=db.queryForObject("select task_id from lesson_tasks where retake_id=? order by rowid limit 1",Long.class,retake);
+    mvc.perform(post("/api/admin/students/{id}/lessons/{lessonId}/tasks/{taskId}/revoke",student,lesson,solved).cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk());
+    assertEquals(0,db.queryForObject("select count(*) from skill_iterations where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+  }
+
+  @Test void finishingARetakeEndsItWithItsScoreAndTheLessonGoesOn() throws Exception {
+    String token=createStudentAndLogin("retake-quit"); long student=studentId("retake-quit"); submitDiagnostic(token,student,false);
+    db.update("insert into student_skills(user_id,skill_code,completed_iterations,mastered) values(?,'BASIC_CODE_READING',3,1)",student);
+    for(int d=1;d<=3;d++) addPoolTask("BASIC_CODE_READING","rt-quit-"+d,d);
+    long retake=json.readTree(mvc.perform(post("/api/retakes").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("language","JAVA","skillCode","BASIC_CODE_READING")))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("retake").path("id").asLong();
+    long first=nextTaskId(token); attempt(token,first,"public class Solution {}"); long second=nextTaskId(token);
+    var done=json.readTree(mvc.perform(post("/api/retakes/{id}/finish",retake).cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(1,done.path("retake").path("passed").asInt()); assertTrue(done.path("retake").path("finished").asBoolean());
+    var next=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertNotEquals(second,next.path("task").path("id").asLong(),"the unsolved re-take task leaves the lesson");
+    assertTrue(next.path("retake").isMissingNode());
+  }
+
   @Test void generatedTaskIsValidatedStoredOnceAndThenRestored() throws Exception {
     String token=createStudentAndLogin("generated-student"); long student=studentId("generated-student"); submitDiagnostic(token,student,false); prepareOnlySkill(student,"METHOD_PARAMETERS");
     when(tutor.status(student)).thenReturn(new LlmStatus(true,true,true,"READY","gpt-6-luna"));
@@ -1189,6 +1248,8 @@ class LearningFlowIntegrationTest {
   private long solveNext(String token) throws Exception {long task=nextTaskId(token);assertTrue(attempt(token,task,"public class Solution {}").path("passed").asBoolean());return task;}
   private void addTask(String skillCode,String title){db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name) values(?,?,?, '', 'class TestHarness {}','TestHarness.java')",skillCode,title,title);long id=db.queryForObject("select last_insert_rowid()",Long.class);db.update("insert into task_target_skills(task_id,skill_code) values(?, ?)",id,skillCode);}
   private jakarta.servlet.http.Cookie cookie(String value){return new jakarta.servlet.http.Cookie("adaptive_session",value);}
+  /** A task of the re-take pool (tasks.mode='RETAKE') as the bank imports it: story «slug», variant 1. */
+  private void addPoolTask(String skill,String slug,int difficulty){db.update("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,source,mode,external_key) values(?,?,?, '', 'class TestHarness {}','TestHarness.java',?,'CURATED','RETAKE',?)",skill,slug,slug,difficulty,"curated:"+slug+":1");long id=db.queryForObject("select last_insert_rowid()",Long.class);db.update("insert into task_target_skills(task_id,skill_code) values(?,?)",id,skill);}
   private int countLessonTasks(long student){return db.queryForObject("select count(*) from lesson_tasks where lesson_id=(select id from lessons where user_id=? and finished_at is null)",Integer.class,student);}
   /** The course passed once: every other topic mastered, this one with its first iteration done in lesson 0 (so it is due in lesson 1). */
   private void passedCourseOnceExcept(long student,String skill){prepareOnlySkill(student,skill);db.update("insert into student_skills(user_id,skill_code,completed_iterations,first_iteration_lesson_number,mastered) values(?,?,1,0,0)",student,skill);}

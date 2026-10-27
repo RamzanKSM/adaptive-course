@@ -39,10 +39,14 @@ record ExistingTask(long id, String title, String statement, String starterCode,
  * student has already studied and matches the requested step of the iteration (difficulty 1..3).
  */
 record ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
-                    List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation, boolean hard) {
+                    List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation, boolean hard, boolean retake) {
+  ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
+               List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation, boolean hard) {
+    this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, hard, false);
+  }
   ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
                List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation) {
-    this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, false);
+    this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, false, false);
   }
 }
 

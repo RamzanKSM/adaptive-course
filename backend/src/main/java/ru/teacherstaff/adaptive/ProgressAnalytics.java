@@ -362,6 +362,8 @@ class ProgressAnalytics {
     final List<Submission> submissions = new ArrayList<>();
     /** Credited tasks of the course: task → hard. */
     final Map<Long, Boolean> credited = new HashMap<>();
+    /** Tasks given in a re-take of a closed topic (TopicRetakes), as lessonId → task ids: they never move iterations. */
+    final Map<Long, Set<Long>> retakeTasks = new HashMap<>();
     /** UTC days (epoch days) with a submission or a chat message of the student. */
     final Set<Long> activeDays = new HashSet<>();
     Long chatLast;
@@ -434,6 +436,9 @@ class ProgressAnalytics {
     db.query("select c.user_id,c.task_id,t.mode='HARD' from successful_task_credit c join tasks t on t.id=c.task_id where t.language=?" + scope.on("c.user_id"),
         (RowCallbackHandler) rs -> { var s = students.get(rs.getLong(1)); if (s != null) s.credited.put(rs.getLong(2), rs.getInt(3) == 1); },
         scope.with(language));
+    db.query("select l.user_id,lt.lesson_id,lt.task_id from lesson_tasks lt join lessons l on l.id=lt.lesson_id where l.language=? and lt.retake_id is not null" + scope.on("l.user_id"),
+        (RowCallbackHandler) rs -> { var s = students.get(rs.getLong(1)); if (s != null) s.retakeTasks.computeIfAbsent(rs.getLong(2), k -> new HashSet<>()).add(rs.getLong(3)); },
+        scope.with(language));
     db.query("select d.user_id,d.skill_code from diagnostic_skill_results d join skills k on k.code=d.skill_code where k.language=? and d.confirmed=1" + scope.on("d.user_id"),
         (RowCallbackHandler) rs -> { var s = students.get(rs.getLong(1)); Integer i = topicIndex.get(rs.getString(2)); if (s != null && i != null) s.confirmed[i] = true; },
         scope.with(language));
@@ -460,6 +465,7 @@ class ProgressAnalytics {
       s.activeDays.add(Math.floorDiv(x.at(), DAY));
       if (!x.passed() || x.revoked() || !s.credited.containsKey(x.taskId())) continue;
       firstPass.putIfAbsent(x.taskId(), x);
+      if (s.retakeTasks.getOrDefault(x.lessonId(), Set.of()).contains(x.taskId())) continue; // solved, but not practice of the topic
       passes.computeIfAbsent(x.lessonId(), k -> new LinkedHashMap<>()).putIfAbsent(x.taskId(), x.at());
     }
     for (var e : s.credited.entrySet()) {
