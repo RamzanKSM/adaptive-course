@@ -122,36 +122,42 @@ class BoardTestsIntegrationTest {
 
   // ---------------------------------------------------------------- items
 
-  @Test void theCodeItemComesFromTheRecentPracticeTopicPreferringEasyAndShortTasks() throws Exception {
+  @Test void theCodeItemComesFromTheFarthestTopicPreferringABankTaskOfMediumDifficultyAndSize() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("it-a", "Ирина", "B-1"); long a = studentId("it-a");
-    String recent = skill("BT_IT_RECENT", 2), older = skill("BT_IT_OLDER", 2);
-    passed(a, older, START.minus(Duration.ofDays(40)));
-    passed(a, recent, START.minus(Duration.ofDays(3)));
-    // The recent topic: a solved story, an unsolved one (two variants), a long one, another difficulty, another source, an input task, a hard task.
-    long solved = codeTask(recent, 1, "CURATED", "curated:it-solved:1"); codeTask(recent, 1, "CURATED", "curated:it-solved:2"); credit(a, solved);
-    long wanted1 = codeTask(recent, 1, "CURATED", "curated:it-fresh:1"), wanted2 = codeTask(recent, 1, "CURATED", "curated:it-fresh:2");
-    long longer = codeTask(recent, 1, "CURATED", "curated:it-long:1");
-    db.update("update tasks set reference_code=? where id=?", "starter " + longer + "\n" + "x();\n".repeat(11), longer);
-    long shortOne = codeTask(recent, 1, "CURATED", "curated:it-fresh:3"); db.update("update tasks set reference_code=? where id=?", "starter " + shortOne + "\n" + "x();\n".repeat(10), shortOne);
-    codeTask(recent, 2, "CURATED", "curated:it-harder:1"); codeTask(recent, 1, "LLM", null);
-    long io = codeTask(recent, 1, "CURATED", "curated:it-io:1"); db.update("update tasks set goal_json='{\"kind\":\"IO_BEHAVIOR\"}' where id=?", io);
-    long hard = codeTask(recent, 1, "CURATED", "curated:it-hard:1"); db.update("update tasks set mode='HARD' where id=?", hard);
-    codeTask(older, 1, "CURATED", "curated:it-older:1");
+    String nearer = skill("BT_IT_NEAR", 2), farthest = skill("BT_IT_FAR", 2);
+    passed(a, farthest, START.minus(Duration.ofDays(40)));
+    passed(a, nearer, START.minus(Duration.ofDays(3)));
+    // The farthest topic: a solved story, an unsolved one (two variants, 5 lines), a trivial one, a long one, an easier one,
+    // a generated one, an input task, a hard task.
+    String five = "x();\n".repeat(5);
+    long solved = codeTask(farthest, 2, "CURATED", "curated:it-solved:1"); codeTask(farthest, 2, "CURATED", "curated:it-solved:2"); credit(a, solved);
+    long wanted1 = codeTask(farthest, 2, "CURATED", "curated:it-fresh:1"), wanted2 = codeTask(farthest, 2, "CURATED", "curated:it-fresh:2");
+    for (long t : List.of(solved, wanted1, wanted2)) db.update("update tasks set reference_code=? where id=?", "starter " + t + "\n" + five, t);
+    long trivial = codeTask(farthest, 2, "CURATED", "curated:it-trivial:1"); db.update("update tasks set reference_code=? where id=?", "starter " + trivial + "\nx();\n", trivial);
+    long longer = codeTask(farthest, 2, "CURATED", "curated:it-long:1"); db.update("update tasks set reference_code=? where id=?", "starter " + longer + "\n" + "x();\n".repeat(11), longer);
+    codeTask(farthest, 1, "CURATED", "curated:it-easier:1"); codeTask(farthest, 2, "LLM", null);
+    long io = codeTask(farthest, 2, "CURATED", "curated:it-io:1"); db.update("update tasks set goal_json='{\"kind\":\"IO_BEHAVIOR\"}' where id=?", io);
+    long hard = codeTask(farthest, 2, "CURATED", "curated:it-hard:1"); db.update("update tasks set mode='HARD' where id=?", hard);
+    codeTask(nearer, 2, "CURATED", "curated:it-nearer:1");
 
     for (int i = 0; i < 6; i++) {
       var test = startTest(admin, token, a, List.of("code"));
       var code = test.path("items").get(0);
       var item = adminTest(admin, test.path("id").asLong()).path("items").get(0);
       long codeTask = item.path("taskId").asLong();
-      assertTrue(Set.of(wanted1, wanted2, shortOne).contains(codeTask), "an unsolved short curated story of the recent topic at difficulty 1, got " + codeTask);
-      assertEquals(recent, item.path("skillCode").asText()); assertEquals(1, item.path("difficulty").asInt());
+      assertTrue(Set.of(wanted1, wanted2).contains(codeTask), "an unsolved curated story of the farthest topic at difficulty 2, neither trivial nor long, got " + codeTask);
+      assertEquals(farthest, item.path("skillCode").asText()); assertEquals(2, item.path("difficulty").asInt()); assertEquals("above", item.path("zone").asText(), "no plan: everything is above the minimum");
       assertEquals(Set.of("kind", "title", "statement", "language", "starterCode"), fields(code));
       assertEquals("code", code.path("kind").asText()); assertEquals("JAVA", code.path("language").asText()); assertEquals("Задача " + codeTask, code.path("title").asText());
       assertEquals("starter " + codeTask, code.path("starterCode").asText()); assertEquals("starter " + codeTask, test.path("answers").path("code").asText());
       finishNow(admin, test.path("id").asLong());
     }
     assertEquals(0, count("select count(*) from submissions where task_id in (?,?)", wanted1, wanted2), "a board test makes no submissions");
+    // Only a generated task in the farthest topic: a bank task of a nearer topic first.
+    db.update("update tasks set active=0 where skill_code=? and source='CURATED'", farthest);
+    long nearerTask = db.queryForObject("select id from tasks where external_key='curated:it-nearer:1'", Long.class);
+    assertEquals(nearerTask, adminTest(admin, startTest(admin, token, a, List.of("code")).path("id").asLong()).path("items").get(0).path("taskId").asLong());
   }
 
   @Test void withoutPracticeTheDiagnosticThenTheFirstTopic() throws Exception {
@@ -159,24 +165,24 @@ class BoardTestsIntegrationTest {
     String token = createStudent("fb-a", "Фёдор", "B-3"); long a = studentId("fb-a");
     String confirmed = skill("BT_FB_CONF", 3);
     confirm(a, confirmed);
-    long code = codeTask(confirmed, 1, "CURATED", "curated:fb-code:1"), parsons = parsonsTask(confirmed, 2, "curated:fb-parsons:1", true);
+    long code = codeTask(confirmed, 2, "CURATED", "curated:fb-code:1"), parsons = parsonsTask(confirmed, 3, "curated:fb-parsons:1", true);
     var view = adminTest(admin, startTest(admin, token, a, List.of("parsons", "code")).path("id").asLong());
-    assertEquals(parsons, view.path("items").get(0).path("taskId").asLong(), "a topic confirmed by the diagnostic");
+    assertEquals(parsons, view.path("items").get(0).path("taskId").asLong(), "a topic confirmed by the diagnostic counts as reached");
     assertEquals(code, view.path("items").get(1).path("taskId").asLong());
 
     String first = db.queryForObject("select code from skills where language='JAVA' order by block_no,sort_order,code limit 1", String.class);
     String token2 = createStudent("fb-b", "Фаина", "B-3"); long b = studentId("fb-b");
-    codeTask(first, 1, "CURATED", "curated:fb-first:1"); parsonsTask(first, 2, "curated:fb-first-p:1", false);
+    codeTask(first, 2, "CURATED", "curated:fb-first:1"); parsonsTask(first, 3, "curated:fb-first-p:1", false);
     var second = adminTest(admin, startTest(admin, token2, b, List.of("parsons", "code")).path("id").asLong());
     assertEquals(first, second.path("items").get(0).path("skillCode").asText(), "nothing passed: the course's first topic");
     assertEquals(first, second.path("items").get(1).path("skillCode").asText());
-    // The first topic has no task for «Исправь ошибку»: the search goes on through the course.
+    // The first topic has no task for «Исправь ошибку»: never a topic beyond the range, the error names the kind.
     String later = skill("BT_FB_LATER", 9);
-    long laterFix = fixTask(later, 2, "curated:fb-later-fix:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    fixTask(later, 2, "curated:fb-later-fix:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
     String token3 = createStudent("fb-c", "Фатима", "B-3"); long c = studentId("fb-c");
-    var fix = adminTest(admin, startTest(admin, token3, c, List.of("fix")).path("id").asLong()).path("items").get(0);
-    assertEquals("fix", fix.path("kind").asText()); assertNotEquals(first, fix.path("skillCode").asText(), "nothing to fix in the first topic");
-    assertTrue(db.queryForObject("select count(*) from tasks where id=? or (wrong_json is not null and skill_code=?)", Integer.class, laterFix, fix.path("skillCode").asText()) > 0);
+    var refused = json.readTree(mvc.perform(post("/api/board/tests/{id}/start", call(admin, c, List.of("fix")).path("id").asLong()).cookie(cookie(token3)))
+        .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
+    assertEquals("NO_BOARD_TASK", refused.path("error").asText(), "nothing to fix in the first topic, a later topic is not reached");
     // No task of a kind in the whole course: the error names it.
     var body = json.readTree(mvc.perform(post("/api/board/tests/{id}/start", read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON)
             .content(json.writeValueAsString(Map.of("userId", b, "language", "PYTHON", "kinds", List.of("fix"))))).path("id").asLong()).cookie(cookie(token2)))
@@ -301,35 +307,36 @@ class BoardTestsIntegrationTest {
     view = adminTest(admin, id);
     assertTrue(view.path("results").get(0).path("passed").asBoolean()); assertEquals("fix", view.path("results").get(0).path("kind").asText());
     assertEquals("printed\n", view.path("results").get(0).path("console").path("stdout").asText());
-    // Only bugs of more than two lines: this task is never a fix item (another topic of the course is used).
+    // Only bugs of more than two lines: this task is never a fix item (another reached topic is used).
     db.update("update tasks set wrong_json=? where id=?", json.writeValueAsString(List.of(Map.of("description", "три", "source", threeLines))), fix);
-    fixTask(skill("BT_FX_LATER", 9), 2, "curated:fx-later:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    String later = skill("BT_FX_LATER", 9); passed(a, later, START.minus(Duration.ofDays(1)));
+    fixTask(later, 2, "curated:fx-later:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
     var other = adminTest(admin, startTest(admin, token, a, List.of("fix")).path("id").asLong()).path("items").get(0);
     assertNotEquals(fix, other.path("taskId").asLong(), "a bug of three lines is not a fix item");
   }
 
-  @Test void fixPrefersAnotherRecentTopicThanCodeAndATestNeverRepeatsAStory() throws Exception {
+  @Test void fixPrefersAnotherTopicThanCodeAndATestNeverRepeatsAStory() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("tp-a", "Тагир", "T-1"); long a = studentId("tp-a");
-    String newest = skill("BT_TP_1", 2), next = skill("BT_TP_2", 2);
-    passed(a, next, START.minus(Duration.ofDays(4))); passed(a, newest, START.minus(Duration.ofDays(1)));
-    long code = codeTask(newest, 1, "CURATED", "curated:tp-code:1");
-    fixTask(newest, 2, "curated:tp-fix-same:1", Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
-    long fixNext = fixTask(next, 2, "curated:tp-fix-next:1", Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    String nearer = skill("BT_TP_1", 2), farthest = skill("BT_TP_2", 2);
+    passed(a, nearer, START.minus(Duration.ofDays(1))); passed(a, farthest, START.minus(Duration.ofDays(4)));
+    long code = codeTask(farthest, 2, "CURATED", "curated:tp-code:1"); db.update("update tasks set reference_code=? where id=?", "starter " + code + "\n" + "x();\n".repeat(5), code);
+    fixTask(farthest, 3, "curated:tp-fix-same:1", Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
+    long fixNearer = fixTask(nearer, 2, "curated:tp-fix-next:1", Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
     var view = adminTest(admin, startTest(admin, token, a, List.of("fix", "code")).path("id").asLong());
-    assertEquals(code, view.path("items").get(1).path("taskId").asLong(), "code: the most recent topic");
-    assertEquals(fixNext, view.path("items").get(0).path("taskId").asLong(), "fix: the next recent topic");
+    assertEquals(code, view.path("items").get(1).path("taskId").asLong(), "code: the farthest topic");
+    assertEquals(fixNearer, view.path("items").get(0).path("taskId").asLong(), "fix: another topic than code's");
     finishNow(admin, view.path("id").asLong());
 
-    // One topic only: code takes a story (difficulty 1 first), fix takes another story, never the other variant of code's.
+    // One topic only: code takes a story (difficulty 2, then 3), fix takes another story, never the other variant of code's.
     String token2 = createStudent("tp-b", "Тамара", "T-1"); long b = studentId("tp-b");
     String only = skill("BT_TP_ONLY", 2); passed(b, only, START.minus(Duration.ofDays(1)));
     var bug = Map.of("b", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n");
     long s1 = fixTask(only, 1, "curated:tp-s1:1", bug), s1b = fixTask(only, 1, "curated:tp-s1:2", bug), s2 = fixTask(only, 3, "curated:tp-s2:1", bug);
     for (int i = 0; i < 4; i++) {
       var v = adminTest(admin, startTest(admin, token2, b, List.of("fix", "code")).path("id").asLong());
-      assertTrue(Set.of(s1, s1b).contains(v.path("items").get(1).path("taskId").asLong()), "code: difficulty 1");
-      assertEquals(s2, v.path("items").get(0).path("taskId").asLong(), "fix: the same topic, another story");
+      assertEquals(s2, v.path("items").get(1).path("taskId").asLong(), "code: difficulty 3 before 1");
+      assertTrue(Set.of(s1, s1b).contains(v.path("items").get(0).path("taskId").asLong()), "fix: the same topic, another story");
       finishNow(admin, v.path("id").asLong());
     }
   }
@@ -343,11 +350,11 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_CALL");
     var call = call(admin, a);
     assertEquals("CALLED", call.path("status").asText()); assertEquals(START.plus(Duration.ofMinutes(5)).toString(), call.path("expiresAt").asText());
-    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds", "source", "stationId", "stationName"), fields(call));
+    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds", "source", "stationId", "stationName", "format"), fields(call));
     long id = call.path("id").asLong();
     var current = read(token, get("/api/board/current"));
     assertEquals(id, current.path("call").path("id").asLong()); assertTrue(current.path("test").isNull());
-    assertEquals(Set.of("id", "calledAt", "expiresAt", "kinds", "durationSeconds", "canStart"), fields(current.path("call"))); assertTrue(current.path("call").path("canStart").asBoolean());
+    assertEquals(Set.of("id", "calledAt", "expiresAt", "kinds", "durationSeconds", "canStart", "format"), fields(current.path("call"))); assertTrue(current.path("call").path("canStart").asBoolean());
     assertTrue(read(other, get("/api/board/current")).path("call").isNull(), "another student sees nothing");
     expect(other, post("/api/board/tests/{id}/start", id), status().isNotFound(), "BOARD_TEST_NOT_FOUND");
 
@@ -415,11 +422,10 @@ class BoardTestsIntegrationTest {
     assertEquals("RIGHT at last", adminTest(admin, id).path("answers").path("code").asText());
   }
 
-  @Test void theChecksTheWeightedGradeAndThePaceCapWithoutTheLlm() throws Exception {
+  @Test void theChecksAndTheWeightedGradeWithoutTheLlm() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("pc-a", "Полина", "B-7"); long a = studentId("pc-a");
     simpleBank(a, "BT_PC");
-    db.update("insert into app_settings(key,value) values('session_date',?)", LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(7).toString());
     var test = startTest(admin, token, a); long id = test.path("id").asLong();
     var run = read(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT draft\"}"));
     assertEquals("printed\n", run.path("console").path("stdout").asText());
@@ -432,8 +438,8 @@ class BoardTestsIntegrationTest {
     assertEquals("FINISHED", view.path("status").asText()); assertEquals("RIGHT final", view.path("answers").path("code").asText());
     assertEquals(1, view.path("runs").size()); assertEquals("RIGHT draft", view.path("runs").get(0).path("code").asText()); assertEquals("code", view.path("runs").get(0).path("item").asText());
     assertEquals("OK", view.path("runs").get(0).path("console").path("status").asText());
-    assertEquals("BEHIND", view.path("paceStatus").asText(), "a week to the session, the course far from closed"); assertEquals(3, view.path("paceCap").asInt());
-    assertEquals("5", view.path("ruleGrade").asText()); assertEquals("3", view.path("suggestedGrade").asText(), "the pace caps the grade");
+    assertTrue(view.path("floor").isNull(), "no plan: no item from the minimum, no floor");
+    assertEquals("5", view.path("ruleGrade").asText()); assertEquals("5", view.path("suggestedGrade").asText());
     assertEquals(6, view.path("score").path("points").asDouble()); assertEquals(6, view.path("score").path("max").asInt()); assertEquals(100, view.path("score").path("percent").asDouble());
     assertEquals(List.of("parsons", "fix", "code"), view.path("score").path("items").findValuesAsText("kind"));
     assertEquals(List.of(1, 2, 3), view.path("score").path("items").findValues("weight").stream().map(JsonNode::asInt).toList());
@@ -441,12 +447,12 @@ class BoardTestsIntegrationTest {
     assertEquals("UNAVAILABLE", view.path("assessmentStatus").asText());
     verify(generator, never()).assessBoardTest(anyLong(), any());
 
-    // Not a session participant: no cap. Only the code right: 3 of 6 points → 3; only parsons: 1 of 6 → 2.
+    // Only the code right: 3 of 6 points → 3; only parsons: 1 of 6 → 2.
     db.update("update users set session_participant=0 where id=?", a);
     long id2 = startTest(admin, token, a).path("id").asLong();
     read(token, post("/api/board/tests/{id}/finish", id2).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\",\"fix\":\"nope\"}"));
     var v2 = adminTest(admin, id2);
-    assertTrue(v2.path("paceStatus").isNull()); assertTrue(v2.path("paceCap").isNull());
+    assertTrue(v2.path("paceStatus").isNull());
     assertFalse(v2.path("results").get(1).path("passed").asBoolean()); assertEquals("Неверный вывод программы", v2.path("results").get(1).path("output").asText());
     assertEquals("3", v2.path("ruleGrade").asText()); assertEquals("3", v2.path("suggestedGrade").asText()); assertEquals(50, v2.path("score").path("percent").asDouble());
     long id3 = startTest(admin, token, a).path("id").asLong();
@@ -467,33 +473,55 @@ class BoardTestsIntegrationTest {
     assertEquals(100, view.path("score").path("percent").asDouble());
   }
 
-  @Test void byPaceTheItemsComeFromTheMinimumForTodayEvenIfNotReached() throws Exception {
+  @Test void theTopicsRangeFromTheMinimumForTodayToTheStudentsFarthestTopicAndTheMinimumDoneGivesAtLeastFour() throws Exception {
     String admin = login("admin", "admin-pass");
-    String token = createStudent("pace-a", "Павел", "B-PACE"); long a = studentId("pace-a");
-    String reached = skill("BT_PACE_REACHED", 2); passed(a, reached, START.minus(Duration.ofDays(2))); long level = codeTask(reached, 1, "CURATED", "curated:bt-pace-reached:1");
-    String last = skill("BT_PACE_LAST", 999); long pace = codeTask(last, 1, "CURATED", "curated:bt-pace-last:1");
-    // Without a session date there is no plan: the call by pace is refused, the overview has no plan.
-    var body = Map.of("userId", a, "language", "JAVA", "kinds", List.of("code"), "source", "PACE");
-    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)), status().isBadRequest(), "BOARD_PACE_UNAVAILABLE");
-    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", a, "source", "SOMETHING"))), status().isBadRequest(), "INVALID_SOURCE");
-    assertTrue(read(admin, get("/api/admin/board").param("group", "B-PACE").param("language", "JAVA")).path("pace").isNull());
-    // The session today, the group's first lesson 30 days ago: the minimum is the whole course, its last topic first.
-    db.update("insert into app_settings(key,value) values('session_date',?) on conflict(key) do update set value=excluded.value", LocalDate.ofInstant(START, ZoneOffset.UTC).toString());
+    db.update("update tasks set active=0"); // only this test's tasks: the minimum is the course's first half
+    String token = createStudent("rg-a", "Раиса", "B-RANGE"), behind = createStudent("rg-b", "Ринат", "B-RANGE");
+    long a = studentId("rg-a"), b = studentId("rg-b");
+    String min = skill("BT_RG_MIN", 0), a1 = skill("BT_RG_A1", 999), a2 = skill("BT_RG_A2", 999), a3 = skill("BT_RG_A3", 999), beyond = skill("BT_RG_BEYOND", 999);
+    for (String t : List.of(a1, a2, a3)) { passed(a, t, START.minus(Duration.ofDays(30))); confirm(a, t); } // passed() leaves no credits for the analytics
+    var bug = Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n");
+    long minParsons = parsonsTask(min, 3, "curated:rg-min-parsons:1", true), minFix = fixTask(min, 1, "curated:rg-min-fix:1", bug), minCode = codeTask(min, 2, "CURATED", "curated:rg-min-code:1");
+    db.update("update tasks set reference_code=? where id=?", "starter " + minCode + "\n" + "x();\n".repeat(5), minCode);
+    long fix1 = fixTask(a1, 2, "curated:rg-a1-fix:1", bug), fix2 = fixTask(a2, 2, "curated:rg-a2-fix:1", bug), code3 = codeTask(a3, 2, "CURATED", "curated:rg-a3-code:1");
+    codeTask(beyond, 2, "CURATED", "curated:rg-beyond:1"); fixTask(beyond, 2, "curated:rg-beyond-fix:1", bug);
+    // The session in 30 days, the group's first lesson 30 days ago: the minimum is the first half of the course.
+    db.update("insert into app_settings(key,value) values('session_date',?) on conflict(key) do update set value=excluded.value", LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(30).toString());
     try {
-      var board = read(admin, get("/api/admin/board").param("group", "B-PACE").param("language", "JAVA"));
       int total = count("select count(*) from skills where language='JAVA'");
-      assertEquals(total, board.path("pace").path("topics").asInt()); assertEquals(total, board.path("pace").path("total").asInt());
-      assertEquals("Тема BT_PACE_LAST", board.path("pace").path("lastTopic").asText());
-      var called = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
-      assertEquals("PACE", called.path("source").asText());
-      var test = read(token, post("/api/board/tests/{id}/start", called.path("id").asLong()));
-      assertEquals(pace, adminTest(admin, test.path("id").asLong()).path("items").get(0).path("taskId").asLong(), "a topic of the minimum the student has not reached");
-      assertEquals("PACE", adminTest(admin, test.path("id").asLong()).path("source").asText());
-      // By level (the default) — the topic the student has reached.
-      read(admin, post("/api/admin/board/tests/{id}/cancel", test.path("id").asLong()));
-      var byLevel = startTest(admin, token, a, List.of("code"));
-      assertEquals(level, adminTest(admin, byLevel.path("id").asLong()).path("items").get(0).path("taskId").asLong());
-      assertEquals("LEVEL", adminTest(admin, byLevel.path("id").asLong()).path("source").asText());
+      var board = read(admin, get("/api/admin/board").param("group", "B-RANGE").param("language", "JAVA"));
+      assertEquals(BoardTests.minimum(total, LocalDate.ofInstant(START, ZoneOffset.UTC).minusDays(30), LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(30), LocalDate.ofInstant(START, ZoneOffset.UTC)),
+          board.path("pace").path("topics").asInt()); assertEquals(total, board.path("pace").path("total").asInt());
+      // Each member's standing as in «Прогресс»: the lag behind the plan line and the farthest closed topic.
+      var standing = member(board, "rg-a");
+      assertEquals(board.path("pace").path("topics").asInt() - 3, standing.path("lag").asInt()); assertEquals("BEHIND", standing.path("status").asText());
+      assertEquals("Тема " + a3, standing.path("farthest").asText());
+      assertTrue(member(board, "rg-b").path("lag").isNull(), "no lesson yet — not in the session, as in «Прогресс»");
+      // Ahead of the minimum: code from the farthest topic, fix from the middle of the topics above the minimum, parsons from the minimum.
+      var called = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", a, "language", "JAVA", "source", "LEVEL"))));
+      assertEquals("RANGE", called.path("source").asText(), "one rule; an older client's source is ignored");
+      long id = read(token, post("/api/board/tests/{id}/start", called.path("id").asLong())).path("id").asLong();
+      var items = adminTest(admin, id).path("items");
+      assertEquals(minParsons, items.get(0).path("taskId").asLong()); assertEquals("minimum", items.get(0).path("zone").asText());
+      assertEquals(fix2, items.get(1).path("taskId").asLong(), "the middle of A1..A3"); assertEquals("above", items.get(1).path("zone").asText());
+      assertEquals(code3, items.get(2).path("taskId").asLong(), "the farthest topic, never beyond it"); assertEquals("above", items.get(2).path("zone").asText());
+      var floor = adminTest(admin, id).path("floor"); assertEquals(4, floor.path("grade").asInt()); assertTrue(floor.path("met").isNull(), "not checked yet");
+      // The minimum right, the harder topics wrong: 1 of 6 points → 2 by the checks, at least 4 suggested.
+      read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(Map.of("parsons", texts(items.get(0).path("solution")), "fix", "nope", "code", "nope"))));
+      var view = adminTest(admin, id);
+      assertEquals("2", view.path("ruleGrade").asText()); assertEquals("4", view.path("suggestedGrade").asText()); assertTrue(view.path("floor").path("met").asBoolean());
+      // The minimum wrong: no floor.
+      long id2 = read(token, post("/api/board/tests/{id}/start", call(admin, a).path("id").asLong())).path("id").asLong();
+      read(token, post("/api/board/tests/{id}/finish", id2).contentType(MediaType.APPLICATION_JSON).content("{\"fix\":\"RIGHT\",\"code\":\"nope\"}"));
+      var v2 = adminTest(admin, id2); assertFalse(v2.path("floor").path("met").asBoolean()); assertEquals("2", v2.path("suggestedGrade").asText(), "only the fix: 2 of 6 points");
+      // At or below the minimum: everything from the minimum, even unreached; no floor.
+      long id3 = read(behind, post("/api/board/tests/{id}/start", call(admin, b).path("id").asLong())).path("id").asLong();
+      var behindItems = adminTest(admin, id3).path("items");
+      assertEquals(List.of(minParsons, minFix, minCode), List.of(behindItems.get(0).path("taskId").asLong(), behindItems.get(1).path("taskId").asLong(), behindItems.get(2).path("taskId").asLong()));
+      for (var item : behindItems) assertEquals("minimum", item.path("zone").asText());
+      assertTrue(adminTest(admin, id3).path("floor").isNull());
+      assertTrue(fix1 > 0);
     } finally { db.update("delete from app_settings where key='session_date'"); }
   }
 
@@ -515,7 +543,7 @@ class BoardTestsIntegrationTest {
     var started = read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "board-pc"));
     assertFalse(started.path("items").isMissingNode());
     var other = read(token, get("/api/board/current").header("X-Board-Device", "own-pc")).path("test");
-    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "elsewhere"), fields(other)); assertTrue(other.path("elsewhere").asBoolean());
+    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "elsewhere", "format"), fields(other)); assertTrue(other.path("elsewhere").asBoolean());
     assertTrue(read(token, get("/api/board/current").header("X-Board-Device", "board-pc")).path("test").path("elsewhere").isMissingNode());
     assertTrue(read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "own-pc")).path("elsewhere").asBoolean(), "a second start does not take it over");
     read(token, put("/api/board/tests/{id}/answers", id).header("X-Board-Device", "board-pc").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"SOLVED\"}"));
@@ -551,16 +579,23 @@ class BoardTestsIntegrationTest {
     assertEquals(Map.of("parsons", 1.0, "fix", 1.0, "code", 1.0), BoardTests.scores(all, rightCode)); assertEquals(5, BoardTests.grade(all, rightCode));
     assertEquals(2, BoardTests.grade(List.of(result("parsons", true), result("fix", false)), rightCode), "«неверно» of the fix: 1 of 3");
     assertEquals(3, BoardTests.grade(all, Map.of("status", "UNAVAILABLE", "items", List.of(Map.of("item", "code", "verdict", "верно")))), "an UNAVAILABLE assessment gives nothing: 3 of 6 → 3");
-    assertNull(BoardTests.cap("ON_TRACK")); assertNull(BoardTests.cap("DONE")); assertNull(BoardTests.cap(null));
-    assertEquals(4, BoardTests.cap("BORDERLINE")); assertEquals(3, BoardTests.cap("BEHIND"));
-    assertEquals(3, BoardTests.suggested(5, 3)); assertEquals(4, BoardTests.suggested(4, null)); assertEquals(2, BoardTests.suggested(2, 4));
+    // The floor (a student ahead of the minimum): every item from the minimum counts fully → at least 4; the pace caps nothing.
+    var ahead = List.<Map<String, Object>>of(Map.of("kind", "parsons", "zone", "minimum"), Map.of("kind", "fix", "zone", "above"), Map.of("kind", "code", "zone", "above"));
+    var failedAbove = List.of(result("parsons", true), result("fix", false), result("code", false));
+    assertEquals(2, BoardTests.grade(failedAbove, null)); assertEquals(true, BoardTests.floor(ahead, BoardTests.scores(failedAbove, null)));
+    assertEquals(4, BoardTests.suggested(ahead, failedAbove, null), "the minimum done, the harder topics not: 4");
+    assertEquals(5, BoardTests.suggested(ahead, all, rightCode), "the floor never lowers");
+    var failedMinimum = List.of(result("parsons", false), result("fix", true), result("code", true));
+    assertEquals(false, BoardTests.floor(ahead, BoardTests.scores(failedMinimum, null))); assertEquals(4, BoardTests.suggested(ahead, failedMinimum, null), "5 of 6 → 4, no floor needed");
+    var onlyMinimum = List.<Map<String, Object>>of(Map.of("kind", "parsons", "zone", "minimum"), Map.of("kind", "fix", "zone", "minimum"), Map.of("kind", "code", "zone", "minimum"));
+    assertNull(BoardTests.floor(onlyMinimum, BoardTests.scores(failedAbove, null)), "not ahead: no floor"); assertEquals(2, BoardTests.suggested(onlyMinimum, failedAbove, null));
+    assertNull(BoardTests.floor(List.of(Map.of("kind", "parsons"), Map.of("kind", "code")), BoardTests.scores(failedAbove, null)), "a test before the zones");
   }
 
   @Test void theLlmVerdictsRaiseTheSuggestedGradeAndTheTeacherGrades() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("llm-a", "Лейла", "B-8"); long a = studentId("llm-a");
     simpleBank(a, "BT_LLM");
-    db.update("insert into app_settings(key,value) values('session_date',?)", LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(7).toString());
     when(generator.available()).thenReturn(true);
     when(generator.assessBoardTest(eq(a), any())).thenReturn(new BoardAssessment("Подход верный, не хватает «;».",
         List.of(new BoardAssessment.Item("parsons", "верно", "Порядок верный."), new BoardAssessment.Item("fix", "верно", "Исправлено."),
@@ -581,11 +616,10 @@ class BoardTestsIntegrationTest {
     assertEquals("3", view.path("ruleGrade").asText(), "by the checks: 3 of 6 points");
     assertEquals(4.5, view.path("score").path("points").asDouble()); assertEquals(75, view.path("score").path("percent").asDouble());
     assertEquals(0.5, view.path("score").path("items").get(2).path("score").asDouble());
-    assertEquals("3", view.path("suggestedGrade").asText(), "4 with the verdict, capped at 3 by the pace");
-    db.update("delete from app_settings where key='session_date'"); db.update("update board_tests set pace_status=null where id=?", id);
+    assertEquals("4", view.path("suggestedGrade").asText(), "the partial verdict raises the suggested grade; the pace caps nothing");
     read(admin, post("/api/admin/board/tests/{id}/assess", id));
     view = assessed(admin, id);
-    assertEquals("4", view.path("suggestedGrade").asText(), "the partial verdict raises the suggested grade"); assertEquals("3", view.path("ruleGrade").asText());
+    assertEquals("4", view.path("suggestedGrade").asText()); assertEquals("3", view.path("ruleGrade").asText());
     var request = ArgumentCaptor.forClass(BoardAssessmentRequest.class);
     verify(generator, times(2)).assessBoardTest(eq(a), request.capture());
     var r = request.getValue();
@@ -606,11 +640,11 @@ class BoardTestsIntegrationTest {
     var graded = read(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":\"5\",\"comment\":\"  Молодец \"}"));
     assertEquals("5", graded.path("finalGrade").asText()); assertEquals("Молодец", graded.path("comment").asText()); assertEquals(now.toString(), graded.path("gradedAt").asText());
     expect(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":\"6\"}"), status().isBadRequest(), "INVALID_GRADE");
-    expect(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"comment\":\"" + "я".repeat(501) + "\"}"), status().isBadRequest(), "INVALID_COMMENT");
+    expect(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"comment\":\"" + "я".repeat(1001) + "\"}"), status().isBadRequest(), "INVALID_COMMENT");
     assertEquals("4", read(admin, patch("/api/admin/board/tests/{id}", id).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":\"4\"}")).path("finalGrade").asText());
     var grades = read(token, get("/api/board/grades").param("language", "JAVA"));
     assertEquals(Set.of("grades"), fields(grades)); assertEquals(1, grades.path("grades").size());
-    assertEquals(Set.of("id", "date", "grade", "comment", "report"), fields(grades.path("grades").get(0)));
+    assertEquals(Set.of("id", "date", "grade", "comment", "report", "format"), fields(grades.path("grades").get(0)));
     assertEquals("2041-03-01", grades.path("grades").get(0).path("date").asText()); assertEquals("4", grades.path("grades").get(0).path("grade").asText());
     assertEquals("Молодец", grades.path("grades").get(0).path("comment").asText());
     // The report (shown by default): per item the statement, the student's own answer, the verdict with the LLM, the check
@@ -672,7 +706,7 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_LK");
     long id = call(admin, a).path("id").asLong();
     var started = read(token, post("/api/board/tests/{id}/start", id));
-    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "durationSeconds", "items", "answers", "revision"), fields(started)); assertEquals(0, started.path("revision").asInt());
+    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "durationSeconds", "items", "answers", "revision", "format"), fields(started)); assertEquals(0, started.path("revision").asInt());
     assertEquals(List.of("parsons", "fix", "code"), started.path("items").findValuesAsText("kind"));
     assertEquals(Set.of("kind", "title", "statement", "language", "before", "after", "lines", "extraLines"), fields(started.path("items").get(0)));
     assertEquals(Set.of("kind", "title", "statement", "language", "program"), fields(started.path("items").get(1)));
@@ -703,7 +737,8 @@ class BoardTestsIntegrationTest {
     var board = read(admin, get("/api/admin/board").param("group", "R-1").param("language", "JAVA"));
     assertEquals(List.of("rt-a", "rt-b", "rt-c", "rt-d", "rt-e", "rt-f", "rt-g"), board.path("members").findValuesAsText("login"));
     var e = member(board, "rt-e");
-    assertEquals(Set.of("userId", "login", "displayName", "present", "lastTestAt", "tests", "lastGrade"), fields(e));
+    assertEquals(Set.of("userId", "login", "displayName", "present", "lastTestAt", "tests", "lastGrade", "lag", "status", "farthest", "attestation"), fields(e));
+    assertTrue(e.path("lag").isNull() && e.path("status").isNull() && e.path("farthest").isNull(), "no session date, nothing closed");
     assertTrue(e.path("present").asBoolean()); assertEquals(2, e.path("tests").asInt()); assertEquals("5", e.path("lastGrade").asText());
     assertEquals(START.minus(Duration.ofHours(1)).toString(), e.path("lastTestAt").asText());
     assertFalse(member(board, "rt-f").path("present").asBoolean()); assertTrue(member(board, "rt-a").path("lastTestAt").isNull());
@@ -741,7 +776,7 @@ class BoardTestsIntegrationTest {
     long cancelled = call(admin, a).path("id").asLong(); read(admin, post("/api/admin/board/tests/{id}/cancel", cancelled));
     var journal = read(admin, get("/api/admin/board/journal").param("group", "J-9").param("language", "JAVA"));
     assertEquals(List.of(cancelled, second, first), journal.path("tests").findValues("id").stream().map(JsonNode::asLong).toList(), "newest first");
-    assertEquals(Set.of("id", "userId", "displayName", "calledAt", "status", "finalGrade", "suggestedGrade"), fields(journal.path("tests").get(0)));
+    assertEquals(Set.of("id", "userId", "displayName", "calledAt", "status", "finalGrade", "suggestedGrade", "format"), fields(journal.path("tests").get(0)));
     assertEquals(List.of("Артур", "Яна"), journal.path("students").findValuesAsText("displayName"));
     var yana = journal.path("students").get(1);
     assertEquals(2, yana.path("grades").size(), "finished tests only");
@@ -803,7 +838,7 @@ class BoardTestsIntegrationTest {
     var listed = callOf(waiting, id);
     assertEquals(id, listed.path("id").asLong()); assertEquals("Стас", listed.path("displayName").asText()); assertEquals("B-ST", listed.path("group").asText());
     assertEquals("JAVA", listed.path("language").asText()); assertEquals(420, listed.path("durationSeconds").asInt()); assertTrue(listed.path("canStart").asBoolean());
-    assertEquals(Set.of("id", "displayName", "group", "language", "kinds", "durationSeconds", "calledAt", "expiresAt", "canStart"), fields(listed));
+    assertEquals(Set.of("id", "displayName", "group", "language", "kinds", "durationSeconds", "calledAt", "expiresAt", "canStart", "format"), fields(listed));
     assertEquals(START.toString(), db.queryForObject("select last_seen_at from board_stations where id=?", String.class, stationId));
 
     var test = station(station, post("/api/station/tests/{id}/start", id));
@@ -873,10 +908,9 @@ class BoardTestsIntegrationTest {
     var called = call(admin, a, List.of("code")); long id = called.path("id").asLong();
     var edited = read(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"code\",\"parsons\"]}"));
     assertEquals(List.of("parsons", "code"), texts(edited.path("kinds"))); assertEquals(300, edited.path("durationSeconds").asInt());
-    assertEquals(called.path("expiresAt"), edited.path("expiresAt"), "the expiry stays"); assertEquals("LEVEL", edited.path("source").asText());
+    assertEquals(called.path("expiresAt"), edited.path("expiresAt"), "the expiry stays"); assertEquals("RANGE", edited.path("source").asText());
     expect(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[]}"), status().isBadRequest(), "INVALID_KINDS");
-    expect(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"X\"}"), status().isBadRequest(), "INVALID_SOURCE");
-    expect(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"PACE\"}"), status().isBadRequest(), "BOARD_PACE_UNAVAILABLE");
+    assertEquals("RANGE", read(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"PACE\"}")).path("source").asText(), "an older client's source is ignored");
     expect(token, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"code\"]}"), status().isBadRequest(), "FORBIDDEN");
     // An expired call can be edited too; it stays expired until «Продлить».
     now = START.plus(Duration.ofMinutes(6));
@@ -896,8 +930,9 @@ class BoardTestsIntegrationTest {
     String admin = login("admin", "admin-pass");
     String token = createStudent("rp-a", "Рита", "B-RP"); long a = studentId("rp-a");
     simpleBank(a, "BT_RP");
-    // Two variants of one story at difficulty 1 (the first choice), another story at difficulty 2.
-    long sameStory = codeTask("BT_RP", 1, "CURATED", "curated:bt_rp:2"), spare = codeTask("BT_RP", 2, "CURATED", "curated:bt_rp-spare:1");
+    // Two variants of one story at difficulty 2 (the first choice), another story at difficulty 1.
+    db.update("update tasks set difficulty=2 where external_key='curated:bt_rp:1'");
+    long sameStory = codeTask("BT_RP", 2, "CURATED", "curated:bt_rp:2"), spare = codeTask("BT_RP", 1, "CURATED", "curated:bt_rp-spare:1");
     long storyOne = db.queryForObject("select id from tasks where external_key='curated:bt_rp:1'", Long.class);
     var test = startTest(admin, token, a, List.of("parsons", "code")); long id = test.path("id").asLong();
     long first = adminTest(admin, id).path("items").get(1).path("taskId").asLong();
@@ -937,12 +972,152 @@ class BoardTestsIntegrationTest {
 
   // ---------------------------------------------------------------- helpers
 
+  // ---------------------------------------------------------------- attestation
+
+  @Test void anAttestationGivesStudentsCalledTogetherDifferentStoriesOfThePoolAndClosesTheirLessons() throws Exception {
+    String admin = login("admin", "admin-pass");
+    db.update("update app_settings set value='false' where key='board_student_start'"); // an attestation starts at the own computer anyway
+    db.update("update tasks set active=0 where mode='ATTESTATION'");
+    String tokenA = createStudent("at-a", "Аслан", "AT-1"), tokenB = createStudent("at-b", "Белла", "AT-1"); long a = studentId("at-a"), b = studentId("at-b");
+    String near = skill("BT_AT_NEAR", 99), far = skill("BT_AT_FAR", 99); // the end of the course: every construct topic is before them
+    String reference = "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 0; i < 3; i++) {\n            if (i > 0) System.out.println(i);\n        }\n    }\n}\n";
+    long far1 = attestationTask(far, "attest:at-far-1", reference), far2 = attestationTask(far, "attest:at-far-2", reference), near1 = attestationTask(near, "attest:at-near-1", reference);
+    // The call: ten minutes by default, kinds ignored; the student may start it at his own computer.
+    var called = callAttestation(admin, a, null);
+    assertEquals("ATTESTATION", called.path("format").asText()); assertEquals(List.of("code"), texts(called.path("kinds"))); assertEquals(600, called.path("durationSeconds").asInt());
+    var call = read(tokenA, get("/api/board/current")).path("call");
+    assertTrue(call.path("canStart").asBoolean()); assertEquals("ATTESTATION", call.path("format").asText());
+    var testA = read(tokenA, post("/api/board/tests/{id}/start", called.path("id").asLong()));
+    assertEquals(START.plusSeconds(600).toString(), testA.path("endsAt").asText()); assertEquals("ATTESTATION", testA.path("format").asText());
+    assertEquals(List.of("code"), testA.path("items").findValuesAsText("kind"));
+    assertFalse(testA.toString().contains("reference"), "the student never sees the reference");
+    long idA = testA.path("id").asLong();
+    long taskA = adminTest(admin, idA).path("items").get(0).path("taskId").asLong();
+    assertTrue(Set.of(far1, far2).contains(taskA), "the task covering most of the plan (no plan: the whole course)");
+    // Called together: another story — nobody else is solving it.
+    long idB = read(tokenB, post("/api/board/tests/{id}/start", callAttestation(admin, b, 7).path("id").asLong())).path("id").asLong();
+    var viewB = adminTest(admin, idB);
+    long taskB = viewB.path("items").get(0).path("taskId").asLong();
+    assertEquals(Set.of(far1, far2), Set.of(taskA, taskB)); assertEquals(420, viewB.path("durationSeconds").asInt());
+    // Lessons, the console and the assistant are closed meanwhile; the board test's own console works.
+    for (var request : List.of(post("/api/lessons/start").param("language", "JAVA"), get("/api/learning/next").param("language", "JAVA"),
+        post("/api/run").param("language", "JAVA").contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"x\"}"),
+        post("/api/chat").param("language", "JAVA").contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"?\"}"),
+        post("/api/attempts").contentType(MediaType.APPLICATION_JSON).content("{\"taskId\":" + far1 + ",\"sourceCode\":\"x\"}")))
+      expect(tokenA, request, status().isBadRequest(), "ATTESTATION_RUNNING");
+    read(tokenA, post("/api/board/tests/{id}/run", idA).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"code\",\"code\":\"x\"}"));
+    // The teacher sees what the task covers, its reference and which constructs the answer uses.
+    String answer = "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 0; i < 3; i++) System.out.println(i);\n    }\n}\n";
+    read(tokenA, post("/api/board/tests/{id}/finish", idA).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("code", answer))));
+    var viewA = adminTest(admin, idA); var item = viewA.path("items").get(0);
+    var course = db.queryForList("select code from skills where language='JAVA' order by block_no,sort_order,code", String.class);
+    assertTrue(item.path("attestation").asBoolean()); assertEquals(course.indexOf(far) + 1, item.path("covers").asInt()); assertEquals("Тема " + far, item.path("coversTitle").asText());
+    assertTrue(item.path("planTopics").isNull()); assertEquals(reference, item.path("reference").asText());
+    var coverage = new HashMap<String, JsonNode>(); for (var row : viewA.path("coverage")) coverage.put(row.path("construct").asText(), row);
+    assertTrue(coverage.get("FOR").path("expected").asBoolean()); assertTrue(coverage.get("FOR").path("used").asBoolean());
+    assertTrue(coverage.get("IF").path("expected").asBoolean()); assertFalse(coverage.get("IF").path("used").asBoolean());
+    assertFalse(coverage.get("WHILE").path("expected").asBoolean());
+    // Finished: the lessons are open again (whatever else the request needs).
+    var after = mvc.perform(post("/api/run").param("language", "JAVA").cookie(cookie(tokenA)).contentType(MediaType.APPLICATION_JSON).content("{\"sourceCode\":\"x\"}")).andReturn().getResponse();
+    assertFalse(after.getContentAsString().contains("ATTESTATION_RUNNING"), after.getContentAsString());
+    // Again for A: a story he never had — the other far one is B's (running), so the nearer one; the replacement avoids both of his.
+    long again = read(tokenA, post("/api/board/tests/{id}/start", callAttestation(admin, a, null).path("id").asLong())).path("id").asLong();
+    assertEquals(near1, adminTest(admin, again).path("items").get(0).path("taskId").asLong());
+    var replaced = read(admin, post("/api/admin/board/tests/{id}/items/{kind}/replace", again, "code"));
+    long other = replaced.path("items").get(0).path("taskId").asLong();
+    assertNotEquals(near1, other); assertNotEquals(taskA, other, "a story he had comes only when nothing else is left");
+    assertEquals(List.of(near1), longs(replaced.path("items").get(0).path("replacedTaskIds")));
+    assertEquals(taskA, read(admin, post("/api/admin/board/tests/{id}/items/{kind}/replace", again, "code")).path("items").get(0).path("taskId").asLong(), "the last one left");
+    expect(admin, post("/api/admin/board/tests/{id}/items/{kind}/replace", again, "code"), status().isBadRequest(), "NO_ATTESTATION_TASK");
+    // The grade: a separate line for the student and in the journal; the board's rotation does not count attestations.
+    read(admin, patch("/api/admin/board/tests/{id}", idA).contentType(MediaType.APPLICATION_JSON).content("{\"finalGrade\":\"4\"}"));
+    var grades = read(tokenA, get("/api/board/grades").param("language", "JAVA")).path("grades");
+    assertEquals("ATTESTATION", grades.get(0).path("format").asText()); assertEquals("4", grades.get(0).path("grade").asText());
+    var journal = read(admin, get("/api/admin/board/journal").param("group", "AT-1").param("language", "JAVA"));
+    for (var s : journal.path("students")) if (s.path("userId").asLong() == a) { assertEquals(0, s.path("grades").size()); assertEquals("4", s.path("attestations").get(0).asText()); }
+    for (var t : journal.path("tests")) assertEquals("ATTESTATION", t.path("format").asText());
+    var overview = read(admin, get("/api/admin/board").param("group", "AT-1").param("language", "JAVA"));
+    var memberA = member(overview, "at-a");
+    assertEquals(0, memberA.path("tests").asInt()); assertTrue(memberA.path("lastTestAt").isNull());
+    assertEquals(again, memberA.path("attestation").path("testId").asLong(), "the latest attestation"); assertEquals("STARTED", memberA.path("attestation").path("status").asText());
+    assertEquals(3, overview.path("attestation").path("tasks").asInt()); assertEquals(3, overview.path("attestation").path("total").asInt()); assertEquals(10, overview.path("attestation").path("minutes").asInt());
+    db.update("update tasks set active=0 where mode='ATTESTATION'");
+  }
+
+  @Test void anAttestationTakesOnlyPoolTasksWithinThePlanAndAnyPositiveTime() throws Exception {
+    String admin = login("admin", "admin-pass");
+    db.update("update tasks set active=0 where mode='ATTESTATION'");
+    String token = createStudent("ap-a", "Ахмед", "AT-PLAN"); long a = studentId("ap-a");
+    String beyond = skill("BT_AP_BEYOND", 99);
+    for (var bad : List.of("0", "-1", "\"ten\"")) expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON)
+        .content("{\"userId\":" + a + ",\"language\":\"JAVA\",\"format\":\"ATTESTATION\",\"minutes\":" + bad + "}"), status().isBadRequest(), "INVALID_MINUTES");
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":" + a + ",\"format\":\"EXAM\"}"), status().isBadRequest(), "INVALID_FORMAT");
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":" + a + ",\"language\":\"JAVA\",\"format\":\"ATTESTATION\"}"), status().isBadRequest(), "NO_ATTESTATION_TASK");
+    // The plan: the group's first lesson 30 days ago, the session in 30 days — half of the course; a task beyond it does not fit.
+    lesson(a, START.minus(Duration.ofDays(30)), true);
+    db.update("insert into app_settings(key,value) values('session_date',?) on conflict(key) do update set value=excluded.value", LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(30).toString());
+    try {
+      String first = db.queryForObject("select code from skills where language='JAVA' order by block_no,sort_order,code limit 1", String.class);
+      attestationTask(beyond, "attest:ap-beyond", null);
+      expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":" + a + ",\"language\":\"JAVA\",\"format\":\"ATTESTATION\"}"), status().isBadRequest(), "NO_ATTESTATION_TASK");
+      long fits = attestationTask(first, "attest:ap-first", null);
+      var board = read(admin, get("/api/admin/board").param("group", "AT-PLAN").param("language", "JAVA"));
+      assertEquals(1, board.path("attestation").path("tasks").asInt()); assertEquals(2, board.path("attestation").path("total").asInt());
+      var called = callAttestation(admin, a, 2.5);
+      assertEquals(150, called.path("durationSeconds").asInt(), "fractions of a minute are fine, no upper limit");
+      var edited = read(admin, patch("/api/admin/board/tests/{id}/call", called.path("id").asLong()).contentType(MediaType.APPLICATION_JSON).content("{\"minutes\":45,\"kinds\":[\"parsons\"]}"));
+      assertEquals(2700, edited.path("durationSeconds").asInt()); assertEquals(List.of("code"), texts(edited.path("kinds")), "an attestation keeps its one item");
+      var recalled = read(admin, post("/api/admin/board/tests/{id}/recall", called.path("id").asLong()));
+      assertEquals("ATTESTATION", recalled.path("format").asText()); assertEquals(2700, recalled.path("durationSeconds").asInt());
+      long id = read(token, post("/api/board/tests/{id}/start", recalled.path("id").asLong())).path("id").asLong();
+      var item = adminTest(admin, id).path("items").get(0);
+      assertEquals(fits, item.path("taskId").asLong()); assertEquals(1, item.path("covers").asInt()); assertEquals(board.path("pace").path("topics").asInt(), item.path("planTopics").asInt());
+      // «План на дату» (owner: the plan of one Monday for every group): the plan of that day, whatever day the attestation is.
+      String total = String.valueOf(count("select count(*) from skills where language='JAVA'"));
+      expect(admin, put("/api/admin/board/settings").contentType(MediaType.APPLICATION_JSON).content("{\"attestationPlanDate\":\"26.10\"}"), status().isBadRequest(), "INVALID_SETTINGS");
+      var day = LocalDate.ofInstant(START, ZoneOffset.UTC).minusDays(29);
+      var settings = read(admin, put("/api/admin/board/settings").contentType(MediaType.APPLICATION_JSON).content("{\"attestationPlanDate\":\"" + day + "\"}"));
+      assertEquals(day.toString(), settings.path("attestationPlanDate").asText()); assertTrue(settings.path("studentStart").asBoolean(), "the other setting stays");
+      var dated = read(admin, get("/api/admin/board").param("group", "AT-PLAN").param("language", "JAVA")).path("attestation");
+      int k = BoardTests.minimum(Integer.parseInt(total), day.minusDays(1), day.plusDays(59), day);
+      assertEquals(day.toString(), dated.path("planDate").asText()); assertEquals(k, dated.path("planTopics").asInt()); assertTrue(k < board.path("pace").path("topics").asInt());
+      long id2 = read(token, post("/api/board/tests/{id}/start", callAttestation(admin, a, null).path("id").asLong())).path("id").asLong();
+      assertEquals(k, adminTest(admin, id2).path("items").get(0).path("planTopics").asInt());
+      assertTrue(read(admin, put("/api/admin/board/settings").contentType(MediaType.APPLICATION_JSON).content("{\"attestationPlanDate\":null}")).path("attestationPlanDate").isNull());
+    } finally { db.update("delete from app_settings where key in ('session_date','attestation_plan_date')"); db.update("update tasks set active=0 where mode='ATTESTATION'"); }
+  }
+
+  @Test void theAttestationPoolIsLoadedByKeyAndRetiresWhatLeftTheBank(@Autowired AttestationBank bank) throws Exception {
+    String topic = skill("BT_AB", 2);
+    var task = json.readTree("{\"key\":\"attest:ab-one\",\"language\":\"JAVA\",\"skill\":\"" + topic + "\",\"difficulty\":3,\"title\":\"Сквозная\",\"statement\":\"s\",\"starter\":\"st\","
+        + "\"testSource\":\"class TestHarness {}\",\"testFileName\":\"TestHarness.java\",\"goalJson\":\"{\\\"kind\\\":\\\"OUTPUT_TEXT\\\"}\",\"reference\":\"ref\","
+        + "\"wrong\":[{\"description\":\"d\",\"source\":\"w\"}],\"cases\":[{\"ordinal\":1,\"input\":\"\",\"expected\":\"ok\\n\",\"public\":true}]}");
+    var bankJson = json.createObjectNode(); bankJson.putArray("tasks").add(task);
+    bank.load(bankJson); bank.load(bankJson);
+    var rows = db.queryForList("select id,mode,active,source,reference_code from tasks where external_key='attest:ab-one'");
+    assertEquals(1, rows.size(), "updated by key, not duplicated");
+    assertEquals("ATTESTATION", rows.getFirst().get("mode")); assertEquals(1, ((Number) rows.getFirst().get("active")).intValue()); assertEquals("ref", rows.getFirst().get("reference_code"));
+    assertEquals(1, count("select count(*) from task_cases where task_id=?", rows.getFirst().get("id")));
+    bank.load(json.readTree("{\"tasks\":[]}"));
+    assertEquals(0, count("select active from tasks where external_key='attest:ab-one'"), "left the bank: deactivated, its tests stay readable");
+  }
+
+  private long attestationTask(String skill, String key, String reference) {
+    long id = task(skill, 3, "CURATED", key, "{\"kind\":\"OUTPUT_TEXT\",\"expectedOutput\":\"ok\\n\"}", reference);
+    db.update("update tasks set mode='ATTESTATION',starter_code=?,title=? where id=?", "starter " + id, "Сквозная " + id, id);
+    return id;
+  }
+  private JsonNode callAttestation(String admin, long user, Number minutes) throws Exception {
+    var body = new LinkedHashMap<String, Object>(Map.of("userId", user, "language", "JAVA", "format", "ATTESTATION", "kinds", List.of("parsons"))); if (minutes != null) body.put("minutes", minutes);
+    return read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
+  }
+
   /**
-   * A test of all three kinds can start: the recent topic has a code task, the older one a fix task (difficulty 2, the
+   * A test of all three kinds can start (no plan: the range is the student's topics): the farther topic has a code task, the nearer one a fix task (difficulty 2, the
    * bug «b равно 3») and a parsons task with an extra line (difficulty 3, so that fix does not take it).
    */
   private void simpleBank(long user, String prefix) {
-    String topic = skill(prefix, 2), old = skill(prefix + "_OLD", 2);
+    String old = skill(prefix + "_OLD", 2), topic = skill(prefix, 2); // the code topic is the farther one
     passed(user, old, START.minus(Duration.ofDays(30))); passed(user, topic, START.minus(Duration.ofDays(1)));
     codeTask(topic, 1, "CURATED", "curated:" + prefix.toLowerCase() + ":1");
     fixTask(old, 2, "curated:" + prefix.toLowerCase() + "-fix:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));

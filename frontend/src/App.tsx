@@ -7,7 +7,7 @@ import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from
 import { LlmAnalytics } from './analytics'
 import { ProgressAnalytics } from './progress'
 import { PairWork } from './pairs'
-import { BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
+import { AttestationDone, BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
 import { StudentSessionCard } from './session'
 import { StationScreen } from './station'
 import { LlmSettingsView } from './settings'
@@ -15,7 +15,7 @@ import { DrawSettingsView } from './wheel'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
 import { DangerFrame, HardModeDialog, HardModeSwitch, HeaderTapes } from './hardmode'
 import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
-import type { ActiveLesson, Attempt, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
+import type { ActiveLesson, Attempt, BoardFormat, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
 
 const UNKNOWN = 'Не знаю'
 const fmt = (value?: string | null) => {
@@ -194,7 +194,7 @@ function Shell() {
   const relogin = (user: User) => {
     setExpired(false); setError('')
     if (user.id === me?.id) { setMe(user); return }
-    setMe(user); setEpoch(n => n + 1); setBoardDone(false); setBoard(null); boardTest.current = null
+    setMe(user); setEpoch(n => n + 1); setBoardDone(null); setBoard(null); boardTest.current = null
   }
   /** «Сделать этот компьютер компьютером у доски»: the station cookie is set; the teacher signs out here and the station screen shows. */
   const becomeStation = useCallback(async () => {
@@ -202,27 +202,32 @@ function Shell() {
     setError(''); setMe(null); setStation(true); setStationLogin(false)
   }, [])
   // Test at the board: the called student sees the call on any page; the test and its «Тест сдан» replace the whole screen.
-  const [boardDone, setBoardDone] = useState(false)
+  // boardDone — the format of the test that just finished here (null — none): a TEST ends in the sign-out, an ATTESTATION back in the lessons.
+  const [boardDone, setBoardDone] = useState<BoardFormat | null>(null)
   const [board, setBoard] = useBoardCurrent(isStudent && !boardDone)
   const boardTest = useRef<Id | null>(null)
+  const boardFormat = useRef<BoardFormat>('TEST')
   useEffect(() => {
     // Only the test this browser runs ends in «Тест сдан» and the sign-out; another session simply goes back.
-    if (board?.test && !board.test.elsewhere) boardTest.current = board.test.id
+    if (board?.test && !board.test.elsewhere) { boardTest.current = board.test.id; boardFormat.current = board.test.format ?? 'TEST' }
     // The running test disappeared (the teacher finished or removed it, the server closed it): it is over for this screen too.
-    else if (board && boardTest.current !== null) { boardTest.current = null; setBoardDone(true) }
+    else if (board && boardTest.current !== null) { boardTest.current = null; setBoardDone(boardFormat.current) }
   }, [board])
-  const boardFinished = useCallback(() => { boardTest.current = null; setBoardDone(true) }, [])
+  const boardFinished = useCallback(() => { boardTest.current = null; setBoardDone(boardFormat.current) }, [])
   // After a test taken from the student's own account on the classroom PC: signed out, the lessons stay open (they may be on the student's PC).
   const boardLogout = useCallback(async () => {
     await post<void>('/auth/logout?keepLessons=true').catch(() => {})
-    boardTest.current = null; setBoardDone(false); signedOut()
+    boardTest.current = null; setBoardDone(null); signedOut()
   }, [signedOut])
+  // After an attestation (taken at the student's own computer): nobody is signed out, back to the lessons.
+  const attestationBack = useCallback(() => { boardTest.current = null; setBoardDone(null) }, [])
   const leaveStation = useCallback(() => { setStation(false); setStationLogin(false) }, [])
   const openStationLogin = useCallback(() => { setError(''); setStationLogin(true) }, [])
   if (loading) return <div className="center"><Spinner /><span>Загружаем…</span></div>
   if (!me) return station && !stationLogin ? <StationScreen onTeacherLogin={openStationLogin} onGone={leaveStation} />
     : <Login onLogin={login} onError={setError} error={error} onBack={station ? () => { setError(''); setStationLogin(false) } : undefined} />
   const reloginForm = expired && <Relogin user={me} onLogin={relogin} onLogout={logout} />
+  if (isStudent && boardDone === 'ATTESTATION') return <>{reloginForm}<AttestationDone onBack={attestationBack} /></>
   if (isStudent && boardDone) return <>{reloginForm}<BoardDone onLogout={boardLogout} /></>
   if (isStudent && board?.test?.elsewhere) return <>{reloginForm}<BoardElsewhere test={board.test} name={me.displayName} /></>
   if (isStudent && board?.test) return <>{reloginForm}<BoardTestScreen key={board.test.id} test={board.test} name={me.displayName} onFinished={boardFinished} /></>

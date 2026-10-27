@@ -184,11 +184,11 @@ class FortuneWheel {
 
   // ---------------------------------------------------------------- board
 
-  /** The window's board tests of the given students: the best final grade of each called student (null — not graded yet). */
+  /** The window's board tests (not attestations) of the given students: the best final grade of each called student (null — not graded yet). */
   private Map<Long, Integer> board(List<Long> users, PairWork.Window w) {
     Map<Long, Integer> result = new HashMap<>();
     if (users.isEmpty()) return result;
-    db.query("select user_id,final_grade from board_tests where status not in ('CANCELLED','EXPIRED') and user_id in (" + String.join(",", Collections.nCopies(users.size(), "?")) + ")"
+    db.query("select user_id,final_grade from board_tests where status not in ('CANCELLED','EXPIRED') and format='TEST' and user_id in (" + String.join(",", Collections.nCopies(users.size(), "?")) + ")"
         + " and cast(strftime('%s',called_at) as integer) between ? and ?",
         (RowCallbackHandler) rs -> {
           long user = rs.getLong(1); String grade = rs.getString(2);

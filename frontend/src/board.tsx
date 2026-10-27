@@ -7,10 +7,10 @@ import { Icon, initials, useToast } from './fx'
 import { parseDate } from './game'
 import { groupCourse, moscow } from './pairs'
 import { NO_GROUP, useGroupFilter } from './groups'
-import { dayNumber, plural, shortDay, StatusChip } from './session'
+import { dayNumber, lagText, plural, shortDay, StatusChip } from './session'
 import type {
-  BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardCheck, BoardCurrent, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
-  BoardMember, BoardOverview, BoardPacePlan, BoardReportItem, BoardRun, BoardScore, BoardSettings, BoardSource, BoardStation, BoardStatus, BoardStudentGrade, BoardStudentItem,
+  BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardAttestationPool, BoardCheck, BoardCoverage, BoardCurrent, BoardFormat, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
+  BoardMember, BoardOverview, BoardPacePlan, BoardReportItem, BoardRun, BoardScore, BoardSettings, BoardStation, BoardStatus, BoardStudentGrade, BoardStudentItem,
   BoardStudentTest, BoardTestSummary, ConsoleRun, CourseLanguage, Id, StationCurrent,
 } from './types'
 
@@ -31,7 +31,16 @@ export const KIND: Record<BoardItemKind, { title: string; phrase: string; minute
 /** Known kinds in the canonical order; missing or empty → all three (as the backend's default). */
 export const canonical = (kinds: readonly string[] | null | undefined) => { const known = KINDS.filter(k => kinds?.includes(k)); return known.length ? known : [...KINDS] }
 export const minutesOf = (kinds: BoardItemKind[], durationSeconds?: number | null) => durationSeconds ? Math.round(durationSeconds / 60) : kinds.reduce((sum, k) => sum + KIND[k].minutes, 0)
-export const minutesText = (n: number) => `${n} ${plural(n, 'минуту', 'минуты', 'минут')}`
+/** «1», «0,5», «0». */
+const decimal = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
+/** «7 минут», «7,5 минуты» (an attestation's time may be fractional). */
+export const minutesText = (n: number) => Number.isInteger(n) ? `${n} ${plural(n, 'минуту', 'минуты', 'минут')}` : `${decimal(n)} минуты`
+
+/** An attestation (one «Напиши код» over the plan, at the student's own computer) rather than the test at the board. */
+export const isAttestation = (t: { format?: BoardFormat | null } | null | undefined) => t?.format === 'ATTESTATION'
+const ATTESTATION_MINUTES = 10
+/** The attestation's time in minutes, fractions kept; without a duration — the default 10. */
+export const attestationMinutes = (durationSeconds?: number | null) => durationSeconds ? Math.round(durationSeconds / 60 * 100) / 100 : ATTESTATION_MINUTES
 
 export const ms = (value: string | null | undefined) => value ? parseDate(value).getTime() : NaN
 /** «5:07», never negative. */
@@ -97,16 +106,17 @@ export function useBoardCurrent(enabled: boolean) {
   return [current, set] as const
 }
 
-/** «Тебя вызвали к доске»: over any page while the call is active. */
+/** «Тебя вызвали к доске» (or «на аттестацию»): over any page while the call is active. */
 export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCurrent['call']>; onStarted: (test: BoardStudentTest) => void }) {
   const now = useNow()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const left = ms(call.expiresAt) - now
   const kinds = canonical(call.kinds)
+  const attest = isAttestation(call)
   const test = `Тест на ${minutesText(minutesOf(kinds, call.durationSeconds))}: ${kinds.map(k => KIND[k].phrase).join(', ')}.`
-  // The test starts at the board station: this browser only tells the student to go there.
-  if (call.canStart === false) return <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-call-title">
+  // The test starts at the board station: this browser only tells the student to go there. An attestation always starts here.
+  if (call.canStart === false && !attest) return <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-call-title">
     <div className="board-call">
       <span className="board-call-icon"><Icon name="flag" size={30} /></span>
       <p className="eyebrow">Ответ у доски</p>
@@ -118,9 +128,20 @@ export function BoardCallDialog({ call, onStarted }: { call: NonNullable<BoardCu
   </div>
   async function start() {
     setBusy(true); setError('')
-    try { onStarted(await boardPost<BoardStudentTest>(`/board/tests/${call.id}/start`)) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Не удалось начать тест'); setBusy(false) }
+    try { const test = await boardPost<BoardStudentTest>(`/board/tests/${call.id}/start`); onStarted({ ...test, format: test.format ?? call.format }) }
+    catch (e) { setError(e instanceof Error ? e.message : attest ? 'Не удалось начать аттестацию' : 'Не удалось начать тест'); setBusy(false) }
   }
+  if (attest) return <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-call-title">
+    <div className="board-call">
+      <span className="board-call-icon"><Icon name="award" size={30} /></span>
+      <p className="eyebrow">Аттестация</p>
+      <h2 id="board-call-title" className="display small">Тебя вызвали на аттестацию</h2>
+      <p>Одна задача на {minutesText(attestationMinutes(call.durationSeconds))}. Отвечай за своим компьютером. Пока идёт аттестация, уроки и помощник закрыты.</p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button type="button" className="primary big" disabled={busy} onClick={start} autoFocus>{busy ? <><span className="spinner" aria-hidden="true" /> Начинаем…</> : <>Начать аттестацию <Icon name="arrow" /></>}</button>
+      {left > 0 && <small className="muted tabular">Вызов действует ещё {clock(left)}</small>}
+    </div>
+  </div>
   return <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-call-title">
     <div className="board-call">
       <span className="board-call-icon"><Icon name="flag" size={30} /></span>
@@ -187,6 +208,9 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
   const [error, setError] = useState('')
   const locked = over || finishing
   const done = useRef(false)
+  /** An attestation: the same screen, its own words («Сдать работу»). */
+  const attest = isAttestation(test)
+  const finishText = attest ? 'Сдать работу' : 'Завершить тест'
 
   /** The revision of the test this screen shows; saves carry it, so the server drops answers typed for a replaced item. */
   const revision = useRef(test.revision ?? 0)
@@ -223,9 +247,9 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
     catch (e) {
       // Time is up or the server already closed the test (e.g. the teacher finished it): the answers are on the server.
       if (auto || e instanceof ApiError) { onFinished(); return }
-      done.current = false; setFinishing(false); setError('Нет связи с сервером — нажми «Завершить тест» ещё раз.')
+      done.current = false; setFinishing(false); setError(`Нет связи с сервером — нажми «${finishText}» ещё раз.`)
     }
-  }, [test.id, onFinished])
+  }, [test.id, onFinished]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (over) finish(true) }, [over, finish])
 
   // ───── «Запустить» (code and fix; each item keeps its own console) ─────
@@ -285,7 +309,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
     <header className="board-bar">
       <div className="board-who">
         <span className="avatar" aria-hidden="true">{initials(name)}</span>
-        <span><small>Ответ у доски</small><b>{name}</b></span>
+        <span><small>{attest ? 'Аттестация' : 'Ответ у доски'}</small><b>{name}</b></span>
       </div>
       {items.length > 1 ? <div className="board-steps" role="tablist" aria-label="Задания теста">
         {items.map((item, i) => <button key={item.kind} ref={el => { tabs.current[i] = el }} type="button" role="tab" id={`board-tab-${item.kind}`}
@@ -301,7 +325,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
       </div>
       <div className="board-bar-actions">
         <SaveBadge state={locked ? 'saved' : save} />
-        <button type="button" className="primary" disabled={locked} onClick={() => setConfirming(true)}><Icon name="flag" size={18} /> Завершить тест</button>
+        <button type="button" className="primary" disabled={locked} onClick={() => setConfirming(true)}><Icon name="flag" size={18} /> {finishText}</button>
       </div>
     </header>
     {error && <p className="board-error" role="alert">{error}</p>}
@@ -338,16 +362,16 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
     </div>
     {confirming && <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-confirm-title">
       <div className="board-call">
-        <h2 id="board-confirm-title" className="title">Завершить тест?</h2>
-        <p>Ответы отправятся преподавателю, изменить их будет нельзя. Осталось {clock(left)}.</p>
+        <h2 id="board-confirm-title" className="title">{finishText}?</h2>
+        <p>{attest ? 'Работа отправится преподавателю, изменить её' : 'Ответы отправятся преподавателю, изменить их'} будет нельзя. Осталось {clock(left)}.</p>
         {items.some(i => !touched[i.kind]) && <p className="board-confirm-warn">Не начато: {items.filter(i => !touched[i.kind]).map(i => `«${KIND[i.kind].title}»`).join(', ')}.</p>}
         <div className="board-confirm-actions">
-          <button type="button" className="ghost big" onClick={() => setConfirming(false)} autoFocus>Продолжить тест</button>
-          <button type="button" className="primary big" onClick={() => finish(false)}>Завершить</button>
+          <button type="button" className="ghost big" onClick={() => setConfirming(false)} autoFocus>{attest ? 'Продолжить' : 'Продолжить тест'}</button>
+          <button type="button" className="primary big" onClick={() => finish(false)}>{attest ? 'Сдать' : 'Завершить'}</button>
         </div>
       </div>
     </div>}
-    {finishing && <div className="board-call-backdrop" role="status"><div className="board-call"><span className="spinner big-spinner" aria-hidden="true" /><h2 className="title">{over ? 'Время вышло — сдаём тест…' : 'Сдаём тест…'}</h2></div></div>}
+    {finishing && <div className="board-call-backdrop" role="status"><div className="board-call"><span className="spinner big-spinner" aria-hidden="true" /><h2 className="title">{over ? `Время вышло — сдаём ${attest ? 'работу' : 'тест'}…` : attest ? 'Сдаём работу…' : 'Сдаём тест…'}</h2></div></div>}
   </main>
 }
 
@@ -489,6 +513,15 @@ function SaveBadge({ state }: { state: SaveState }) {
 export function BoardElsewhere({ test, name }: { test: BoardStudentTest; name: string }) {
   const offset = useMemo(() => { const server = ms(test.now); return Number.isNaN(server) ? 0 : server - Date.now() }, [test.now])
   const left = ms(test.endsAt) - (useNow() + offset)
+  if (isAttestation(test)) return <main className="board-screen board-done">
+    <div className="board-done-card">
+      <span className="board-call-icon"><Icon name="award" size={30} /></span>
+      <p className="eyebrow">Аттестация · {name}</p>
+      <h1 className="display small">Аттестация идёт на другом компьютере</h1>
+      <p>Здесь ничего делать не нужно — отвечай там, где начал аттестацию. Уроки и помощник откроются, когда сдашь работу.</p>
+      {left > 0 && <p className="board-done-count">Осталось <b className="tabular">{clock(left)}</b></p>}
+    </div>
+  </main>
   return <main className="board-screen board-done">
     <div className="board-done-card">
       <span className="board-call-icon"><Icon name="flag" size={30} /></span>
@@ -517,6 +550,18 @@ export function BoardDone({ onLogout }: { onLogout: () => void }) {
   </main>
 }
 
+/** After an attestation from the student's own account: nobody is signed out, «Вернуться к урокам» leaves this screen. */
+export function AttestationDone({ onBack }: { onBack: () => void }) {
+  return <main className="board-screen board-done">
+    <div className="board-done-card">
+      <span className="board-done-icon"><Icon name="check" size={44} /></span>
+      <h1 className="display">Работа сдана</h1>
+      <p>Преподаватель посмотрит и поставит оценку.</p>
+      <button type="button" className="primary big" onClick={onBack} autoFocus>Вернуться к урокам <Icon name="arrow" size={18} /></button>
+    </div>
+  </main>
+}
+
 /** «Мой прогресс»: the student's own answers at the board — date, grade and the teacher's comment. Hidden while there are none. */
 export function StudentBoardGrades({ language }: { language: CourseLanguage }) {
   const [grades, setGrades] = useState<BoardStudentGrade[]>([])
@@ -528,7 +573,7 @@ export function StudentBoardGrades({ language }: { language: CourseLanguage }) {
   }, [language])
   if (!grades.length) return null
   return <section className="card student-grades enter" aria-label="Ответы у доски">
-    <h2 className="card-title"><span className="chip-icon"><Icon name="award" size={16} /></span> Ответы у доски</h2>
+    <h2 className="card-title"><span className="chip-icon"><Icon name="award" size={16} /></span> Ответы у доски{grades.some(isAttestation) && ' и аттестации'}</h2>
     <ul className="board-grades">{grades.map((g, i) => <StudentGrade key={g.id ?? `${g.date}-${i}`} grade={g} open={i === 0} />)}</ul>
   </section>
 }
@@ -543,7 +588,7 @@ function StudentGrade({ grade: g, open: initiallyOpen }: { grade: BoardStudentGr
   const id = `board-report-${g.id}`
   return <li className="board-grade-row">
     <div className="board-grade-head">
-      <span className="muted">{shortDay(dayNumber(g.date))}</span><GradeChip grade={g.grade} />
+      <span className="muted">{shortDay(dayNumber(g.date))}</span>{isAttestation(g) && <span className="attest-tag">Аттестация</span>}<GradeChip grade={g.grade} />
       {g.comment && <span className="board-grade-comment">{g.comment}</span>}
       {report && <button type="button" className="ghost small-button board-report-button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(o => !o)}>
         {open ? 'Свернуть' : 'Разбор'} <Icon name={open ? 'back' : 'arrow'} size={14} /></button>}
@@ -561,7 +606,8 @@ function StudentGrade({ grade: g, open: initiallyOpen }: { grade: BoardStudentGr
         {item.passed ? <p className="board-report-hint ok">Все проверки пройдены.</p>
           : item.check && <div className="board-code"><small>Проверка</small><pre>{item.check}</pre></div>}
       </div>)}
-      <p className="muted small">Правильные решения здесь не показываются — эти задачи ещё могут встретиться тебе на уроках. Разбери их с преподавателем или в чате с помощником.</p>
+      <p className="muted small">{isAttestation(g) ? 'Правильное решение здесь не показывается — разбери задачу с преподавателем.'
+        : 'Правильные решения здесь не показываются — эти задачи ещё могут встретиться тебе на уроках. Разбери их с преподавателем или в чате с помощником.'}</p>
     </div>}
   </li>
 }
@@ -582,13 +628,6 @@ const live = (t: BoardTestSummary) => t.status === 'CALLED' || t.status === 'STA
 
 /** The kinds the teacher calls with, remembered in this browser (default: all three, never empty). */
 const KINDS_KEY = 'rmzn-board-kinds'
-/** Where the items come from (default: the student's level), remembered in this browser. */
-const SOURCE_KEY = 'rmzn-board-source'
-function useBoardSource() {
-  const [source, setSource] = useState<BoardSource>(() => { try { return localStorage.getItem(SOURCE_KEY) === 'PACE' ? 'PACE' : 'LEVEL' } catch { return 'LEVEL' } })
-  const choose = useCallback((value: BoardSource) => { setSource(value); try { localStorage.setItem(SOURCE_KEY, value) } catch { /* private mode: not remembered */ } }, [])
-  return [source, choose] as const
-}
 
 /** The kinds with one switched on or off, in the canonical order; the last one cannot be switched off. */
 const toggled = (current: BoardItemKind[], kind: BoardItemKind) => {
@@ -608,6 +647,82 @@ function useBoardKinds() {
   return [kinds, toggle] as const
 }
 
+/** «Тест / Аттестация» and the attestation's minutes, remembered in this browser like the kinds. */
+const FORMAT_KEY = 'rmzn-board-format', MINUTES_KEY = 'rmzn-board-attestation-minutes'
+function useBoardFormat() {
+  const [format, setFormat] = useState<BoardFormat>(() => { try { return localStorage.getItem(FORMAT_KEY) === 'ATTESTATION' ? 'ATTESTATION' : 'TEST' } catch { return 'TEST' } })
+  const choose = useCallback((next: BoardFormat) => {
+    setFormat(next)
+    try { localStorage.setItem(FORMAT_KEY, next) } catch { /* private mode: not remembered */ }
+  }, [])
+  return [format, choose] as const
+}
+/** Minutes > 0, fractions allowed, no upper limit; null — empty or not a number. */
+const parseMinutes = (value: string) => { const n = Number(value.replace(',', '.')); return value.trim() && Number.isFinite(n) && n > 0 ? n : null }
+/** The minutes as typed (may be a draft that is not a number yet); only a valid value is remembered. null — never set: the server's default. */
+function useAttestationMinutes() {
+  const [text, setText] = useState<string | null>(() => { try { return localStorage.getItem(MINUTES_KEY) } catch { return null } })
+  const change = useCallback((value: string) => {
+    setText(value)
+    const n = parseMinutes(value)
+    if (n !== null) try { localStorage.setItem(MINUTES_KEY, String(n)) } catch { /* private mode: not remembered */ }
+  }, [])
+  return [text, change] as const
+}
+
+function FormatSwitch({ format, onChange }: { format: BoardFormat; onChange: (format: BoardFormat) => void }) {
+  return <div className="period board-format" role="group" aria-label="Формат вызова">
+    {([['TEST', 'Тест'], ['ATTESTATION', 'Аттестация']] as const).map(([key, title]) =>
+      <button key={key} type="button" className={key === format ? 'active' : ''} aria-pressed={key === format} onClick={() => key !== format && onChange(key)}>{title}</button>)}
+  </div>
+}
+
+/** The attestation's time in minutes: any number above 0, no maximum (the teacher sets what he needs). */
+function MinutesInput({ value, onChange, legend }: { value: string; onChange: (value: string) => void; legend: string }) {
+  const minutes = parseMinutes(value)
+  return <fieldset className="board-kinds board-attest">
+    <legend>{legend}</legend>
+    <label className="board-minutes">Время
+      <input type="number" inputMode="decimal" min={0.01} step="any" value={value} aria-invalid={minutes === null} onChange={e => onChange(e.target.value)} />
+      <span>мин</span></label>
+    <span className="board-kinds-total">«Напиши код» · <b className="tabular">{minutes === null ? '—' : minutesText(minutes)}</b></span>
+    {minutes === null && <small className="form-error board-kinds-note" role="alert">Укажи время больше 0 минут</small>}
+  </fieldset>
+}
+
+/**
+ * What the attestation takes: all topics of the group's plan on the set day (or on the day of the attestation; the whole
+ * course without a plan) and how many pool tasks fit.
+ */
+function AttestationNote({ pace, pool, loaded }: { pace: BoardPacePlan | null; pool: BoardAttestationPool | null; loaded: boolean }) {
+  if (!loaded) return null
+  const topics = pool?.planTopics ?? pace?.topics, last = pool?.planTopics != null ? pool.planLastTopic : pace?.lastTopic
+  const when = pool?.planDate ? `на ${shortDay(dayNumber(pool.planDate))}` : 'на сегодня'
+  return <p className="board-kinds-note board-range-note">
+    {pace && topics != null ? <>Одна сквозная задача «Напиши код» по всем темам плана {when}: {topics} {plural(topics, 'тема', 'темы', 'тем')} из {pace.total}{last ? `, до «${last}»` : ''}.</>
+      : <>Одна сквозная задача «Напиши код» по всему курсу — плана нет (нужна дата сессии во вкладке «Прогресс» и уроки группы).</>}
+    {pool && <> {pace ? 'Задач аттестации на этот план' : 'Задач аттестации в курсе'}: <b className="tabular">{pool.tasks}</b>{pool.tasks !== pool.total && ` из ${pool.total}`}.</>}
+    {pool && !pool.tasks && <b className="board-attest-warn"> Нет задач аттестации на этот план — вызвать не получится.</b>}
+  </p>
+}
+
+/** «План на дату»: the day whose plan line attestations cover, for every group; empty — the day of each attestation. */
+function PlanDateInput({ value, onSave }: { value: string | null; onSave: (value: string | null) => void }) {
+  return <label className="board-minutes board-plan-date">План на дату
+    <input type="date" value={value ?? ''} onChange={e => onSave(e.target.value || null)} />
+    <small className="muted">{value ? 'для всех групп' : 'пусто — план на день аттестации'}</small>
+  </label>
+}
+
+/** The member's latest attestation under the name: «аттестация 27 окт · 4», «аттестация идёт», «без аттестации». */
+function AttestationState({ member }: { member: BoardMember }) {
+  const a = member.attestation
+  if (!a) return <>без аттестации</>
+  if (a.status === 'STARTED') return <span className="board-lag ok">аттестация идёт</span>
+  if (a.status === 'CALLED') return <span className="board-lag warn">вызван на аттестацию</span>
+  return <>аттестация {dayOnly(a.at)} · {a.grade ? <GradeChip grade={a.grade} small /> : 'без оценки'}</>
+}
+
 /** «Задания теста»: the kinds of items as chips and the total time. */
 function KindPicker({ kinds, onToggle }: { kinds: BoardItemKind[]; onToggle: (kind: BoardItemKind) => void }) {
   return <fieldset className="board-kinds">
@@ -621,48 +736,47 @@ function KindPicker({ kinds, onToggle }: { kinds: BoardItemKind[]; onToggle: (ki
   </fieldset>
 }
 
-/** «Темы заданий»: the student's level or the minimum for today (only with a plan of the group). */
-function SourcePicker({ source, pace, loaded, onChoose }: { source: BoardSource; pace: BoardPacePlan | null; loaded: boolean; onChoose: (source: BoardSource) => void }) {
-  return <fieldset className="board-kinds board-source">
-    <legend>Темы заданий</legend>
-    <div className="period" role="group" aria-label="Темы заданий">
-      <button type="button" className={source === 'LEVEL' || !pace ? 'active' : ''} aria-pressed={source === 'LEVEL' || !pace} onClick={() => onChoose('LEVEL')}>По уровню</button>
-      <button type="button" className={source === 'PACE' && pace ? 'active' : ''} aria-pressed={source === 'PACE' && !!pace} disabled={!pace} onClick={() => onChoose('PACE')}
-        title={pace ? undefined : 'Нужна дата сессии (вкладка «Прогресс») и уроки группы в этом курсе'}>По темпу на сегодня</button>
-    </div>
-    <small className="board-kinds-note">{!loaded ? '' : !pace ? 'По темпу — когда есть дата сессии и уроки группы в курсе.'
-      : source === 'PACE' ? `Минимум к сегодня: ${pace.topics} ${plural(pace.topics, 'тема', 'темы', 'тем')} из ${pace.total}${pace.lastTopic ? `, до «${pace.lastTopic}»` : ''} — даже если студент до них не дошёл.`
-        : 'Из тем, которые студент прошёл.'}</small>
-  </fieldset>
+/** «Темы заданий»: one rule — from the minimum for today (the group's plan line) to the student's farthest topic. */
+function RangeNote({ pace, loaded }: { pace: BoardPacePlan | null; loaded: boolean }) {
+  if (!loaded) return null
+  return <p className="board-kinds-note board-range-note">
+    <b>Темы:</b> {pace
+      ? <>от минимума на сегодня ({pace.topics} {plural(pace.topics, 'тема', 'темы', 'тем')} из {pace.total}{pace.lastTopic ? `, до «${pace.lastTopic}»` : ''}) до самой дальней темы студента. «Собери программу» — из минимума; кто впереди и сделал минимум, получает не ниже 4.</>
+      : <>пройденные студентом — минимума на сегодня нет: нужна дата сессии (вкладка «Прогресс») и уроки группы в курсе.</>}
+  </p>
 }
 
-/** «Изменить» on a call that has not started: the same kinds and source as the call panel; the expiry stays. */
-function CallEditor({ test, pace, onSave, onClose }: { test: BoardTestSummary; pace: BoardPacePlan | null; onSave: (kinds: BoardItemKind[], source: BoardSource) => Promise<string | null>; onClose: () => void }) {
+/** «Изменить» on a call that has not started: the same kinds as the call panel (an attestation — its minutes); the expiry stays. */
+function CallEditor({ test, onSave, onClose }: { test: BoardTestSummary; onSave: (change: CallChange) => Promise<string | null>; onClose: () => void }) {
   const [kinds, setKinds] = useState(() => canonical(test.kinds))
-  const [source, setSource] = useState<BoardSource>(test.source === 'PACE' ? 'PACE' : 'LEVEL')
+  const attest = isAttestation(test)
+  const [minutesValue, setMinutesValue] = useState(() => String(attestationMinutes(test.durationSeconds)))
+  const minutes = parseMinutes(minutesValue)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   async function save() {
+    if (attest && minutes === null) return
     setSaving(true); setError('')
-    const message = await onSave(kinds, pace ? source : 'LEVEL')
+    const message = await onSave(attest ? { minutes: minutes! } : { kinds })
     setSaving(false)
     if (message) setError(message); else onClose()
   }
   return <div className="board-call-editor">
     <b>Изменить вызов — {test.displayName}</b>
-    <KindPicker kinds={kinds} onToggle={kind => setKinds(current => toggled(current, kind))} />
-    <SourcePicker source={source} pace={pace} loaded onChoose={setSource} />
+    {attest ? <MinutesInput legend="Аттестация" value={minutesValue} onChange={setMinutesValue} />
+      : <KindPicker kinds={kinds} onToggle={kind => setKinds(current => toggled(current, kind))} />}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="password-row">
-      <button type="button" className="primary small-button" disabled={saving} onClick={save}>{saving ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : <><Icon name="check" size={15} />Сохранить</>}</button>
+      <button type="button" className="primary small-button" disabled={saving || (attest && minutes === null)} onClick={save}>{saving ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : <><Icon name="check" size={15} />Сохранить</>}</button>
       <button type="button" className="ghost small-button" disabled={saving} onClick={onClose}>Отмена</button>
       <small className="muted">Время вызова не меняется — для этого «+1 мин».</small>
     </div>
   </div>
 }
 
-/** «Собери программу · Исправь ошибку · 7 мин» for a call or test; nothing for tests without kinds. */
-function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationSeconds' | 'source'> }) {
+/** «Собери программу · Исправь ошибку · 7 мин» for a call or test, «Аттестация · 10 мин»; nothing for tests without kinds. */
+function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationSeconds' | 'source' | 'format'> }) {
+  if (isAttestation(test)) return <small className="board-kinds-note board-attest-note">Аттестация · {decimal(attestationMinutes(test.durationSeconds))} мин</small>
   if (!test.kinds?.length) return null
   const kinds = canonical(test.kinds)
   return <small className="board-kinds-note">{kinds.map(k => KIND[k].title).join(' · ')} · {minutesOf(kinds, test.durationSeconds)} мин{test.source === 'PACE' && ' · по темпу'}</small>
@@ -680,20 +794,22 @@ function Countdown({ test, now }: { test: BoardTestSummary; now: number }) {
 
 type Act = 'cancel' | 'recall' | 'extend' | 'finish' | 'delete' | 'assess'
 
-type EditCall = (test: BoardTestSummary, kinds: BoardItemKind[], source: BoardSource) => Promise<string | null>
+/** A call's change: the kinds of a test, the minutes of an attestation. */
+type CallChange = { kinds: BoardItemKind[] } | { minutes: number }
+type EditCall = (test: BoardTestSummary, change: CallChange) => Promise<string | null>
 
 /** Every action the teacher may take on a call or test; nothing is hidden behind the status except what has no meaning. */
-function BoardActions({ test, busy, onAct, pace, onEdit }: { test: BoardTestSummary; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; pace: BoardPacePlan | null; onEdit: EditCall }) {
+function BoardActions({ test, busy, onAct, onEdit }: { test: BoardTestSummary; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; onEdit: EditCall }) {
   const [confirm, setConfirm] = useState(false)
   const [editing, setEditing] = useState(false)
   const editable = test.status === 'CALLED' || test.status === 'EXPIRED'
-  if (editing && editable) return <CallEditor test={test} pace={pace} onSave={(kinds, source) => onEdit(test, kinds, source)} onClose={() => setEditing(false)} />
+  if (editing && editable) return <CallEditor test={test} onSave={change => onEdit(test, change)} onClose={() => setEditing(false)} />
   const mine = busy?.endsWith(`:${test.id}`) ? busy.split(':')[0] : null
   const button = (act: Act, icon: Parameters<typeof Icon>[0]['name'], text: string, className = 'ghost') =>
     <button type="button" className={`${className} small-button`} disabled={!!mine} onClick={() => act === 'delete' ? setConfirm(true) : onAct(act, test)}>
       {mine === act ? <span className="spinner" aria-hidden="true" /> : <Icon name={icon} size={15} />}{text}</button>
   if (confirm) return <div className="danger-zone open board-delete">
-    <b>Удалить {test.status === 'CALLED' ? 'вызов' : 'тест'} — {test.displayName}?</b>
+    <b>Удалить {test.status === 'CALLED' ? 'вызов' : isAttestation(test) ? 'аттестацию' : 'тест'} — {test.displayName}?</b>
     <p className="muted small">Ответы, проверки, оценка LLM и итоговая оценка будут удалены. Восстановить нельзя.</p>
     <div className="password-row">
       <button type="button" className="danger-solid" disabled={mine === 'delete'} onClick={() => onAct('delete', test)}>{mine === 'delete' ? <><span className="spinner" aria-hidden="true" /> Удаляем…</> : 'Удалить'}</button>
@@ -722,7 +838,14 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [kinds, toggleKind] = useBoardKinds()
-  const [source, chooseSource] = useBoardSource()
+  const [format, setFormat] = useBoardFormat()
+  const attest = format === 'ATTESTATION'
+  const [minutesDraft, setMinutes] = useAttestationMinutes()
+  const minutesValue = minutesDraft ?? String(overview?.attestation?.minutes ?? ATTESTATION_MINUTES)
+  const minutes = parseMinutes(minutesValue)
+  /** Students ticked for «Вызвать на аттестацию». */
+  const [picked, setPicked] = useState<Set<Id>>(() => new Set())
+  const [callError, setCallError] = useState('')
   const toast = useToast()
   const now = useNow()
   /** The detail view registers here to receive the test an action returns. */
@@ -755,31 +878,55 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
     return () => { alive = false }
   }, [query, activeKey, reload])
 
-  function chooseGroup(value: string) { if (value === group) return; setGroup(value); setOverview(null); setJournal(null); setOpenId(null) }
-  function chooseCourse(value: CourseLanguage) { setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null) }
+  function chooseGroup(value: string) { if (value === group) return; setGroup(value); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
+  function chooseCourse(value: CourseLanguage) { setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
   /** Opening a test scrolls to its detail as soon as it is rendered (the detail mounts with the new id). */
   const scrollTo = useRef(false)
   const scroll = () => { if (scrollTo.current && detailRef.current) { scrollTo.current = false; detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }
   useEffect(scroll)
   const open = (id: Id) => { scrollTo.current = true; setOpenId(id); requestAnimationFrame(scroll) }
 
+  /** The call with the current format: a test with the chosen kinds, an attestation with the minutes. */
+  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes } : { userId: member.userId, language, kinds }
   async function call(member: BoardMember) {
-    if (!language) return
+    if (!language || (attest && minutes === null)) return
     setBusy(`call:${member.userId}`)
-    const test = await request(() => post<BoardTestSummary>('/admin/board/call', { userId: member.userId, language, kinds, source: pace ? source : 'LEVEL' }))
+    const test = await request(() => post<BoardTestSummary>('/admin/board/call', callBody(member)))
     setBusy(null)
     if (!test) return
     setReload(n => n + 1); open(test.id)
+    if (attest) { toast({ tone: 'info', icon: 'award', title: `Вызван на аттестацию: ${member.displayName}`, text: 'Пусть нажмёт «Начать аттестацию» в своём аккаунте' }); return }
     toast({ tone: 'info', icon: 'flag', title: `Вызван к доске: ${member.displayName}`, text: overview?.settings?.studentStart
       ? 'Пусть нажмёт «Начать тест» на компьютере у доски или в своём аккаунте — вызов действует 5 минут'
       : 'Пусть подойдёт к компьютеру у доски и нажмёт «Начать тест» — вызов действует 5 минут' })
   }
-  const editCall = useCallback<EditCall>(async (test, kinds, source) => {
+  /** «Вызвать на аттестацию (n)»: one request per ticked student, one after another; those that failed stay ticked. */
+  async function callPicked(chosen: BoardMember[]) {
+    if (!language || minutes === null || !chosen.length) return
+    setBusy('call:picked'); setCallError('')
+    const failed: string[] = [], left = new Set<Id>()
+    for (const member of chosen) {
+      try { await post<BoardTestSummary>('/admin/board/call', callBody(member)) }
+      catch (e) { failed.push(`${member.displayName} — ${e instanceof Error ? e.message : 'ошибка'}`); left.add(member.userId) }
+    }
+    setBusy(null); setPicked(left); setReload(n => n + 1)
+    const called = chosen.length - failed.length
+    if (failed.length) setCallError(`Не удалось вызвать: ${failed.join('; ')}`)
+    if (called) toast({ tone: 'info', icon: 'award', title: `На аттестацию ${plural(called, 'вызван', 'вызваны', 'вызваны')} ${called} ${plural(called, 'студент', 'студента', 'студентов')}`,
+      text: failed.length ? `Не удалось: ${failed.length} — причина под кнопкой` : 'Пусть каждый нажмёт «Начать аттестацию» в своём аккаунте' })
+  }
+  const pick = (id: Id) => setPicked(current => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next })
+  /** «План на дату» of attestations (a board setting for every group); the overview reloads with the new plan. */
+  async function savePlanDate(value: string | null) {
+    const saved = await request(() => api<BoardSettings>('/admin/board/settings', { method: 'PUT', body: JSON.stringify({ attestationPlanDate: value }) }))
+    if (saved) setReload(n => n + 1)
+  }
+  const editCall = useCallback<EditCall>(async (test, change) => {
     try {
-      const view = await patch<BoardAdminTest>(`/admin/board/tests/${test.id}/call`, { kinds, source })
+      const view = await patch<BoardAdminTest>(`/admin/board/tests/${test.id}/call`, change)
       setReload(n => n + 1)
       if (view?.id === openId) detailUpdate.current?.(view)
-      toast({ tone: 'info', icon: 'check', title: `Вызов изменён: ${test.displayName}`, text: `${kinds.map(k => KIND[k].title).join(' · ')}${source === 'PACE' ? ' · по темпу' : ''}` })
+      toast({ tone: 'info', icon: 'check', title: `Вызов изменён: ${test.displayName}`, text: 'kinds' in change ? change.kinds.map(k => KIND[k].title).join(' · ') : `Аттестация · ${minutesText(change.minutes)}` })
       return null
     } catch (e) { return e instanceof Error ? e.message : 'Не удалось изменить вызов' }
   }, [openId, toast])
@@ -808,6 +955,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
       || (a.lastTestAt ? ms(a.lastTestAt) : -Infinity) - (b.lastTestAt ? ms(b.lastTestAt) : -Infinity) || a.displayName.localeCompare(b.displayName, 'ru'))
   }, [overview])
   const activeOf = (userId: Id) => overview?.active.find(t => t.userId === userId && live(t))
+  const chosen = members?.filter(m => picked.has(m.userId)) ?? []
 
   if (groups && !groups.length) return <section className="analytics board-admin">
     <p className="eyebrow">Преподаватель</p><h1 className="display small">К доске</h1>
@@ -821,32 +969,52 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
       <div className="card board-left enter">
         <p className="eyebrow">Преподаватель</p>
         <h1 className="display small">К доске</h1>
-        <p className="muted small board-lead">Вызови студента — он нажмёт «Начать тест» на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.</p>
+        <p className="muted small board-lead">{attest ? 'Отметь студентов и вызови на аттестацию — каждый нажмёт «Начать аттестацию» за своим компьютером и решит одну сквозную задачу; у вызванных одновременно задачи разные. Оценка LLM и предложенная оценка видны только тебе.'
+          : 'Вызови студента — он нажмёт «Начать тест» на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.'}</p>
         {!groups ? <p className="muted small">Загружаем группы…</p>
           : <div className="topic-filters group-filters" role="group" aria-label="Группа">{groups.map(g =>
             <button key={g} type="button" className={g === group ? 'active' : ''} aria-pressed={g === group} onClick={() => chooseGroup(g)}>{g}</button>)}</div>}
         <div className="period" role="group" aria-label="Курс">
           {COURSES.map(([key, title]) => <button key={key} type="button" disabled={!language} className={key === language ? 'active' : ''} aria-pressed={key === language} onClick={() => key !== language && chooseCourse(key)}>{title}</button>)}
         </div>
-        <KindPicker kinds={kinds} onToggle={toggleKind} />
-        <SourcePicker source={source} pace={pace} loaded={!!overview} onChoose={chooseSource} />
+        <FormatSwitch format={format} onChange={setFormat} />
+        {attest ? <>
+          <MinutesInput legend="Аттестация" value={minutesValue} onChange={setMinutes} />
+          {overview && <PlanDateInput value={overview.settings?.attestationPlanDate ?? null} onSave={savePlanDate} />}
+          <AttestationNote pace={pace} pool={overview?.attestation ?? null} loaded={!!overview} />
+        </> : <>
+          <KindPicker kinds={kinds} onToggle={toggleKind} />
+          <RangeNote pace={pace} loaded={!!overview} />
+        </>}
         <h2 className="card-title">Студенты{overview && <span className="muted small">на месте {present} из {overview.members.length}</span>}</h2>
+        {attest && !!members?.length && <div className="board-attest-call">
+          <button type="button" className="primary small-button" disabled={!chosen.length || minutes === null || busy === 'call:picked'} onClick={() => callPicked(chosen)}>
+            {busy === 'call:picked' ? <span className="spinner" aria-hidden="true" /> : <Icon name="award" size={15} />}Вызвать на аттестацию ({chosen.length})</button>
+          {chosen.length > 0 && <button type="button" className="ghost small-button" disabled={busy === 'call:picked'} onClick={() => setPicked(new Set())}>Снять отметки</button>}
+          {callError && <p className="form-error" role="alert">{callError}</p>}
+        </div>}
         {!members ? <p className="muted">Загружаем…</p> : !members.length ? <p className="muted">В группе нет участников курса {language ? courseTitle(language) : ''}.</p>
           : <ul className="board-member-list">{members.map(m => {
-            const suggested = m.userId === overview?.suggested, active = activeOf(m.userId)
-            return <li key={m.userId} className={suggested ? 'suggested' : ''}>
+            const suggested = !attest && m.userId === overview?.suggested, active = activeOf(m.userId)
+            return <li key={m.userId} className={`${suggested ? 'suggested' : ''} ${attest && picked.has(m.userId) ? 'picked' : ''}`}>
+              {attest && <input type="checkbox" className="board-pick" checked={picked.has(m.userId)} onChange={() => pick(m.userId)} aria-label={`Отметить для аттестации: ${m.displayName}`} />}
               <span className={`presence ${m.present ? 'on' : ''}`} title={m.present ? 'На месте: занимается сейчас или был активен последний час' : 'Не активен последний час'}><span className="sr-only">{m.present ? 'на месте' : 'не на месте'}</span></span>
               <span className="board-member-meta">
                 <b>{m.displayName}{suggested && <span className="suggest-tag">предлагаем</span>}</b>
-                <small>{m.lastTestAt ? `у доски ${dayOnly(m.lastTestAt)} · ${m.tests} ${plural(m.tests, 'раз', 'раза', 'раз')}` : 'ещё не был у доски'}</small>
+                <small>{attest ? <AttestationState member={m} /> : m.lastTestAt ? `у доски ${dayOnly(m.lastTestAt)} · ${m.tests} ${plural(m.tests, 'раз', 'раза', 'раз')}` : 'ещё не был у доски'}
+                  {m.status === 'DONE' ? <> · <span className="board-lag ok">курс закрыт</span></>
+                    : m.lag != null && <> · <span className={`board-lag ${m.status === 'BEHIND' ? 'bad' : m.status === 'BORDERLINE' ? 'warn' : 'ok'}`} title="План к сегодня минус пройдено, как в «Прогрессе»">{lagText(m.lag)}</span></>}
+                  {m.farthest && <> · до «{m.farthest}»</>}</small>
               </span>
               {active ? <button type="button" className="row-link board-member-state" onClick={() => open(active.id)}><BoardStatusTag status={active.status} /></button>
-                : m.lastGrade && <span title="Последняя оценка у доски"><GradeChip grade={m.lastGrade} small /></span>}
-              <button type="button" className={`${suggested ? 'primary' : 'ghost'} small-button`} disabled={busy === `call:${m.userId}`} onClick={() => call(m)}>
+                : !attest && m.lastGrade && <span title="Последняя оценка у доски"><GradeChip grade={m.lastGrade} small /></span>}
+              <button type="button" className={`${suggested ? 'primary' : 'ghost'} small-button`} disabled={busy === `call:${m.userId}` || busy === 'call:picked' || (attest && minutes === null)} onClick={() => call(m)}
+                title={attest ? 'Вызвать только этого студента на аттестацию' : undefined}>
                 {busy === `call:${m.userId}` ? <span className="spinner" aria-hidden="true" /> : <Icon name="flag" size={15} />}Вызвать</button>
             </li>
           })}</ul>}
-        <p className="muted small table-note">Предложение: сначала те, кто на месте, затем кто дольше всех не был у доски (случайно среди трёх). Решаешь ты.</p>
+        <p className="muted small table-note">{attest ? 'Каждому вызванному — задача, которой у него ещё не было и которую сейчас не решает никто другой. Пока идёт аттестация, уроки и помощник у студента закрыты.'
+          : 'Предложение: сначала те, кто на месте, затем кто дольше всех не был у доски (случайно среди трёх). Решаешь ты.'}</p>
       </div>
 
       <div className="card board-active">
@@ -861,12 +1029,12 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
               {t.stationName && <small className="board-kinds-note board-station-note" title={t.stationName}><Icon name="flag" size={13} /> на компьютере у доски</small>}
               {t.status === 'FINISHED' && <span className="board-active-grade">{t.assessmentStatus === 'PENDING' ? <><span className="spinner" aria-hidden="true" /> LLM оценивает</> : <>предложено <GradeChip grade={t.suggestedGrade} small /></>}{t.finalGrade && <> · итог <GradeChip grade={t.finalGrade} small /></>}</span>}
             </div>
-            <BoardActions test={t} busy={busy} onAct={act} pace={pace} onEdit={editCall} />
+            <BoardActions test={t} busy={busy} onAct={act} onEdit={editCall} />
           </li>)}</ul>}
       </div>
 
       {openId !== null
-        ? <BoardTestDetail key={openId} id={openId} anchor={detailRef} request={request} busy={busy} onAct={act} pace={pace} onEdit={editCall} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />
+        ? <BoardTestDetail key={openId} id={openId} anchor={detailRef} request={request} busy={busy} onAct={act} onEdit={editCall} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />
         : <aside className="card board-summary" aria-label="Итог"><h2 className="card-title">Итог</h2><p className="muted small">{SUMMARY_HINT}</p></aside>}
     </div>
 
@@ -971,9 +1139,6 @@ function checkOf(test: BoardAdminTest, kind: BoardItemKind, index: number): Boar
   if (Array.isArray(results)) return results.find(r => r?.kind === kind) ?? results[index] ?? null
   return results[kind] ?? null
 }
-/** «1», «0,5», «0». */
-const decimal = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
-
 /** The centre of an opened test: its items as tabs, one at a time, then the points and the runs. */
 function BoardTestItems({ test, onReplace }: { test: BoardAdminTest; onReplace?: (kind: BoardItemKind) => Promise<boolean> }) {
   const items = test.items ?? []
@@ -1010,16 +1175,53 @@ function BoardTestItems({ test, onReplace }: { test: BoardAdminTest; onReplace?:
             {item.bugDescription && <p className="board-bug"><b>Ошибка:</b> {item.bugDescription}</p>}
             {item.reference && item.program && <details className="board-statement-small"><summary>Программа с ошибкой</summary><pre>{item.program}</pre></details>}
           </>
+            : item.attestation ? <>
+              <AttestationCovers item={item} />
+              <div className="compare-grid">
+                <div><small>Код студента</small><pre>{test.answers?.code || '(пусто)'}</pre></div>
+                <div><small>Эталонное решение</small><pre>{item.reference || '—'}</pre></div>
+              </div>
+              <div className="board-code"><small>Проверка</small><pre>{check ? check.feedback || check.output || (check.passed ? 'Все проверки пройдены.' : '—') : 'Ещё не проверено.'}</pre></div>
+            </>
             : <div className="compare-grid">
               <div><small>Код студента</small><pre>{test.answers?.code || '(пусто)'}</pre></div>
               <div><small>Проверка</small><pre>{check ? check.feedback || check.output || (check.passed ? 'Все проверки пройдены.' : '—') : 'Ещё не проверено.'}</pre></div>
             </div>}
       </BoardItemBlock>
     })}
+    {test.coverage && <CoverageTable coverage={test.coverage} answered={!!test.answers?.code?.trim()} />}
 
     {test.score && <ScoreTable score={test.score} />}
     <Runs runs={test.runs ?? []} language={test.language ?? items[0]?.language ?? 'JAVA'} />
   </>
+}
+
+/** «Задача охватывает темы 1–7 (до «Циклы»), план — 9 тем». */
+function AttestationCovers({ item }: { item: BoardAdminItem }) {
+  if (item.covers == null) return null
+  return <p className="board-attest-covers"><Icon name="target" size={16} /> Задача охватывает темы 1–{item.covers}{item.coversTitle && ` (до «${item.coversTitle}»)`}, план — {item.planTopics != null
+    ? `${item.planTopics} ${plural(item.planTopics, 'тема', 'темы', 'тем')}` : 'нет (весь курс)'}</p>
+}
+
+/** The constructs of the covered topics: in the reference ✓, in the student's code ✓ / ✗ / — (no answer). */
+function CoverageTable({ coverage, answered }: { coverage: BoardCoverage[]; answered: boolean }) {
+  if (!coverage.length) return null
+  const mark = (value: boolean | null, expected: boolean) => value == null ? <span className="muted" aria-label="нет ответа">—</span>
+    : value ? <span className="check-tag ok" aria-label="есть"><Icon name="check" size={14} /></span>
+      : <span className={`check-tag ${expected ? 'bad' : ''}`} aria-label="нет"><Icon name="x" size={14} /></span>
+  return <div className="board-score board-coverage">
+    <h3 className="card-title"><span className="chip-icon"><Icon name="target" size={16} /></span> Конструкции тем</h3>
+    <div className="table-scroll"><table className="data-table board-coverage-table">
+      <thead><tr><th className="text">Конструкция</th><th className="text">Тема</th><th>В эталоне</th><th>В коде студента</th></tr></thead>
+      <tbody>{coverage.map(c => <tr key={c.construct}>
+        <td className="text">{c.title}</td>
+        <td className="text">{c.topicTitle ?? <span className="muted">—</span>}</td>
+        <td>{c.expected ? <span className="check-tag ok" aria-label="есть"><Icon name="check" size={14} /></span> : <span className="muted" aria-label="нет">—</span>}</td>
+        <td>{mark(c.used, c.expected)}</td>
+      </tr>)}</tbody>
+    </table></div>
+    <p className="muted small table-note">{answered ? 'Отмечено по тексту программы: конструкция есть в коде — ещё не значит, что применена верно.' : 'Ответа нет — сравнивать не с чем.'}</p>
+  </div>
 }
 
 /** The right column of an opened test: the facts, the LLM assessment and the final grade. */
@@ -1031,10 +1233,11 @@ function BoardSummary({ test, assess, saveGrade }: { test: BoardAdminTest; asses
     <h2 className="card-title">Итог · {test.displayName}</h2>
     {ran && <>
       <div className="panel-facts">
-        <span className="mini-stats-cell"><b><StatusChip status={test.paceStatus} /></b><small>темп к сессии · {test.paceCap ? `оценка не выше ${test.paceCap}` : 'без ограничения'}</small></span>
+        <span className="mini-stats-cell"><b><StatusChip status={test.paceStatus} /></b><small>{test.floor ? (test.floor.met == null ? `впереди минимума · минимум верно → не ниже ${test.floor.grade}`
+          : test.floor.met ? `минимум сделан · не ниже ${test.floor.grade}` : 'впереди минимума · минимум не сделан') : 'темп к сессии · на оценку не влияет'}</small></span>
         <span className="mini-stats-cell"><b>{score ? <span className="tabular">{Math.round(score.percent)}%</span> : '—'}</b><small>{score ? `баллы ${decimal(score.points)} из ${decimal(score.max)}` : 'баллы — после проверки'}</small></span>
         <span className="mini-stats-cell"><b><GradeChip grade={test.ruleGrade} small /></b><small>по проверкам (без LLM)</small></span>
-        <span className="mini-stats-cell"><b>{assessmentStatus === 'PENDING' ? <span className="spinner" aria-hidden="true" /> : <GradeChip grade={test.suggestedGrade} small />}</b><small>предложено (с учётом LLM и темпа)</small></span>
+        <span className="mini-stats-cell"><b>{assessmentStatus === 'PENDING' ? <span className="spinner" aria-hidden="true" /> : <GradeChip grade={test.suggestedGrade} small />}</b><small>предложено (с учётом LLM)</small></span>
       </div>
       <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — на экране у доски этого нет.</p>
     </>}
@@ -1072,7 +1275,7 @@ function BoardItemBlock({ id, labelledBy, hidden, item, check, explanation, chil
 }) {
   const topic = item.skillTitle ?? item.skillCode
   return <div className="board-detail-item" id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
-    <p className="muted small board-item-ref">{item.title && <><b>{item.title}</b> · </>}{[`вес ${KIND[item.kind]?.weight ?? '—'}`, topic && `тема: ${topic}`, item.difficulty != null && `сложность ${item.difficulty}`,
+    <p className="muted small board-item-ref">{item.title && <><b>{item.title}</b> · </>}{[`вес ${KIND[item.kind]?.weight ?? '—'}`, topic && `тема: ${topic}${item.zone === 'minimum' ? ' (минимум)' : item.zone === 'above' ? ' (выше минимума)' : ''}`, item.difficulty != null && `сложность ${item.difficulty}`,
       item.externalKey ?? (item.taskId != null ? `задача #${item.taskId}` : null), item.replacedTaskIds?.length && `заменено: ${item.replacedTaskIds.length}`].filter(Boolean).join(' · ')}</p>
     {children}
     {item.kind !== 'code' && check && (check.feedback || check.output) && <div className="board-code"><small>Проверка</small><pre>{check.feedback || check.output}</pre></div>}
@@ -1163,9 +1366,9 @@ function Assessment({ assessment, status, finished, onAssess }: { assessment: Bo
 }
 
 
-function BoardTestDetail({ id, anchor, request, busy, onAct, pace, onEdit, onClose, register, onSaved }: {
+function BoardTestDetail({ id, anchor, request, busy, onAct, onEdit, onClose, register, onSaved }: {
   id: Id; anchor: RefObject<HTMLDivElement | null>; request: Request; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void
-  pace: BoardPacePlan | null; onEdit: EditCall; onClose: () => void
+  onEdit: EditCall; onClose: () => void
   register: (update: ((test: BoardAdminTest) => void) | null) => void; onSaved: () => void
 }) {
   const [test, setTest] = useState<BoardAdminTest | null>(null)
@@ -1216,7 +1419,7 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, pace, onEdit, onClo
       <section className="card board-detail enter" aria-label={`Тест: ${test.displayName}`}>
         <div className="chart-head">
           <div>
-            <p className="eyebrow">Ответ у доски</p>
+            <p className="eyebrow">{isAttestation(test) ? 'Аттестация' : 'Ответ у доски'}</p>
             <h2 className="title">{test.displayName} <BoardStatusTag status={test.status} /></h2>
             <p className="muted small">Вызван {dayTime(test.calledAt)}{test.login && ` · ${test.login}`}{test.language && ` · ${courseTitle(test.language)}`}
               {duration !== null && ` · тест занял ${clock(duration * 1000)}`}{test.stationName && ` · на компьютере у доски «${test.stationName}»`}</p>
@@ -1225,10 +1428,11 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, pace, onEdit, onClo
           <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
         </div>
         {live(test) && <div className="board-detail-live"><Countdown test={test} now={now} /></div>}
-        <BoardActions test={test} busy={busy} onAct={onAct} pace={pace} onEdit={onEdit} />
+        <BoardActions test={test} busy={busy} onAct={onAct} onEdit={onEdit} />
 
         {test.status === 'CALLED' || test.status === 'CANCELLED' || test.status === 'EXPIRED'
-          ? <p className="muted">{test.status === 'CALLED' ? 'Студент ещё не начал тест: задания выбираются, когда он нажмёт «Начать тест».' : 'Тест не проводился.'}</p>
+          ? <p className="muted">{test.status === 'CALLED' ? (isAttestation(test) ? 'Студент ещё не начал аттестацию: задача выбирается, когда он нажмёт «Начать аттестацию».' : 'Студент ещё не начал тест: задания выбираются, когда он нажмёт «Начать тест».')
+            : isAttestation(test) ? 'Аттестация не проводилась.' : 'Тест не проводился.'}</p>
           : <BoardTestItems test={test} onReplace={test.status === 'STARTED' ? replace : undefined} />}
       </section>
     </div>
@@ -1258,7 +1462,7 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
       {GRADES.map(g => <button key={g} type="button" role="radio" aria-checked={grade === g} className={`board-grade-pick g${g} ${grade === g ? 'active' : ''}`} onClick={() => setGrade(grade === g ? null : g)}>
         {g}{test.suggestedGrade === g && <small>предложено</small>}</button>)}
     </div>
-    <label>Комментарий для студента<textarea rows={4} maxLength={500} value={comment} onChange={e => setComment(e.target.value)} placeholder="Что получилось и что подтянуть — студент увидит это в «Моём прогрессе»" /></label>
+    <label>Комментарий для студента<textarea rows={6} maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} placeholder="Что получилось и что подтянуть — студент увидит это в «Моём прогрессе»" /></label>
     {draft && comment.trim() === draft && comment.trim() !== (test.comment ?? '').trim()
       ? <p className="muted small board-comment-draft"><Icon name="sparkle" size={14} /> Черновик от нейросети — поправь, если нужно. Студент увидит комментарий только после сохранения.</p>
       : draft && comment.trim() !== draft && <button type="button" className="ghost small-button board-comment-draft" onClick={() => setComment(draft)}><Icon name="sparkle" size={14} /> Вставить черновик нейросети</button>}
@@ -1283,10 +1487,11 @@ function BoardJournalCard({ journal, openId, onOpen }: { journal: BoardJournal |
       <h2 className="card-title">Журнал</h2>
       {!journal ? <p className="muted">Загружаем…</p> : !journal.students.length ? <p className="muted">Пока никого не вызывали.</p>
         : <div className="table-scroll"><table className="data-table board-journal-table">
-          <thead><tr><th className="text">Студент</th><th className="text">Оценки у доски</th><th>Последний раз</th></tr></thead>
+          <thead><tr><th className="text">Студент</th><th className="text">Оценки у доски</th><th className="text">Аттестация</th><th>Последний раз</th></tr></thead>
           <tbody>{journal.students.map(s => <tr key={s.userId}>
             <td className="text"><b>{s.displayName}</b></td>
             <td className="text"><span className="board-journal-grades">{s.grades.length ? s.grades.map((g, i) => <GradeChip key={i} grade={gradeOf(g)} small />) : <span className="muted">—</span>}</span></td>
+            <td className="text"><span className="board-journal-grades">{s.attestations?.length ? s.attestations.map((g, i) => <GradeChip key={i} grade={gradeOf(g)} small />) : <span className="muted">—</span>}</span></td>
             <td>{dayOnly(s.lastTestAt)}</td>
           </tr>)}</tbody>
         </table></div>}
@@ -1297,7 +1502,7 @@ function BoardJournalCard({ journal, openId, onOpen }: { journal: BoardJournal |
         <thead><tr><th className="text">Когда, МСК</th><th className="text">Студент</th><th className="text">Статус</th><th>Предложено</th><th>Итог</th></tr></thead>
         <tbody>{shown.map(t => <tr key={t.id} className={openId === t.id ? 'selected' : ''} onClick={() => onOpen(t.id)}>
           <td className="text"><button type="button" className="row-link" onClick={e => { e.stopPropagation(); onOpen(t.id) }}>{dayTime(t.calledAt)}</button></td>
-          <td className="text">{t.displayName}</td>
+          <td className="text">{t.displayName}{isAttestation(t) && <> <span className="attest-tag">Аттестация</span></>}</td>
           <td className="text"><BoardStatusTag status={t.status} /></td>
           <td><GradeChip grade={t.suggestedGrade} small /></td>
           <td><GradeChip grade={t.finalGrade} small /></td>

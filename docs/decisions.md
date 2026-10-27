@@ -6,6 +6,36 @@ the reasoning and the open questions so a new agent does not re-ask settled poin
 ## Test at the board («вызов к доске», in design since 2026-10-15)
 The owner finds grades for work during the pair inappropriate. New model: students study at home on the platform; in
 class the teacher calls students one by one to a short individual test, projected for the group.
+- «Аттестация» (owner, 2026-10-27): a call format of «К доске», not a separate mode. Rejected first: the whole group at
+  once (he cannot watch everyone for cheating). Agreed: selected students, usually several at once at their own
+  computers; one integrative «Напиши код» task touching all topics of the group's plan for today (option B; rejected A —
+  items from parts of the plan); about 10 minutes, any other number, extendable — everything as in «К доске», no upper
+  limits; completely different stories for students called together («чтобы даже подсказки не было») — a pool of
+  stories, one value set each, a student gets one he never had and nobody is solving now; no logging of tab switches or
+  pastes (he watches in person); lessons, the assistant and the console closed while it runs; no sign-out afterwards;
+  a separate «Аттестация» line in the journal and for the student; the wheel counts only board tests. The pool for the
+  first attestation is written by hand, later ones will be generated («потом разберёмся»). The plan line of one fixed
+  day for every group (owner: «не усложнять, всем группам задачи темпа на пн 26.10») — the setting «План на дату»; the
+  pool for 26.10 has a level per distinct plan: Java 9, 12, 14 topics, Python 10, 11, 14.
+- One rule for the topics (owner, 2026-10-22, after the production data: in 19 of 63 tests «по уровню» gave «Собери
+  программу»/«Исправь ошибку» on topics the student had not started — the early topics had no bank task with wrong
+  solutions, so the search ran on through the course; students complained). The items come from a range: from the
+  minimum for today (the group's plan line, the old «по темпу») up to the student's farthest topic (practice and the
+  diagnostic count the same), never beyond. A student who does not know a topic he should already know gets a 2; one
+  ahead gets interesting tasks: «Напиши код» from his farthest topic, «Исправь ошибку» from the middle, «Собери
+  программу» from the minimum. The «по уровню / по темпу» switch is gone.
+- No pace cap any more (owner: no double penalty for a student behind — the minimum is now tested by the items
+  themselves). Reward for being ahead (owner chose variant 1 of three; rejected: a 5 only with an item above the
+  minimum — again a cap for those on the line; calling those ahead less often): when the items from the minimum are all
+  right, the suggested grade is at least 4 — a harder topic is a chance, not a risk.
+- «Напиши код» was too easy (owner: «вывести остаток от деления — полная фигня»): difficulty 2, 3, then 1; neither trivial
+  (< 3 lines) nor long preferred; a bank task before a generated one across the topics.
+- The assessor of «Исправь ошибку» took the given program for the student's work and gave «частично верно» for doing
+  nothing (4 of 12 such verdicts had no change at all): it now gets the student's changes separately and is told that
+  the given code is not his merit and an unfixed bug is «неверно». The draft comment for the student is longer (4–6
+  sentences: per item what worked, the error, what to revise; owner: «слишком короткое»).
+- The early topics (Java 1–9, 19 Python topics) get bank stories with wrong solutions so that the minimum can be tested
+  by «Собери программу» and «Исправь ошибку».
 - «Компьютер у доски» (owner, 2026-10-22: logging students in and out on the classroom PC for every call is tedious): the
   teacher turns a browser into a board station once (button in «К доске»; a separate station cookie, no login/password —
   the owner chose a separate board account over a student test inside the admin account, because the admin session would
@@ -18,9 +48,12 @@ class the teacher calls students one by one to a short individual test, projecte
   the test starts. During the test the teacher can «Заменить задание» (another task of the kind, that answer reset, the
   timer goes on). Adding/removing items mid-test is not offered (the same time for the same set). Changing the student is
   not needed (cancel + call).
-- Two criteria: the pace (above the session line) is required for a 5; the test gives the grade.
+- (Superseded 2026-10-22: no pace criterion.) Two criteria: the pace (above the session line) is required for a 5; the test gives the grade.
 - Not every student every pair; the platform should suggest whom to call (longest not asked + randomness), the teacher
   decides — fair rotation, no impression of bias.
+- The list of students shows each member's standing as in «Прогресс» (owner, 2026-10-24: choosing whom to call meant
+  switching to «Прогресс»; chose variant A of three — one line under the name, no new controls): the lag behind the plan
+  line in the status colour and the farthest closed topic. The suggestion and the order did not change.
 - One timer, the same for everyone given the same set of items (the minutes of the chosen items, below); at the end
   the answers are submitted and checked.
 - A task that passes the checks counts fully. An unfinished one (e.g. a missing semicolon) gets a detailed LLM assessment:
@@ -28,7 +61,7 @@ class the teacher calls students one by one to a short individual test, projecte
   teacher, never on the projector; the teacher reads it and announces the final grade. Student code is data, not
   instructions (same protection as the «calculate» review); without the LLM the teacher grades alone.
 - After the time is up the teacher reviews the mistakes with the student (projector or not — to decide later).
-- Pace caps the grade: on track (or course closed) → up to 5; borderline → at most 4; behind → at most 3.
+- (Removed 2026-10-22.) Pace caps the grade: on track (or course closed) → up to 5; borderline → at most 4; behind → at most 3.
 - Grades come only from this test. The pair window stays as teacher-only analytics («Работа на паре», below).
 - Two devices (decided 2026-10-15): the teacher calls a student from the admin on his laptop; the called student logs in on
   the classroom PC (projector) and only then can start the test; the call expires after 5 minutes. No «board device»
@@ -58,7 +91,7 @@ class the teacher calls students one by one to a short individual test, projecte
   owns the test (a random per-browser token); other sessions show «Тест идёт на компьютере у доски», cannot save or
   submit, and return to the lesson afterwards (no sign-out there). Signing the other sessions out at the call was not
   needed.
-- Topics of the items (owner, 2026-10-20): besides «по уровню» (the topics the student has reached) the teacher may call
+- (Replaced by the one range rule 2026-10-22.) Topics of the items (owner, 2026-10-20): besides «по уровню» (the topics the student has reached) the teacher may call
   «по темпу на сегодня» — the minimum everyone should have covered by today, even topics the student has not reached.
   There was no such line in the analytics (the forecast is a per-student pace), so it is a uniform plan: the first
   ⌈total × (today − start) / (session − start)⌉ topics of the course, start = the group's first lesson in the course

@@ -23,10 +23,10 @@ final class BoardItems {
   static final List<Kind> KINDS = List.of(
       new Kind("parsons", "Собери программу", 2, 1, List.of(2, 1, 3)),
       new Kind("fix", "Исправь ошибку", 2, 2, List.of(2, 1, 3)),
-      new Kind("code", "Напиши код", 3, 3, List.of(1, 2, 3)));
+      new Kind("code", "Напиши код", 3, 3, List.of(2, 3, 1)));
   static final List<String> ALL = KINDS.stream().map(Kind::name).toList();
   static final Set<String> PLACEHOLDERS = Set.of("# Напиши решение здесь", "// Напиши решение здесь");
-  static final int BLOCK_MIN = 4, BLOCK_MAX = 12, FIX_MAX_CHANGED = 2, SHORT_CODE_LINES = 10;
+  static final int BLOCK_MIN = 4, BLOCK_MAX = 12, FIX_MAX_CHANGED = 2, SHORT_CODE_LINES = 10, TRIVIAL_CODE_LINES = 3;
 
   static Kind kind(String name) { return KINDS.stream().filter(k -> k.name().equals(name)).findFirst().orElseThrow(() -> new IllegalArgumentException(name)); }
   static int seconds(List<String> kinds) { return kinds.stream().mapToInt(k -> kind(k).minutes()).sum() * 60; }

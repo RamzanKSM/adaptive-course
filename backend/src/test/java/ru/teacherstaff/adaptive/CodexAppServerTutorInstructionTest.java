@@ -51,12 +51,15 @@ class CodexAppServerTutorInstructionTest {
     assertTrue(prompt.contains("Задание 1 (parsons, «Собери программу», вес 1)") && prompt.contains("Задание 2 (fix, «Исправь ошибку», вес 2)") && prompt.contains("Задание 3 (code, «Напиши код», вес 3)"), prompt);
     assertTrue(prompt.contains("<<<СТРОКИ\nif (h >= 120) {\n    ok();\n}\nСТРОКИ>>>") && prompt.contains("<<<ЛИШНЯЯ\nif (h > 120) {"), prompt);
     assertTrue(prompt.contains("Ошибка в ней: склеивает строки вместо сложения") && prompt.contains("<<<ПРОГРАММА\n  1| print(a + b)"), prompt);
+    assertTrue(prompt.contains("<<<ИЗМЕНЕНИЯ\n- строка 1 данной программы: print(a + b)\n+ строка 1 итоговой программы: print(int(a) + int(b))\nИЗМЕНЕНИЯ>>>"), "fix: only the student's changes are his");
+    assertTrue(prompt.contains("это не его заслуга") && prompt.contains("ничего не изменил"), "the given code is not the student's work");
+    assertEquals("(студент ничего не изменил)\n", CodexAppServerTutor.changes(Language.PYTHON, "print(a)\nprint(b)\n", "print(a)\nprint(b)  \n"));
     assertTrue(prompt.contains("<<<РЕШЕНИЕ") && prompt.contains("<<<ЗАПУСК 1 (code)") && prompt.contains("не выполняй"), prompt);
     assertTrue(prompt.contains("Оценка по проверкам: 3") && prompt.contains("не пройдена") && prompt.contains("половина веса"), prompt);
     assertTrue(prompt.contains("пропущенная «;»"), "a small error is not a zero");
     assertTrue(prompt.contains("к оформлению вывода не придирайся") && prompt.contains("только из-за формы вывода") && prompt.contains("это «верно»"), "only the format of the output differs → right");
     assertTrue(prompt.contains("questions"), "questions for the oral follow-up");
-    assertTrue(prompt.contains("studentComment") && prompt.contains("без оценки"), "a draft comment for the student, without the grade");
+    assertTrue(prompt.contains("studentComment") && prompt.contains("без оценки") && prompt.contains("4–6 предложений"), "a fuller draft comment for the student, without the grade");
   }
 
   @Test void aBoardAssessmentNeedsAReasonAndKeepsKnownItemsAndTwoQuestions() throws Exception {
@@ -69,7 +72,7 @@ class CodexAppServerTutorInstructionTest {
     assertEquals(BoardAssessment.PARTLY, a.items().get(0).verdict()); assertEquals("неверно", a.items().get(1).verdict(), "an unknown verdict is not a pass");
     assertEquals(java.util.List.of("Зачем здесь >=?", "Что будет при 120?"), a.questions());
     assertEquals("Хороший подход, проверяй «;».", a.studentComment());
-    var long_ = CodexAppServerTutor.parseBoardAssessment(mapper.readTree("{\"summary\":\"Да.\",\"items\":[],\"questions\":[],\"studentComment\":\"" + "а".repeat(700) + "\"}"));
+    var long_ = CodexAppServerTutor.parseBoardAssessment(mapper.readTree("{\"summary\":\"Да.\",\"items\":[],\"questions\":[],\"studentComment\":\"" + "а".repeat(1200) + "\"}"));
     assertTrue(long_.studentComment().length() <= BoardTests.COMMENT_MAX, "the draft fits the comment limit");
     assertNull(CodexAppServerTutor.parseBoardAssessment(mapper.readTree("{\"summary\":\"Да.\",\"items\":[],\"questions\":[]}")).studentComment());
     var view = a.view();

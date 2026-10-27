@@ -63,7 +63,9 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
   see only their own data — never medians, rankings or other students.
 - Grades: individual tests at the board («К доске», `BoardTests`): the teacher calls a student from his laptop, the
   student takes a timed test on the classroom PC (projected) with the items the teacher chose: «Собери программу»,
-  «Исправь ошибку», «Напиши код» (2/2/3 minutes, weights 1/2/3); checks + an LLM assessment and a suggested grade by
-  points, capped by the session pace (borderline ≤ 4, behind ≤ 3) — visible only to the teacher, who sets the final
-  grade and comment; the student sees date, grade, comment. «Работа на паре» (`PairWork`) is teacher-only analytics of
-  a pair window.
+  «Исправь ошибку», «Напиши код» (2/2/3 minutes, weights 1/2/3) on topics from the group's minimum for today up to the
+  student's farthest topic; checks + an LLM assessment and a suggested grade by points (no pace cap; a student ahead
+  with the minimum items right gets at least 4) — visible only to the teacher, who sets the final grade and comment; the student sees date, grade, comment. «Аттестация» is a
+  call format of «К доске»: several students at their own computers, one integrative task from the attestation pool
+  (`AttestationBank`, `tools/curated_python/build_attestation.py`) over the group's plan, lessons and the assistant
+  closed meanwhile. «Работа на паре» (`PairWork`) is teacher-only analytics of a pair window.

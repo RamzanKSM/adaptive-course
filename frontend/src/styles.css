@@ -1234,6 +1234,9 @@ th.text .sort { justify-content: flex-start; }
 .board-member-meta b { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 14px; }
 .board-member-meta small { color: var(--muted); font-size: 12px; font-weight: 600; }
 .board-member-state { flex: none; }
+.board-lag.ok { color: #0b6b44; }
+.board-lag.warn { color: var(--warn-ink); }
+.board-lag.bad { color: var(--danger-ink); }
 .presence { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
 .presence.on { background: var(--success); box-shadow: 0 0 0 3px rgb(16 160 103 / .18); }
 .suggest-tag { padding: 1px 8px; border-radius: 99px; background: var(--brand); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
@@ -1589,3 +1592,25 @@ button.ghost.board-run-button { padding: 9px 16px; border: 2px solid var(--brand
 html :is(code, pre, kbd, samp, .code-editor, .cm-editor, .console-out, .parsons-code, .board-file, .review-line, .code-card, .stdin-field textarea, .password-row input, .danger-zone input) {
   font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
 }
+
+/* «Аттестация»: a call format of «К доске» */
+.board-left .board-format { display: flex; width: fit-content; }
+.board-left .board-attest { margin-bottom: 8px; }
+.board-minutes { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.board-minutes input { width: 92px; padding: 6px 10px; border-radius: 10px; background: var(--surface); font-variant-numeric: tabular-nums; }
+.board-minutes input[aria-invalid="true"] { border-color: var(--danger); }
+.board-minutes span { font-weight: 650; color: var(--muted); }
+.board-attest .form-error { margin: 0; }
+.board-attest-warn { color: var(--danger-ink); }
+.board-attest-call { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 8px; }
+.board-attest-call .small-button { margin: 0; }
+.board-attest-call .form-error { flex-basis: 100%; margin: 0; font-size: 13px; }
+.board-pick { flex: none; width: 17px; height: 17px; margin: 0; padding: 0; accent-color: var(--brand); cursor: pointer; }
+.board-member-list li.picked { border-color: var(--brand); background: var(--brand-soft); }
+.attest-tag { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--brand-ink); font-size: 11px; font-weight: 800; letter-spacing: .03em; vertical-align: 1px; white-space: nowrap; }
+.board-attest-note { color: var(--brand-ink); }
+.board-attest-covers { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--brand-soft); color: var(--brand-ink); font-size: 14px; font-weight: 650; }
+.board-coverage-table td:not(.text), .board-coverage-table th:not(.text) { text-align: center; }
+.board-coverage .table-note { margin: 0; }
+.board-plan-date { flex-wrap: wrap; margin: 8px 0 2px; }
+.board-plan-date input { width: auto; }

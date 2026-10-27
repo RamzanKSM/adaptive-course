@@ -147,6 +147,8 @@ export type BoardStatus = 'CALLED' | 'CANCELLED' | 'EXPIRED' | 'STARTED' | 'FINI
 export type BoardGrade = '2' | '3' | '4' | '5'
 /** The kinds of items the teacher chooses when calling; a test always has them in this order (parsons → fix → code). */
 export type BoardItemKind = 'parsons' | 'fix' | 'code'
+/** TEST — the test at the board; ATTESTATION — one «Напиши код» over the whole plan at the student's own computer (since 2026-10-27). */
+export type BoardFormat = 'TEST' | 'ATTESTATION'
 /** A movable line of «Собери программу»: text with its original indentation. */
 export interface BoardLine { id: string; text: string }
 /** One item of the student's view; never the solution order, which line is extra, the reference or the bug description. */
@@ -166,26 +168,28 @@ export interface BoardStudentTest {
   revision?: number
   /** The student's name (station views only). */
   displayName?: string
+  format?: BoardFormat
 }
 /** GET /board/current: the student's active call or their running test. canStart false — the test starts only at the board station. */
-export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null; canStart?: boolean } | null; test: BoardStudentTest | null }
+export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null; canStart?: boolean; format?: BoardFormat } | null; test: BoardStudentTest | null }
 /** A call shown on the board station. */
 export interface StationCall {
   id: Id; displayName: string; group: string | null; language: CourseLanguage; kinds?: BoardItemKind[] | null; durationSeconds?: number | null
-  calledAt: string; expiresAt: string; canStart: boolean
+  calledAt: string; expiresAt: string; canStart: boolean; format?: BoardFormat
 }
 /** GET /station/current: the active calls and the test running on this station (at most one). now — the server clock. */
 export interface StationCurrent { station: { id: Id; name: string }; now: string; calls: StationCall[]; test: BoardStudentTest | null }
 /** A board station (a browser of the classroom PC that shows only the calls and the tests). */
 export interface BoardStation { id: Id; name: string; createdAt: string; lastSeenAt: string | null; current?: boolean }
-export interface BoardSettings { studentStart: boolean }
+/** attestationPlanDate — the day whose plan line attestations cover (null: the day of each attestation). */
+export interface BoardSettings { studentStart: boolean; attestationPlanDate?: string | null }
 /** The student's own board grades in «Мой прогресс»: Moscow date, the teacher's final grade and comment. */
 /** One item of the report a student sees for a graded test (when the teacher shows it): never the reference or the scores. */
 export interface BoardReportItem {
   kind: BoardItemKind; title: string | null; statement: string | null; language: CourseLanguage; answer: string | null
   verdict: 'верно' | 'частично верно' | 'неверно'; passed: boolean; check: string | null; extraUsed: boolean | null
 }
-export interface BoardStudentGrade { id: Id; date: string; grade: BoardGrade; comment: string | null; report: BoardReportItem[] | null }
+export interface BoardStudentGrade { id: Id; date: string; grade: BoardGrade; comment: string | null; report: BoardReportItem[] | null; format?: BoardFormat }
 export type AssessmentStatus = 'PENDING' | 'DONE' | 'UNAVAILABLE'
 export interface BoardTestSummary {
   id: Id; userId: Id; displayName: string; status: BoardStatus
@@ -194,13 +198,24 @@ export interface BoardTestSummary {
   kinds?: BoardItemKind[] | null; durationSeconds?: number | null; source?: BoardSource
   /** The station the test was started at; null — from the student's own account. */
   stationId?: Id | null; stationName?: string | null
+  format?: BoardFormat
 }
-export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null }
+export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null
+  /** Session members only (as in «Прогресс»): lag = plan for today − closed; farthest — the title of the farthest closed topic. */
+  lag?: number | null; status?: SessionStatus | null; farthest?: string | null
+  /** The latest attestation that was not cancelled or expired; at — started or called. tests, lastTestAt, lastGrade count only TEST. */
+  attestation?: { testId: Id; status: BoardStatus; grade: BoardGrade | null; at: string } | null }
 /** Where the items come from: the topics the student has reached, or the minimum for today (a uniform plan to the session). */
-export type BoardSource = 'LEVEL' | 'PACE'
+/** RANGE — the one rule since 2026-10-22 (from the minimum for today to the student's farthest topic); LEVEL, PACE — older calls. */
+export type BoardSource = 'RANGE' | 'LEVEL' | 'PACE'
 /** The minimum for today of the group: the first `topics` of `total` topics; null without a session date or lessons. */
 export interface BoardPacePlan { topics: number; total: number; lastTopic: string | null; start: string; session: string }
-export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[]; pace?: BoardPacePlan | null; settings?: BoardSettings }
+/**
+ * The attestation pool: tasks — fitting the plan (the whole course without a plan), total — the course's pool, minutes —
+ * the default time; planDate — the set day of the plan (null: the day of the attestation), planTopics/planLastTopic — that plan.
+ */
+export interface BoardAttestationPool { tasks: number; total: number; minutes: number; planDate?: string | null; planTopics?: number | null; planLastTopic?: string | null }
+export interface BoardOverview { group: string; language: CourseLanguage; members: BoardMember[]; suggested: Id | null; active: BoardTestSummary[]; pace?: BoardPacePlan | null; settings?: BoardSettings; attestation?: BoardAttestationPool | null }
 /** An item with full data: parsons — before/after, lines, solution (ids in the reference order), extraLineId, reference;
  *  fix — program (the buggy one), bugDescription, reference; code — statement and starter. */
 export interface BoardAdminItem {
@@ -208,8 +223,12 @@ export interface BoardAdminItem {
   program?: string | null; bugDescription?: string | null; reference?: string | null
   before?: string | null; after?: string | null; lines?: BoardLine[] | null; solution?: string[] | null; extraLineId?: string | null
   taskId?: Id | null; externalKey?: string | null; skillCode?: string | null; skillTitle?: string | null; difficulty?: number | null
+  /** The topic within the minimum for today or above it (tests since 2026-10-22). */
+  zone?: 'minimum' | 'above' | null
   /** Tasks the teacher replaced in this item during the test. */
   replacedTaskIds?: Id[] | null
+  /** Attestation item: it covers topics 1…covers of the course; planTopics — the plan's K at the start. */
+  attestation?: boolean; covers?: number | null; coversTitle?: string | null; planTopics?: number | null
 }
 /** The check of one item; program — the assembled program of parsons. */
 export interface BoardCheck { kind?: BoardItemKind; passed: Flag; output?: string | null; outcome?: string | null; feedback?: string | null; console?: ConsoleRun | null; unavailable?: Flag | null; program?: string | null }
@@ -231,12 +250,18 @@ export interface BoardAdminTest extends BoardTestSummary {
   /** Aligned with items, or keyed by kind. */
   results: BoardCheck[] | Partial<Record<BoardItemKind, BoardCheck>> | null
   runs: BoardRun[] | null; score?: BoardScore | null
-  paceStatus: SessionStatus | null; paceCap: number | null; ruleGrade: BoardGrade | null
+  paceStatus: SessionStatus | null; ruleGrade: BoardGrade | null
+  /** A student ahead of the minimum: every item from the minimum right → at least `grade`; met — null until checked; null — does not apply. */
+  floor?: { grade: number; met: boolean | null } | null
   assessment: BoardAssessment | null; comment: string | null; gradedAt?: string | null
   /** «Показать студенту разбор»; true by default. */
   reportVisible?: boolean
+  /** Attestation only: the constructs of the covered topics — expected: the reference uses it, used: the student's code (null without an answer). */
+  coverage?: BoardCoverage[] | null
 }
+export interface BoardCoverage { construct: string; title: string; topicTitle: string | null; expected: boolean; used: boolean | null }
 export interface BoardJournal {
-  tests: { id: Id; userId: Id; displayName: string; calledAt: string; status: BoardStatus; finalGrade: BoardGrade | null; suggestedGrade: BoardGrade | null }[]
-  students: { userId: Id; displayName: string; grades: (BoardGrade | null)[]; lastTestAt: string | null }[]
+  tests: { id: Id; userId: Id; displayName: string; calledAt: string; status: BoardStatus; finalGrade: BoardGrade | null; suggestedGrade: BoardGrade | null; format?: BoardFormat }[]
+  /** grades — TEST only; attestations — final grades of finished attestations, oldest first. */
+  students: { userId: Id; displayName: string; grades: (BoardGrade | null)[]; lastTestAt: string | null; attestations?: (BoardGrade | null)[] }[]
 }

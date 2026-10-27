@@ -107,6 +107,23 @@ class ProgressAnalytics {
         "students", students);
   }
 
+  /** «К доске»: the lag and status of a session member (as in «Прогресс») and the title of the farthest topic he closed. */
+  record Standing(Integer lag, String status, String farthest) {}
+  /** Standings of the group's session members in this course, by user id (others are absent). */
+  Map<Long, Standing> standings(String group, Language lang, Instant at) {
+    var course = load(lang, Scope.group(group));
+    long now = at.getEpochSecond(); LocalDate today = day(now), session = sessionDate(), start = planStart(group, lang);
+    var standings = new HashMap<Long, Standing>();
+    for (var s : course.students()) {
+      if (!member(s, lang)) continue;
+      var f = forecast(course, s, now, today, session, start);
+      var cursor = new Cursor(s).at(now + 1); String farthest = null;
+      for (int i = course.topics().size() - 1; i >= 0 && farthest == null; i--) if (cursor.confirmed(i) || cursor.completed[i] >= 1) farthest = course.topics().get(i).title();
+      standings.put(s.id, new Standing(f.lag(), f.status(), farthest));
+    }
+    return standings;
+  }
+
   /**
    * The «session» block of the student's own GET /api/progress: their pace, status and closed topics per day. Null unless
    * the student takes the session in this course.
