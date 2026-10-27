@@ -1,10 +1,14 @@
+import { redo } from '@codemirror/commands'
 import { java } from '@codemirror/lang-java'
 import { python } from '@codemirror/lang-python'
+import { keymap } from '@uiw/react-codemirror'
 import ReactMarkdown from 'react-markdown'
 import { javaCompletions } from './javaCompletions'
 
+/** Ctrl+Shift+Z redoes everywhere (CodeMirror binds it only on Linux; Ctrl+Y and ⌘⇧Z on macOS stay). */
+const redoKeys = keymap.of([{ key: 'Ctrl-Shift-z', run: redo, preventDefault: true }])
 // Stable references: a new extensions array on every render would make CodeMirror reconfigure the editor.
-export const EDITOR_EXTENSIONS = { JAVA: [java(), javaCompletions], PYTHON: [python()] }
+export const EDITOR_EXTENSIONS = { JAVA: [java(), javaCompletions, redoKeys], PYTHON: [python(), redoKeys] }
 /** The editor's text when a task has no starter code. */
 export const FALLBACK_CODE = {
   JAVA: 'public class Solution {\n    public static void main(String[] args) {\n        // Напишите решение здесь\n    }\n}\n',
