@@ -1093,12 +1093,12 @@ class BoardTestsIntegrationTest {
         + "\"testSource\":\"class TestHarness {}\",\"testFileName\":\"TestHarness.java\",\"goalJson\":\"{\\\"kind\\\":\\\"OUTPUT_TEXT\\\"}\",\"reference\":\"ref\","
         + "\"wrong\":[{\"description\":\"d\",\"source\":\"w\"}],\"cases\":[{\"ordinal\":1,\"input\":\"\",\"expected\":\"ok\\n\",\"public\":true}]}");
     var bankJson = json.createObjectNode(); bankJson.putArray("tasks").add(task);
-    bank.load(bankJson); bank.load(bankJson);
+    bank.load(AttestationBank.ATTESTATION, bankJson); bank.load(AttestationBank.ATTESTATION, bankJson);
     var rows = db.queryForList("select id,mode,active,source,reference_code from tasks where external_key='attest:ab-one'");
     assertEquals(1, rows.size(), "updated by key, not duplicated");
     assertEquals("ATTESTATION", rows.getFirst().get("mode")); assertEquals(1, ((Number) rows.getFirst().get("active")).intValue()); assertEquals("ref", rows.getFirst().get("reference_code"));
     assertEquals(1, count("select count(*) from task_cases where task_id=?", rows.getFirst().get("id")));
-    bank.load(json.readTree("{\"tasks\":[]}"));
+    bank.load(AttestationBank.ATTESTATION, json.readTree("{\"tasks\":[]}"));
     assertEquals(0, count("select active from tasks where external_key='attest:ab-one'"), "left the bank: deactivated, its tests stay readable");
   }
 

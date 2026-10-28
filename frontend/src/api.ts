@@ -1,5 +1,6 @@
+/** code — the backend's «error» field (e.g. PRACTICE_RUNNING), when the answer has one. */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) { super(message) }
+  constructor(message: string, public readonly status: number, public readonly code?: string) { super(message) }
 }
 
 // Backend status codes (LLM/runner availability) that may reach the UI as reasons or error messages.
@@ -34,13 +35,13 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
  * session) and the login itself; those report their own error and leave the app as it is.
  */
 async function failure(response: Response, path: string): Promise<ApiError> {
-  const body = await response.json().catch(() => null) as { message?: string } | null
+  const body = await response.json().catch(() => null) as { message?: string; error?: string } | null
   if (response.status === 401 && path.startsWith('/station')) return new ApiError('Компьютер у доски отключён', 401)
   if (response.status === 401 && !path.startsWith('/auth/login')) {
     unauthorizedHandler?.()
     return new ApiError('Сессия истекла. Войдите снова.', 401)
   }
-  return new ApiError(humanize(body?.message) ||`Ошибка сервера (${response.status})`, response.status)
+  return new ApiError(humanize(body?.message) ||`Ошибка сервера (${response.status})`, response.status, body?.error)
 }
 
 /** Fetches a file (same session cookie and error handling as api) and saves it through a temporary download link. */

@@ -24,9 +24,9 @@ public class ApiController {
    * a second request for the same lesson (double click, React StrictMode) waits and then sees the task the first one
    * assigned, instead of generating and assigning another. Other students are not affected.
    */
-  private final TopicRetakes retakes; private final ConcurrentHashMap<String,java.util.concurrent.locks.ReentrantLock> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
+  private final TopicRetakes retakes; private final AttestationPractice practices; private final IntegrativeTasks integratives; private final ConcurrentHashMap<String,java.util.concurrent.locks.ReentrantLock> lessonLocks=new ConcurrentHashMap<>(); private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
   @Value("${app.session-hours}") long sessionHours; @Value("${app.lesson.idle-minutes:20}") int idleMinutes; @Value("${app.cookie-secure}") boolean secureCookie; @Value("${app.piston.base-url}") String pistonUrl;
-  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests, BoardStations boardStations, FortuneWheel wheel, TopicRetakes retakes) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; this.boardStations=boardStations; this.wheel=wheel; this.retakes=retakes; }
+  ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests, BoardStations boardStations, FortuneWheel wheel, TopicRetakes retakes, AttestationPractice practices, IntegrativeTasks integratives) { this.db=db; this.codeRunner=codeRunner; this.tutor=tutor; this.contentGenerator=contentGenerator; this.verifier=verifier; this.diagnostics=diagnostics; this.tx=tx; this.llmSettings=llmSettings; this.analytics=analytics; this.pairWork=pairWork; this.boardTests=boardTests; this.boardStations=boardStations; this.wheel=wheel; this.retakes=retakes; this.practices=practices; this.integratives=integratives; }
   @PostMapping("/auth/login") public Map<String,Object> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
     var rows=db.queryForList("select id,login,password_hash,role,display_name,llm_enabled,hard_mode_allowed,hard_mode_on from users where login=?",body.get("login"));
     if(rows.isEmpty() || !passwords.matches(body.getOrDefault("password",""),(String)rows.getFirst().get("password_hash"))) throw bad("INVALID_CREDENTIALS","Неверный логин или пароль");
@@ -66,6 +66,7 @@ public class ApiController {
     if(db.update("update lessons set finished_at=?,finish_reason=? where id=? and user_id=? and finished_at is null",Instant.now().toString(),reason,lessonId,user)==0)return false;
     queueUnsolvedRedos(user,lessonId);
     retakes.finishLesson(lessonId);
+    practices.finishLesson(lessonId);
     return true;
   }
   /** Students' courses whose /learning/next is preparing content right now: such a lesson is never closed as idle. */
@@ -105,7 +106,11 @@ public class ApiController {
     var lock=lessonLock(key); lock.lock();
     try {
       touch(userId,lang); preparing.add(key);
-      try { var open=active(userId,lang); var before=open==null?null:retakes.active(((Number)open.get("id")).longValue()); return withRetake(userId,lang,nextLocked(userId,lang),before); } finally { preparing.remove(key); touch(userId,lang); }
+      try {
+        var open=active(userId,lang); Long lessonId=open==null?null:((Number)open.get("id")).longValue();
+        var retake=lessonId==null?null:retakes.active(lessonId); var practice=lessonId==null?null:practices.active(lessonId);
+        return withPractice(userId,lang,withRetake(userId,lang,nextLocked(userId,lang),retake),practice);
+      } finally { preparing.remove(key); touch(userId,lang); }
     } finally { lock.unlock(); }
   }
   /**
@@ -122,6 +127,9 @@ public class ApiController {
     try {
       var lesson=active(u,lang); if(lesson==null) throw bad("NO_ACTIVE_LESSON","Сначала начните урок");
       long lessonId=((Number)lesson.get("id")).longValue();
+      var practice=practices.active(lessonId);
+      if(practice!=null&&practice.get("result")==null) throw bad("PRACTICE_RUNNING","Идёт тренировочная аттестация — повторить тему можно, когда она закончится");
+      if(practice!=null) practices.finish(((Number)practice.get("id")).longValue(),TopicRetakes.DONE); // solved: over now, its waiting task comes back
       var open=retakes.active(lessonId); var current=unsolvedTask(lesson);
       boolean currentIsRetake=current!=null&&retakes.retakeOf(lessonId,((Number)current.get("id")).longValue())!=null;
       Long paused=current==null||currentIsRetake?null:((Number)current.get("id")).longValue();
@@ -134,19 +142,58 @@ public class ApiController {
   /** «Закончить повторение»: ends the student's open re-take; the paused task comes back. Returns its summary. */
   @PostMapping("/retakes/{id}/finish") public Map<String,Object> finishRetake(@PathVariable long id,HttpServletRequest r){
     long u=learner(r);
-    var rows=db.queryForList("select l.language from topic_retakes t join lessons l on l.id=t.lesson_id where t.id=? and t.user_id=?",id,u);
+    var rows=db.queryForList("select l.language from topic_retakes t join lessons l on l.id=t.lesson_id where t.id=? and t.user_id=? and t.kind=?",id,u,TopicRetakes.TOPIC);
     if(rows.isEmpty()) throw bad("RETAKE_NOT_FOUND","Повторение не найдено");
     var lock=lessonLock(u+":"+rows.getFirst().get("language")); lock.lock();
     try { var view=retakes.finish(id,TopicRetakes.STUDENT); return obj("retake",view==null?retakes.view(id):view); } finally { lock.unlock(); }
   }
+  /**
+   * «Тренировочная аттестация» (AttestationPractice): one task of the attestation's size and kind with a 10-minute timer in
+   * the open lesson; an open re-take ends first, the lesson's unsolved task waits. Starting while one runs returns it.
+   */
+  @PostMapping("/attestation-practice") public Map<String,Object> startPractice(@RequestBody(required=false) Map<String,Object> body,HttpServletRequest r){
+    long u=learner(r); Language lang=Language.parse(body!=null&&body.get("language") instanceof String l?l:null);
+    var lock=lessonLock(u+":"+lang.name()); lock.lock();
+    try {
+      var lesson=active(u,lang); if(lesson==null) throw bad("NO_ACTIVE_LESSON","Сначала начните урок");
+      long lessonId=((Number)lesson.get("id")).longValue();
+      var open=practices.active(lessonId);
+      if(open!=null&&open.get("result")==null) return obj("practice",practices.view(((Number)open.get("id")).longValue()));
+      var task=practices.choose(u,lessonId,lang);
+      if(open!=null) practices.finish(((Number)open.get("id")).longValue(),TopicRetakes.DONE); // solved, waiting for the next task: over now
+      var retake=retakes.active(lessonId); if(retake!=null) retakes.finish(((Number)retake.get("id")).longValue(),TopicRetakes.STUDENT);
+      var current=unsolvedTask(lesson);
+      long id=practices.start(u,lessonId,task,current==null?null:((Number)current.get("id")).longValue());
+      touch(u,lang);
+      return obj("practice",practices.view(id));
+    } finally { lock.unlock(); }
+  }
+  /** «Завершить» a practice: NOT_SOLVED unless its task was solved; the waiting task comes back. Returns it, finished. */
+  @PostMapping("/attestation-practice/{id}/finish") public Map<String,Object> finishPractice(@PathVariable long id,HttpServletRequest r){
+    long u=learner(r);
+    var rows=db.queryForList("select l.language from topic_retakes t join lessons l on l.id=t.lesson_id where t.id=? and t.user_id=? and t.kind=?",id,u,AttestationPractice.KIND);
+    if(rows.isEmpty()) throw bad("PRACTICE_NOT_FOUND","Тренировочная аттестация не найдена");
+    var lock=lessonLock(u+":"+rows.getFirst().get("language")); lock.lock();
+    try { var view=practices.finish(id,TopicRetakes.STUDENT); return obj("practice",view==null?practices.view(id):view); } finally { lock.unlock(); }
+  }
   /** The re-take of a lesson task for the attempt's answer (its progress after this attempt), or null for a regular task. */
   private Map<String,Object> retakeView(long lessonId,long taskId){ Long id=retakes.retakeOf(lessonId,taskId); return id==null?null:retakes.view(id); }
+  /** The practice of a lesson task (its state after this attempt), or null. */
+  private Map<String,Object> practiceView(long lessonId,long taskId){ Long id=practices.practiceOf(lessonId,taskId); return id==null?null:practices.view(id); }
   private Map<String,Object> nextLocked(long userId,Language lang) {
     var lesson=active(userId,lang);
     if(lesson==null) throw bad("NO_ACTIVE_LESSON","Сначала начните урок");
+    long lessonId=((Number)lesson.get("id")).longValue();
     var assigned=unsolvedTask(lesson);
+    // A practice is over once its task is not the lesson's current one (solved, or gone): the task that waited comes back.
+    var practice=practices.active(lessonId);
+    if(practice!=null){
+      long practiceId=((Number)practice.get("id")).longValue();
+      Long ofAssigned=assigned==null?null:practices.practiceOf(lessonId,((Number)assigned.get("id")).longValue());
+      if(ofAssigned==null||ofAssigned!=practiceId){ practices.finish(practiceId,practice.get("result")==null?TopicRetakes.NO_TASK:TopicRetakes.DONE); assigned=unsolvedTask(lesson); }
+    }
     if(assigned!=null) return learningResponse(userId,lesson,assigned);
-    var retake=retakes.active(((Number)lesson.get("id")).longValue());
+    var retake=retakes.active(lessonId);
     if(retake!=null){
       var response=retakeTask(userId,lesson,lang,retake);
       if(response!=null) return response;
@@ -166,13 +213,15 @@ public class ApiController {
     var skill=nextSkill(userId,lang,((Number)lesson.get("number")).intValue(),((Number)lesson.get("id")).longValue());
     if(skill==null) return obj("lesson",lesson,"skill",null,"explanation",null,"task",null,"reason",remainingTopics(userId,lang)==0?"COURSE_COMPLETE":"NO_DUE_SKILL","llm",llm(userId,lang));
     String skillCode=(String)skill.get("code");
-    long lessonId=((Number)lesson.get("id")).longValue();
     Object explanation=explanation(userId, skillCode);
     // The lesson may have been finished (by the student, an admin or a logout) while the explanation was generated;
     // the explanation is saved for the topic, a task is chosen in the next lesson.
     if(!stillActive(lessonId)) return lessonFinished(lesson);
     // Switching the mode does not wait for this request (see myHardMode): it may have switched while the explanation was prepared.
     if(hardModeActive(userId,lang)) return hardTrack(userId,lesson,lang);
+    // The 3rd iteration of a topic outside block 0 is an integrative task (IntegrativeTasks); without one in the pool — as before.
+    var integrative=integratives.next(userId,lessonId,skillCode);
+    if(integrative!=null) return assign(lesson,((Number)integrative.get("id")).longValue())?obj("lesson",lesson,"skill",skill,"explanation",explanation,"task",taskView(userId,integrative)):lessonFinished(lesson);
     int difficulty=targetDifficulty(userId, lessonId, skillCode);
     var tasks=availableTasks(userId, lesson, skillCode, difficulty);
     Long generatedTaskId=null;
@@ -256,6 +305,16 @@ public class ApiController {
     }
     return response;
   }
+  /**
+   * Adds the attestation practice to a /learning/next answer: «practice» while the given task is the open practice's,
+   * «practiceDone» — the practice that was open before and is over now (once).
+   */
+  private Map<String,Object> withPractice(long userId,Language lang,Map<String,Object> response,Map<String,Object> before){
+    if(before!=null){ var view=practices.view(((Number)before.get("id")).longValue()); if(Boolean.TRUE.equals(view.get("finished"))) response.put("practiceDone",view); }
+    var lesson=active(userId,lang);
+    if(lesson!=null&&response.get("task") instanceof Map<?,?> task){ var view=practiceView(((Number)lesson.get("id")).longValue(),((Number)task.get("id")).longValue()); if(view!=null) response.put("practice",view); }
+    return response;
+  }
   /** Whether another variant of this bank task's story is credited to the student: «похожая на решённую». */
   private boolean similarTask(long userId,long taskId){
     return count("select count(*) from tasks t join tasks s on s.source='CURATED' and s.id<>t.id and t.external_key like 'curated:%:%' and substr(s.external_key,1,8+instr(substr(t.external_key,9),':'))=substr(t.external_key,1,8+instr(substr(t.external_key,9),':')) "
@@ -297,10 +356,10 @@ public class ApiController {
     var rows=db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.mode,ts.skill_code,s.title as skill_title,s.block_no,p.reason from pending_redos p join tasks t on t.id=p.task_id join task_target_skills ts on ts.task_id=t.id join skills s on s.code=ts.skill_code where p.user_id=? and t.language=? and (coalesce(p.reason,'')<>'GENERATED' or t.mode=?) order by p.created_at,p.task_id limit 1",userId,lang.name(),hard?"HARD":"NORMAL");
     return rows.isEmpty()?null:rows.getFirst();
   }
-  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation="HARD".equals(task.get("mode"))?cachedExplanation(skillCode):explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(userId,task)); }
+  private Map<String,Object> learningResponse(long userId,Map<String,Object> lesson,Map<String,Object> task) { String skillCode=(String)task.get("skill_code");Object explanation="HARD".equals(task.get("mode"))||AttestationBank.PRACTICE.mode().equals(task.get("mode"))?cachedExplanation(skillCode):explanation(userId,skillCode);return obj("lesson",lesson,"skill",Map.of("code",skillCode,"title",task.get("skill_title"),"blockNo",task.get("block_no")),"explanation",explanation,"task",taskView(userId,task)); }
   /** redo: the teacher cancelled this student's accepted solution, so the task is being solved again. */
   private boolean redo(long userId,Object taskId) { return count("select count(*) from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and s.task_id=? and s.revoked_at is not null",userId,taskId)>0; }
-  private Map<String,Object> taskView(long userId,Map<String,Object> task) { boolean redo=redo(userId,task.get("id")); return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code"),"redo",redo,"hard","HARD".equals(task.get("mode"))); }
+  private Map<String,Object> taskView(long userId,Map<String,Object> task) { boolean redo=redo(userId,task.get("id")); return Map.of("id",task.get("id"),"title",task.get("title"),"statement",task.get("statement"),"starterCode",task.get("starter_code"),"redo",redo,"hard","HARD".equals(task.get("mode")),"integrative",AttestationBank.INTEGRATIVE.mode().equals(task.get("mode"))); }
   /**
    * Unsolved bank tasks for the skill. A curated task («curated:<slug>:<n>») is one of the variants of the story <slug>
    * (same wording, other values); any other task is a story of its own. Tasks of stories the student has not solved yet
@@ -460,12 +519,13 @@ public class ApiController {
     long submissionId=tx.execute(status->{
       // Submission, task credit and skill progress change together, so a crash can never leave credit without its submission.
       long id=db.queryForObject("insert into submissions(lesson_id,task_id,source_code,passed,runner_output,console_json,grader,review_json) values(?,?,?,?,?,?,?,?) returning id",Long.class,l.get("id"),task,source,finalResult.passed()?1:0,finalResult.output(),consoleJson(consoleRun),finalGrader,reviewJson);
-      // A re-take's task is credited (solved count, XP, the pair's points) but never moves the topic's iterations (TopicRetakes).
-      if(finalResult.passed()&&db.update("insert or ignore into successful_task_credit(user_id,task_id) values(?,?)",u,task)>0&&retakes.retakeOf(((Number)l.get("id")).longValue(),task)==null)for(var target:db.queryForList("select skill_code from task_target_skills where task_id=?",task))credit(u,(String)target.get("skill_code"),((Number)l.get("id")).longValue(),((Number)l.get("number")).intValue());
+      // A re-take's or a practice's task is credited (solved count, XP, the pair's points) but never moves the topic's iterations (TopicRetakes).
+      if(finalResult.passed()&&db.update("insert or ignore into successful_task_credit(user_id,task_id) values(?,?)",u,task)>0&&!retakes.outsideIterations(((Number)l.get("id")).longValue(),task))for(var target:db.queryForList("select skill_code from task_target_skills where task_id=?",task))credit(u,(String)target.get("skill_code"),((Number)l.get("id")).longValue(),((Number)l.get("number")).intValue());
+      if(finalResult.passed()) practices.solved(((Number)l.get("id")).longValue(),task);
       return id;
     });
     var response=ResponseEntity.ok(obj("id",submissionId,"passed",result.passed(),"output",result.output(),"console",consoleRun==null?null:consoleRun.view(),
-        "grader",grader,"review",review==null?null:review.view(),"mismatch",mismatch,"progress",progress(u,lang),"retake",retakeView(((Number)l.get("id")).longValue(),task)));
+        "grader",grader,"review",review==null?null:review.view(),"mismatch",mismatch,"progress",progress(u,lang),"retake",retakeView(((Number)l.get("id")).longValue(),task),"practice",practiceView(((Number)l.get("id")).longValue(),task)));
     logCheckTiming(u,task,lang,testsNs,finalConsole,finalConsoleWait,System.nanoTime()-received);
     return response; }
   /**
@@ -556,9 +616,9 @@ public class ApiController {
   private String consoleJson(PistonCodeRunner.Console console){ try { return console==null?null:new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(console.view()); } catch(Exception e){ return null; } }
   private Object consoleView(Object stored){ try { return stored==null?null:new com.fasterxml.jackson.databind.ObjectMapper().readValue((String)stored,Map.class); } catch(Exception e){ return null; } }
   /** session: the student's own pace to the session in their session course (ProgressAnalytics), otherwise null. */
-  @GetMapping("/progress") public Map<String,Object> progress(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=uid(r);Language lang=Language.parse(language);return obj("language",lang.name(),"skills",progress(u,lang),"solvedTasks",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=?",u,lang.name()),"hardSolved",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=? and t.mode='HARD'",u,lang.name()),"activity",db.queryForList("select s.created_at from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and l.language=? and s.passed=1 and s.created_at>=datetime('now','-90 days') order by s.id",String.class,u,lang.name()),"session","STUDENT".equals(user(r).get("role"))?analytics.studentSession(u,lang,analytics.now()):null,"retakes",retakes.history(u,lang));}
+  @GetMapping("/progress") public Map<String,Object> progress(@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=uid(r);Language lang=Language.parse(language);return obj("language",lang.name(),"skills",progress(u,lang),"solvedTasks",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=?",u,lang.name()),"hardSolved",count("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language=? and t.mode='HARD'",u,lang.name()),"activity",db.queryForList("select s.created_at from submissions s join lessons l on l.id=s.lesson_id where l.user_id=? and l.language=? and s.passed=1 and s.created_at>=datetime('now','-90 days') order by s.id",String.class,u,lang.name()),"session","STUDENT".equals(user(r).get("role"))?analytics.studentSession(u,lang,analytics.now()):null,"retakes",retakes.history(u,lang),"attestationPractice",practices.offer(u,lang));}
   @GetMapping("/chat") public Map<String,Object> chat(@RequestParam(name="language",required=false) String language,HttpServletRequest r){var l=active(uid(r),Language.parse(language));return Map.of("messages",l==null?List.of():db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",l.get("id")),"llm",llm(uid(r),Language.parse(language)),"quota",llmSettings.chatQuota(uid(r)).view());}
-  @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=learner(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");touch(u,lang);String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");String consoleOutput=body.get("consoleOutput") instanceof String text&&!text.isBlank()?text:null;Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}var chatState=chatStatus(u,lang);if("DISABLED_IN_HARD_MODE".equals(chatState.reason()))return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message","В hard mode помощник отключён — разбирайся сам","llm",chatState.asMap()));var quota=llmSettings.chatQuota(u);if(!quota.allowed()){log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})",u,quota.hourUsed(),quota.hourLimit(),quota.dayUsed(),quota.dayLimit());return ResponseEntity.status(429).header("Retry-After",String.valueOf(quota.retryAfterSeconds())).body(Map.of("error","LLM_RATE_LIMITED","message",rateLimitMessage(quota),"quota",quota.view()));}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource,consoleOutput),question);touch(u,lang);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u),"quota",llmSettings.chatQuota(u).view()));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
+  @PostMapping("/chat") public ResponseEntity<?> sendChat(@RequestBody Map<String,Object> body,@RequestParam(name="language",required=false) String language,HttpServletRequest r){long u=learner(r);Language lang=Language.parse(language);var l=active(u,lang);if(l==null)throw bad("NO_ACTIVE_LESSON","Сначала начните урок");touch(u,lang);if(practices.timerRunning(((Number)l.get("id")).longValue()))throw bad("PRACTICE_RUNNING","Идёт тренировочная аттестация — помощник откроется, когда выйдет время");String question=(String)body.get("content");String editorSource=(String)body.get("sourceCode");String consoleOutput=body.get("consoleOutput") instanceof String text&&!text.isBlank()?text:null;Object requestedTask=body.get("taskId");if(editorSource!=null||requestedTask!=null){if(editorSource==null||requestedTask==null)throw bad("INVALID_CHAT_CONTEXT","Для кода нужны taskId и sourceCode");if(editorSource.length()>16_000)throw bad("EDITOR_SOURCE_TOO_LONG","Код в редакторе длиннее 16 000 символов");long requestedTaskId;try{requestedTaskId=requestedTask instanceof Number n?n.longValue():Long.parseLong((String)requestedTask);}catch(RuntimeException e){throw bad("INVALID_CHAT_CONTEXT","taskId должен быть числом");}var current=unsolvedTask(l);if(current==null||requestedTaskId!=((Number)current.get("id")).longValue())throw bad("CHAT_TASK_MISMATCH","Код относится не к текущей задаче урока");}var chatState=chatStatus(u,lang);if("DISABLED_IN_HARD_MODE".equals(chatState.reason()))return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message","В hard mode помощник отключён — разбирайся сам","llm",chatState.asMap()));var quota=llmSettings.chatQuota(u);if(!quota.allowed()){log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})",u,quota.hourUsed(),quota.hourLimit(),quota.dayUsed(),quota.dayLimit());return ResponseEntity.status(429).header("Retry-After",String.valueOf(quota.retryAfterSeconds())).body(Map.of("error","LLM_RATE_LIMITED","message",rateLimitMessage(quota),"quota",quota.view()));}db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)",l.get("id"),"STUDENT",question);try {String answer=tutor.reply(u,tutorContext(lang,l,editorSource,consoleOutput),question);touch(u,lang);long id=db.queryForObject("insert into chat_messages(lesson_id,role,content) values(?,?,?) returning id",Long.class,l.get("id"),"ASSISTANT",answer);return ResponseEntity.ok(Map.of("message",Map.of("id",id,"role","ASSISTANT","content",answer,"createdAt",Instant.now().toString()),"llm",llm(u),"quota",llmSettings.chatQuota(u).view()));}catch(LlmUnavailableException e){return ResponseEntity.status(503).body(Map.of("error","LLM_UNAVAILABLE","message",e.getMessage(),"llm",llm(u)));}}
 
   @PostMapping("/admin/students") public Map<String,Object> createStudent(@RequestBody Map<String,Object>b,HttpServletRequest r){
     admin(r);
@@ -832,7 +892,7 @@ public class ApiController {
   private boolean replaceTaskOfOtherMode(long u,Language lang){
     var lesson=active(u,lang); var task=lesson==null?null:unsolvedTask(lesson);
     boolean hard=hardModeActive(u,lang);
-    if(task==null||"HARD".equals(task.get("mode"))==hard||redo(u,task.get("id"))||retakes.retakeOf(((Number)lesson.get("id")).longValue(),((Number)task.get("id")).longValue())!=null) return false;
+    if(task==null||"HARD".equals(task.get("mode"))==hard||redo(u,task.get("id"))||retakes.outsideIterations(((Number)lesson.get("id")).longValue(),((Number)task.get("id")).longValue())) return false;
     if(db.update("update lesson_tasks set replaced_at=? where lesson_id=? and task_id=? and replaced_at is null",Instant.now().toString(),lesson.get("id"),task.get("id"))==0) return false;
     log.info("Task {} of lesson {} replaced: student {} switched to {} tasks",task.get("id"),lesson.get("id"),u,hard?"hard":"regular");
     return true;
@@ -861,6 +921,7 @@ public class ApiController {
     int submissions=db.update("delete from submissions where lesson_id in "+lessons,id);
     int messages=db.update("delete from chat_messages where lesson_id in "+lessons,id);
     db.update("delete from lesson_tasks where lesson_id in "+lessons,id);
+    db.update("delete from topic_retakes where user_id=?",id);
     db.update("delete from skill_iterations where user_id=? or lesson_id in "+lessons,id,id);
     int lessonCount=db.update("delete from lessons where user_id=?",id);
     db.update("update submissions set revoked_by=null where revoked_by=?",id);
@@ -889,7 +950,7 @@ public class ApiController {
     var errors=db.queryForList("select c.created_at as createdAt,c.purpose,c.language,c.status,c.error,c.duration_ms as durationMs,u.display_name as displayName from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.status<>'OK' order by c.created_at desc,c.id desc limit 20",since);
     return obj("days",period,"totals",totals,"byDay",byDay,"byPurpose",byPurpose,"byLanguage",byLanguage,"byStudent",byStudent,"recentErrors",errors,"llm",llm(uid(r)));
   }
-  @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=participantFlag(db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled,hard_mode_allowed as hardModeAllowed,hard_mode_on as hardModeOn,group_name as \"group\",session_participant as sessionParticipant from users where id=? and role='STUDENT'",id));s.put("hardModeCourses",hardModeCourses(id));var byLanguage=new LinkedHashMap<String,Object>();var retakesByLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values()){byLanguage.put(lang.name(),progress(id,lang));retakesByLanguage.put(lang.name(),retakes.times(id,lang));}return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"retakesByLanguage",retakesByLanguage,"llm",llm(id));}
+  @GetMapping("/admin/students/{id}") public Map<String,Object> student(@PathVariable long id,HttpServletRequest r){admin(r);var s=participantFlag(db.queryForMap("select id,login,display_name as displayName,llm_enabled as llmEnabled,hard_mode_allowed as hardModeAllowed,hard_mode_on as hardModeOn,group_name as \"group\",session_participant as sessionParticipant from users where id=? and role='STUDENT'",id));s.put("hardModeCourses",hardModeCourses(id));var byLanguage=new LinkedHashMap<String,Object>();var retakesByLanguage=new LinkedHashMap<String,Object>();var practiceByLanguage=new LinkedHashMap<String,Object>();for(Language lang:Language.values()){byLanguage.put(lang.name(),progress(id,lang));retakesByLanguage.put(lang.name(),retakes.times(id,lang));practiceByLanguage.put(lang.name(),practices.history(id,lang));}return Map.of("student",s,"progress",progress(id,Language.JAVA),"progressByLanguage",byLanguage,"retakesByLanguage",retakesByLanguage,"practiceByLanguage",practiceByLanguage,"llm",llm(id));}
   @GetMapping("/admin/students/{id}/lessons") public Map<String,Object> lessons(@PathVariable long id,HttpServletRequest r){admin(r);return Map.of("lessons",db.queryForList("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt,finish_reason as finishReason from lessons where user_id=? order by lesson_number",id));}
   /** The same as the student's own «Завершить урок», for any student's open lesson. */
   @PostMapping("/admin/students/{id}/lessons/{lessonId}/finish") public Map<String,Object> finishStudentLesson(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){
@@ -915,8 +976,8 @@ public class ApiController {
     var skills=db.queryForList("select skill_code from task_target_skills where task_id=?",String.class,taskId);
     for(String skill:skills) replayProgress(id,skill);
     boolean openLesson=lessonRows.getFirst().get("finished_at")==null;
-    // A re-take's task is not an obligation: it is not queued for the next lesson.
-    if(!openLesson&&retakes.retakeOf(lessonId,taskId)==null) db.update("insert or ignore into pending_redos(user_id,task_id) values(?,?)",id,taskId);
+    // A re-take's or a practice's task is not an obligation: it is not queued for the next lesson.
+    if(!openLesson&&!retakes.outsideIterations(lessonId,taskId)) db.update("insert or ignore into pending_redos(user_id,task_id) values(?,?)",id,taskId);
     log.info("Admin {} revoked accepted task {} of student {} in lesson {} ({} submission(s)); skills {} recalculated",uid(r),taskId,id,lessonId,revoked,skills);
     return obj("revokedSubmissions",revoked,"skills",skills,"redoInOpenLesson",openLesson);
   }
@@ -938,7 +999,7 @@ public class ApiController {
     for(var l:lessons) credit(user,skill,((Number)l.get("id")).longValue(),((Number)l.get("number")).intValue());
   }
 
-  @GetMapping("/admin/students/{id}/lessons/{lessonId}") public Map<String,Object> lessonDetail(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){admin(r);var l=db.queryForMap("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt,finish_reason as finishReason from lessons where id=? and user_id=?",lessonId,id);var tasks=db.queryForList("select t.id,t.title,t.statement,t.mode='HARD' as hard,x.replaced_at is not null as replaced,(select k.title from topic_retakes rt join skills k on k.code=rt.skill_code where rt.id=x.retake_id) as retakeSkill from tasks t join lesson_tasks x on x.task_id=t.id where x.lesson_id=?",lessonId);for(var t:tasks){var submissions=db.queryForList("select id,source_code as sourceCode,passed,runner_output as output,console_json,grader,review_json,created_at as createdAt,revoked_at as revokedAt from submissions where lesson_id=? and task_id=? order by id",lessonId,t.get("id"));for(var x:submissions){x.put("console",consoleView(x.remove("console_json")));Object reviewJson=x.remove("review_json");x.put("review",reviewJson==null?null:jsonValue((String)reviewJson));}t.put("submissions",submissions);}return Map.of("lesson",l,"chat",db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",lessonId),"tasks",tasks);}
+  @GetMapping("/admin/students/{id}/lessons/{lessonId}") public Map<String,Object> lessonDetail(@PathVariable long id,@PathVariable long lessonId,HttpServletRequest r){admin(r);var l=db.queryForMap("select id,coalesce(language_lesson_number,lesson_number) as number,language,started_at as startedAt,finished_at as finishedAt,finish_reason as finishReason from lessons where id=? and user_id=?",lessonId,id);var tasks=db.queryForList("select t.id,t.title,t.statement,t.mode='HARD' as hard,t.mode=? as integrative,x.replaced_at is not null as replaced,(select k.title from topic_retakes rt join skills k on k.code=rt.skill_code where rt.id=x.retake_id and rt.kind=?) as retakeSkill,exists(select 1 from topic_retakes rt where rt.id=x.retake_id and rt.kind=?) as practice from tasks t join lesson_tasks x on x.task_id=t.id where x.lesson_id=?",AttestationBank.INTEGRATIVE.mode(),TopicRetakes.TOPIC,AttestationPractice.KIND,lessonId);for(var t:tasks){t.put("integrative",((Number)t.get("integrative")).intValue()==1);t.put("practice",((Number)t.get("practice")).intValue()==1);var submissions=db.queryForList("select id,source_code as sourceCode,passed,runner_output as output,console_json,grader,review_json,created_at as createdAt,revoked_at as revokedAt from submissions where lesson_id=? and task_id=? order by id",lessonId,t.get("id"));for(var x:submissions){x.put("console",consoleView(x.remove("console_json")));Object reviewJson=x.remove("review_json");x.put("review",reviewJson==null?null:jsonValue((String)reviewJson));}t.put("submissions",submissions);}return Map.of("lesson",l,"chat",db.queryForList("select id,role,content,created_at as createdAt from chat_messages where lesson_id=? order by id",lessonId),"tasks",tasks);}
 
   private TutorContext tutorContext(Language lang,Map<String,Object> lesson,String currentEditorSource,String consoleOutput) { long lessonId=((Number)lesson.get("id")).longValue(); var taskRows=db.queryForList("select t.id,t.title,t.statement,ts.skill_code from lesson_tasks lt join tasks t on t.id=lt.task_id join task_target_skills ts on ts.task_id=t.id where lt.lesson_id=? and lt.replaced_at is null and t.active=1 and not exists(select 1 from submissions x where x.lesson_id=lt.lesson_id and x.task_id=lt.task_id and x.passed=1) order by lt.rowid desc limit 1",lessonId); String skillCode=null,skillTitle=null; Long taskId=null;String taskTitle=null,taskStatement=null,source=null,output=null,submissionConsole=null;Boolean passed=null; if(!taskRows.isEmpty()){var task=taskRows.getFirst();taskId=((Number)task.get("id")).longValue();taskTitle=(String)task.get("title");taskStatement=(String)task.get("statement");skillCode=(String)task.get("skill_code");var titleRows=db.queryForList("select title from skills where code=?",skillCode);skillTitle=titleRows.isEmpty()?skillCode:(String)titleRows.getFirst().get("title");var submission=db.queryForList("select source_code,passed,runner_output,console_json from submissions where lesson_id=? and task_id=? order by id desc limit 1",lessonId,taskId);if(!submission.isEmpty()){var last=submission.getFirst();source=(String)last.get("source_code");passed=((Number)last.get("passed")).intValue()==1;output=(String)last.get("runner_output");submissionConsole=consoleText(last.get("console_json"));}} return new TutorContext(lang,lessonId,((Number)lesson.get("number")).intValue(),skillCode,skillTitle,taskId,taskTitle,taskStatement,currentEditorSource,source,passed,output,submissionConsole,consoleOutput,taskId!=null&&retakes.retakeOf(lessonId,taskId)!=null); }
   private String consoleText(Object stored){ if(!(consoleView(stored) instanceof Map<?,?> c))return null; return "статус="+c.get("status")+"\nвывод:\n"+(c.get("stdout") instanceof String out&&!out.isEmpty()?out:"(пусто)")+(c.get("error") instanceof String e&&!e.isBlank()?"\nошибка:\n"+e:""); }
@@ -979,7 +1040,7 @@ public class ApiController {
     for(var row:due) if(((Number)row.get("completed")).intValue()>0) return skillView(row);
     // Without generation a topic with an empty bank would block the lesson, so take the first topic that still has tasks.
     if(!tutor.status(userId).available()||!codeRunner.status(lang).available())
-      for(var row:due) if(count("select count(*) from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id)",row.get("code"),userId,lessonId)>0) return skillView(row);
+      for(var row:due) if(count("select count(*) from tasks t join task_target_skills ts on ts.task_id=t.id where t.active=1 and t.mode='NORMAL' and ts.skill_code=? and not exists(select 1 from successful_task_credit c where c.user_id=? and c.task_id=t.id) and not exists(select 1 from lesson_tasks x where x.lesson_id=? and x.task_id=t.id)",row.get("code"),userId,lessonId)>0) return skillView(row);
     return skillView(due.getFirst());
   }
   private static Map<String,Object> skillView(Map<String,Object> row) { return Map.of("code",row.get("code"),"title",row.get("title"),"blockNo",row.get("block_no")); }

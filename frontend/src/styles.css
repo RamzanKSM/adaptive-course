@@ -1632,3 +1632,41 @@ html :is(code, pre, kbd, samp, .code-editor, .cm-editor, .console-out, .parsons-
 @media (max-width: 520px) { .student-tabs .tab-long { display: none; } .student-tabs .tab-short { display: inline; } }
 .stat-grid + .topic-filters { margin-top: 24px; }
 .achievement-group .muted { font-weight: 600; }
+
+/* The lesson heading's buttons: «Тренировочная аттестация» next to «Завершить урок»; on a phone they share the row. */
+.lesson-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+@media (max-width: 800px) { .lesson-heading-actions > button { flex: 1 1 auto; } }
+
+/* Integrative task of a 3rd iteration: the chip before the title (student task and teacher's lesson detail), the line under it. */
+.integ-chip { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; padding: 2px 9px; border-radius: 99px; font-family: var(--font-body); font-size: 12px; font-weight: 800; letter-spacing: 0; line-height: 1.5; color: #fff; background: linear-gradient(135deg, var(--brand), var(--brand-2)); vertical-align: 3px; white-space: nowrap; }
+.detail-task-head .integ-chip { gap: 3px; margin-right: 6px; padding: 1px 7px; font-size: 10.5px; vertical-align: 2px; }
+.integ-note { margin: -4px 0 12px; font-size: 13.5px; font-weight: 650; color: var(--brand-ink); }
+
+/* «Тренировочная аттестация»: the plate over its task (the re-take plate's look), the lock notes, the card in «Темы», the attempts. */
+.practice-plate.over { background: var(--warn-soft); color: var(--warn-ink); }
+.practice-plate.solved { background: var(--success-soft); color: #0b6b44; }
+.practice-plate > .icon { flex: none; }
+.practice-clock { display: inline-block; min-width: 5ch; font-size: 1.08em; }
+.practice-clock.low { color: var(--danger-ink); }
+@media (max-width: 520px) { .practice-plate { flex-wrap: wrap; } .practice-plate > span { flex-basis: calc(100% - 30px); } .practice-plate .small-button { margin-left: auto; } }
+.practice-need { margin: -4px 0 0; }
+.practice-hint-note { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 13px; font-weight: 650; color: var(--muted); }
+.practice-lock { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 650; color: var(--brand-ink); }
+.practice-lock .icon { flex: none; }
+.practice-dialog p:not(.eyebrow) { line-height: 1.5; }
+.practice-card { display: grid; gap: 10px; margin-top: 18px; padding: 16px 18px; }
+.practice-card + .topic-filters { margin-top: 24px; }
+.practice-card-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.practice-card-head > div { flex: 1 1 260px; min-width: 0; }
+.practice-card-head .muted { margin: 2px 0 0; }
+.practice-card-note { margin: 0; }
+.practice-attempts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.practice-attempts li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+.practice-level { font-weight: 750; white-space: nowrap; }
+.practice-task { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.practice-more { justify-self: start; margin-top: 0; }
+.practice-summary { grid-column: 1 / -1; display: grid; gap: 6px; margin: 2px 0 6px; }
+.practice-summary .practice-attempts li { padding: 4px 8px; font-size: 12px; }
+.retake-chip.practice { background: var(--warn-soft); color: var(--warn-ink); }
+/* The board's presence dot (.presence, «К доске») also matched the chat's status line and squeezed it to 10px. */
+.chat-head .presence { width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; }

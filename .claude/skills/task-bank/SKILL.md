@@ -63,6 +63,15 @@ then Verify.java on Piston as above, and copy the verified file to
 `backend/src/main/resources/attestation-tasks/bank.json` — it ships with a normal deploy (no import step);
 `AttestationBank` loads it at startup with `tasks.mode = 'ATTESTATION'` and deactivates tasks that left the file.
 
+## Integrative and practice pools (same builder)
+`build_attestation.py --pool integrative` builds `integrative/*.py` (keys `integ:<slug>`; `skill` = the topic at the
+task's core, 1–2 earlier topics join it, ~4–5 minutes, 3 stories per topic) for the 3rd iteration of a topic;
+`--pool practice` builds `practice/*.py` (keys `practice:<slug>`; like the attestation, topics 1…skill, 4 stories per
+level) for «Тренировочная аттестация». Same rules as the attestation pool: one value set per family, local self-check,
+`check_ascii.py`, Verify.java on Piston, then copy the verified files to
+`backend/src/main/resources/integrative-tasks/bank.json` and `.../attestation-practice/bank.json` (loaded at startup by
+`AttestationBank` with modes `INTEGRATIVE` / `ATTESTATION_PRACTICE`). A ready script: `agent-runs/attestation-prep/verify.sh`.
+
 ## Other task sources
 `source='LLM'` (generated, now with the English-in-code rule), `SEED` (`DiagnosticImporter.seedTasks`, updated by title
 at startup). 82 older LLM tasks still print Russian text — translation pending (see `docs/decisions.md`).

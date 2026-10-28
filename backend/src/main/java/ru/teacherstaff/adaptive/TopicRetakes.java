@@ -20,6 +20,9 @@ import java.util.*;
  * never take), then the regular bank — at the step's difficulty or the nearest; the generator is asked when the best one
  * is not a new story of that difficulty; the last resort is a variant of the story solved longest ago, which the student
  * sees as «похожая на решённую». Rules: backend/README.md, «Повторение темы».
+ * <p>The table also keeps «Тренировочная аттестация» (AttestationPractice, kind = 'ATTESTATION', V37): its task is marked
+ * the same way, so the iteration rule skips it too (outsideIterations); a re-take is kind 'TOPIC', and only re-takes are
+ * shown or counted here (active, retakeOf, history).
  */
 @Component
 class TopicRetakes {
@@ -27,6 +30,8 @@ class TopicRetakes {
   /** Tasks in a re-take, one per difficulty step 1, 2, 3. */
   static final int TASKS = 3;
   static final String DONE = "DONE", STUDENT = "STUDENT", LESSON = "LESSON", NO_TASK = "NO_TASK";
+  /** topic_retakes.kind of a re-take (an attestation practice is AttestationPractice.KIND). */
+  static final String TOPIC = "TOPIC";
 
   private final JdbcTemplate db; private final Clock clock;
   TopicRetakes(JdbcTemplate db, Clock clock) { this.db = db; this.clock = clock; }
@@ -39,7 +44,7 @@ class TopicRetakes {
 
   /** The open re-take of a lesson, {id, skill_code, paused_task_id}, or null. */
   Map<String, Object> active(long lessonId) {
-    var rows = db.queryForList("select id,skill_code,paused_task_id from topic_retakes where lesson_id=? and finished_at is null order by id desc limit 1", lessonId);
+    var rows = db.queryForList("select id,skill_code,paused_task_id from topic_retakes where lesson_id=? and kind=? and finished_at is null order by id desc limit 1", lessonId, TOPIC);
     return rows.isEmpty() ? null : rows.getFirst();
   }
 
@@ -63,21 +68,31 @@ class TopicRetakes {
    * when it was not open.
    */
   Map<String, Object> finish(long id, String reason) {
-    var rows = db.queryForList("select lesson_id,paused_task_id from topic_retakes where id=? and finished_at is null", id);
-    if (rows.isEmpty()) return null;
-    long lessonId = ((Number) rows.getFirst().get("lesson_id")).longValue();
-    db.update("update topic_retakes set finished_at=?,finish_reason=? where id=? and finished_at is null", now(), reason, id);
-    db.update("update lesson_tasks set replaced_at=? where retake_id=? and replaced_at is null and not exists(select 1 from submissions s where s.lesson_id=lesson_tasks.lesson_id and s.task_id=lesson_tasks.task_id and s.passed=1)", now(), id);
-    if (rows.getFirst().get("paused_task_id") instanceof Number paused)
-      db.update("update lesson_tasks set replaced_at=null where lesson_id=? and task_id=? and exists(select 1 from lessons where id=? and finished_at is null)", lessonId, paused.longValue(), lessonId);
+    if (!close(id, reason)) return null;
     var view = view(id);
     log.info("Re-take {} finished ({}): {} of {} solved", id, reason, view.get("passed"), TASKS);
     return view;
   }
 
+  /**
+   * Ends an open row of either kind: its unsolved task leaves the lesson, the paused task comes back (into an open lesson
+   * only); a practice without a solved task gets NOT_SOLVED. False when it was not open.
+   */
+  boolean close(long id, String reason) {
+    var rows = db.queryForList("select lesson_id,paused_task_id from topic_retakes where id=? and finished_at is null", id);
+    if (rows.isEmpty()) return false;
+    long lessonId = ((Number) rows.getFirst().get("lesson_id")).longValue();
+    if (db.update("update topic_retakes set finished_at=?,finish_reason=?,result=case when kind=? then coalesce(result,?) end where id=? and finished_at is null",
+        now(), reason, AttestationPractice.KIND, AttestationPractice.NOT_SOLVED, id) == 0) return false;
+    db.update("update lesson_tasks set replaced_at=? where retake_id=? and replaced_at is null and not exists(select 1 from submissions s where s.lesson_id=lesson_tasks.lesson_id and s.task_id=lesson_tasks.task_id and s.passed=1)", now(), id);
+    if (rows.getFirst().get("paused_task_id") instanceof Number paused)
+      db.update("update lesson_tasks set replaced_at=null where lesson_id=? and task_id=? and exists(select 1 from lessons where id=? and finished_at is null)", lessonId, paused.longValue(), lessonId);
+    return true;
+  }
+
   /** Ends the open re-takes of a lesson that ends (nothing comes back into a finished lesson). */
   void finishLesson(long lessonId) {
-    for (long id : db.queryForList("select id from topic_retakes where lesson_id=? and finished_at is null", Long.class, lessonId)) finish(id, LESSON);
+    for (long id : db.queryForList("select id from topic_retakes where lesson_id=? and kind=? and finished_at is null", Long.class, lessonId, TOPIC)) finish(id, LESSON);
   }
 
   /** The difficulty of the re-take's next task, 1..TASKS, or 0 when all its tasks were given. */
@@ -96,10 +111,17 @@ class TopicRetakes {
     return count("select count(distinct lt.task_id) from lesson_tasks lt join submissions s on s.lesson_id=lt.lesson_id and s.task_id=lt.task_id and s.passed=1 and s.revoked_at is null where lt.retake_id=?", id);
   }
 
-  /** The re-take a task of a lesson belongs to, or null (a regular task). */
+  /** The re-take a task of a lesson belongs to, or null (a regular task, or an attestation practice's). */
   Long retakeOf(long lessonId, long taskId) {
-    var ids = db.queryForList("select retake_id from lesson_tasks where lesson_id=? and task_id=? and retake_id is not null", Long.class, lessonId, taskId);
+    var ids = db.queryForList("select lt.retake_id from lesson_tasks lt join topic_retakes r on r.id=lt.retake_id and r.kind=? where lt.lesson_id=? and lt.task_id=?", Long.class, TOPIC, lessonId, taskId);
     return ids.isEmpty() ? null : ids.getFirst();
+  }
+  /**
+   * Whether a task of a lesson is outside the iteration rule: a re-take's or an attestation practice's
+   * (lesson_tasks.retake_id). Such a task is credited, but never moves iterations and is never an obligation (no redo queue).
+   */
+  boolean outsideIterations(long lessonId, long taskId) {
+    return count("select count(*) from lesson_tasks where lesson_id=? and task_id=? and retake_id is not null", lessonId, taskId) > 0;
   }
 
   /** Marks a task just assigned to the lesson as the re-take's. */
@@ -135,7 +157,7 @@ class TopicRetakes {
   /** Re-takes per topic for «Мой прогресс»: [{skillCode, times, lastAt}], counting re-takes with at least one solved task. */
   List<Map<String, Object>> history(long user, Language lang) {
     return db.queryForList("select r.skill_code as skillCode,count(*) as times,max(r.started_at) as lastAt from topic_retakes r join skills k on k.code=r.skill_code "
-        + "where r.user_id=? and k.language=? and exists(select 1 from lesson_tasks lt join submissions s on s.lesson_id=lt.lesson_id and s.task_id=lt.task_id and s.passed=1 and s.revoked_at is null where lt.retake_id=r.id) "
+        + "where r.user_id=? and r.kind='" + TOPIC + "' and k.language=? and exists(select 1 from lesson_tasks lt join submissions s on s.lesson_id=lt.lesson_id and s.task_id=lt.task_id and s.passed=1 and s.revoked_at is null where lt.retake_id=r.id) "
         + "group by r.skill_code", user, lang.name());
   }
   /** How many topic re-takes (with a solved task) the student made in a course: the teacher's student card. */

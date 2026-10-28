@@ -59,6 +59,10 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
 - «Повторить тему» (`TopicRetakes`): a closed topic can be re-taken any time — 3 tasks (difficulty 1→2→3) from its own
   pool (`tasks.mode='RETAKE'`, `tools/curated_python/retake*/`, never in lessons or at the board); a re-take never moves
   iterations/mastery/pace (`lesson_tasks.retake_id` is skipped by the iteration rule), its tasks count as solved and in pair points.
+- The 3rd iteration of a topic outside block 0 is an integrative task from its own pool (`IntegrativeTasks`,
+  `tasks.mode='INTEGRATIVE'`), no fallback to an ordinary task unless the pool has none. «Тренировочная аттестация»
+  (`AttestationPractice`, a `topic_retakes` row with `kind='ATTESTATION'`): one attestation-sized task from its own pool,
+  10-minute timer with the assistant closed, no grade, never moves progress.
 - Task text: everything a student types or reads as program text/output is plain English ASCII; statements, hints and
   check messages are Russian and quote the English strings. Applies to the curated bank, hard bank, seeds and the LLM
   generator prompt.

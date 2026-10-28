@@ -607,7 +607,7 @@ class BoardTests implements DisposableBean {
         (RowCallbackHandler) rs -> {
           int at = course.indexOf(rs.getString(2));
           if (at >= 0 && at < k && !exclude.contains(rs.getLong(1))) options.add(new Option(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7), at + 1));
-        }, lang.name(), AttestationBank.MODE);
+        }, lang.name(), AttestationBank.ATTESTATION.mode());
     return options;
   }
   private ApiError noAttestationTask(Language lang, String group, Instant now, boolean other) {
@@ -936,7 +936,7 @@ class BoardTests implements DisposableBean {
     var plan = pacePlan(name, lang, now);
     var pace = plan == null ? null : obj("topics", plan.topics().size(), "total", plan.total(), "lastTopic", plan.topics().isEmpty() ? null : titleOf(plan.topics().getLast()),
         "start", plan.start().toString(), "session", plan.session().toString());
-    int attestationPool = count("select count(*) from tasks where language=? and active=1 and mode=?", lang.name(), AttestationBank.MODE);
+    int attestationPool = count("select count(*) from tasks where language=? and active=1 and mode=?", lang.name(), AttestationBank.ATTESTATION.mode());
     var aPlan = attestationPlan(name, lang, now); var planDay = attestationPlanDate();
     var attestation = obj("tasks", attestationOptions(lang, name, now, Set.of()).size(), "total", attestationPool, "minutes", ATTESTATION_MINUTES,
         "planDate", planDay == null ? null : planDay.toString(), "planTopics", aPlan == null ? null : aPlan.topics().size(),

@@ -159,6 +159,23 @@ Several students asked to go through topics again. Agreed with the owner:
 - «Заполни банк ещё и для повторного прохождения»: a separate re-take pool, 3 new stories per topic (one per difficulty) × 3 variants (`tasks.mode='RETAKE'`). Regular lessons and «К доске» never take it, otherwise mastery would use it up and re-takes would get «the same task with other numbers» again. Order: the pool's and the bank's unsolved stories, then generation, then a variant of the story solved longest ago, marked «похожая на решённую».
 - The lesson's unsolved task waits during a re-take and comes back afterwards. Teacher screens change minimally: a chip on re-take tasks in the lesson review and a count in the student card.
 
+## Integrative 3rd iteration and «Тренировочная аттестация» (2026-10-28)
+Students found the attestation too hard because they had never met such tasks. The owner's idea, agreed:
+- The single task of a topic's 3rd iteration is an integrative task: the topic at its core plus 1–2 earlier topics, in the
+  attestation's format (story, data in fields/variables, numbered steps), about 4–5 minutes. Its own pool
+  (`tasks.mode='INTEGRATIVE'`, keys `integ:`), separate from the attestation pool so that one stays unseen; 3 stories per
+  topic, ordered per student. Block 0 (the first five topics) keeps ordinary tasks — nothing to combine yet.
+- Rejected by the owner: falling back to an ordinary task when the student cannot solve it («лёгкая третья попытка»).
+  The student solves it with the assistant like any lesson task. The only fallback is a topic whose pool is not written
+  yet (or fully solved): then the ordinary difficulty-3 task, as before.
+- «Тренировочная аттестация»: the student starts it from a lesson. One task of the real attestation's size over topics
+  1…level, where the level is the highest pool level within the topics he has passed without a gap. 10-minute timer,
+  the assistant and the hint closed until it runs out, then open; result «в срок / после времени / без решения».
+  No grade, no effect on progress; solved — counted like a re-take (solved count, XP, pair points). Own pool
+  (`ATTESTATION_PRACTICE`, keys `practice:`), levels as the real attestation (Java 9/12/14, Python 10/11/14), 4 stories
+  each. Implemented on `topic_retakes` (`kind='ATTESTATION'`) so the iteration rule skips it like a re-take.
+- First part of the integrative pool: Java topics 6–20, Python 6–22 (96 tasks); the rest block by block ahead of students.
+
 ## Task bank and selection
 - 2026-10-14: a second story per topic and difficulty (18 tasks per topic, 1224 total) and story-aware selection:
   students complained about «the same task again with other numbers». Variants of a story are per student, so

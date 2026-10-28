@@ -7,7 +7,7 @@ import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from
 import { LlmAnalytics } from './analytics'
 import { ProgressAnalytics } from './progress'
 import { PairWork } from './pairs'
-import { AttestationDone, BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, StudentBoardGrades, useBoardCurrent } from './board'
+import { AttestationDone, BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, clock, StudentBoardGrades, useBoardCurrent, useNow } from './board'
 import { StudentSessionCard } from './session'
 import { StationScreen } from './station'
 import { LlmSettingsView } from './settings'
@@ -15,7 +15,7 @@ import { DrawSettingsView } from './wheel'
 import { ConsolePanel, consoleText, type ConsoleOrigin } from './console'
 import { DangerFrame, HardModeDialog, HardModeSwitch, HeaderTapes } from './hardmode'
 import { GroupFilter, GroupOptions, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
-import type { ActiveLesson, Attempt, BoardFormat, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Progress, Retake, RetakeHistory, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
+import type { ActiveLesson, Attempt, AttestationPractice, BoardFormat, ChatMessage, ChatQuota, ConsoleRun, CourseLanguage, Diagnostic, Id, LearningNext, Lesson, LessonDetail, LlmStatus, MeResponse, Practice, PracticeAttempt, PracticeByLanguage, Progress, Retake, RetakeHistory, SkillProgress, Student, Task, User, Review, OutputMismatch } from './types'
 
 const UNKNOWN = 'Не знаю'
 const fmt = (value?: string | null) => {
@@ -407,11 +407,22 @@ function StudentPage({ request }: { request: Request }) {
     // Finished elsewhere (another tab, the teacher, a logout, inactivity) while the task was being prepared.
     if (next.reason === 'LESSON_FINISHED') { setLesson(null); setEnded({ reason: next.lesson?.finishReason ?? null, minutes: next.lesson?.idleMinutes || idleMinutes.current }); return setState('ready') }
     if (next.retakeDone) { toast(retakeToast(next.retakeDone)); loadProgress() }
+    if (next.practiceDone) { toast(practiceToast(next.practiceDone)); loadProgress() }
     armIdle(next.lesson); setEnded(null); setLesson(next); setState('ready')
   }, [request, loadProgress, course.id, armIdle, toast])
   /** «Повторить»: starts a re-take of a closed topic (and a lesson if none is open) and shows its first task. */
   const startRetake = useCallback(async (skillCode: string) => {
     const started = await request(() => post<{ retake: Retake }>('/retakes', { language: course.id, skillCode }))
+    if (started) { setTab('lesson'); load() }
+  }, [request, course.id, load])
+  /** «Тренировочная аттестация»: asked from the lesson or «Темы», confirmed in the dialog; the lesson's task waits meanwhile. */
+  const [practiceAsk, setPracticeAsk] = useState(false); const [practiceBusy, setPracticeBusy] = useState(false)
+  const askPractice = useCallback(() => setPracticeAsk(true), [])
+  const cancelPractice = useCallback(() => setPracticeAsk(false), [])
+  const startPractice = useCallback(async () => {
+    setPracticeBusy(true)
+    const started = await request(() => post<{ practice: Practice }>('/attestation-practice', { language: course.id }))
+    setPracticeBusy(false); setPracticeAsk(false)
     if (started) { setTab('lesson'); load() }
   }, [request, course.id, load])
   useEffect(() => { load() }, [load])
@@ -484,7 +495,10 @@ function StudentPage({ request }: { request: Request }) {
     : <div className="center"><Spinner /><span>Загружаем…</span></div>
   if (!diagnostic.completed) return <DiagnosticForm diagnostic={diagnostic} request={request} onDone={load} />
   const currentSkill = lesson?.skill ? progress?.skills.find(s => s.skillCode === lesson.skill?.code) : undefined
+  const practiceInfo = progress?.attestationPractice
+  const ongoing = openId === null ? null : lesson?.practice ? 'practice' : lesson?.retake ? 'retake' : null
   return <>
+    {practiceAsk && practiceInfo?.available && <PracticeDialog info={practiceInfo} busy={practiceBusy} onStart={startPractice} onCancel={cancelPractice} />}
     {progress && <Hud progress={progress} />}
     <nav className="segmented four student-tabs" role="tablist" style={{ '--active': STUDENT_TABS.findIndex(t => t.id === tab) } as CSSProperties}>
       <span className="segmented-thumb" aria-hidden="true" />
@@ -494,13 +508,13 @@ function StudentPage({ request }: { request: Request }) {
     {idleWarning && openId !== null && <div className="lesson-notice warn" role="alert"><Icon name="clock" size={18} /><span>Урок завершится через 3 минуты: нет запусков кода, отправок и сообщений помощнику. Запусти код или напиши помощнику, чтобы продолжить.</span></div>}
     {ended && !lesson && <div className="lesson-notice" role="status"><Icon name="flag" size={18} /><span>{lessonEndText(ended)}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setEnded(null)}><Icon name="x" size={16} /></button></div>}
     {/* All tabs stay mounted so leaving the lesson does not discard the code in the editor. */}
-    <div hidden={tab !== 'topics'} className={tab === 'topics' ? 'enter' : ''}><TopicsView progress={progress} onRetake={startRetake} /></div>
+    <div hidden={tab !== 'topics'} className={tab === 'topics' ? 'enter' : ''}><TopicsView progress={progress} onRetake={startRetake} lessonOpen={openId !== null} ongoing={ongoing} onPractice={askPractice} /></div>
     <div hidden={tab !== 'grades'} className={tab === 'grades' ? 'enter' : ''}><GradesView progress={progress} visible={tab === 'grades'} /></div>
     <div hidden={tab !== 'achievements'} className={tab === 'achievements' ? 'enter' : ''}><AchievementsView progress={progress} otherProgress={otherProgress} /></div>
     <div hidden={tab !== 'lesson'} className={tab === 'lesson' ? 'enter' : ''}>
       {state === 'loading' ? <LessonSkeleton lesson={preparing} request={request} onFinished={load} />
         : state === 'failed' ? <section className="empty-state enter"><h2 className="title">Не удалось загрузить урок</h2><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
-          : <LessonActivity.Provider value={activity}><LessonView lesson={lesson} skillProgress={currentSkill} progress={progress} request={request} refresh={load} onProgress={onProgress} onRetake={startRetake} /></LessonActivity.Provider>}
+          : <LessonActivity.Provider value={activity}><LessonView lesson={lesson} skillProgress={currentSkill} progress={progress} request={request} refresh={load} onProgress={onProgress} onRetake={startRetake} onPractice={askPractice} /></LessonActivity.Provider>}
     </div>
   </>
 }
@@ -629,13 +643,26 @@ function LessonSkeleton({ lesson, request, onFinished }: { lesson: Lesson | null
   </section>
 }
 
-function LessonView({ lesson, skillProgress, progress, request, refresh, onProgress, onRetake }: { lesson: LearningNext | null; skillProgress?: SkillProgress; progress: Progress | null; request: Request; refresh: () => void; onProgress: (skills: SkillProgress[]) => void; onRetake: (skillCode: string) => void }) {
+function LessonView({ lesson, skillProgress, progress, request, refresh, onProgress, onRetake, onPractice }: { lesson: LearningNext | null; skillProgress?: SkillProgress; progress: Progress | null; request: Request; refresh: () => void; onProgress: (skills: SkillProgress[]) => void; onRetake: (skillCode: string) => void; onPractice: () => void }) {
   const [working, setWorking] = useState(false)
   const course = useCourse()
   const toast = useToast()
+  // «Тренировочная аттестация»: the countdown starts from the server's secondsLeft; at 0 the hint and the assistant open, nothing closes.
+  const practice = lesson?.practice && !lesson.practice.finished ? lesson.practice : undefined
+  const practiceEnds = useMemo(() => practice ? Date.now() + Math.max(0, practice.secondsLeft) * 1000 : null, [practice])
+  const timeUp = usePassed(practiceEnds)
+  /** When this screen saw the practice's task accepted: the plate stops counting. */
+  const [solvedAt, setSolvedAt] = useState<number | null>(null)
+  const practicePassed = useCallback(() => setSolvedAt(at => at ?? Date.now()), [])
+  const practiceRunning = !!practice && !timeUp && solvedAt === null
   async function endRetake(retake: Retake) {
     setWorking(true); const ended = await request(() => post<{ retake: Retake }>(`/retakes/${retake.id}/finish`)); setWorking(false)
     if (ended) { toast(retakeToast(ended.retake)); refresh() }
+  }
+  async function endPractice(open: Practice) {
+    if (!window.confirm('Завершить тренировочную аттестацию? Задача не решена — попытка запишется без решения, урок продолжится.')) return
+    setWorking(true); const ended = await request(() => post<{ practice: Practice }>(`/attestation-practice/${open.id}/finish`)); setWorking(false)
+    if (ended) { toast(practiceToast(ended.practice)); refresh() }
   }
   async function start() { setWorking(true); const started = await request(() => post<{ lesson: Lesson }>(withCourse('/lessons/start', course.id))); setWorking(false); if (started) refresh() }
   async function finish(current: Lesson, hasTask: boolean) {
@@ -649,7 +676,10 @@ function LessonView({ lesson, skillProgress, progress, request, refresh, onProgr
     <button className="primary big" disabled={working} onClick={start}>{working ? <><Spinner /> Готовим урок…</> : <>Начать урок <Icon name="arrow" /></>}</button>
   </section>
   const finished = lesson.reason === 'NO_DUE_SKILL' || lesson.reason === 'COURSE_COMPLETE' || lesson.reason === 'HARD_BANK_COMPLETE'
-  const title = lesson.skill?.title ?? (lesson.reason === 'COURSE_COMPLETE' ? 'Все темы курса закрыты' : lesson.reason === 'HARD_BANK_COMPLETE' ? 'Все hard-задачи решены' : lesson.reason === 'NO_DUE_SKILL' ? 'На сегодня задач больше нет' : 'Текущий урок')
+  const title = practice ? 'Тренировочная аттестация' : lesson.skill?.title ?? (lesson.reason === 'COURSE_COMPLETE' ? 'Все темы курса закрыты' : lesson.reason === 'HARD_BANK_COMPLETE' ? 'Все hard-задачи решены' : lesson.reason === 'NO_DUE_SKILL' ? 'На сегодня задач больше нет' : 'Текущий урок')
+  const practiceInfo = progress?.attestationPractice
+  const free = !practice && !lesson.retake
+  const need = free && practiceInfo && !practiceInfo.available ? practiceInfo.needTopics : null
   const retryable = lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' || lesson.reason === 'RUNNER_UNAVAILABLE' || lesson.reason === 'LLM_RATE_LIMITED'
   const emptyMessage = lesson.reason === 'NO_TASK_AVAILABLE' ? 'Подходящей задачи в банке пока нет. Преподаватель увидит это состояние.'
     : lesson.reason === 'LLM_GENERATION_FAILED_VALIDATION' ? 'Новая задача не прошла проверку. Попробуй запросить её ещё раз.'
@@ -661,12 +691,17 @@ function LessonView({ lesson, skillProgress, progress, request, refresh, onProgr
   return <section className="lesson">
     <div className="lesson-heading enter">
       <div>
-        <p className="eyebrow">{course.title} · Урок {lesson.lesson.number}{lesson.skill ? ` · Блок ${lesson.skill.blockNo}` : ''}</p>
+        <p className="eyebrow">{course.title} · Урок {lesson.lesson.number}{lesson.skill && !practice ? ` · Блок ${lesson.skill.blockNo}` : ''}</p>
         <h1 className="display small">{title}</h1>
+        {!!need && <p className="muted small practice-need">{practiceNeedText(need)}</p>}
       </div>
-      <button className="ghost" disabled={working} onClick={() => finish(lesson.lesson, !!lesson.task)}>{working ? <><Spinner /> Завершаем…</> : <><Icon name="flag" size={16} /> Завершить урок</>}</button>
+      <div className="lesson-heading-actions">
+        {free && practiceInfo?.available && <button className="secondary" disabled={working} onClick={onPractice} title={`Одна задача как на аттестации, ${minutesText(practiceInfo.minutes)}, без оценки`}><Icon name="award" size={16} /> Тренировочная аттестация</button>}
+        <button className="ghost" disabled={working} onClick={() => finish(lesson.lesson, !!lesson.task)}>{working ? <><Spinner /> Завершаем…</> : <><Icon name="flag" size={16} /> Завершить урок</>}</button>
+      </div>
     </div>
-    {lesson.retake && <div className="retake-plate enter" role="status">
+    {practice && practiceEnds !== null && <PracticePlate practice={practice} endsAt={practiceEnds} timeUp={timeUp} solvedAt={solvedAt} busy={working} onFinish={() => endPractice(practice)} />}
+    {lesson.retake && !practice && <div className="retake-plate enter" role="status">
       <Icon name="refresh" size={18} />
       <span><b>Повторение</b> · {lesson.retake.skillTitle} · {Math.min(lesson.retake.given, lesson.retake.total)} из {lesson.retake.total}
         {lesson.retake.similar && <span className="retake-similar" title="Новых задач по этой теме пока нет — это та же история с другими числами">похожая на решённую</span>}</span>
@@ -677,7 +712,8 @@ function LessonView({ lesson, skillProgress, progress, request, refresh, onProgr
       <Markdown>{lesson.explanation.content}</Markdown>
     </article>}
     {lesson.task
-      ? <TaskWorkspace key={lesson.task.id} task={lesson.task} skillProgress={lesson.retake ? undefined : skillProgress} llm={lesson.llm} request={request} onNext={refresh} onProgress={onProgress} />
+      ? <TaskWorkspace key={lesson.task.id} task={lesson.task} skillProgress={lesson.retake || practice ? undefined : skillProgress} llm={lesson.llm} request={request} onNext={refresh} onProgress={onProgress}
+        practiceEnds={practiceRunning ? practiceEnds : null} onPassed={practice ? practicePassed : undefined} />
       : <div className="lesson-grid enter">
         <article className={`card task empty-task ${finished ? 'done' : ''}`}>
           {finished && <span className="empty-icon success"><Icon name={lesson.reason === 'COURSE_COMPLETE' ? 'award' : 'check'} size={28} /></span>}
@@ -694,7 +730,8 @@ function LessonView({ lesson, skillProgress, progress, request, refresh, onProgr
 
 type ConsoleState = { run: ConsoleRun; origin: ConsoleOrigin }
 
-function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress }: { task: Task; skillProgress?: SkillProgress; llm?: LlmStatus; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void }) {
+/** practiceEnds — while a practice's timer runs (client clock): the hint is hidden and the assistant closed; onPassed — the task was accepted. */
+function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress, practiceEnds, onPassed }: { task: Task; skillProgress?: SkillProgress; llm?: LlmStatus; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void; practiceEnds?: number | null; onPassed?: () => void }) {
   const course = useCourse()
   const starter = task.starterCode || course.fallback
   // The code survives a reload or a re-login: a draft in this browser, per user and task, until the task is accepted.
@@ -709,17 +746,18 @@ function TaskWorkspace({ task, skillProgress, llm, request, onNext, onProgress }
     const timer = setTimeout(() => { if (code === starter) dropDraft(key); else writeDraft(key, code) }, 500)
     return () => clearTimeout(timer)
   }, [key, code, starter])
-  const onAccepted = useCallback(() => { accepted.current = true; if (key) dropDraft(key) }, [key])
+  const onAccepted = useCallback(() => { accepted.current = true; if (key) dropDraft(key); onPassed?.() }, [key, onPassed])
   const startOver = useCallback(() => { if (key) dropDraft(key); setCode(starter); setRestored(false) }, [key, starter])
   // The console on screen; the assistant sees the same text when the student asks about it.
   const [screen, setScreen] = useState<ConsoleState | null>(null)
   // «Разобрать с помощником»: the check says why a solution was rejected, the assistant helps to understand it.
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | undefined>()
   const askAssistant = useCallback((text: string) => setPrefill({ text, nonce: Date.now() }), [])
+  const practiceRunning = practiceEnds != null
   return <div className="lesson-grid enter">
-    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} onAskAssistant={llm?.available ? askAssistant : undefined}
-      restored={restored} onStartOver={startOver} onAccepted={onAccepted} />
-    <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} consoleOutput={screen ? consoleText(screen.run) : undefined} prefill={prefill} />
+    <TaskEditor task={task} skillProgress={skillProgress} code={code} onCodeChange={setCode} request={request} onNext={onNext} onProgress={onProgress} console={screen} onConsole={setScreen} onAskAssistant={llm?.available && !practiceRunning ? askAssistant : undefined}
+      restored={restored} onStartOver={startOver} onAccepted={onAccepted} hideHint={practiceRunning} />
+    <Chat llm={llm} request={request} taskId={task.id} sourceCode={code} consoleOutput={screen ? consoleText(screen.run) : undefined} prefill={prefill} lockedUntil={practiceEnds} />
   </div>
 }
 
@@ -731,11 +769,13 @@ function IterationSteps({ done, iteration, pulse }: { done: number; iteration: n
   </div>
 }
 
-function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole, onAskAssistant, restored, onStartOver, onAccepted }: {
+function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, onProgress, console: screen, onConsole, onAskAssistant, restored, onStartOver, onAccepted, hideHint }: {
   task: Task; skillProgress?: SkillProgress; code: string; onCodeChange: (code: string) => void; request: Request; onNext: () => void; onProgress: (skills: SkillProgress[]) => void
   console: ConsoleState | null; onConsole: (console: ConsoleState) => void; onAskAssistant?: (text: string) => void
   /** The code came from this browser's draft; «Начать заново» goes back to the starter. onAccepted — the draft is no longer needed. */
   restored: boolean; onStartOver: () => void; onAccepted: () => void
+  /** A practice's timer runs: the statement's «Подсказка» section is not shown. */
+  hideHint?: boolean
 }) {
   // Hard tasks read their input: the student types it here to try the program with «Запустить».
   const [stdin, setStdin] = useState('')
@@ -774,6 +814,8 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
   useEffect(() => { if (attempt) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [attempt, tries])
   const passed = !!attempt?.passed
   const ask = () => onAskAssistant?.(`Мою отправку не приняли. Вот что сказала проверка:\n\n${attempt?.output ?? ''}\n\nПомоги понять, в чём ошибка, но не пиши готовое решение.`)
+  const statement = hideHint ? withoutHint(task.statement) : task.statement
+  const hintHidden = hideHint && statement !== task.statement.trimEnd()
   return <section className={`card task ${passed ? 'is-passed' : ''} ${task.hard ? 'hard-task' : ''}`}>
     <div className="task-head">
       {task.hard
@@ -782,8 +824,10 @@ function TaskEditor({ task, skillProgress, code, onCodeChange, request, onNext, 
       {skillProgress && <IterationSteps done={step.done + (passed ? 1 : 0)} iteration={step.iteration} pulse={passed} />}
     </div>
     {task.redo && <p className="redo-note"><Icon name="refresh" size={15} /> Преподаватель попросил решить эту задачу заново — прежнее решение не засчитано.</p>}
-    <h2 className="title">{task.title}</h2>
-    <Markdown>{task.statement}</Markdown>
+    <h2 className="title">{task.integrative && <span className="integ-chip"><Icon name="target" size={13} /> Комплексная задача</span>}{task.title}</h2>
+    {task.integrative && <p className="integ-note">Тема урока вместе с тем, что ты уже прошёл, — как на аттестации</p>}
+    <Markdown>{statement}</Markdown>
+    {hintHidden && <p className="practice-hint-note"><Icon name="lock" size={14} /> Подсказка откроется, когда выйдет время</p>}
     {restored && !passed && <p className="draft-note" role="status"><Icon name="refresh" size={15} /><span>Восстановлен твой код — он сохранился в этом браузере.</span>
       <button type="button" className="ghost small-button" onClick={() => { if (window.confirm('Вернуть начальный код задачи? Твой код будет удалён.')) onStartOver() }}>Начать заново</button></p>}
     <div className="code-label"><span>Решение на {course.title}</span><CodeMirror className="code-editor" value={code} height="clamp(18rem, 48vh, 32rem)" extensions={EDITOR_EXTENSIONS[course.id]} onChange={onCodeChange} editable={!passed} aria-label={`Редактор решения на ${course.title}`} /></div>
@@ -849,8 +893,11 @@ function ReviewVerdict({ review }: { review: Review }) {
 
 type ChatState = { messages: ChatMessage[]; llm: LlmStatus; quota?: ChatQuota }
 
-function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string; consoleOutput?: string; prefill?: { text: string; nonce: number } }) {
+/** lockedUntil — a practice's timer runs until then (client clock): the composer gives way to «Помощник откроется, когда выйдет время». */
+function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill, lockedUntil }: { llm?: LlmStatus; request: Request; taskId?: Id; sourceCode?: string; consoleOutput?: string; prefill?: { text: string; nonce: number }; lockedUntil?: number | null }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]); const [text, setText] = useState(''); const [status, setStatus] = useState<LlmStatus | undefined>(llm); const [sending, setSending] = useState(false)
+  /** The server still holds the assistant for a practice (its clock is ahead of this one): its message, the question stays in the box. */
+  const [held, setHeld] = useState('')
   const composer = useRef<HTMLTextAreaElement>(null)
   // A question prepared from a rejected check; the student can edit it before sending.
   useEffect(() => { if (prefill) { setText(prefill.text); composer.current?.focus() } }, [prefill])
@@ -877,9 +924,15 @@ function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { ll
     setSending(true)
     setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'STUDENT', content, createdAt: new Date().toISOString() }]); setText('')
     const body = taskId !== undefined ? { content, taskId, sourceCode, consoleOutput } : { content }
-    const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus; quota?: ChatQuota }>(withCourse('/chat', course.id), body))
-    activity(!!result)
-    if (result) {
+    const hold = { message: '' }
+    const result = await request(() => post<{ message: ChatMessage; llm?: LlmStatus; quota?: ChatQuota }>(withCourse('/chat', course.id), body)
+      .catch(e => { if (e instanceof ApiError && e.code === 'PRACTICE_RUNNING') { hold.message = e.message; return undefined } throw e }))
+    activity(!!result || !!hold.message)
+    setHeld(hold.message)
+    if (hold.message) {
+      // Not stored: the question goes back to the box, to send once the time is up.
+      setMessages(m => m.filter(x => !(typeof x.id === 'string' && x.id.startsWith('local-')))); setText(t => t || content)
+    } else if (result) {
       setMessages(m => [...m, result.message]); if (result.llm) setStatus(result.llm); if (result.quota) setQuota(result.quota)
     } else {
       // The server may or may not have stored the question; resync and give the text back if it was lost.
@@ -893,23 +946,27 @@ function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { ll
   const unavailable = status && !status.available ? humanize(status.reason) || 'Помощник временно недоступен.' : ''
   const limited = !!quota?.retryAfterSeconds
   const left = quota?.hourLimit ? Math.max(0, quota.hourLimit - quota.hourUsed) : null
+  const locked = lockedUntil != null
   return <aside className="card chat">
     <div className="chat-head">
       <span className="bot-avatar" aria-hidden="true"><Icon name="sparkle" size={18} /></span>
-      <div><h2 className="card-title">Учебный помощник</h2><small className={`presence ${unavailable ? 'off' : 'on'}`}>{unavailable ? 'Недоступен' : 'На связи'}</small></div>
+      <div><h2 className="card-title">Учебный помощник</h2><small className={`presence ${unavailable || locked ? 'off' : 'on'}`}>{unavailable ? 'Недоступен' : locked ? 'Закрыт до конца времени' : 'На связи'}</small></div>
     </div>
     <div className="messages" ref={listRef} aria-live="polite">
       {messages.length ? messages.map(m => <div key={m.id} className={`message ${m.role.toLowerCase()}`}><Markdown>{m.content}</Markdown><small>{m.role === 'STUDENT' ? 'Ты' : 'Помощник'} · {fmt(m.createdAt)}</small></div>)
         : <div className="chat-empty"><Icon name="chat" size={22} /><p>Помощник подскажет ход мысли, а не готовый ответ. Спроси, что непонятно в условии или почему код не работает.</p></div>}
       {sending && <div className="message assistant typing" aria-label="Помощник думает"><span /><span /><span /></div>}
     </div>
-    {unavailable ? <p className="muted small chat-off">{unavailable}</p> : <form onSubmit={send} className="composer">
+    {unavailable ? <p className="muted small chat-off">{unavailable}</p>
+      : locked ? <p className="chat-off practice-lock"><Icon name="lock" size={15} /><span>Помощник откроется, когда выйдет время — через <PracticeClock endsAt={lockedUntil} /></span></p>
+      : <form onSubmit={send} className="composer">
       {taskId !== undefined && <p className="chat-code-note"><Icon name="code" size={13} /> Помощник видит текущий код из редактора</p>}
       <div className="composer-row">
         <textarea ref={composer} value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} placeholder={limited ? 'Лимит сообщений исчерпан' : 'Опиши, где возникло затруднение…'} aria-label="Ваш вопрос учебному помощнику" rows={2} disabled={limited} />
         <button className="primary icon-only" disabled={sending || !text.trim() || limited} aria-label="Отправить" title="Отправить (Ctrl+Enter)">{sending ? <Spinner /> : <Icon name="send" />}</button>
       </div>
-      {limited ? <p className="quota-note limited">Лимит сообщений помощнику исчерпан. Снова можно через {Math.max(1, Math.ceil(quota!.retryAfterSeconds / 60))} мин. — а пока перечитай объяснение или спроси преподавателя.</p>
+      {held ? <p className="quota-note limited" role="status">{held}</p>
+        : limited ? <p className="quota-note limited">Лимит сообщений помощнику исчерпан. Снова можно через {Math.max(1, Math.ceil(quota!.retryAfterSeconds / 60))} мин. — а пока перечитай объяснение или спроси преподавателя.</p>
         : left !== null && left <= 5 && <p className="quota-note">Осталось сообщений в этот час: {left} из {quota!.hourLimit}</p>}
     </form>}
   </aside>
@@ -931,7 +988,9 @@ const TOPIC_FILTERS: { id: 'todo' | 'confirmed' | 'mastered' | 'all'; label: str
   { id: 'all', label: 'Все', match: () => true },
 ]
 
-function TopicsView({ progress, onRetake }: { progress: Progress | null; onRetake: (skillCode: string) => void }) {
+/** lessonOpen — a lesson of this course is open; ongoing — what that lesson runs now besides its own tasks. */
+type Ongoing = 'practice' | 'retake' | null
+function TopicsView({ progress, onRetake, lessonOpen, ongoing, onPractice }: { progress: Progress | null; onRetake: (skillCode: string) => void; lessonOpen: boolean; ongoing: Ongoing; onPractice: () => void }) {
   const [filter, setFilter] = useState<(typeof TOPIC_FILTERS)[number]['id']>('todo')
   const course = useCourse()
   if (!progress) return <section><h1 className="display small">Темы</h1><div className="sk sk-card" /></section>
@@ -948,11 +1007,12 @@ function TopicsView({ progress, onRetake }: { progress: Progress | null; onRetak
       <Stat icon="flag" label={`Курс закрыт · ${level.closed} из ${level.topics} тем`} value={coverage} suffix="%" />
       <Stat icon="award" label={`Освоено практикой${level.confirmed ? ` · ${level.confirmed} подтверждено диагностикой` : ''}`} value={level.mastered} />
     </div>
+    <PracticeCard info={progress.attestationPractice} lessonOpen={lessonOpen} ongoing={ongoing} onStart={onPractice} />
     <div className="topic-filters" role="tablist" aria-label="Темы">{TOPIC_FILTERS.map(f => <button key={f.id} role="tab" aria-selected={f.id === filter} className={f.id === filter ? 'active' : ''} onClick={() => setFilter(f.id)}>
       {f.label}<span className="tabular">{counts[f.id]}</span></button>)}</div>
     {skills.some(skillClosed) && <RetakeLagHint progress={progress} />}
     <div className="card skills">{skills.length
-      ? skills.map(skill => <TopicRow key={skill.skillCode} skill={skill} retake={progress.retakes?.find(r => r.skillCode === skill.skillCode)} lag={lagOf(progress)} onRetake={onRetake} />)
+      ? skills.map(skill => <TopicRow key={skill.skillCode} skill={skill} retake={progress.retakes?.find(r => r.skillCode === skill.skillCode)} lag={lagOf(progress)} onRetake={onRetake} practiceOpen={ongoing === 'practice'} />)
       : <p className="muted">{filter === 'todo' ? 'Все темы закрыты — практикой или диагностикой. Отличная работа!' : filter === 'confirmed' ? 'Диагностика пока не подтвердила ни одной темы.' : filter === 'mastered' ? 'Пока ни одна тема не освоена полностью: для этого нужны три итерации на разных уроках.' : 'Тем пока нет.'}</p>}</div>
   </section>
 }
@@ -982,7 +1042,7 @@ function AchievementsView({ progress, otherProgress }: { progress: Progress | nu
 }
 
 /** Practice progress and the diagnostic result side by side; a confirmed topic is never drawn as practiced. */
-function TopicRow({ skill, retake, lag, onRetake }: { skill: SkillProgress; retake?: RetakeHistory; lag: number; onRetake: (skillCode: string) => void }) {
+function TopicRow({ skill, retake, lag, onRetake, practiceOpen }: { skill: SkillProgress; retake?: RetakeHistory; lag: number; onRetake: (skillCode: string) => void; practiceOpen?: boolean }) {
   const state = skillState(skill)
   const diagnostic = skill.diagnosticTotal ? `${skill.diagnosticCorrect ?? 0}/${skill.diagnosticTotal}` : null
   return <div className={`skill-row ${state}`}>
@@ -994,7 +1054,7 @@ function TopicRow({ skill, retake, lag, onRetake }: { skill: SkillProgress; reta
       {state === 'mastered' ? 'Освоено практикой' : state === 'confirmed' ? null : `Итерации ${skill.completedIterations}/${ITERATIONS} · задачи ${skill.iterationSuccesses}/${iterationTasks(skill.completedIterations)}`}
       {diagnostic && <span className={`diag-chip ${skill.confirmedByDiagnostic ? 'ok' : 'gap'}`} title="Результат первичной диагностики по теме">диагностика {diagnostic}</span>}
       {retake && <span className="retake-meta">{retakeTimes(retake)}</span>}
-      {skillClosed(skill) && <button className="secondary retake-button" onClick={() => onRetake(skill.skillCode)} title={lag > 0 ? lagText(lag) : 'Три задачи по теме: от простой к сложной. На освоение темы не влияет.'}><Icon name="refresh" size={14} /> Повторить</button>}
+      {skillClosed(skill) && <button className="secondary retake-button" disabled={practiceOpen} onClick={() => onRetake(skill.skillCode)} title={practiceOpen ? 'Повторить тему можно после тренировочной аттестации' : lag > 0 ? lagText(lag) : 'Три задачи по теме: от простой к сложной. На освоение темы не влияет.'}><Icon name="refresh" size={14} /> Повторить</button>}
     </small>
   </div>
 }
@@ -1029,6 +1089,135 @@ function RetakeChoices({ progress, onRetake }: { progress: Progress; onRetake: (
     })}</ul>
     {closed.length > shown.length && <button className="ghost small-button" onClick={() => setAll(true)}>Показать все ({closed.length})</button>}
   </div>
+}
+
+// ───────── «Тренировочная аттестация»: one attestation-sized task, a 10-minute timer, no grade, no effect on progress ─────────
+
+/** True once the moment `at` (client clock) has passed; re-renders once, at that moment. null — no moment. */
+function usePassed(at: number | null) {
+  const [passed, setPassed] = useState(() => at !== null && Date.now() >= at)
+  useEffect(() => {
+    if (at === null) { setPassed(false); return }
+    const left = at - Date.now()
+    setPassed(left <= 0)
+    if (left <= 0) return
+    const timer = setTimeout(() => setPassed(true), left)
+    // A hidden tab throttles timers: coming back checks at once.
+    const onWake = () => { if (Date.now() >= at) setPassed(true) }
+    document.addEventListener('visibilitychange', onWake); window.addEventListener('focus', onWake)
+    return () => { clearTimeout(timer); document.removeEventListener('visibilitychange', onWake); window.removeEventListener('focus', onWake) }
+  }, [at])
+  return passed
+}
+
+/** The statement without its «Подсказка» section (from that heading to the next heading of the same or a higher level); code blocks are not headings. */
+function withoutHint(statement: string) {
+  let fence = false, skip = 0
+  return statement.split('\n').filter(line => {
+    if (/^\s*(```|~~~)/.test(line)) { fence = !fence; return !skip }
+    const heading = fence ? null : /^(#{1,6})\s+(.*)$/.exec(line)
+    if (heading) {
+      const level = heading[1].length
+      if (skip && level <= skip) skip = 0
+      if (!skip && /^подсказк/i.test(heading[2].trim())) skip = level
+    }
+    return !skip
+  }).join('\n').trimEnd()
+}
+
+const practiceNeedText = (n: number) => `Тренировочная аттестация откроется, когда пройдёшь ещё ${n} ${plural(n, 'тему', 'темы', 'тем')} по порядку`
+const practiceTopics = (p: { levelTopics: number | null }) => `темы 1–${p.levelTopics}`
+/** «6 мин 12 с», «42 с». */
+const durationText = (seconds: number) => { const m = Math.floor(seconds / 60), s = Math.round(seconds % 60); return m ? `${m} мин ${s} с` : `${s} с` }
+const practiceToast = (p: Practice) => {
+  const text = `Тренировочная аттестация · ${practiceTopics(p)}`
+  return p.result === 'IN_TIME' ? { tone: 'reward' as const, icon: 'award' as const, title: `Решено${p.seconds != null ? ` за ${durationText(p.seconds)}` : ''} — уложился в ${minutesText(p.minutes)}`, text }
+    : p.result === 'LATE' ? { tone: 'info' as const, icon: 'clock' as const, title: `Решено после времени${p.seconds != null ? `: ${Math.ceil(p.seconds / 60)} мин` : ''}`, text }
+      : { tone: 'info' as const, icon: 'flag' as const, title: 'Тренировка завершена без решения', text }
+}
+
+/** «07:32» counting down to `endsAt` (client clock); red in the last minute. */
+function PracticeClock({ endsAt }: { endsAt: number }) {
+  const left = endsAt - useNow(250)
+  return <b className={`practice-clock tabular ${left < 60_000 ? 'low' : ''}`} role="timer" aria-live="off">{clock(left).padStart(5, '0')}</b>
+}
+
+/** Over the practice's task, like the re-take plate: the topics and the time left; after the deadline «Время вышло»; once solved — the time it took. */
+function PracticePlate({ practice, endsAt, timeUp, solvedAt, busy, onFinish }: { practice: Practice; endsAt: number; timeUp: boolean; solvedAt: number | null; busy: boolean; onFinish: () => void }) {
+  const elapsed = solvedAt === null ? 0 : practice.minutes * 60_000 - (endsAt - solvedAt)
+  return <div className={`retake-plate practice-plate enter ${solvedAt !== null ? 'solved' : timeUp ? 'over' : ''}`}>
+    <Icon name={solvedAt !== null ? 'check' : 'clock'} size={18} />
+    <span><b>Тренировочная аттестация</b> · {practiceTopics(practice)} · {solvedAt !== null ? <>решено за <b className="tabular">{clock(elapsed)}</b></>
+      : timeUp ? <span role="status"><b>Время вышло</b> — можно дорешать, помощник открыт</span>
+        : <>осталось <PracticeClock endsAt={endsAt} /></>}</span>
+    {solvedAt === null && <button className="ghost small-button" disabled={busy} onClick={onFinish}>Завершить</button>}
+  </div>
+}
+
+/** Before the start: what the practice is; Esc or a click outside cancels. */
+function PracticeDialog({ info, busy, onStart, onCancel }: { info: AttestationPractice; busy: boolean; onStart: () => void; onCancel: () => void }) {
+  const startRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    startRef.current?.focus()
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+  return <div className="board-call-backdrop" onClick={busy ? undefined : onCancel}>
+    <div className="board-call practice-dialog" role="dialog" aria-modal="true" aria-labelledby="practice-dialog-title" onClick={e => e.stopPropagation()}>
+      <span className="board-call-icon"><Icon name="award" size={30} /></span>
+      <p className="eyebrow">Без оценки</p>
+      <h2 id="practice-dialog-title" className="display small">Тренировочная аттестация</h2>
+      <p>Одна задача как на аттестации: {practiceTopics(info)} (до «{info.levelTitle}»). {minutesText(info.minutes)}, помощник закрыт до конца времени. Оценки нет, на прогресс не влияет — можно бросить в любой момент.</p>
+      <div className="board-confirm-actions">
+        <button type="button" className="ghost big" disabled={busy} onClick={onCancel}>Отмена</button>
+        <button type="button" ref={startRef} className="primary big" disabled={busy} onClick={onStart}>{busy ? <><Spinner /> Начинаем…</> : <>Начать <Icon name="arrow" /></>}</button>
+      </div>
+    </div>
+  </div>
+}
+
+/** «Темы»: the start (or what is left before it opens) and the student's own attempts. Nothing when the course has no pool. */
+function PracticeCard({ info, lessonOpen, ongoing, onStart }: { info?: AttestationPractice; lessonOpen: boolean; ongoing: Ongoing; onStart: () => void }) {
+  if (!info || (!info.available && info.needTopics == null && !info.history.length)) return null
+  const note = !info.available ? null : ongoing === 'practice' ? 'Тренировка идёт — она во вкладке «Урок».' : ongoing === 'retake' ? 'Начать можно, когда закончишь повторение темы.' : !lessonOpen ? 'Начни урок — тренировка проходит внутри урока.' : null
+  return <section className="card practice-card" aria-label="Тренировочная аттестация">
+    <div className="practice-card-head">
+      <span className="chip-icon"><Icon name="award" size={16} /></span>
+      <div>
+        <h2 className="card-title">Тренировочная аттестация</h2>
+        <p className="muted small">{info.available ? `Одна задача как на аттестации: ${practiceTopics(info)} (до «${info.levelTitle}»), ${minutesText(info.minutes)}. Без оценки, на прогресс не влияет.`
+          : info.needTopics ? `Откроется, когда пройдёшь ещё ${info.needTopics} ${plural(info.needTopics, 'тему', 'темы', 'тем')} по порядку.` : 'Пока недоступна.'}</p>
+      </div>
+      {info.available && !ongoing && <button className="secondary" disabled={!lessonOpen} onClick={onStart}><Icon name="award" size={16} /> Начать</button>}
+    </div>
+    {note && <p className="muted small practice-card-note">{note}</p>}
+    {info.history.length > 0 && <PracticeAttempts items={info.history} />}
+  </section>
+}
+
+const PRACTICE_RESULT: Record<NonNullable<PracticeAttempt['result']> | 'OPEN', { label: string; tone: string }> = {
+  IN_TIME: { label: 'в срок', tone: 'ok' }, LATE: { label: 'после времени', tone: 'warn' }, NOT_SOLVED: { label: 'без решения', tone: 'bad' }, OPEN: { label: 'идёт', tone: '' },
+}
+/** «28 окт., 11:20». */
+const shortDateTime = (value: string) => parseDate(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+/** Attempts newest first: date, level, task, result and the time to the first pass; the latest five until «Показать все». */
+function PracticeAttempts({ items }: { items: PracticeAttempt[] }) {
+  const [all, setAll] = useState(false)
+  const shown = all ? items : items.slice(0, 5)
+  return <>
+    <ul className="practice-attempts">{shown.map(a => {
+      const result = PRACTICE_RESULT[a.result ?? 'OPEN']
+      return <li key={a.id}>
+        <span className="muted tabular">{shortDateTime(a.startedAt)}</span>
+        <span className="practice-level" title={`до «${a.levelTitle}»`}>{practiceTopics(a)}</span>
+        <span className="practice-task" title={a.taskTitle}>{a.taskTitle}</span>
+        <span className={`check-tag ${result.tone}`}>{result.label}{a.seconds != null && <span className="tabular"> · {clock(a.seconds * 1000)}</span>}</span>
+      </li>
+    })}</ul>
+    {items.length > shown.length && <button className="ghost small-button practice-more" onClick={() => setAll(true)}>Показать все ({items.length})</button>}
+  </>
 }
 
 const unlocked = (items: ReturnType<typeof achievements>) => items.filter(a => a.unlocked).length
@@ -1221,6 +1410,15 @@ function DiagnosticSummary({ skills }: { skills: SkillProgress[] }) {
   </div>
 }
 
+/** The teacher's view of a course's «Тренировочная аттестация»: how many attempts, how many in time, then the list. */
+function PracticeSummary({ attempts }: { attempts: PracticeAttempt[] }) {
+  const inTime = attempts.filter(a => a.result === 'IN_TIME').length
+  return <div className="practice-summary">
+    <span className="small"><b>Тренировочная аттестация:</b> попыток {attempts.length}, в срок {inTime}</span>
+    <PracticeAttempts items={attempts} />
+  </div>
+}
+
 /** «урок идёт · Java, 12 мин» — the open lesson and how long it has been going. */
 function ActiveLessonBadge({ lesson }: { lesson: ActiveLesson }) {
   const minutes = Math.max(0, Math.round((Date.now() - parseDate(lesson.startedAt).getTime()) / 60_000))
@@ -1300,6 +1498,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
   const [lessons, setLessons] = useState<Lesson[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<CourseLanguage, SkillProgress[]>> | null>(null)
   const [retakes, setRetakes] = useState<Partial<Record<CourseLanguage, number>>>({})
+  const [practice, setPractice] = useState<PracticeByLanguage>({})
   const [hardCourses, setHardCourses] = useState<Student['hardModeCourses']>(student.hardModeCourses)
   const [openLesson, setOpenLesson] = useState<Id | null>(null)
   const [detail, setDetail] = useState<LessonDetail | null>(null)
@@ -1308,7 +1507,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
     let alive = true
     setLessons(null); setDetail(null); setOpenLesson(null); openRef.current = null
     request(() => api<{ lessons: Lesson[] }>(`/admin/students/${student.id}/lessons`)).then(value => { if (alive && value) setLessons(value.lessons) })
-    request(() => api<{ llm: LlmStatus; student?: Student; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>>; retakesByLanguage?: Partial<Record<CourseLanguage, number>> }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }); setRetakes(value.retakesByLanguage ?? {}); if (value.student?.hardModeCourses) setHardCourses(value.student.hardModeCourses) } })
+    request(() => api<{ llm: LlmStatus; student?: Student; progress: SkillProgress[]; progressByLanguage?: Partial<Record<CourseLanguage, SkillProgress[]>>; retakesByLanguage?: Partial<Record<CourseLanguage, number>>; practiceByLanguage?: PracticeByLanguage }>(`/admin/students/${student.id}`)).then(value => { if (alive && value) { onLlmStatus(value.llm); setProgress(value.progressByLanguage ?? { JAVA: value.progress }); setRetakes(value.retakesByLanguage ?? {}); setPractice(value.practiceByLanguage ?? {}); if (value.student?.hardModeCourses) setHardCourses(value.student.hardModeCourses) } })
     return () => { alive = false }
   }, [student.id, request, onLlmStatus])
   const toast = useToast()
@@ -1375,6 +1574,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
         <span className="mini-stats-cell"><b>{level.mastered}</b><small>тем освоено</small></span>
         {!!retakes[language] && <span className="mini-stats-cell" title="Повторений пройденных тем с хотя бы одной решённой задачей"><b>{retakes[language]}</b><small>повторений тем</small></span>}
         <DiagnosticSummary skills={progress[language]!} />
+        {!!practice[language]?.length && <PracticeSummary attempts={practice[language]!} />}
       </div>
     })}</div>}
     {!lessons ? <p className="muted">Загружаем данные…</p> : <>
@@ -1391,7 +1591,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
         </div>
         <h3 className="section-title">Задачи и попытки</h3>
         {detail.tasks.length ? detail.tasks.map(t => <article key={t.id} className="detail-task">
-          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{t.retakeSkill && <span className="retake-chip" title="Задача из повторения пройденной темы: на итерации и освоение не влияет">повторение · {t.retakeSkill}</span>}{t.title}{!!t.replaced && <span className="replaced-chip" title={t.retakeSkill ? 'Повторение закончилось раньше, чем задача была решена' : 'Студент переключил hard mode или начал повторение темы — задача снята с урока'}>{t.retakeSkill ? 'снята в конце повторения' : 'снята с урока'}</span>}</b>
+          <div className="detail-task-head"><b>{!!t.hard && <span className="hard-chip"><Icon name="flame" size={12} /> HARD</span>}{!!t.integrative && <span className="integ-chip" title="Задача 3-й итерации: тема вместе с 1–2 пройденными, как на аттестации"><Icon name="target" size={11} /> Комплексная задача</span>}{!!t.practice && <span className="retake-chip practice" title="Задача тренировочной аттестации: на итерации, освоение и оценки не влияет">тренировочная аттестация</span>}{t.retakeSkill && !t.practice && <span className="retake-chip" title="Задача из повторения пройденной темы: на итерации и освоение не влияет">повторение · {t.retakeSkill}</span>}{t.title}{!!t.replaced && <span className="replaced-chip" title={t.practice ? 'Тренировка закончилась раньше, чем задача была решена' : t.retakeSkill ? 'Повторение закончилось раньше, чем задача была решена' : 'Студент переключил hard mode, начал повторение темы или тренировочную аттестацию — задача снята с урока'}>{t.practice ? 'снята в конце тренировки' : t.retakeSkill ? 'снята в конце повторения' : 'снята с урока'}</span>}</b>
             {t.submissions.some(a => a.passed && !a.revokedAt) && <button className="ghost danger small-button" onClick={() => revoke(detail.lesson, t)} title="Студенту придётся решить задачу заново"><Icon name="refresh" size={14} /> Отменить зачёт</button>}
           </div>
           <Markdown>{t.statement}</Markdown>

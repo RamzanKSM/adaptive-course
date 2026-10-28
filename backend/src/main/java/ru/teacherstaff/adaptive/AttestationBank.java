@@ -13,20 +13,34 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.io.InputStream;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
- * The attestation pool («Аттестация» in «К доске», BoardTests): integrative tasks over the course from its first topic up
- * to the task's own topic (skill), one story each, built and verified like the curated bank
- * (tools/curated_python/build_attestation.py → Verify.java) and shipped as resources/attestation-tasks/bank.json.
- * Loaded at startup with tasks.mode = 'ATTESTATION', so lessons and regular board tests never take them; a task keeps
- * its id by key (attest:<slug>), and a task that left the bank is deactivated (its tests stay readable).
+ * The pools of attestation-format tasks: one story each, built and verified like the curated bank
+ * (tools/curated_python/build_attestation.py --pool … → Verify.java) and shipped as resources.
+ * <ul>
+ * <li>ATTESTATION — «Аттестация» in «К доске» (BoardTests): integrative tasks over the course from its first topic up to the
+ * task's own topic (skill); attestation-tasks/bank.json, key attest:&lt;slug&gt;;</li>
+ * <li>INTEGRATIVE — the task of a topic's 3rd iteration in lessons (IntegrativeTasks): the topic (skill) at its core with
+ * 1–2 earlier topics; integrative-tasks/bank.json, key integ:&lt;slug&gt;;</li>
+ * <li>ATTESTATION_PRACTICE — «Тренировочная аттестация» (AttestationPractice): tasks of the attestation's size and kind
+ * over topics 1…skill; attestation-practice/bank.json, key practice:&lt;slug&gt;.</li>
+ * </ul>
+ * Loaded at startup with tasks.mode = the pool's mode, so lessons, regular board tests, re-takes, hard mode and the
+ * generator never take them; a task keeps its id by key, and a task that left its file is deactivated (its tests and
+ * lessons stay readable). A missing resource loads and retires nothing.
  */
 @Component
 @Order(11)
 class AttestationBank implements ApplicationRunner {
   private static final Logger log = LoggerFactory.getLogger(AttestationBank.class);
-  static final String RESOURCE = "attestation-tasks/bank.json", KEY_PREFIX = "attest:", MODE = "ATTESTATION";
+  /** A pool: tasks.mode of its tasks, the resource it ships as, the prefix of its keys, its name in the log. */
+  record Pool(String mode, String resource, String keyPrefix, String name) {}
+  static final Pool ATTESTATION = new Pool("ATTESTATION", "attestation-tasks/bank.json", "attest:", "Attestation pool"),
+      INTEGRATIVE = new Pool("INTEGRATIVE", "integrative-tasks/bank.json", "integ:", "Integrative pool"),
+      PRACTICE = new Pool("ATTESTATION_PRACTICE", "attestation-practice/bank.json", "practice:", "Attestation practice pool");
+  static final List<Pool> POOLS = List.of(ATTESTATION, INTEGRATIVE, PRACTICE);
   private final JdbcTemplate db;
   private final ObjectMapper json;
   private final TransactionTemplate tx;
@@ -34,47 +48,51 @@ class AttestationBank implements ApplicationRunner {
   AttestationBank(JdbcTemplate db, ObjectMapper json, TransactionTemplate tx) { this.db = db; this.json = json; this.tx = tx; }
 
   @Override public void run(ApplicationArguments args) throws Exception {
-    JsonNode bank;
-    try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) { bank = json.readTree(in); }
-    load(bank);
+    for (Pool pool : POOLS) {
+      var resource = new ClassPathResource(pool.resource());
+      JsonNode bank = null;
+      if (resource.exists()) try (InputStream in = resource.getInputStream()) { bank = json.readTree(in); }
+      if (bank == null || !bank.isObject()) { log.warn("{}: {} is missing or empty, nothing loaded", pool.name(), pool.resource()); continue; }
+      load(pool, bank);
+    }
   }
 
-  /** Stores every task of the bank (by key) and deactivates pool tasks that are not in it any more. */
-  void load(JsonNode bank) {
+  /** Stores every task of the pool's bank (by key) and deactivates the pool's tasks that are not in it any more. */
+  void load(Pool pool, JsonNode bank) {
     Set<String> keys = new HashSet<>(); int loaded = 0, skipped = 0;
     for (JsonNode task : bank.path("tasks")) {
       String key = task.path("key").asText();
-      if (!key.startsWith(KEY_PREFIX)) { log.warn("Attestation task {} skipped: the key must start with {}", key, KEY_PREFIX); skipped++; continue; }
-      if (store(key, task)) { keys.add(key); loaded++; } else skipped++;
+      if (!key.startsWith(pool.keyPrefix())) { log.warn("{}: task {} skipped, the key must start with {}", pool.name(), key, pool.keyPrefix()); skipped++; continue; }
+      if (store(pool, key, task)) { keys.add(key); loaded++; } else skipped++;
     }
     int retired = 0;
-    for (var row : db.queryForList("select id,external_key from tasks where mode=? and active=1", MODE))
+    for (var row : db.queryForList("select id,external_key from tasks where mode=? and active=1", pool.mode()))
       if (!keys.contains((String) row.get("external_key"))) retired += db.update("update tasks set active=0 where id=?", row.get("id"));
-    log.info("Attestation pool: {} tasks loaded from {}{}{}", loaded, RESOURCE, skipped > 0 ? ", " + skipped + " skipped" : "", retired > 0 ? ", " + retired + " retired" : "");
+    log.info("{}: {} tasks loaded from {}{}{}", pool.name(), loaded, pool.resource(), skipped > 0 ? ", " + skipped + " skipped" : "", retired > 0 ? ", " + retired + " retired" : "");
   }
 
-  private boolean store(String key, JsonNode t) {
+  private boolean store(Pool pool, String key, JsonNode t) {
     Language language = Language.of(t.path("language").asText("PYTHON"));
     String skill = t.path("skill").asText();
     if (db.queryForObject("select count(*) from skills where code=? and language=?", Integer.class, skill, language.name()) == 0) {
-      log.warn("Attestation task {} skipped: topic {} is not in the {} course", key, skill, language);
+      log.warn("{}: task {} skipped, topic {} is not in the {} course", pool.name(), key, skill, language);
       return false;
     }
     String wrong = wrongJson(t.path("wrong"));
     tx.executeWithoutResult(status -> {
       var existing = db.queryForList("select id from tasks where external_key=?", Long.class, key);
       Object[] values = {skill, t.path("title").asText(), t.path("statement").asText(), t.path("starter").asText(), t.path("testSource").asText(), t.path("testFileName").asText(),
-          t.path("difficulty").asInt(3), t.path("goalJson").asText(), LearningContentGenerator.TASK_QUALITY_VERSION, language.name(), t.path("reference").asText(null), wrong};
+          t.path("difficulty").asInt(3), t.path("goalJson").asText(), LearningContentGenerator.TASK_QUALITY_VERSION, language.name(), t.path("reference").asText(null), wrong, pool.mode()};
       long id;
       if (existing.isEmpty()) {
         Object[] insert = java.util.Arrays.copyOf(values, values.length + 1); insert[values.length] = key;
-        id = db.queryForObject("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,goal_json,quality_version,language,reference_code,wrong_json,source,mode,active,external_key) "
-            + "values(?,?,?,?,?,?,?,?,?,?,?,?,'CURATED','" + MODE + "',1,?) returning id", Long.class, insert);
+        id = db.queryForObject("insert into tasks(skill_code,title,statement,starter_code,test_source,test_file_name,difficulty,goal_json,quality_version,language,reference_code,wrong_json,mode,source,active,external_key) "
+            + "values(?,?,?,?,?,?,?,?,?,?,?,?,?,'CURATED',1,?) returning id", Long.class, insert);
       } else {
         id = existing.getFirst();
         Object[] update = java.util.Arrays.copyOf(values, values.length + 1); update[values.length] = id;
-        db.update("update tasks set skill_code=?,title=?,statement=?,starter_code=?,test_source=?,test_file_name=?,difficulty=?,goal_json=?,quality_version=?,language=?,reference_code=?,wrong_json=?,"
-            + "source='CURATED',mode='" + MODE + "',active=1 where id=?", update);
+        db.update("update tasks set skill_code=?,title=?,statement=?,starter_code=?,test_source=?,test_file_name=?,difficulty=?,goal_json=?,quality_version=?,language=?,reference_code=?,wrong_json=?,mode=?,"
+            + "source='CURATED',active=1 where id=?", update);
         db.update("delete from task_target_skills where task_id=?", id);
         db.update("delete from task_cases where task_id=?", id);
       }
