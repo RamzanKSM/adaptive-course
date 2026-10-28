@@ -1627,3 +1627,8 @@ html :is(code, pre, kbd, samp, .code-editor, .cm-editor, .console-out, .parsons-
 .retake-choices ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .retake-choices li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
 .retake-chip { display: inline-flex; align-items: center; margin-right: 6px; padding: 1px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--brand-ink); font-size: 11px; font-weight: 750; vertical-align: 2px; }
+
+/* The student's tabs «Текущий урок | Темы | Оценки и план | Достижения»: short titles on a phone. */
+@media (max-width: 520px) { .student-tabs .tab-long { display: none; } .student-tabs .tab-short { display: inline; } }
+.stat-grid + .topic-filters { margin-top: 24px; }
+.achievement-group .muted { font-weight: 600; }

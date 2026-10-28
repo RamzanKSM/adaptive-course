@@ -190,7 +190,7 @@ export interface StationCurrent { station: { id: Id; name: string }; now: string
 export interface BoardStation { id: Id; name: string; createdAt: string; lastSeenAt: string | null; current?: boolean }
 /** attestationPlanDate — the day whose plan line attestations cover (null: the day of each attestation). */
 export interface BoardSettings { studentStart: boolean; attestationPlanDate?: string | null }
-/** The student's own board grades in «Мой прогресс»: Moscow date, the teacher's final grade and comment. */
+/** The student's own board grades in «Оценки и план»: Moscow date, the teacher's final grade and comment. */
 /** One item of the report a student sees for a graded test (when the teacher shows it): never the reference or the scores. */
 export interface BoardReportItem {
   kind: BoardItemKind; title: string | null; statement: string | null; language: CourseLanguage; answer: string | null

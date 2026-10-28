@@ -356,7 +356,7 @@ function StudentPage({ request }: { request: Request }) {
   const [progress, setProgress] = useState<Progress | null>(null)
   const [otherProgress, setOtherProgress] = useState<Partial<Record<CourseLanguage, Progress>>>({})
   const [othersReady, setOthersReady] = useState(false)
-  const [tab, setTab] = useState<'lesson' | 'progress'>('lesson')
+  const [tab, setTab] = useState<StudentTab>('lesson')
   const toast = useToast()
   const course = useCourse()
   const loadId = useRef(0)
@@ -486,15 +486,17 @@ function StudentPage({ request }: { request: Request }) {
   const currentSkill = lesson?.skill ? progress?.skills.find(s => s.skillCode === lesson.skill?.code) : undefined
   return <>
     {progress && <Hud progress={progress} />}
-    <nav className="segmented" role="tablist" style={{ '--active': tab === 'lesson' ? 0 : 1 } as CSSProperties}>
+    <nav className="segmented four student-tabs" role="tablist" style={{ '--active': STUDENT_TABS.findIndex(t => t.id === tab) } as CSSProperties}>
       <span className="segmented-thumb" aria-hidden="true" />
-      <button role="tab" aria-selected={tab === 'lesson'} className={tab === 'lesson' ? 'active' : ''} onClick={() => setTab('lesson')}><Icon name="code" size={16} /> Текущий урок</button>
-      <button role="tab" aria-selected={tab === 'progress'} className={tab === 'progress' ? 'active' : ''} onClick={() => setTab('progress')}><Icon name="chart" size={16} /> Мой прогресс</button>
+      {STUDENT_TABS.map(t => <button key={t.id} role="tab" aria-label={t.title} aria-selected={tab === t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
+        <Icon name={t.icon} size={16} /> <span className="tab-long">{t.title}</span><span className="tab-short">{t.short}</span></button>)}
     </nav>
     {idleWarning && openId !== null && <div className="lesson-notice warn" role="alert"><Icon name="clock" size={18} /><span>Урок завершится через 3 минуты: нет запусков кода, отправок и сообщений помощнику. Запусти код или напиши помощнику, чтобы продолжить.</span></div>}
     {ended && !lesson && <div className="lesson-notice" role="status"><Icon name="flag" size={18} /><span>{lessonEndText(ended)}</span><button className="flash-close" aria-label="Скрыть сообщение" onClick={() => setEnded(null)}><Icon name="x" size={16} /></button></div>}
-    {/* Both tabs stay mounted so switching to progress does not discard the code in the editor. */}
-    <div hidden={tab !== 'progress'} className={tab === 'progress' ? 'enter' : ''}><ProgressView progress={progress} otherProgress={otherProgress} onRetake={startRetake} /></div>
+    {/* All tabs stay mounted so leaving the lesson does not discard the code in the editor. */}
+    <div hidden={tab !== 'topics'} className={tab === 'topics' ? 'enter' : ''}><TopicsView progress={progress} onRetake={startRetake} /></div>
+    <div hidden={tab !== 'grades'} className={tab === 'grades' ? 'enter' : ''}><GradesView progress={progress} visible={tab === 'grades'} /></div>
+    <div hidden={tab !== 'achievements'} className={tab === 'achievements' ? 'enter' : ''}><AchievementsView progress={progress} otherProgress={otherProgress} /></div>
     <div hidden={tab !== 'lesson'} className={tab === 'lesson' ? 'enter' : ''}>
       {state === 'loading' ? <LessonSkeleton lesson={preparing} request={request} onFinished={load} />
         : state === 'failed' ? <section className="empty-state enter"><h2 className="title">Не удалось загрузить урок</h2><button className="primary" onClick={load}><Icon name="refresh" /> Повторить</button></section>
@@ -913,6 +915,15 @@ function Chat({ llm, request, taskId, sourceCode, consoleOutput, prefill }: { ll
   </aside>
 }
 
+/** The student's tabs; on a phone the short titles. */
+type StudentTab = 'lesson' | 'topics' | 'grades' | 'achievements'
+const STUDENT_TABS: { id: StudentTab; icon: Parameters<typeof Icon>[0]['name']; title: string; short: string }[] = [
+  { id: 'lesson', icon: 'code', title: 'Текущий урок', short: 'Урок' },
+  { id: 'topics', icon: 'chart', title: 'Темы', short: 'Темы' },
+  { id: 'grades', icon: 'award', title: 'Оценки и план', short: 'Оценки' },
+  { id: 'achievements', icon: 'star', title: 'Достижения', short: 'Награды' },
+]
+
 const TOPIC_FILTERS: { id: 'todo' | 'confirmed' | 'mastered' | 'all'; label: string; match: (state: SkillState) => boolean }[] = [
   { id: 'todo', label: 'Нужна практика', match: state => state === 'gap' || state === 'started' || state === 'new' },
   { id: 'confirmed', label: 'Подтверждено диагностикой', match: state => state === 'confirmed' },
@@ -920,39 +931,53 @@ const TOPIC_FILTERS: { id: 'todo' | 'confirmed' | 'mastered' | 'all'; label: str
   { id: 'all', label: 'Все', match: () => true },
 ]
 
-function ProgressView({ progress, otherProgress, onRetake }: { progress: Progress | null; otherProgress: Partial<Record<CourseLanguage, Progress>>; onRetake: (skillCode: string) => void }) {
+function TopicsView({ progress, onRetake }: { progress: Progress | null; onRetake: (skillCode: string) => void }) {
   const [filter, setFilter] = useState<(typeof TOPIC_FILTERS)[number]['id']>('todo')
   const course = useCourse()
-  const list = useMemo(() => progress ? achievements(progress, course.id) : [], [progress, course.id])
-  const shared = useMemo(() => progress ? commonAchievements({ ...otherProgress, [course.id]: progress }) : [], [progress, otherProgress, course.id])
-  if (!progress) return <section><h1 className="display small">Мой прогресс</h1><div className="sk sk-card" /></section>
+  if (!progress) return <section><h1 className="display small">Темы</h1><div className="sk sk-card" /></section>
   const level = experience(progress)
   const counts = Object.fromEntries(TOPIC_FILTERS.map(f => [f.id, progress.skills.filter(skill => f.match(skillState(skill))).length]))
   const active = TOPIC_FILTERS.find(f => f.id === filter)!
   const skills = progress.skills.filter(skill => active.match(skillState(skill)))
   const coverage = level.topics ? Math.round((level.closed / level.topics) * 100) : 0
   return <section className="progress-page">
-    <h1 className="display small">Мой прогресс · {course.title}</h1>
-    {progress.session && <StudentSessionCard session={progress.session} />}
-    <StudentBoardGrades language={course.id} />
+    <h1 className="display small">Темы · {course.title}</h1>
     <div className="stat-grid">
       <Stat icon="sparkle" label={level.diagnosticXp ? `Опыт · ${level.diagnosticXp} за диагностику` : 'Опыт'} value={level.xp} suffix="XP" />
       <Stat icon="bolt" label="Задач решено" value={level.solved} />
       <Stat icon="flag" label={`Курс закрыт · ${level.closed} из ${level.topics} тем`} value={coverage} suffix="%" />
       <Stat icon="award" label={`Освоено практикой${level.confirmed ? ` · ${level.confirmed} подтверждено диагностикой` : ''}`} value={level.mastered} />
     </div>
-    <h2 className="section-title">Достижения <span className="muted">{[...list, ...shared].filter(a => a.unlocked).length} из {list.length + shared.length}</span></h2>
-    <p className="achievement-group"><span className={`lang-dot ${course.key}`} aria-hidden="true" />Курс {course.title}</p>
-    <AchievementGrid items={list} />
-    <p className="achievement-group"><Icon name="globe" size={15} />Общие — для обоих курсов</p>
-    <AchievementGrid items={shared} />
-    <h2 className="section-title">Темы</h2>
     <div className="topic-filters" role="tablist" aria-label="Темы">{TOPIC_FILTERS.map(f => <button key={f.id} role="tab" aria-selected={f.id === filter} className={f.id === filter ? 'active' : ''} onClick={() => setFilter(f.id)}>
       {f.label}<span className="tabular">{counts[f.id]}</span></button>)}</div>
     {skills.some(skillClosed) && <RetakeLagHint progress={progress} />}
     <div className="card skills">{skills.length
       ? skills.map(skill => <TopicRow key={skill.skillCode} skill={skill} retake={progress.retakes?.find(r => r.skillCode === skill.skillCode)} lag={lagOf(progress)} onRetake={onRetake} />)
       : <p className="muted">{filter === 'todo' ? 'Все темы закрыты — практикой или диагностикой. Отличная работа!' : filter === 'confirmed' ? 'Диагностика пока не подтвердила ни одной темы.' : filter === 'mastered' ? 'Пока ни одна тема не освоена полностью: для этого нужны три итерации на разных уроках.' : 'Тем пока нет.'}</p>}</div>
+  </section>
+}
+
+/** «Оценки и план»: answers at the board and attestations, then the pace to the session. Grades reload each time the tab opens. */
+function GradesView({ progress, visible }: { progress: Progress | null; visible: boolean }) {
+  const course = useCourse()
+  return <section className="progress-page">
+    <h1 className="display small">Оценки и план · {course.title}</h1>
+    <StudentBoardGrades language={course.id} visible={visible} />
+    {!progress ? <div className="sk sk-card" /> : progress.session && <StudentSessionCard session={progress.session} />}
+  </section>
+}
+
+function AchievementsView({ progress, otherProgress }: { progress: Progress | null; otherProgress: Partial<Record<CourseLanguage, Progress>> }) {
+  const course = useCourse()
+  const list = useMemo(() => progress ? achievements(progress, course.id) : [], [progress, course.id])
+  const shared = useMemo(() => progress ? commonAchievements({ ...otherProgress, [course.id]: progress }) : [], [progress, otherProgress, course.id])
+  if (!progress) return <section><h1 className="display small">Достижения</h1><div className="sk sk-card" /></section>
+  return <section className="progress-page">
+    <h1 className="display small">Достижения · {course.title}</h1>
+    <p className="achievement-group"><span className={`lang-dot ${course.key}`} aria-hidden="true" />Курс {course.title}<span className="muted">· получено {unlocked(list)} из {list.length}</span></p>
+    <AchievementGrid items={list} />
+    <p className="achievement-group"><Icon name="globe" size={15} />Общие — для обоих курсов<span className="muted">· получено {unlocked(shared)} из {shared.length}</span></p>
+    <AchievementGrid items={shared} />
   </section>
 }
 
@@ -1005,6 +1030,8 @@ function RetakeChoices({ progress, onRetake }: { progress: Progress; onRetake: (
     {closed.length > shown.length && <button className="ghost small-button" onClick={() => setAll(true)}>Показать все ({closed.length})</button>}
   </div>
 }
+
+const unlocked = (items: ReturnType<typeof achievements>) => items.filter(a => a.unlocked).length
 
 function AchievementGrid({ items }: { items: ReturnType<typeof achievements> }) {
   return <div className="achievements">{items.map((a, i) => <div key={a.id} className={`achievement ${a.unlocked ? 'unlocked' : ''}`} style={{ animationDelay: `${i * 40}ms` }}>

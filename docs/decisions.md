@@ -193,3 +193,7 @@ Several students asked to go through topics again. Agreed with the owner:
 - Java editor hints (keywords, types, System.out.println, members after a dot, words from the code); no construct
   templates — beginners should type `for`/`if` themselves.
 - Teacher card ⇄ «Прогресс» links both ways.
+- 2026-10-28 «Мой прогресс» was split (owner: «слишком разрослась»; he chose top-level tabs over sub-tabs or one
+  compact page): «Текущий урок | Темы | Оценки и план | Достижения». «Темы» — the four numbers and the topic list with
+  «Повторить»; «Оценки и план» — answers at the board and attestations, then «До сессии»; «Достижения» — both grids. On a
+  phone the titles shorten to «Урок / Темы / Оценки / Награды». Board grades reload each time their tab opens.

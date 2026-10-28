@@ -562,16 +562,21 @@ export function AttestationDone({ onBack }: { onBack: () => void }) {
   </main>
 }
 
-/** «Мой прогресс»: the student's own answers at the board — date, grade and the teacher's comment. Hidden while there are none. */
-export function StudentBoardGrades({ language }: { language: CourseLanguage }) {
-  const [grades, setGrades] = useState<BoardStudentGrade[]>([])
+/** «Оценки и план»: the student's own answers at the board — date, grade and the teacher's comment. Reloaded each time the tab is shown. */
+export function StudentBoardGrades({ language, visible }: { language: CourseLanguage; visible: boolean }) {
+  const [grades, setGrades] = useState<BoardStudentGrade[] | null>(null)
+  useEffect(() => { setGrades(null) }, [language])
   useEffect(() => {
+    if (!visible) return
     let alive = true
-    setGrades([])
     api<{ grades: BoardStudentGrade[] }>(`/board/grades?language=${language}`).then(v => { if (alive) setGrades(v.grades) }, () => {})
     return () => { alive = false }
-  }, [language])
-  if (!grades.length) return null
+  }, [language, visible])
+  if (!grades) return null
+  if (!grades.length) return <section className="card student-grades enter" aria-label="Ответы у доски">
+    <h2 className="card-title"><span className="chip-icon"><Icon name="award" size={16} /></span> Ответы у доски</h2>
+    <p className="muted">Оценок пока нет. Когда преподаватель вызовет тебя к доске и поставит оценку, она появится здесь вместе с разбором.</p>
+  </section>
   return <section className="card student-grades enter" aria-label="Ответы у доски">
     <h2 className="card-title"><span className="chip-icon"><Icon name="award" size={16} /></span> Ответы у доски{grades.some(isAttestation) && ' и аттестации'}</h2>
     <ul className="board-grades">{grades.map((g, i) => <StudentGrade key={g.id ?? `${g.date}-${i}`} grade={g} open={i === 0} />)}</ul>
@@ -1396,7 +1401,7 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, onEdit, onClose, re
     const value = await request(() => patch<BoardAdminTest>(`/admin/board/tests/${test.id}`, { finalGrade, comment: comment.trim() || null, reportVisible }))
     if (!value) return false
     setTest(value); onSaved()
-    toast({ tone: 'info', icon: 'award', title: finalGrade ? `Оценка ${finalGrade} сохранена` : 'Оценка снята', text: `${value.displayName} · студент увидит её в «Моём прогрессе»` })
+    toast({ tone: 'info', icon: 'award', title: finalGrade ? `Оценка ${finalGrade} сохранена` : 'Оценка снята', text: `${value.displayName} · студент увидит её во вкладке «Оценки и план»` })
     return true
   }
   async function replace(kind: BoardItemKind) {
@@ -1467,7 +1472,7 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
       ? <p className="muted small board-comment-draft"><Icon name="sparkle" size={14} /> Черновик от нейросети — поправь, если нужно. Студент увидит комментарий только после сохранения.</p>
       : draft && comment.trim() !== draft && <button type="button" className="ghost small-button board-comment-draft" onClick={() => setComment(draft)}><Icon name="sparkle" size={14} /> Вставить черновик нейросети</button>}
     <label className="board-report-toggle"><input type="checkbox" checked={report} onChange={e => setReport(e.target.checked)} />
-      <span><b>Показать студенту разбор</b><small>В «Моём прогрессе»: по каждому заданию условие, его код, «верно / частично / не верно» и сообщение проверки. Без эталона, описания ошибки, баллов и пояснений LLM.</small></span></label>
+      <span><b>Показать студенту разбор</b><small>Во вкладке студента «Оценки и план»: по каждому заданию условие, его код, «верно / частично / не верно» и сообщение проверки. Без эталона, описания ошибки, баллов и пояснений LLM.</small></span></label>
     <div className="pair-form-actions">
       <button className="primary" disabled={saving || !changed}>{saving ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : test.finalGrade ? 'Сохранить изменения' : 'Поставить оценку'}</button>
       <span className="muted small">{test.finalGrade ? `Сейчас: ${test.finalGrade}${test.gradedAt ? ` · ${dayTime(test.gradedAt)}` : ''}` : 'Оценка пока не выставлена — студент ничего не видит.'}</span>

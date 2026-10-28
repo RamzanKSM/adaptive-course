@@ -124,7 +124,7 @@ export function SessionChart({ plan, height = 220, label = 'Пройденные
   </div>
 }
 
-// ───────── The student's own session card («Мой прогресс») ─────────
+// ───────── The student's own session card («Оценки и план») ─────────
 /** Only the student's own numbers: status, position against the plan, pace, forecast and their own line. Never others' data. */
 export function StudentSessionCard({ session }: { session: StudentSession }) {
   const today = session.days.length ? session.days[session.days.length - 1] : todayUtc()
