@@ -130,6 +130,11 @@ class the teacher calls students one by one to a short individual test, projecte
   wants no limits on the values, only defaults, and rejected leaving out recent winners. A winner not in class is marked
   «Нет на паре» and a replacement is drawn from every name that has not won; runs can be deleted. Every step is picked by
   the server when it is spun (`draw_runs`, `draw_steps`, V34).
+- Chances by points (owner, 2026-10-30): a student's chance grows with the pair's points plus a bonus for a grade at the
+  board or an attestation in the pair (owner's numbers: 5 → +25, 4 → +20, 3 → +15; settings), at least 1; attestations now
+  also give a place on the wheel. Segments are drawn in proportion to the chance (the inverse in «Выбывание»), so the
+  class sees who worked more — the owner accepted that over hidden weights. «Шансы: равные» keeps the old behaviour.
+  Colours stay with the student for the whole draw (they used to shift when a name dropped out).
 
 ## Teacher analytics and the session (since 2026-10-13)
 - Status by a global plan line (owner, 2026-10-22): the individual needed pace (remaining / weeks left vs the recent

@@ -18,8 +18,12 @@ import java.util.random.RandomGenerator;
  * Every student of the group takes part, whether in the session or not; the teacher may add or remove names. A draw is
  * a run of steps the teacher starts one by one: in ARROW mode every step picks a winner, in ELIMINATION mode every step
  * drops out a name until the winners are left. The server picks every step; a winner not in class is marked absent and
- * the next step draws a replacement from every name of the run that has not won. Settings: {@link DrawSettings}. The
- * projected wheel shows names and the prize only. The rules: backend/README.md, «Жребий».
+ * the next step draws a replacement from every name of the run that has not won. With chances by points (the default)
+ * a student's weight is the pair's points plus a bonus for the best grade of the window at the board or at an
+ * attestation (at least 1): ARROW picks a winner in proportion to it, ELIMINATION drops a name out in proportion to its
+ * inverse; the wheel draws the segments the same way. Weights are computed when needed, from the pair's window, so a
+ * grade set later changes them. Settings: {@link DrawSettings}. The projected wheel shows names and the prize only.
+ * The rules: backend/README.md, «Жребий».
  */
 @Component
 class FortuneWheel {
@@ -42,6 +46,33 @@ class FortuneWheel {
     return Math.max(border, minPoints);
   }
 
+  /** A student's weight: the pair's points plus the bonus of the grade, at least 1; 1 for everybody with equal chances. */
+  static int weight(int points, Integer grade, DrawSettings.Values s) {
+    if (s.chances().equals("EQUAL")) return 1;
+    int bonus = grade == null ? 0 : grade >= 5 ? s.bonus5() : grade == 4 ? s.bonus4() : grade == 3 ? s.bonus3() : 0;
+    return Math.max(1, points + bonus);
+  }
+
+  /** One of the ids at random in proportion to its weight, or to the inverse of it (who drops out in ELIMINATION). */
+  static long pick(List<Long> ids, Map<Long, Integer> weights, boolean inverse, RandomGenerator random) {
+    double total = 0;
+    for (long id : ids) total += share(weights.getOrDefault(id, 1), inverse);
+    double x = random.nextDouble() * total;
+    for (long id : ids) { x -= share(weights.getOrDefault(id, 1), inverse); if (x < 0) return id; }
+    return ids.getLast();
+  }
+  private static double share(int weight, boolean inverse) { return inverse ? 1.0 / weight : weight; }
+
+  /** The weights of the given students in a pair under the current settings: points of the window plus the bonus of the grade. */
+  private Map<Long, Integer> weights(PairWork.Head head, Collection<Long> users, DrawSettings.Values s) {
+    Map<Long, Integer> result = new HashMap<>();
+    if (users.isEmpty()) return result;
+    var ids = new ArrayList<>(users);
+    var grades = board(ids, head.window());
+    for (var r : pairs.rowsOf(head.language(), head.window(), ids)) result.put(r.userId(), weight(r.points(), grades.get(r.userId()), s));
+    return result;
+  }
+
   /** GET /api/admin/pairs/{id}/wheel: who is on the wheel and why, the rest of the group to add by hand, the runs, the settings. */
   Map<String, Object> wheel(long pairId) {
     var head = pairs.saved(pairId); var s = settings.current();
@@ -56,7 +87,8 @@ class FortuneWheel {
     var candidates = new ArrayList<Map<String, Object>>(); var called = new ArrayList<Map<String, Object>>(); var others = new ArrayList<Map<String, Object>>();
     for (var r : rows.stream().sorted(byName).toList()) {
       boolean wasCalled = board.containsKey(r.userId()); Integer grade = board.get(r.userId());
-      var person = obj("userId", r.userId(), "login", r.login(), "displayName", r.name(), "attended", r.attended(), "points", r.points(), "grade", grade == null ? null : String.valueOf(grade));
+      var person = obj("userId", r.userId(), "login", r.login(), "displayName", r.name(), "attended", r.attended(), "points", r.points(), "grade", grade == null ? null : String.valueOf(grade),
+          "weight", weight(r.points(), grade, s));
       if (grade != null && grade >= s.boardMinGrade()) { person.put("reason", "BOARD"); candidates.add(person); }
       else if (!wasCalled && r.attended() && threshold != null && r.points() >= threshold) { person.put("reason", "TOP"); candidates.add(person); }
       else (wasCalled ? called : others).add(person);
@@ -109,21 +141,23 @@ class FortuneWheel {
   }
 
   /**
-   * POST /api/admin/pairs/{id}/wheel/runs/{runId}/step: the next step. ARROW (or a replacement): a winner at random from the
-   * wheel. ELIMINATION: a name at random drops out; when as many names are left as winners are still wanted, they win.
+   * POST /api/admin/pairs/{id}/wheel/runs/{runId}/step: the next step. ARROW (or a replacement): a winner from the wheel in
+   * proportion to the weights. ELIMINATION: a name drops out in proportion to the inverse weights; when as many names are
+   * left as winners are still wanted, they win.
    */
   Map<String, Object> step(long pairId, long runId) {
     var run = run(pairId, runId);
     if (run.finished()) throw new ApiError("DRAW_FINISHED", "Жребий уже брошен: победители выявлены");
     var wheel = run.wheel(); long need = run.winners() - run.activeWins();
+    var weights = weights(pairs.saved(pairId), wheel, settings.current());
     Map<String, Object> pick = null; var won = new ArrayList<Long>();
     if (run.mode().equals("ARROW") || run.replacing()) {
-      long user = wheel.get(random.nextInt(wheel.size())); insert(runId, user, "WIN"); won.add(user);
+      long user = pick(wheel, weights, false, random); insert(runId, user, "WIN"); won.add(user);
       pick = obj("userId", user, "kind", "WIN");
     } else {
       var left = new ArrayList<>(wheel);
       if (left.size() > need) {
-        long user = left.remove(random.nextInt(left.size())); insert(runId, user, "OUT");
+        long user = pick(left, weights, true, random); left.remove(Long.valueOf(user)); insert(runId, user, "OUT");
         pick = obj("userId", user, "kind", "OUT");
       }
       if (left.size() <= need) for (long user : left) { insert(runId, user, "WIN"); won.add(user); }
@@ -184,11 +218,11 @@ class FortuneWheel {
 
   // ---------------------------------------------------------------- board
 
-  /** The window's board tests (not attestations) of the given students: the best final grade of each called student (null — not graded yet). */
+  /** The window's board tests and attestations of the given students: the best final grade of each called student (null — not graded yet). */
   private Map<Long, Integer> board(List<Long> users, PairWork.Window w) {
     Map<Long, Integer> result = new HashMap<>();
     if (users.isEmpty()) return result;
-    db.query("select user_id,final_grade from board_tests where status not in ('CANCELLED','EXPIRED') and format='TEST' and user_id in (" + String.join(",", Collections.nCopies(users.size(), "?")) + ")"
+    db.query("select user_id,final_grade from board_tests where status not in ('CANCELLED','EXPIRED') and user_id in (" + String.join(",", Collections.nCopies(users.size(), "?")) + ")"
         + " and cast(strftime('%s',called_at) as integer) between ? and ?",
         (RowCallbackHandler) rs -> {
           long user = rs.getLong(1); String grade = rs.getString(2);

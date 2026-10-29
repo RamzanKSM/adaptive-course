@@ -26,11 +26,13 @@ class DrawSettings {
    * @param defaultPrize the prize when the teacher names none
    * @param surprisePrize the projected wheel hides the prize until the winners are known
    * @param sound sounds of the wheel; volume 0–100
+   * @param chances POINTS (a student's chance grows with the pair's points and the grade at the board) or EQUAL
+   * @param bonus5 bonus4 bonus3 points a grade at the board or an attestation adds to the weight
    */
   record Values(double spinSeconds, String mode, double eliminationSeconds, int winners, boolean autoNext, double topPercent, int minPoints,
-                int boardMinGrade, String defaultPrize, boolean surprisePrize, boolean sound, int volume) {}
+                int boardMinGrade, String defaultPrize, boolean surprisePrize, boolean sound, int volume, String chances, int bonus5, int bonus4, int bonus3) {}
 
-  static final Values DEFAULTS = new Values(6.5, "ARROW", 2, 1, false, 20, 1, 5, "Шоколадка", true, true, 70);
+  static final Values DEFAULTS = new Values(6.5, "ARROW", 2, 1, false, 20, 1, 5, "Шоколадка", true, true, 70, "POINTS", 25, 20, 15);
 
   private final JdbcTemplate db; private final ObjectMapper json;
   DrawSettings(JdbcTemplate db, ObjectMapper json) { this.db = db; this.json = json; }
@@ -64,10 +66,13 @@ class DrawSettings {
     String mode = text(v, "mode");
     if (!mode.equals("ARROW") && !mode.equals("ELIMINATION")) throw bad("Формат — «Стрелка» или «Выбывание»");
     String prize = text(v, "defaultPrize").strip().replaceAll("\\s+", " ");
+    String chances = text(v, "chances");
+    if (!chances.equals("POINTS") && !chances.equals("EQUAL")) throw bad("chances — «по баллам» или «равные»");
     return new Values(number(v, "spinSeconds", 0, Double.MAX_VALUE), mode, number(v, "eliminationSeconds", 0, Double.MAX_VALUE),
         (int) whole(v, "winners", 1), flag(v, "autoNext"), number(v, "topPercent", 0, 100), (int) whole(v, "minPoints", 0),
         (int) number(whole(v, "boardMinGrade", 2), "boardMinGrade", 2, 5), prize.isEmpty() ? DEFAULTS.defaultPrize() : prize,
-        flag(v, "surprisePrize"), flag(v, "sound"), (int) number(whole(v, "volume", 0), "volume", 0, 100));
+        flag(v, "surprisePrize"), flag(v, "sound"), (int) number(whole(v, "volume", 0), "volume", 0, 100),
+        chances, (int) whole(v, "bonus5", 0), (int) whole(v, "bonus4", 0), (int) whole(v, "bonus3", 0));
   }
   private static double number(Map<String, Object> v, String key, double min, double max) {
     if (!(v.get(key) instanceof Number n) || !Double.isFinite(n.doubleValue())) throw bad(key + " — число");
@@ -88,7 +93,8 @@ class DrawSettings {
   private static final Map<String, String> TITLES = Map.ofEntries(Map.entry("spinSeconds", "Время прокрутки"), Map.entry("mode", "Формат"),
       Map.entry("eliminationSeconds", "Время выбывания"), Map.entry("winners", "Число победителей"), Map.entry("autoNext", "Следующая прокрутка"),
       Map.entry("topPercent", "Доля топа"), Map.entry("minPoints", "Минимум баллов"), Map.entry("boardMinGrade", "Оценка у доски"),
-      Map.entry("defaultPrize", "Приз по умолчанию"), Map.entry("surprisePrize", "Приз-сюрприз"), Map.entry("sound", "Звуки"), Map.entry("volume", "Громкость"));
+      Map.entry("defaultPrize", "Приз по умолчанию"), Map.entry("surprisePrize", "Приз-сюрприз"), Map.entry("sound", "Звуки"), Map.entry("volume", "Громкость"),
+      Map.entry("chances", "Шансы"), Map.entry("bonus5", "Бонус за 5"), Map.entry("bonus4", "Бонус за 4"), Map.entry("bonus3", "Бонус за 3"));
   private static ApiError bad(String message) {
     String key = message.split(" ", 2)[0];
     return new ApiError("INVALID_DRAW_SETTINGS", TITLES.containsKey(key) ? "«" + TITLES.get(key) + "»" + message.substring(key.length()) : message);
@@ -98,6 +104,7 @@ class DrawSettings {
     m.put("spinSeconds", s.spinSeconds()); m.put("mode", s.mode()); m.put("eliminationSeconds", s.eliminationSeconds()); m.put("winners", s.winners());
     m.put("autoNext", s.autoNext()); m.put("topPercent", s.topPercent()); m.put("minPoints", s.minPoints()); m.put("boardMinGrade", s.boardMinGrade());
     m.put("defaultPrize", s.defaultPrize()); m.put("surprisePrize", s.surprisePrize()); m.put("sound", s.sound()); m.put("volume", s.volume());
+    m.put("chances", s.chances()); m.put("bonus5", s.bonus5()); m.put("bonus4", s.bonus4()); m.put("bonus3", s.bonus3());
     return m;
   }
 }

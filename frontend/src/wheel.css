@@ -76,3 +76,4 @@
 .wheel-result-prize { color: #ffd43b; }
 .wheel-absent { padding: 3px 10px; border-radius: 99px; font-size: 12px; background: transparent; color: rgb(255 255 255 / .7); border: 1px solid rgb(255 255 255 / .3); }
 @media (prefers-reduced-motion: reduce) { .wheel-seg-leaving, .wheel-seg-win, .wheel-prize.revealed b { animation: none; } }
+.wheel-person-tags { display: flex; align-items: center; gap: 8px; flex: none; }

@@ -11,9 +11,10 @@ type Mode = 'ARROW' | 'ELIMINATION'
 export type DrawSettings = {
   spinSeconds: number; mode: Mode; eliminationSeconds: number; winners: number; autoNext: boolean; topPercent: number; minPoints: number
   boardMinGrade: number; defaultPrize: string; surprisePrize: boolean; sound: boolean; volume: number
+  chances: 'POINTS' | 'EQUAL'; bonus5: number; bonus4: number; bonus3: number
 }
 type SettingsView = DrawSettings & { defaults: DrawSettings }
-type Person = { userId: Id; login: string; displayName: string; attended: boolean; points: number; grade: string | null; reason?: 'BOARD' | 'TOP' }
+type Person = { userId: Id; login: string; displayName: string; attended: boolean; points: number; grade: string | null; weight: number; reason?: 'BOARD' | 'TOP' }
 type Win = { userId: Id; login: string; displayName: string; absent: boolean }
 type Run = { id: Id; mode: Mode; winners: number; prize: string; names: Id[]; wheel: Id[]; outs: Id[]; wins: Win[]; replacing: boolean; finished: boolean; createdAt: string }
 type Step = { pick: { userId: Id; kind: 'WIN' | 'OUT' } | null; won: Id[]; run: Run }
@@ -59,7 +60,7 @@ export function DrawSettingsForm({ request, initial, onSaved }: { request: Reque
       <div className="limit-input"><input type="number" min={0} max={max} step="any" value={draft[key]} onChange={e => set(key, Math.max(0, Number(e.target.value) || 0))} />
         <small className="muted">по умолчанию {decimal(defaults[key])}</small></div>
     </label>
-  const whole = (key: 'winners' | 'minPoints', title: string, hint: string, min: number) =>
+  const whole = (key: 'winners' | 'minPoints' | 'bonus5' | 'bonus4' | 'bonus3', title: string, hint: string, min: number) =>
     <label className="setting-row" key={key}>
       <div><b>{title}</b><small className="muted">{hint}</small></div>
       <div className="limit-input"><input type="number" min={min} step={1} inputMode="numeric" value={draft[key]} onChange={e => set(key, Math.max(min, Math.floor(Number(e.target.value) || 0)))} />
@@ -87,7 +88,14 @@ export function DrawSettingsForm({ request, initial, onSaved }: { request: Reque
         <Choice label="Следующая прокрутка" value={draft.autoNext} options={[[false, 'вручную'], [true, 'сама']]} onChange={v => set('autoNext', v)} /></div>
       {num('topPercent', 'Доля топа', '%', 'Сколько процентов пришедших и не вызванных к доске попадают на колесо по баллам за пару (с округлением вверх, при равенстве проходят все).', 100)}
       {whole('minPoints', 'Минимум баллов для топа', 'Меньше этого за пару — в топ не попадает.', 0)}
-      <div className="setting-row"><div><b>Оценка у доски</b><small className="muted">Какая оценка за ответ у доски на этой паре даёт место на колесе.</small></div>
+      <div className="setting-row"><div><b>Шансы</b><small className="muted">По баллам — шанс растёт с баллами за пару и бонусом за оценку у доски или на аттестации, сектор на колесе тем шире. В «Выбывании» наоборот: шире сектор у того, кто скорее выбудет.</small></div>
+        <Choice label="Шансы" value={draft.chances} options={[['POINTS', 'по баллам'], ['EQUAL', 'равные']]} onChange={v => set('chances', v)} /></div>
+      {draft.chances === 'POINTS' && <>
+        {whole('bonus5', 'Бонус за 5', 'Сколько баллов к весу добавляет пятёрка у доски или на аттестации за эту пару.', 0)}
+        {whole('bonus4', 'Бонус за 4', 'То же за четвёрку.', 0)}
+        {whole('bonus3', 'Бонус за 3', 'То же за тройку.', 0)}
+      </>}
+      <div className="setting-row"><div><b>Оценка у доски</b><small className="muted">Какая оценка у доски или на аттестации на этой паре даёт место на колесе.</small></div>
         <Choice label="Оценка у доски" value={draft.boardMinGrade} options={GRADES} onChange={v => set('boardMinGrade', v)} /></div>
       <label className="setting-row"><div><b>Приз по умолчанию</b><small className="muted">Подставляется в панель жребия; перед запуском можно поменять.</small></div>
         <input className="draw-prize-input" type="text" value={draft.defaultPrize} placeholder={defaults.defaultPrize} onChange={e => set('defaultPrize', e.target.value)} /></label>
@@ -143,6 +151,10 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
   const names = chosen.map(id => byId.get(id)).filter((p): p is Person => !!p)
   const prizeName = prize.trim().replace(/\s+/g, ' ') || wheel.settings.defaultPrize
   const s = wheel.settings
+  const total = names.reduce((sum, p) => sum + Math.max(1, p.weight), 0)
+  /** A chosen student's weight and, with the arrow, the chance to win the first spin. */
+  const chance = (p: Person) => !chosen.includes(p.userId) || s.chances === 'EQUAL' ? null
+    : `вес ${p.weight}${s.mode === 'ARROW' ? ` · шанс ${Math.round(Math.max(1, p.weight) * 100 / total)}%` : ''}`
   const updateRun = (run: Run) => setWheel(w => w && { ...w, runs: w.runs.some(r => r.id === run.id) ? w.runs.map(r => r.id === run.id ? run : r) : [...w.runs, run] })
   async function deleteRun(id: Id) {
     const value = await request(() => remove<{ runs: Run[] }>(`/admin/pairs/${pair.id}/wheel/runs/${id}`))
@@ -164,7 +176,7 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
     <p className="muted small draw-summary">
       {s.mode === 'ARROW' ? 'Стрелка' : 'Выбывание'} · {s.winners} {plural(s.winners, 'победитель', 'победителя', 'победителей')} · прокрутка {decimal(s.spinSeconds)} с
       {s.mode === 'ELIMINATION' ? `, выбывание ${decimal(s.eliminationSeconds)} с` : ''} · {s.autoNext ? 'следующая сама' : 'каждая прокрутка по кнопке'}
-      {s.surprisePrize ? ' · приз-сюрприз' : ''} · {s.sound ? `звук ${s.volume}%` : 'без звука'}
+      {s.chances === 'POINTS' ? ` · шансы по баллам (+${s.bonus5}/${s.bonus4}/${s.bonus3} за 5/4/3)` : ' · равные шансы'}{s.surprisePrize ? ' · приз-сюрприз' : ''} · {s.sound ? `звук ${s.volume}%` : 'без звука'}
       <button type="button" className="row-link" onClick={() => setSettingsOpen(o => !o)}>{settingsOpen ? 'Скрыть настройки' : 'Настройки'}</button>
     </p>
     {settingsOpen && <div className="draw-settings-inline"><DrawSettingsForm request={request} initial={wheel.settings} onSaved={() => { load(true); setSettingsOpen(false) }} /></div>}
@@ -175,7 +187,8 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
       {[...wheel.candidates, ...added].map(p => <li key={p.userId}>
         <label><input type="checkbox" checked={chosen.includes(p.userId)} onChange={() => toggle(p.userId)} />
           <b>{p.displayName}</b> <small className="muted">{p.login}</small></label>
-        <span className={`pill ${p.reason === 'BOARD' ? 'wheel-board' : p.reason === 'TOP' ? 'wheel-top' : ''}`}>{p.reason ? reasonText(p) : `вручную · ${reasonText(p)}`}</span>
+        <span className="wheel-person-tags">{chance(p) && <small className="muted tabular">{chance(p)}</small>}
+          <span className={`pill ${p.reason === 'BOARD' ? 'wheel-board' : p.reason === 'TOP' ? 'wheel-top' : ''}`}>{p.reason ? reasonText(p) : `вручную · ${reasonText(p)}`}</span></span>
       </li>)}
     </ul>
     {addable.length > 0 && <label className="wheel-add">Добавить вручную
@@ -202,8 +215,15 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
 
 const COLORS = ['#5b3df5', '#ff6bd6', '#ffb224', '#10a067', '#2f6fde', '#ff6b2c', '#7cf2c8', '#c6f24e', '#e5484d', '#9b6dff']
 const INK = new Set(['#ffb224', '#7cf2c8', '#c6f24e'])
-/** Neighbours never share a colour: the last segment skips the first one's. */
+/** A student's colour by place in the first wheel order, kept for the whole draw; the last skips the first one's colour. */
 const colorOf = (i: number, n: number) => COLORS[(n > 1 && i === n - 1 && i % COLORS.length === 0 ? 1 : i) % COLORS.length]
+/** Segments in proportion to the weights (or their inverse: the chance to drop out); start and size in degrees. */
+function layout(ids: Id[], weightOf: (id: Id) => number, inverse: boolean) {
+  const shares = ids.map(id => inverse ? 1 / weightOf(id) : weightOf(id)), total = shares.reduce((a, b) => a + b, 0) || 1
+  const size = shares.map(x => x * 360 / total), start: number[] = []
+  size.reduce((at, sz) => { start.push(at); return at + sz }, 0)
+  return { start, size }
+}
 const C = 300, R = 290
 /** Room for a name along the radius: from the rim's inner margin (22) to past the hub (r 34 + 14). */
 const NAME_SPACE = R - 22 - 48
@@ -237,7 +257,12 @@ function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }
   pairId: Id; people: Person[]; prize: string; settings: DrawSettings; request: Request; onRun: (run: Run) => void; onClose: () => void
 }) {
   const names = useMemo(() => new Map(people.map(p => [p.userId, p.displayName])), [people])
-  const [wheelIds, setWheelIds] = useState<Id[]>(() => shuffle(people.map(p => p.userId)))
+  const [order] = useState<Id[]>(() => shuffle(people.map(p => p.userId)))
+  const [wheelIds, setWheelIds] = useState<Id[]>(order)
+  const colorIndex = useMemo(() => new Map(order.map((id, i) => [id, i])), [order])
+  const colorFor = (id: Id) => colorOf(colorIndex.get(id) ?? 0, order.length)
+  const weights = useMemo(() => new Map(people.map(p => [p.userId, Math.max(1, p.weight || 1)])), [people])
+  const weightOf = useCallback((id: Id) => weights.get(id) ?? 1, [weights])
   const [run, setRun] = useState<Run | null>(null)
   const [rotation, setRotation] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -266,19 +291,23 @@ function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The ratchet: a click whenever another segment passes the arrow while the disc turns.
-  const n = wheelIds.length, seg = 360 / Math.max(n, 1)
+  const n = wheelIds.length
+  const inverse = (run?.mode ?? settings.mode) === 'ELIMINATION' && !run?.replacing
+  const segs = useMemo(() => layout(wheelIds, weightOf, inverse), [wheelIds, weightOf, inverse])
   useEffect(() => {
     if (phase !== 'spinning' || !disc.current || reduced) return
     let frame = 0, lastIndex = -1
     const loop = () => {
       if (!disc.current) return
-      const pointer = ((-angleOf(disc.current) % 360) + 360) % 360, index = Math.floor(pointer / seg)
+      const pointer = ((-angleOf(disc.current) % 360) + 360) % 360
+      let index = segs.start.length - 1
+      while (index > 0 && segs.start[index] > pointer) index--
       if (index !== lastIndex) { if (lastIndex !== -1) sound.tick(); lastIndex = index }
       frame = requestAnimationFrame(loop)
     }
     frame = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(frame)
-  }, [phase, seg, sound, reduced])
+  }, [phase, segs, sound, reduced])
 
   function close() { if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined); onClose() }
   function enterFull() { ref.current?.requestFullscreen?.().catch(() => undefined) }
@@ -300,10 +329,11 @@ function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }
     if (!alive.current) return
     if (!step) { setPhase(r.wins.length || r.outs.length ? 'between' : 'ready'); return }
     if (!step.pick) { pending.current = step; land(); return }
-    const count = wheel.length, size = 360 / count, index = wheel.indexOf(step.pick.userId)
+    const at = layout(wheel, weightOf, r.mode === 'ELIMINATION' && !r.replacing), index = wheel.indexOf(step.pick.userId)
+    const size = at.size[index]
     const decisive = step.pick.kind === 'WIN' || step.won.length > 0
     const seconds = decisive ? settings.spinSeconds : settings.eliminationSeconds
-    const target = (index + 0.5) * size + (Math.random() - 0.5) * size * 0.6
+    const target = at.start[index] + size * (0.5 + (Math.random() - 0.5) * 0.6)
     const now = ((rotation % 360) + 360) % 360
     const delta = ((360 - target - now) % 360 + 360) % 360
     const turns = Math.max(1, Math.round(seconds * 1.1))
@@ -350,7 +380,7 @@ function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }
   const winnerIds = new Set(winners.map(w => w.userId))
   const segClass = (id: Id) => leaving === id ? 'wheel-seg-leaving' : phase !== 'done' ? '' : winnerIds.has(id) ? 'wheel-seg-win' : 'wheel-seg-dim'
   const wanted = run?.winners ?? settings.winners
-  const fontOf = (lines: string[]) => Math.max(11, Math.min(30, Math.floor(seg * 1.6 / lines.length), Math.floor(NAME_SPACE / (0.62 * Math.max(...lines.map(l => l.length), 4)))))
+  const fontOf = (lines: string[], seg: number) => Math.max(11, Math.min(30, Math.floor(seg * 1.6 / lines.length), Math.floor(NAME_SPACE / (0.62 * Math.max(...lines.map(l => l.length), 4)))))
   const pickName = last ? names.get(last.userId) ?? '' : ''
   const message = !last ? null : last.kind === 'OUT' ? <>Выбывает: <b>{pickName}</b></>
     : <>{wanted > 1 ? `Победитель ${winners.length} из ${wanted}` : 'Победитель'}: <b>{pickName}</b></>
@@ -368,12 +398,14 @@ function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }
       <div ref={disc} className="wheel-disc" style={{ transform: `rotate(${rotation}deg)`, transitionDuration: `${duration}ms` } as CSSProperties}
         onTransitionEnd={e => { if (e.target === disc.current) land() }}>
         <svg viewBox="0 0 600 600" role="img" aria-label={`На колесе ${n} ${plural(n, 'имя', 'имени', 'имён')}`}>
-          {n === 1 ? <circle cx={C} cy={C} r={R} fill={COLORS[0]} className={segClass(wheelIds[0])} />
-            : wheelIds.map((id, i) => <path key={`s${id}`} d={`M ${C} ${C} L ${point(i * seg)} A ${R} ${R} 0 ${seg > 180 ? 1 : 0} 1 ${point((i + 1) * seg)} Z`}
-              fill={colorOf(i, n)} stroke="#1b1830" strokeWidth="2" className={segClass(id)} />)}
+          {n === 1 ? <circle cx={C} cy={C} r={R} fill={colorFor(wheelIds[0])} className={segClass(wheelIds[0])} />
+            : wheelIds.map((id, i) => { const a = segs.start[i], sz = segs.size[i]
+              return <path key={`s${id}`} d={`M ${C} ${C} L ${point(a)} A ${R} ${R} 0 ${sz > 180 ? 1 : 0} 1 ${point(a + sz)} Z`}
+                fill={colorFor(id)} stroke="#1b1830" strokeWidth="2" className={segClass(id)} /> })}
           {wheelIds.map((id, i) => {
-            const color = colorOf(i, n), lines = nameLines(names.get(id) ?? '', one => fontOf(one) >= 22), size = fontOf(lines)
-            return <g key={`n${id}`} transform={`rotate(${(i + 0.5) * seg - 90} ${C} ${C})`} className={segClass(id) === 'wheel-seg-dim' ? 'wheel-seg-dim' : ''}>
+            const sz = n === 1 ? 360 : segs.size[i], color = colorFor(id)
+            const lines = nameLines(names.get(id) ?? '', one => fontOf(one, sz) >= 22), size = fontOf(lines, sz)
+            return <g key={`n${id}`} transform={`rotate(${segs.start[i] + sz / 2 - 90} ${C} ${C})`} className={segClass(id) === 'wheel-seg-dim' ? 'wheel-seg-dim' : ''}>
               <text x={C + R - 22} y={C} textAnchor="end" dominantBaseline="middle" fontSize={size} fill={INK.has(color) ? '#15141a' : '#fff'} className="wheel-name">
                 {lines.map((line, k) => <tspan key={k} x={C + R - 22} dy={k === 0 ? `${-(lines.length - 1) * 0.55}em` : '1.1em'}>{line}</tspan>)}</text>
             </g>

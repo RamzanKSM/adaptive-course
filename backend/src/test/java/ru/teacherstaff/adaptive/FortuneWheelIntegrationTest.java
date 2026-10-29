@@ -70,6 +70,22 @@ class FortuneWheelIntegrationTest {
     assertEquals(5, FortuneWheel.threshold(List.of(3, 10, 9, 0, 9, 5, 0, 1), 50, 1));
   }
 
+  @Test void weightsAndWeightedPicks() {
+    var s = DrawSettings.DEFAULTS;
+    assertEquals(34, FortuneWheel.weight(9, 5, s)); assertEquals(29, FortuneWheel.weight(9, 4, s)); assertEquals(24, FortuneWheel.weight(9, 3, s));
+    assertEquals(9, FortuneWheel.weight(9, 2, s)); assertEquals(9, FortuneWheel.weight(9, null, s)); assertEquals(1, FortuneWheel.weight(0, null, s), "never a zero chance");
+    var equal = new DrawSettings.Values(6.5, "ARROW", 2, 1, false, 20, 1, 5, "Шоколадка", true, true, 70, "EQUAL", 25, 20, 15);
+    assertEquals(1, FortuneWheel.weight(40, 5, equal));
+    // 1 against 99: the heavy one wins about 99% of the time, and drops out about 1% of the time.
+    var random = new java.util.Random(42); var ids = List.of(1L, 2L); var weights = Map.of(1L, 1, 2L, 99);
+    int heavyWins = 0, heavyOuts = 0;
+    for (int i = 0; i < 10_000; i++) { if (FortuneWheel.pick(ids, weights, false, random) == 2L) heavyWins++; if (FortuneWheel.pick(ids, weights, true, random) == 2L) heavyOuts++; }
+    assertTrue(heavyWins > 9_800 && heavyWins < 9_970, "wins " + heavyWins); assertTrue(heavyOuts > 30 && heavyOuts < 200, "outs " + heavyOuts);
+    var thirds = new int[3]; var three = List.of(1L, 2L, 3L);
+    for (int i = 0; i < 30_000; i++) thirds[(int) FortuneWheel.pick(three, Map.of(1L, 10, 2L, 20, 3L, 30), false, random) - 1]++;
+    assertTrue(Math.abs(thirds[0] - 5_000) < 400 && Math.abs(thirds[1] - 10_000) < 400 && Math.abs(thirds[2] - 15_000) < 400, Arrays.toString(thirds));
+  }
+
   @Test void whoIsOnTheWheel() throws Exception {
     String admin = login("admin", "admin-pass");
     Instant start = Instant.parse("2041-02-05T08:00:00Z");
@@ -86,6 +102,7 @@ class FortuneWheelIntegrationTest {
     long boardFive = studentRow("w-b5", "Пятёрка у доски", "WH-1"); earn(boardFive, "JAVA", start, 1); board(boardFive, "FINISHED", at(start, 30), "5");
     long boardFour = studentRow("w-b4", "Четвёрка у доски", "WH-1"); earn(boardFour, "JAVA", start, 30); board(boardFour, "FINISHED", at(start, 40), "4");
     long twice = studentRow("w-b45", "Дважды у доски", "WH-1"); board(twice, "FINISHED", at(start, 41), "5"); board(twice, "FINISHED", at(start, 50), "3");
+    long attested = studentRow("w-att", "Аттестованный", "WH-1"); earn(attested, "JAVA", start, 2); attestation(attested, at(start, 45), "4");
     long early = studentRow("w-early", "Пятёрка вчера", "WH-1"); earn(early, "JAVA", start, 2); board(early, "FINISHED", start.minus(Duration.ofDays(1)), "5");
     long other = studentRow("w-other", "Чужой", "WH-2"); earn(other, "JAVA", start, 50);
 
@@ -96,15 +113,24 @@ class FortuneWheelIntegrationTest {
     assertEquals(List.of("w-out", "w-9a", "w-9b", "w-b45", "w-b5"), wheel.path("candidates").findValuesAsText("login"), "the top by name, then the grades at the board");
     assertEquals(List.of("TOP", "TOP", "TOP", "BOARD", "BOARD"), wheel.path("candidates").findValuesAsText("reason"));
     assertEquals("5", wheel.path("candidates").get(3).path("grade").asText(), "the best grade of the pair counts");
-    assertEquals(List.of("w-b4"), wheel.path("called").findValuesAsText("login"));
+    assertEquals(List.of("w-att", "w-b4"), wheel.path("called").findValuesAsText("login"), "an attestation counts as a call to the board");
     assertEquals(Set.of("w-5", "w-3", "w-0", "w-cancel", "w-absent", "w-early"), new HashSet<>(wheel.path("others").findValuesAsText("login")));
+    // Weights: the pair's points + 25 / 20 / 15 for a 5 / 4 / 3 at the board or the attestation, at least 1.
+    var weights = new HashMap<String, Integer>();
+    for (var list : List.of("candidates", "called", "others")) wheel.path(list).forEach(p -> weights.put(p.path("login").asText(), p.path("weight").asInt()));
+    assertEquals(Map.of("w-out", 10, "w-9a", 9, "w-b5", 26, "w-b45", 25, "w-b4", 50, "w-att", 22, "w-0", 1, "w-absent", 1, "w-early", 2), Map.of(
+        "w-out", weights.get("w-out"), "w-9a", weights.get("w-9a"), "w-b5", weights.get("w-b5"), "w-b45", weights.get("w-b45"), "w-b4", weights.get("w-b4"),
+        "w-att", weights.get("w-att"), "w-0", weights.get("w-0"), "w-absent", weights.get("w-absent"), "w-early", weights.get("w-early")));
     assertTrue(wheel.path("runs").isEmpty()); assertEquals("Шоколадка", wheel.path("prize").asText()); assertEquals("ARROW", wheel.path("settings").path("mode").asText());
 
     // Settings: a 4 at the board is enough, the top half, no minimum of points.
     settings(admin, Map.of("boardMinGrade", 4, "topPercent", 50, "minPoints", 0));
     wheel = read(admin, get("/api/admin/pairs/{id}/wheel", id));
     assertEquals(4, wheel.path("topCount").asInt()); assertEquals(5, wheel.path("threshold").asInt());
-    assertEquals(List.of("w-out", "w-9a", "w-9b", "w-5", "w-b45", "w-b5", "w-b4"), wheel.path("candidates").findValuesAsText("login"));
+    assertEquals(List.of("w-out", "w-9a", "w-9b", "w-5", "w-att", "w-b45", "w-b5", "w-b4"), wheel.path("candidates").findValuesAsText("login"));
+    // Equal chances: everybody weighs 1.
+    settings(admin, Map.of("chances", "EQUAL"));
+    read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("candidates").forEach(p -> assertEquals(1, p.path("weight").asInt()));
 
     expect(admin, get("/api/admin/pairs/{id}/wheel", 987_654), status().isNotFound(), "PAIR_NOT_FOUND");
     String student = createStudent("w-student", "Студент", "WH-3");
@@ -120,6 +146,7 @@ class FortuneWheelIntegrationTest {
     assertEquals(1, s.path("winners").asInt()); assertFalse(s.path("autoNext").asBoolean()); assertEquals(20.0, s.path("topPercent").asDouble());
     assertEquals(1, s.path("minPoints").asInt()); assertEquals(5, s.path("boardMinGrade").asInt()); assertEquals("Шоколадка", s.path("defaultPrize").asText());
     assertTrue(s.path("surprisePrize").asBoolean()); assertTrue(s.path("sound").asBoolean()); assertEquals(70, s.path("volume").asInt());
+    assertEquals("POINTS", s.path("chances").asText()); assertEquals(25, s.path("bonus5").asInt()); assertEquals(20, s.path("bonus4").asInt()); assertEquals(15, s.path("bonus3").asInt());
     assertEquals(6.5, s.path("defaults").path("spinSeconds").asDouble());
 
     var saved = settings(admin, Map.of("spinSeconds", 600, "eliminationSeconds", 0.3, "winners", 40, "mode", "ELIMINATION", "autoNext", true, "defaultPrize", "  Кофе  ", "unknown", 1));
@@ -130,7 +157,7 @@ class FortuneWheelIntegrationTest {
     assertEquals("Шоколадка", settings(admin, Map.of("defaultPrize", " ")).path("defaultPrize").asText(), "an empty prize is the chocolate");
 
     for (var bad : List.<Map<String, Object>>of(Map.of("spinSeconds", -1), Map.of("winners", 0), Map.of("winners", 1.5), Map.of("mode", "SLOT"), Map.of("topPercent", 101),
-        Map.of("boardMinGrade", 6), Map.of("volume", 120), Map.of("sound", "да"), Map.of("spinSeconds", "fast")))
+        Map.of("boardMinGrade", 6), Map.of("volume", 120), Map.of("sound", "да"), Map.of("chances", "RANDOM"), Map.of("bonus5", -1), Map.of("bonus3", 2.5), Map.of("spinSeconds", "fast")))
       expect(admin, put("/api/admin/draw/settings").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(bad)), status().isBadRequest(), "INVALID_DRAW_SETTINGS");
     assertEquals(600.0, read(admin, get("/api/admin/draw/settings")).path("spinSeconds").asDouble(), "a refused save changes nothing");
   }
@@ -219,6 +246,10 @@ class FortuneWheelIntegrationTest {
   private static List<Long> longs(JsonNode array) { var list = new ArrayList<Long>(); array.forEach(n -> list.add(n.asLong())); return list; }
   private static List<Long> longs(List<JsonNode> nodes) { return nodes.stream().map(JsonNode::asLong).toList(); }
 
+  private void attestation(long user, Instant calledAt, String grade) {
+    db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade,format) values(?,'WH-1','JAVA','FINISHED',?,?,?,'ATTESTATION')",
+        user, calledAt.toString(), calledAt.plusSeconds(300).toString(), grade);
+  }
   private void board(long user, String status, Instant calledAt, String grade) {
     db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade) values(?,'WH-1','JAVA',?,?,?,?)",
         user, status, calledAt.toString(), calledAt.plusSeconds(300).toString(), grade);
