@@ -92,6 +92,16 @@ class ProgressAnalyticsIntegrationTest {
     LocalDate today = LocalDate.now(ZoneOffset.UTC);
     setSession(admin, today.plusDays(70));
 
+    // Rebuild the persisted state from the accepted history; running the repair twice is safe.
+    db.update("update student_skills set completed_iterations=0,iteration_successes=0,first_iteration_lesson_number=null,mastered=0 where user_id=? and skill_code='VARIABLE_BASIC'", student);
+    try (var connection = db.getDataSource().getConnection()) {
+      connection.setAutoCommit(false);
+      IterationHistoryRestore.restore(connection);
+      IterationHistoryRestore.restore(connection);
+      connection.commit();
+    }
+    assertEquals(2, db.queryForObject("select completed_iterations from student_skills where user_id=? and skill_code='VARIABLE_BASIC'", Integer.class, student));
+
     var live = read(token, get("/api/progress"));
     var view = read(admin, get("/api/admin/progress").param("language", "JAVA"));
     var me = findStudent(view, "flow-analytics");
@@ -115,13 +125,13 @@ class ProgressAnalyticsIntegrationTest {
     assertEquals(Math.round(100 * withDiagnostic / topics * 10) / 10.0, series.path("skillsWithDiagnostic").get(last).asDouble(), 1e-9);
     assertEquals(db.queryForObject("select count(*) from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.language='JAVA'", Integer.class, student), series.path("solved").get(last).asInt());
     assertEquals(experience(live), series.path("xp").get(last).asInt(), "XP is the student's own «Мой прогресс»");
-    // The same numbers worked out by hand: VARIABLE_BASIC 5/6, PRIMITIVE_TYPES 1/6, four topics confirmed, 7 tasks (one hard).
-    assertEquals(2.3, series.path("skills").get(last).asDouble()); assertEquals(11.4, series.path("skillsWithDiagnostic").get(last).asDouble());
+    // The same numbers worked out by hand: VARIABLE_BASIC 5/6, PRIMITIVE_TYPES 2/6, four topics confirmed, 7 tasks (one hard).
+    assertEquals(2.7, series.path("skills").get(last).asDouble()); assertEquals(11.7, series.path("skillsWithDiagnostic").get(last).asDouble());
     assertEquals(7, series.path("solved").get(last).asInt()); assertEquals(6 * 10 + 30 + 2 * 20 + 4 * 5, series.path("xp").get(last).asInt());
     // Earlier days are replayed: two days ago only lesson 1 (the revoked task is not there), yesterday lesson 2 as well.
     assertEquals(today.minusDays(2).toString(), days.get(last - 2).asText(), "the period starts at the course's first lesson");
-    assertEquals(List.of(1.1, 2.3, 2.3), doubles(series.path("skills"), last - 2));
-    assertEquals(List.of(1.1, 11.4, 11.4), doubles(series.path("skillsWithDiagnostic"), last - 2), "the diagnostic counts from its own date");
+    assertEquals(List.of(1.1, 2.3, 2.7), doubles(series.path("skills"), last - 2));
+    assertEquals(List.of(1.1, 11.4, 11.7), doubles(series.path("skillsWithDiagnostic"), last - 2), "the diagnostic counts from its own date");
     assertEquals(List.of(3.0, 6.0, 7.0), doubles(series.path("solved"), last - 2), "the re-solved task counts from today");
     assertEquals(List.of(2 * 10 + 30 + 20.0, 5 * 10 + 30 + 2 * 20 + 4 * 5.0, 150.0), doubles(series.path("xp"), last - 2));
     assertEquals(List.of(1.0, 5.0, 5.0), doubles(series.path("closed"), last - 2), "closed topics: the first iteration, then the diagnostic's four");

@@ -6,7 +6,7 @@ package ru.teacherstaff.adaptive;
  * <p>A topic is practised in iterations of ApiController.ITERATION_TASKS tasks (3, 2, 1). The first iteration may happen
  * in any lesson; the second from lesson N+1 on and the third from lesson N+3 on, where N is the lesson of the first
  * (per-language lesson numbers): a repetition missed in its lesson stays due, otherwise the topic could never be
- * mastered. Credited tasks count per lesson: an iteration needs its tasks within one lesson.
+ * mastered. Unfinished progress carries across lessons.
  */
 final class IterationRule {
   private IterationRule() {}
@@ -17,15 +17,11 @@ final class IterationRule {
     boolean mastered() { return completed >= ApiController.ITERATION_TASKS.length; }
   }
 
-  /**
-   * The topic after one more of its tasks is credited in a lesson. solvedInLesson — distinct credited tasks of the topic
-   * passed in this lesson, this one included; iterationInLesson — the lesson has already completed an iteration of it.
-   * Short of the iteration's tasks, the lesson's count is the progress of the current iteration; with enough tasks in a
-   * lesson where an iteration is due, the iteration completes; otherwise nothing changes.
-   */
-  static Topic credit(Topic topic, int solvedInLesson, int lessonNumber, boolean iterationInLesson) {
-    if (solvedInLesson < ApiController.iterationTasks(topic.completed())) return new Topic(topic.completed(), solvedInLesson, topic.firstLesson());
-    if (!due(topic, lessonNumber) || iterationInLesson) return topic;
+  /** Credits one task when the iteration is due, carrying unfinished progress across lessons. */
+  static Topic credit(Topic topic, int lessonNumber, boolean iterationInLesson) {
+    if (topic.mastered() || iterationInLesson || !due(topic, lessonNumber)) return topic;
+    int successes = topic.successes() + 1;
+    if (successes < ApiController.iterationTasks(topic.completed())) return new Topic(topic.completed(), successes, topic.firstLesson());
     return new Topic(topic.completed() + 1, 0, topic.firstLesson() == null ? lessonNumber : topic.firstLesson());
   }
 

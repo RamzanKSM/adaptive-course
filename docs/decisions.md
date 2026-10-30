@@ -219,3 +219,7 @@ Students found the attestation too hard because they had never met such tasks. T
   compact page): «Текущий урок | Темы | Оценки и план | Достижения». «Темы» — the four numbers and the topic list with
   «Повторить»; «Оценки и план» — answers at the board and attestations, then «До сессии»; «Достижения» — both grids. On a
   phone the titles shorten to «Урок / Темы / Оценки / Награды». Board grades reload each time their tab opens.
+- 2026-10-30 unfinished iteration progress carries between lessons (owner confirmed after `tsaidaev` repeatedly lost
+  2/3 by ending lessons). Accepted task credits remain the source of truth: restore existing topic counters and iteration
+  history from them once, excluding re-take and practice tasks. At most one iteration of a topic completes per lesson;
+  the schedule for later iterations still uses the lesson where the first iteration completed.

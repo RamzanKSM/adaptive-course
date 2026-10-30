@@ -460,13 +460,14 @@ class ProgressAnalytics {
   private static void replay(Student s, Map<Long, List<Integer>> targets, int topicCount) {
     Map<Long, Submission> firstSubmission = new HashMap<>(), firstPass = new HashMap<>();
     Map<Long, LinkedHashMap<Long, Long>> passes = new HashMap<>(); // lesson → credited task → its first pass in the lesson
+    Set<Long> practiced = new HashSet<>();
     for (var x : s.submissions) {
       firstSubmission.putIfAbsent(x.taskId(), x);
       s.activeDays.add(Math.floorDiv(x.at(), DAY));
       if (!x.passed() || x.revoked() || !s.credited.containsKey(x.taskId())) continue;
       firstPass.putIfAbsent(x.taskId(), x);
       if (s.retakeTasks.getOrDefault(x.lessonId(), Set.of()).contains(x.taskId())) continue; // solved, but not practice of the topic
-      passes.computeIfAbsent(x.lessonId(), k -> new LinkedHashMap<>()).putIfAbsent(x.taskId(), x.at());
+      if (practiced.add(x.taskId())) passes.computeIfAbsent(x.lessonId(), k -> new LinkedHashMap<>()).putIfAbsent(x.taskId(), x.at());
     }
     for (var e : s.credited.entrySet()) {
       var pass = firstPass.get(e.getKey());
@@ -481,10 +482,10 @@ class ProgressAnalytics {
     for (var lesson : s.lessons) {
       var credited = passes.get(lesson.id());
       if (credited == null) continue;
-      Map<Integer, Integer> solved = new HashMap<>(); Set<Integer> iterated = new HashSet<>();
+      Set<Integer> iterated = new HashSet<>();
       for (var task : credited.entrySet()) for (int topic : targets.getOrDefault(task.getKey(), List.of())) {
         var before = state[topic];
-        var after = IterationRule.credit(before, solved.merge(topic, 1, Integer::sum), lesson.number(), iterated.contains(topic));
+        var after = IterationRule.credit(before, lesson.number(), iterated.contains(topic));
         if (after.equals(before)) continue;
         if (after.completed() > before.completed()) { iterated.add(topic); if (before.completed() == 0) s.firstIteration[topic] = task.getValue(); }
         state[topic] = after;

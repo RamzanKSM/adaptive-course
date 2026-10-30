@@ -12,20 +12,22 @@ class ProgressAnalyticsTest {
   static final LocalDate IN_TEN_WEEKS = TODAY.plusDays(70);
 
   @Test void iterationsFollowTheLessonScheduleAndCountOncePerLesson() {
-    var topic = IterationRule.Topic.NEW;
-    topic = IterationRule.credit(topic, 1, 4, false); assertEquals(new IterationRule.Topic(0, 1, null), topic);
-    topic = IterationRule.credit(topic, 2, 4, false); assertEquals(new IterationRule.Topic(0, 2, null), topic);
-    topic = IterationRule.credit(topic, 3, 4, false); assertEquals(new IterationRule.Topic(1, 0, 4), topic, "three tasks in one lesson: the first iteration, in any lesson");
-    assertEquals(topic, IterationRule.credit(topic, 2, 5, true), "one iteration per lesson, even a due one");
-    assertEquals(new IterationRule.Topic(1, 1, 4), IterationRule.credit(topic, 1, 6, false), "short of the iteration's tasks: progress inside it");
-    assertEquals(new IterationRule.Topic(1, 0, 4), IterationRule.credit(topic, 2, 4, false), "the second iteration not before lesson N+1");
-    assertEquals(new IterationRule.Topic(2, 0, 4), IterationRule.credit(topic, 2, 6, false), "a repetition missed in lesson N+1 is still due later");
-    topic = IterationRule.credit(topic, 2, 5, false); assertEquals(new IterationRule.Topic(2, 0, 4), topic);
-    assertEquals(topic, IterationRule.credit(topic, 1, 6, false), "the third not before lesson N+3");
-    assertEquals(new IterationRule.Topic(3, 0, 4), IterationRule.credit(topic, 1, 12, false), "and also any lesson after it");
-    topic = IterationRule.credit(topic, 1, 7, false); assertEquals(new IterationRule.Topic(3, 0, 4), topic); assertTrue(topic.mastered());
-    assertEquals(topic, IterationRule.credit(topic, 5, 8, false), "a mastered topic stays as it is");
-    assertFalse(IterationRule.due(new IterationRule.Topic(1, 0, null), 2), "a schedule without its first lesson is never due");
+    var topic = IterationRule.credit(IterationRule.Topic.NEW, 1, false);
+    topic = IterationRule.credit(topic, 2, false);
+    assertEquals(new IterationRule.Topic(0, 2, null), topic);
+    topic = IterationRule.credit(topic, 3, false);
+    assertEquals(new IterationRule.Topic(1, 0, 3), topic);
+    assertEquals(topic, IterationRule.credit(topic, 3, true));
+    assertEquals(topic, IterationRule.credit(topic, 3, false));
+    topic = IterationRule.credit(topic, 4, false);
+    assertEquals(new IterationRule.Topic(1, 1, 3), topic);
+    topic = IterationRule.credit(topic, 5, false);
+    assertEquals(new IterationRule.Topic(2, 0, 3), topic);
+    assertEquals(topic, IterationRule.credit(topic, 5, false));
+    topic = IterationRule.credit(topic, 6, false);
+    assertTrue(topic.mastered());
+    assertEquals(topic, IterationRule.credit(topic, 7, false));
+    assertFalse(IterationRule.due(new IterationRule.Topic(1, 0, null), 2));
   }
 
   @Test void topicShareIsTheStudentsTopicBar() {
