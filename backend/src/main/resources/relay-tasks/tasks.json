@@ -1,0 +1,480 @@
+{
+ "tasks": [
+  {
+   "key": "java-evens",
+   "language": "JAVA",
+   "title": "Чётные и нечётные",
+   "statement": "Посчитай, сколько чётных чисел от 1 до `n`, и сумму нечётных. Для `n = 10` программа выводит `Even: 5` и `Odd sum: 25`.",
+   "starter": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n    }\n}\n",
+   "expectedOutput": "Even: 5\nOdd sum: 25\n",
+   "steps": [
+    {
+     "prompt": "Заведи счётчик чётных чисел `evens`, сначала он равен 0.",
+     "check": [
+      "int evens=0;"
+     ],
+     "hint": "int evens = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи сумму нечётных чисел `oddSum`, сначала она равна 0.",
+     "check": [
+      "int oddSum=0;"
+     ],
+     "hint": "int oddSum = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Начни цикл: `i` от 1 до `n` включительно.",
+     "check": [
+      "for\\(int i=1;(?:i<=n|i<n\\+1);(?:i\\+\\+|\\+\\+i|i\\+=1|i=(?:i\\+1|1\\+i))\\)\\{"
+     ],
+     "hint": "for (int i = 1; i <= n; i++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В цикле проверь, чётное ли `i`.",
+     "check": [
+      "\\)\\{if\\(i%2==0\\)\\{"
+     ],
+     "hint": "if (i % 2 == 0) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n            if (i % 2 == 0) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если `i` чётное, увеличь `evens` на 1.",
+     "check": [
+      "if\\(i%2==0\\)\\{(?:evens\\+\\+|\\+\\+evens|evens\\+=1|evens=(?:evens\\+1|1\\+evens));"
+     ],
+     "hint": "evens++;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n            if (i % 2 == 0) {\n                evens++;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Добавь ветку «иначе».",
+     "check": [
+      "(?:evens\\+\\+|\\+\\+evens|evens\\+=1|evens=(?:evens\\+1|1\\+evens));\\}else\\{"
+     ],
+     "hint": "else {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n            if (i % 2 == 0) {\n                evens++;\n            }\n            else {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Иначе прибавь `i` к `oddSum`.",
+     "check": [
+      "else\\{(?:oddSum\\+=i|oddSum=oddSum\\+i|oddSum=i\\+oddSum);"
+     ],
+     "hint": "oddSum += i;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n            if (i % 2 == 0) {\n                evens++;\n            }\n            else {\n                oddSum += i;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После цикла выведи `Even: ` и значение `evens`.",
+     "check": [
+      "\\}\\}System\\.out\\.println\\(\"Even: \"\\+evens\\);"
+     ],
+     "hint": "System.out.println(\"Even: \" + evens);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n            if (i % 2 == 0) {\n                evens++;\n            }\n            else {\n                oddSum += i;\n            }\n        }\n        System.out.println(\"Even: \" + evens);\n    }\n}\n"
+    },
+    {
+     "prompt": "Следом выведи `Odd sum: ` и значение `oddSum`.",
+     "check": [
+      "System\\.out\\.println\\(\"Even: \"\\+evens\\);System\\.out\\.println\\(\"Odd\\ sum: \"\\+oddSum\\);"
+     ],
+     "hint": "System.out.println(\"Odd sum: \" + oddSum);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int n = 10;\n        int evens = 0;\n        int oddSum = 0;\n        for (int i = 1; i <= n; i++) {\n            if (i % 2 == 0) {\n                evens++;\n            }\n            else {\n                oddSum += i;\n            }\n        }\n        System.out.println(\"Even: \" + evens);\n        System.out.println(\"Odd sum: \" + oddSum);\n    }\n}\n"
+    }
+   ]
+  },
+  {
+   "key": "java-max",
+   "language": "JAVA",
+   "title": "Самое большое число",
+   "statement": "Найди в массиве `nums` самое большое число и его индекс. Программа выводит `Max: 23` и `Index: 3`.",
+   "starter": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n    }\n}\n",
+   "expectedOutput": "Max: 23\nIndex: 3\n",
+   "steps": [
+    {
+     "prompt": "Заведи `max`: пока самое большое — первый элемент массива.",
+     "check": [
+      "int max=nums\\[0\\];"
+     ],
+     "hint": "int max = nums[0];",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи `index` — где стоит `max`, сначала 0.",
+     "check": [
+      "int index=0;"
+     ],
+     "hint": "int index = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Начни цикл по индексам массива `i`, со второго элемента до конца.",
+     "check": [
+      "for\\(int i=[01];i<nums\\.length;(?:i\\+\\+|\\+\\+i|i\\+=1|i=(?:i\\+1|1\\+i))\\)\\{"
+     ],
+     "hint": "for (int i = 1; i < nums.length; i++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n        for (int i = 1; i < nums.length; i++) {\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В цикле проверь, больше ли текущий элемент, чем `max`.",
+     "check": [
+      "\\)\\{if\\((?:nums\\[i\\]>max|max<nums\\[i\\])\\)\\{"
+     ],
+     "hint": "if (nums[i] > max) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n        for (int i = 1; i < nums.length; i++) {\n            if (nums[i] > max) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если больше — запомни его в `max`.",
+     "check": [
+      "if\\((?:nums\\[i\\]>max|max<nums\\[i\\])\\)\\{max=nums\\[i\\];"
+     ],
+     "hint": "max = nums[i];",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n        for (int i = 1; i < nums.length; i++) {\n            if (nums[i] > max) {\n                max = nums[i];\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "И запомни его индекс в `index`.",
+     "check": [
+      "max=nums\\[i\\];index=i;"
+     ],
+     "hint": "index = i;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n        for (int i = 1; i < nums.length; i++) {\n            if (nums[i] > max) {\n                max = nums[i];\n                index = i;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После цикла выведи `Max: ` и значение `max`.",
+     "check": [
+      "\\}\\}System\\.out\\.println\\(\"Max: \"\\+max\\);"
+     ],
+     "hint": "System.out.println(\"Max: \" + max);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n        for (int i = 1; i < nums.length; i++) {\n            if (nums[i] > max) {\n                max = nums[i];\n                index = i;\n            }\n        }\n        System.out.println(\"Max: \" + max);\n    }\n}\n"
+    },
+    {
+     "prompt": "Следом выведи `Index: ` и значение `index`.",
+     "check": [
+      "System\\.out\\.println\\(\"Max: \"\\+max\\);System\\.out\\.println\\(\"Index: \"\\+index\\);"
+     ],
+     "hint": "System.out.println(\"Index: \" + index);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] nums = {4, 17, 9, 23, 8, 15};\n        int max = nums[0];\n        int index = 0;\n        for (int i = 1; i < nums.length; i++) {\n            if (nums[i] > max) {\n                max = nums[i];\n                index = i;\n            }\n        }\n        System.out.println(\"Max: \" + max);\n        System.out.println(\"Index: \" + index);\n    }\n}\n"
+    }
+   ]
+  },
+  {
+   "key": "java-fizzbuzz",
+   "language": "JAVA",
+   "title": "FizzBuzz до 15",
+   "statement": "Выведи числа от 1 до 15, но вместо кратных 3 — `Fizz`, вместо кратных 5 — `Buzz`, а вместо кратных и 3, и 5 — `FizzBuzz`.",
+   "starter": "public class Solution {\n    public static void main(String[] args) {\n    }\n}\n",
+   "expectedOutput": "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n",
+   "steps": [
+    {
+     "prompt": "Начни цикл: `i` от 1 до 15 включительно.",
+     "check": [
+      "for\\(int i=1;(?:i<=15|i<16);(?:i\\+\\+|\\+\\+i|i\\+=1|i=(?:i\\+1|1\\+i))\\)\\{"
+     ],
+     "hint": "for (int i = 1; i <= 15; i++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В цикле проверь, делится ли `i` и на 3, и на 5.",
+     "check": [
+      "\\)\\{if\\((?:i%15==0|i%3==0&&i%5==0|i%5==0&&i%3==0)\\)\\{"
+     ],
+     "hint": "if (i % 15 == 0) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если да — выведи `FizzBuzz`.",
+     "check": [
+      "if\\((?:i%15==0|i%3==0&&i%5==0|i%5==0&&i%3==0)\\)\\{System\\.out\\.println\\(\\\"FizzBuzz\\\"\\);"
+     ],
+     "hint": "System.out.println(\"FizzBuzz\");",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Иначе, если `i` делится на 3…",
+     "check": [
+      "println\\(\\\"FizzBuzz\\\"\\);\\}else if\\(i%3==0\\)\\{"
+     ],
+     "hint": "else if (i % 3 == 0) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n            else if (i % 3 == 0) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "…выведи `Fizz`.",
+     "check": [
+      "else if\\(i%3==0\\)\\{System\\.out\\.println\\(\\\"Fizz\\\"\\);"
+     ],
+     "hint": "System.out.println(\"Fizz\");",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n            else if (i % 3 == 0) {\n                System.out.println(\"Fizz\");\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Иначе, если `i` делится на 5…",
+     "check": [
+      "println\\(\\\"Fizz\\\"\\);\\}else if\\(i%5==0\\)\\{"
+     ],
+     "hint": "else if (i % 5 == 0) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n            else if (i % 3 == 0) {\n                System.out.println(\"Fizz\");\n            }\n            else if (i % 5 == 0) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "…выведи `Buzz`.",
+     "check": [
+      "else if\\(i%5==0\\)\\{System\\.out\\.println\\(\\\"Buzz\\\"\\);"
+     ],
+     "hint": "System.out.println(\"Buzz\");",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n            else if (i % 3 == 0) {\n                System.out.println(\"Fizz\");\n            }\n            else if (i % 5 == 0) {\n                System.out.println(\"Buzz\");\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Добавь последнюю ветку «иначе».",
+     "check": [
+      "println\\(\\\"Buzz\\\"\\);\\}else\\{"
+     ],
+     "hint": "else {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n            else if (i % 3 == 0) {\n                System.out.println(\"Fizz\");\n            }\n            else if (i % 5 == 0) {\n                System.out.println(\"Buzz\");\n            }\n            else {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В ней выведи само число `i`.",
+     "check": [
+      "\\}else\\{System\\.out\\.println\\(i\\);"
+     ],
+     "hint": "System.out.println(i);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 1; i <= 15; i++) {\n            if (i % 15 == 0) {\n                System.out.println(\"FizzBuzz\");\n            }\n            else if (i % 3 == 0) {\n                System.out.println(\"Fizz\");\n            }\n            else if (i % 5 == 0) {\n                System.out.println(\"Buzz\");\n            }\n            else {\n                System.out.println(i);\n            }\n        }\n    }\n}\n"
+    }
+   ]
+  },
+  {
+   "key": "python-evens",
+   "language": "PYTHON",
+   "title": "Чётные и нечётные",
+   "statement": "Посчитай, сколько чётных чисел от 1 до `n`, и сумму нечётных. Для `n = 10` программа выводит `Even: 5` и `Odd sum: 25`.",
+   "starter": "n = 10\n",
+   "expectedOutput": "Even: 5\nOdd sum: 25\n",
+   "steps": [
+    {
+     "prompt": "Заведи счётчик чётных чисел `evens`, сначала он равен 0.",
+     "check": [
+      "^evens=0$"
+     ],
+     "hint": "evens = 0",
+     "code": "n = 10\nevens = 0\n"
+    },
+    {
+     "prompt": "Заведи сумму нечётных чисел `odd_sum`, сначала она равна 0.",
+     "check": [
+      "^odd_sum=0$"
+     ],
+     "hint": "odd_sum = 0",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\n"
+    },
+    {
+     "prompt": "Начни цикл: `i` от 1 до `n` включительно.",
+     "check": [
+      "^for i in range\\(1,(?:n\\+1|1\\+n)\\):$"
+     ],
+     "hint": "for i in range(1, n + 1):",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n"
+    },
+    {
+     "prompt": "В цикле проверь, чётное ли `i`.",
+     "check": [
+      "^for i in range[^\\n]*\\n>if i%2==0:$"
+     ],
+     "hint": "if i % 2 == 0:",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n    if i % 2 == 0:\n"
+    },
+    {
+     "prompt": "Если `i` чётное, увеличь `evens` на 1.",
+     "check": [
+      "^>if i%2==0:\\n>>(?:evens\\+=1|evens=evens\\+1|evens=1\\+evens)$"
+     ],
+     "hint": "evens += 1",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n    if i % 2 == 0:\n        evens += 1\n"
+    },
+    {
+     "prompt": "Добавь ветку «иначе».",
+     "check": [
+      "^>>(?:evens\\+=1|evens=evens\\+1|evens=1\\+evens)\\n>else:$"
+     ],
+     "hint": "else:",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n    if i % 2 == 0:\n        evens += 1\n    else:\n"
+    },
+    {
+     "prompt": "Иначе прибавь `i` к `odd_sum`.",
+     "check": [
+      "^>else:\\n>>(?:odd_sum\\+=i|odd_sum=odd_sum\\+i|odd_sum=i\\+odd_sum)$"
+     ],
+     "hint": "odd_sum += i",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n    if i % 2 == 0:\n        evens += 1\n    else:\n        odd_sum += i\n"
+    },
+    {
+     "prompt": "После цикла выведи `Even:` и значение `evens`.",
+     "check": [
+      "^>>(?:odd_sum\\+=i|odd_sum=odd_sum\\+i|odd_sum=i\\+odd_sum)\\nprint\\((?:\"Even:\",evens|\"Even: \"\\+str\\(evens\\)|f\"Even: \\{evens\\}\")\\)$"
+     ],
+     "hint": "print(\"Even:\", evens)",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n    if i % 2 == 0:\n        evens += 1\n    else:\n        odd_sum += i\nprint(\"Even:\", evens)\n"
+    },
+    {
+     "prompt": "Следом выведи `Odd sum:` и значение `odd_sum`.",
+     "check": [
+      "^print\\((?:\"Even:\",evens|\"Even: \"\\+str\\(evens\\)|f\"Even: \\{evens\\}\")\\)\\nprint\\((?:\"Odd\\ sum:\",odd_sum|\"Odd\\ sum: \"\\+str\\(odd_sum\\)|f\"Odd\\ sum: \\{odd_sum\\}\")\\)$"
+     ],
+     "hint": "print(\"Odd sum:\", odd_sum)",
+     "code": "n = 10\nevens = 0\nodd_sum = 0\nfor i in range(1, n + 1):\n    if i % 2 == 0:\n        evens += 1\n    else:\n        odd_sum += i\nprint(\"Even:\", evens)\nprint(\"Odd sum:\", odd_sum)\n"
+    }
+   ]
+  },
+  {
+   "key": "python-max",
+   "language": "PYTHON",
+   "title": "Самое большое число",
+   "statement": "Найди в списке `nums` самое большое число и его индекс (без `max()`). Программа выводит `Max: 23` и `Index: 3`.",
+   "starter": "nums = [4, 17, 9, 23, 8, 15]\n",
+   "expectedOutput": "Max: 23\nIndex: 3\n",
+   "steps": [
+    {
+     "prompt": "Заведи `max_value`: пока самое большое — первый элемент списка.",
+     "check": [
+      "^max_value=nums\\[0\\]$"
+     ],
+     "hint": "max_value = nums[0]",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\n"
+    },
+    {
+     "prompt": "Заведи `index` — где стоит `max_value`, сначала 0.",
+     "check": [
+      "^index=0$"
+     ],
+     "hint": "index = 0",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\n"
+    },
+    {
+     "prompt": "Начни цикл по индексам списка `i`, со второго элемента до конца.",
+     "check": [
+      "^for i in range\\((?:[01],)?len\\(nums\\)\\):$"
+     ],
+     "hint": "for i in range(1, len(nums)):",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\nfor i in range(1, len(nums)):\n"
+    },
+    {
+     "prompt": "В цикле проверь, больше ли текущий элемент, чем `max_value`.",
+     "check": [
+      "^for i in range[^\\n]*\\n>if (?:nums\\[i\\]>max_value|max_value<nums\\[i\\]):$"
+     ],
+     "hint": "if nums[i] > max_value:",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\nfor i in range(1, len(nums)):\n    if nums[i] > max_value:\n"
+    },
+    {
+     "prompt": "Если больше — запомни его в `max_value`.",
+     "check": [
+      "^>if [^\\n]*\\n>>max_value=nums\\[i\\]$"
+     ],
+     "hint": "max_value = nums[i]",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\nfor i in range(1, len(nums)):\n    if nums[i] > max_value:\n        max_value = nums[i]\n"
+    },
+    {
+     "prompt": "И запомни его индекс в `index`.",
+     "check": [
+      "^>>max_value=nums\\[i\\]\\n>>index=i$"
+     ],
+     "hint": "index = i",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\nfor i in range(1, len(nums)):\n    if nums[i] > max_value:\n        max_value = nums[i]\n        index = i\n"
+    },
+    {
+     "prompt": "После цикла выведи `Max:` и значение `max_value`.",
+     "check": [
+      "^>>index=i\\nprint\\((?:\"Max:\",max_value|\"Max: \"\\+str\\(max_value\\)|f\"Max: \\{max_value\\}\")\\)$"
+     ],
+     "hint": "print(\"Max:\", max_value)",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\nfor i in range(1, len(nums)):\n    if nums[i] > max_value:\n        max_value = nums[i]\n        index = i\nprint(\"Max:\", max_value)\n"
+    },
+    {
+     "prompt": "Следом выведи `Index:` и значение `index`.",
+     "check": [
+      "^print\\((?:\"Max:\",max_value|\"Max: \"\\+str\\(max_value\\)|f\"Max: \\{max_value\\}\")\\)\\nprint\\((?:\"Index:\",index|\"Index: \"\\+str\\(index\\)|f\"Index: \\{index\\}\")\\)$"
+     ],
+     "hint": "print(\"Index:\", index)",
+     "code": "nums = [4, 17, 9, 23, 8, 15]\nmax_value = nums[0]\nindex = 0\nfor i in range(1, len(nums)):\n    if nums[i] > max_value:\n        max_value = nums[i]\n        index = i\nprint(\"Max:\", max_value)\nprint(\"Index:\", index)\n"
+    }
+   ]
+  },
+  {
+   "key": "python-fizzbuzz",
+   "language": "PYTHON",
+   "title": "FizzBuzz до 15",
+   "statement": "Выведи числа от 1 до 15, но вместо кратных 3 — `Fizz`, вместо кратных 5 — `Buzz`, а вместо кратных и 3, и 5 — `FizzBuzz`.",
+   "starter": "",
+   "expectedOutput": "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n",
+   "steps": [
+    {
+     "prompt": "Начни цикл: `i` от 1 до 15 включительно.",
+     "check": [
+      "^for i in range\\(1,16\\):$"
+     ],
+     "hint": "for i in range(1, 16):",
+     "code": "for i in range(1, 16):\n"
+    },
+    {
+     "prompt": "В цикле проверь, делится ли `i` и на 3, и на 5.",
+     "check": [
+      "^for i in range[^\\n]*\\n>if (?:i%15==0|i%3==0 and i%5==0|i%5==0 and i%3==0):$"
+     ],
+     "hint": "if i % 15 == 0:",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n"
+    },
+    {
+     "prompt": "Если да — выведи `FizzBuzz`.",
+     "check": [
+      "^>if [^\\n]*:\\n>>print\\(\\\"FizzBuzz\\\"\\)$"
+     ],
+     "hint": "print(\"FizzBuzz\")",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n"
+    },
+    {
+     "prompt": "Иначе, если `i` делится на 3…",
+     "check": [
+      "^>>print\\(\\\"FizzBuzz\\\"\\)\\n>elif i%3==0:$"
+     ],
+     "hint": "elif i % 3 == 0:",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n"
+    },
+    {
+     "prompt": "…выведи `Fizz`.",
+     "check": [
+      "^>elif i%3==0:\\n>>print\\(\\\"Fizz\\\"\\)$"
+     ],
+     "hint": "print(\"Fizz\")",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n        print(\"Fizz\")\n"
+    },
+    {
+     "prompt": "Иначе, если `i` делится на 5…",
+     "check": [
+      "^>>print\\(\\\"Fizz\\\"\\)\\n>elif i%5==0:$"
+     ],
+     "hint": "elif i % 5 == 0:",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n        print(\"Fizz\")\n    elif i % 5 == 0:\n"
+    },
+    {
+     "prompt": "…выведи `Buzz`.",
+     "check": [
+      "^>elif i%5==0:\\n>>print\\(\\\"Buzz\\\"\\)$"
+     ],
+     "hint": "print(\"Buzz\")",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n        print(\"Fizz\")\n    elif i % 5 == 0:\n        print(\"Buzz\")\n"
+    },
+    {
+     "prompt": "Добавь последнюю ветку «иначе».",
+     "check": [
+      "^>>print\\(\\\"Buzz\\\"\\)\\n>else:$"
+     ],
+     "hint": "else:",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n        print(\"Fizz\")\n    elif i % 5 == 0:\n        print(\"Buzz\")\n    else:\n"
+    },
+    {
+     "prompt": "В ней выведи само число `i`.",
+     "check": [
+      "^>else:\\n>>print\\(i\\)$"
+     ],
+     "hint": "print(i)",
+     "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n        print(\"Fizz\")\n    elif i % 5 == 0:\n        print(\"Buzz\")\n    else:\n        print(i)\n"
+    }
+   ]
+  }
+ ]
+}

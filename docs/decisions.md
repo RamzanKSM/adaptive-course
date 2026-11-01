@@ -181,6 +181,16 @@ Students found the attestation too hard because they had never met such tasks. T
   each. Implemented on `topic_retakes` (`kind='ATTESTATION'`) so the iteration rule skips it like a re-take.
 - First part of the integrative pool: Java topics 6–20, Python 6–22 (96 tasks); the rest block by block ahead of students.
 
+## «Эстафета» (2026-10-28, committed 2026-11-01, not deployed yet)
+The owner's idea: the group shares one editor and passes the right to write down a queue. Agreed:
+- No grades and no points; try with the whole group and see whether it interests them; students work from their own PCs.
+- A turn is 20–30 s at most (default 25), the steps are tiny: about 10 s for a student who follows. Three tasks are enough
+  for the trial (each in Java and Python).
+- A skipped turn must affect the whole group, not only the student. Implemented as a group streak that drops to 0 plus a
+  record streak. The owner has not confirmed this form yet; the alternatives offered were rolling back a step and taking
+  10 s from a common timer.
+- The teacher opens it with the floating «Эстафета» button; it may become a proper tab if the trial goes well.
+
 ## Task bank and selection
 - 2026-10-14: a second story per topic and difficulty (18 tasks per topic, 1224 total) and story-aware selection:
   students complained about «the same task again with other numbers». Variants of a story are per student, so

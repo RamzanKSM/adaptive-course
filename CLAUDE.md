@@ -63,6 +63,8 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
   `tasks.mode='INTEGRATIVE'`), no fallback to an ordinary task unless the pool has none. «Тренировочная аттестация»
   (`AttestationPractice`, a `topic_retakes` row with `kind='ATTESTATION'`): one attestation-sized task from its own pool,
   10-minute timer with the assistant closed, no grade, never moves progress.
+- «Эстафета» (`CodeRelay`): the group solves one task in one shared editor, one writer per tiny step (25 s); a skip resets
+  the group's streak; no grades or points. Details in `backend/README.md`.
 - Task text: everything a student types or reads as program text/output is plain English ASCII; statements, hints and
   check messages are Russian and quote the English strings. Applies to the curated bank, hard bank, seeds and the LLM
   generator prompt.

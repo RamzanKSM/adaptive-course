@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, post } from './api'
 import { attestationMinutes, BoardTestScreen, canonical, clock, isAttestation, KIND, minutesOf, minutesText, ms, STATION_BOARD_API, useNow } from './board'
 import { Icon, initials } from './fx'
+import { RelayProjector, type RelayView } from './relay'
 import { plural } from './session'
 import type { BoardStudentTest, Id, StationCall, StationCurrent } from './types'
 
-const POLL_MS = 3_000, DONE_SECONDS = 8
+const POLL_MS = 3_000, DONE_SECONDS = 8, RELAY_POLL_MS = 1_000
 const COURSE: Record<string, string> = { JAVA: 'Java', PYTHON: 'Python' }
 
 /**
@@ -42,7 +43,20 @@ export function StationScreen({ onTeacherLogin, onGone }: { onTeacherLogin: () =
   const finished = useCallback(() => { running.current = null; seq.current++; setCurrent(null); setDone(true) }, [])
   const started = useCallback((test: BoardStudentTest) => { seq.current++; setCurrent(c => c && { ...c, test: { ...test, format: test.format ?? c.calls.find(call => call.id === test.id)?.format } }) }, [])
 
+  // «Эстафета» running in any group is projected here while no test runs.
+  const [relay, setRelay] = useState<RelayView | null>(null)
+  const relaySeq = useRef(0)
+  useEffect(() => {
+    if (current?.test) { setRelay(null); return }
+    let alive = true
+    const tick = () => { const id = ++relaySeq.current; api<{ relay: RelayView | null }>('/station/relay').then(v => { if (alive && id === relaySeq.current) setRelay(v.relay) }, () => {}) }
+    tick()
+    const timer = setInterval(tick, RELAY_POLL_MS)
+    return () => { alive = false; clearInterval(timer) }
+  }, [current?.test])
+
   if (done) return <StationDone attestation={attestation.current} onBack={() => setDone(false)} />
+  if (!current?.test && relay) return <RelayProjector view={relay} />
   if (current?.test) return <BoardTestScreen key={current.test.id} test={current.test} name={current.test.displayName ?? ''} onFinished={finished} endpoints={STATION_BOARD_API} />
   return <StationWaiting current={current} failed={failed} onStarted={started} onTeacherLogin={onTeacherLogin} />
 }

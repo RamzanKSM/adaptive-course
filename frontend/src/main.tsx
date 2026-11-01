@@ -6,5 +6,6 @@ import '@fontsource-variable/jetbrains-mono'
 import './styles.css'
 import './markdown.css'
 import App from './App'
+import { RelayLayer } from './relay'
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>)
+createRoot(document.getElementById('root')!).render(<StrictMode><App /><RelayLayer /></StrictMode>)
