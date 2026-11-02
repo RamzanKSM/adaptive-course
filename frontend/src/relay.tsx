@@ -5,35 +5,16 @@ import { ConsolePanel } from './console'
 import { EDITOR_EXTENSIONS, Markdown } from './editor'
 import { Icon, initials } from './fx'
 import { plural } from './session'
-import type { ConsoleRun, CourseLanguage, Id } from './types'
+import type { CourseLanguage, RelayOutcome, RelayRun, RelayView } from './types'
 import './relay.css'
 
 /**
  * «Эстафета» (CodeRelay on the backend): the whole group solves one task in one editor, one writer at a time, one small
  * step per turn. A skip («Пас» or the time is out) drops the group's streak. The student's screen and the teacher's
- * console open over the app (RelayLayer, mounted next to App); the board station projects the running relay.
+ * console open over the app (RelayLayer, mounted by App for the signed-in user); the board station projects the relay the
+ * teacher put on the board.
  */
 
-type RelayStatus = 'LOBBY' | 'RUNNING' | 'PAUSED' | 'SOLVED' | 'FINISHED'
-type Outcome = 'DONE' | 'PASS' | 'TIMEOUT' | 'TEACHER_DONE' | 'TEACHER_SKIP' | 'STOPPED'
-interface RelayPerson { userId: Id; name: string; present: boolean }
-interface RelayRun extends Partial<Omit<ConsoleRun, 'status'>> { status: ConsoleRun['status'] | 'PENDING'; matches?: boolean; at?: string }
-export interface RelayView {
-  id: Id; group: string; language: CourseLanguage; status: RelayStatus
-  task: { key: string; title: string; statement: string; steps: number }
-  code: string; version: number; step: number; steps: number
-  stepPrompt: string | null; nextPrompt: string | null; donePrompts: string[]
-  turn: number; turnSeconds: number; writer: { userId: Id; name: string } | null
-  turnEndsAt: string | null; pausedLeftMs: number | null
-  queue: RelayPerson[]; members: number
-  streak: number; bestStreak: number; record: number; skips: number
-  lastTurn: { outcome: Outcome; step: number; at: string; name: string } | null
-  run: RelayRun | null; now: string
-  me?: { userId: Id; member: boolean; writing: boolean; turnsAhead: number }
-  hint?: string | null; reference?: string; credited?: number[]
-  people?: (RelayPerson & { done: number; skipped: number; other: number })[]
-  log?: { turn: number; step: number; outcome: Outcome | null; startedAt: string; endedAt: string | null; name: string }[]
-}
 interface RelayTask { key: string; language: CourseLanguage; title: string; statement: string; steps: number }
 interface RelayAdmin { tasks: RelayTask[]; groups: string[]; relay: RelayView | null }
 interface RelayMe { role: 'ADMIN' | 'STUDENT'; relay: RelayView | null }
@@ -273,14 +254,16 @@ const ACTIONS: { action: string; label: string; when: (v: RelayView) => boolean;
   { action: 'skip', label: 'Пропустить ход', when: v => (v.status === 'RUNNING' || v.status === 'PAUSED') && !!v.writer },
   { action: 'restore', label: 'Вернуть код начала хода', when: v => v.turn > 0 && v.status !== 'FINISHED' },
   { action: 'run', label: 'Запустить код', when: v => v.status !== 'FINISHED' && v.status !== 'LOBBY' },
+  { action: 'board', label: 'На доску', when: v => !v.onBoard },
+  { action: 'unboard', label: 'Убрать с доски', when: v => !!v.onBoard },
   { action: 'finish', label: 'Завершить', when: v => v.status !== 'FINISHED', confirm: 'Завершить эстафету?' },
 ]
-const OUTCOME: Record<Outcome, string> = { DONE: 'шаг сделан', PASS: 'пас', TIMEOUT: 'время вышло', TEACHER_DONE: 'засчитан', TEACHER_SKIP: 'пропущен', STOPPED: 'остановлен' }
+const OUTCOME: Record<RelayOutcome, string> = { DONE: 'шаг сделан', PASS: 'пас', TIMEOUT: 'время вышло', TEACHER_DONE: 'засчитан', TEACHER_SKIP: 'пропущен', STOPPED: 'остановлен' }
 
 function readGroup() { try { return localStorage.getItem(GROUP_KEY) ?? '' } catch { return '' } }
 function saveGroup(group: string) { try { localStorage.setItem(GROUP_KEY, group) } catch { /* not kept */ } }
 
-/** The teacher's console: open a relay for a group, run it, see the reference of the step and who did what; «Показ» projects it. */
+/** The teacher's console: open a relay for a group, run it, see the reference of the step and who did what; «На доску» sends it to the board station, «Показ» fills this screen. */
 function RelayConsole({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<RelayAdmin | null>(null)
   const [group, setGroup] = useState(readGroup)
@@ -364,18 +347,19 @@ function RelayConsole({ onClose }: { onClose: () => void }) {
 
 // ---------------------------------------------------------------- the projector (board station)
 
-/** The board station's screen while a relay runs: the shared board, nothing that only the teacher may see. */
-export function RelayProjector({ view }: { view: RelayView }) {
+/** The board station's screen for the relay on the board: the shared board, nothing that only the teacher may see. */
+export function RelayProjector({ view, onTeacherLogin }: { view: RelayView; onTeacherLogin: () => void }) {
   const flash = useFlash(view)
-  return <main className="relay-layer projector station"><RelayBoard view={view} code={view.code} editable={false} flash={flash} /></main>
+  return <main className="relay-layer projector station"><RelayBoard view={view} code={view.code} editable={false} flash={flash}
+    footer={<button type="button" className="ghost small-button" onClick={onTeacherLogin}><Icon name="user" size={15} /> Войти как преподаватель</button>} /></main>
 }
 
 // ---------------------------------------------------------------- the layer over the app
 
 /**
- * Mounted next to App: finds out (every 5 s, quietly — no sign-in prompts) whether the signed-in student's group has a
- * relay, and offers to join or come back to it; the pen coming to him opens his screen by itself. The teacher gets a
- * button to his console. Nothing is shown when nobody is signed in (the login form, the board station).
+ * Mounted by App for the signed-in user on the usual page (not over a test at the board): finds out (every 5 s, quietly —
+ * no sign-in prompts) whether the student's group has a relay, and offers to join or come back to it; the pen coming to
+ * him opens his screen by itself. The teacher gets a button to his console.
  */
 export function RelayLayer() {
   const [me, setMe] = useState<RelayMe | null>(null)

@@ -117,7 +117,7 @@ class CodeRelay {
 
   private record Relay(long id, String group, Language language, Task task, int turnSeconds, String status, String code, long version, int step,
                        int turnNo, Long writer, Instant turnStarted, Instant turnEnds, Long pausedLeftMs, int streak, int bestStreak, int skips,
-                       Set<Integer> credited, String runJson, Instant createdAt, Instant startedAt) {}
+                       Set<Integer> credited, String runJson, Instant createdAt, Instant startedAt, boolean onBoard) {}
 
   private Relay load(long id) {
     var rows = db.queryForList("select * from relays where id=?", id);
@@ -129,7 +129,7 @@ class CodeRelay {
         (String) r.get("status"), (String) r.get("code"), ((Number) r.get("version")).longValue(), num(r.get("step")), num(r.get("turn_no")),
         r.get("writer_id") == null ? null : ((Number) r.get("writer_id")).longValue(), at(r.get("turn_started_at")), at(r.get("turn_ends_at")),
         r.get("paused_left_ms") == null ? null : ((Number) r.get("paused_left_ms")).longValue(), num(r.get("streak")), num(r.get("best_streak")),
-        num(r.get("skips")), credited, (String) r.get("run_json"), at(r.get("created_at")), at(r.get("started_at")));
+        num(r.get("skips")), credited, (String) r.get("run_json"), at(r.get("created_at")), at(r.get("started_at")), num(r.get("on_board")) == 1);
   }
 
   /** The group's relay that is not finished (started in the last ACTIVE_FOR), or null. */
@@ -273,8 +273,13 @@ class CodeRelay {
       case "finish" -> {
         if (r.status().equals("FINISHED")) break;
         if (r.writer() != null) db.update("update relay_turns set ended_at=?, outcome='STOPPED', code_after=? where relay_id=? and turn_no=? and ended_at is null", now.toString(), r.code(), id, r.turnNo());
-        db.update("update relays set status='FINISHED', writer_id=null, turn_ends_at=null, finished_at=? where id=?", now.toString(), id);
+        db.update("update relays set status='FINISHED', writer_id=null, turn_ends_at=null, finished_at=?, on_board=0 where id=?", now.toString(), id);
       }
+      case "board" -> {
+        if (r.status().equals("FINISHED")) throw new ApiError("RELAY_FINISHED", "Эстафета уже закончилась");
+        db.update("update relays set on_board=(id=?) where on_board=1 or id=?", id, id);
+      }
+      case "unboard" -> db.update("update relays set on_board=0 where id=?", id);
       default -> throw new NotFoundError("RELAY_UNKNOWN_ACTION", "Неизвестное действие");
     }
     log.info("Relay {}: {} by the teacher", id, action);
@@ -338,11 +343,11 @@ class CodeRelay {
 
   // ---------------------------------------------------------------- the projector
 
-  /** GET /api/station/relay: the relay running last (any group), for the board station; null when none. */
-  synchronized Map<String, Object> station() {
-    var ids = db.queryForList("select id from relays where status in ('RUNNING','PAUSED','SOLVED') and created_at>? order by started_at desc, id desc limit 1", Long.class,
+  /** The relay the teacher put on the board (at most one, of any group), as everybody sees it; null when none. */
+  synchronized Map<String, Object> onBoard() {
+    var ids = db.queryForList("select id from relays where on_board=1 and status<>'FINISHED' and created_at>? order by id desc limit 1", Long.class,
         clock.instant().minus(ACTIVE_FOR).toString());
-    return obj("relay", ids.isEmpty() ? null : publicView(tick(load(ids.getFirst()))), "now", clock.instant().toString());
+    return ids.isEmpty() ? null : publicView(tick(load(ids.getFirst())));
   }
 
   // ---------------------------------------------------------------- views
@@ -390,6 +395,7 @@ class CodeRelay {
     view.put("hint", r.step() < steps.size() ? steps.get(r.step()).hint() : null);
     view.put("reference", r.step() < steps.size() ? steps.get(r.step()).code() : steps.getLast().code());
     view.put("credited", r.credited());
+    view.put("onBoard", r.onBoard());
     var stats = new HashMap<Long, int[]>();
     db.query("select user_id, outcome from relay_turns where relay_id=? and outcome is not null", rs -> {
       int[] s = stats.computeIfAbsent(rs.getLong(1), k -> new int[3]);

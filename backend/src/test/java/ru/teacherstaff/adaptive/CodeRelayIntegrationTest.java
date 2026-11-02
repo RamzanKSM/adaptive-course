@@ -28,7 +28,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * «Эстафета»: every task's steps pass one by one on the reference snapshots (and not before), the normalization, and a
  * relay of three students — joining, the queue, a step done by the writer, a pass and a timeout dropping the streak,
- * an absent student passed over, the teacher's credit / skip / pause / finish, the final run, and who may write.
+ * an absent student passed over, the teacher's credit / skip / pause / finish, the final run, and who may write; what
+ * the board station shows: the relay only when the teacher put it on the board, and never instead of a call.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -170,6 +171,47 @@ class CodeRelayIntegrationTest {
     assertTrue(read(admin, get("/api/admin/relay").param("group", "RL-1")).path("relay").isNull());
   }
 
+  @Test void theBoardShowsTheRelayOnlyByTheTeachersChoiceAndNeverOverACall() throws Exception {
+    String admin = login("admin", "admin-pass"), student = createStudent("b1", "Студент b1", "RL-B");
+    createStudent("b2", "Студент b2", "RL-C");
+    long user = db.queryForObject("select id from users where login='b1'", Long.class);
+    String station = mvc.perform(post("/api/admin/board/stations").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isOk())
+        .andReturn().getResponse().getCookie("adaptive_station").getValue();
+    long id = read(admin, post("/api/admin/relay").contentType(MediaType.APPLICATION_JSON).content("{\"group\":\"RL-B\",\"taskKey\":\"java-evens\"}")).path("id").asLong();
+    read(student, post("/api/relay/" + id + "/join"));
+    read(admin, post("/api/admin/relay/" + id + "/start"));
+    assertTrue(station(station).path("relay").isNull(), "a running relay stays off the board until the teacher puts it there");
+
+    assertTrue(read(admin, post("/api/admin/relay/" + id + "/board")).path("onBoard").asBoolean());
+    var shown = station(station).path("relay");
+    assertEquals(id, shown.path("id").asLong());
+    assertFalse(shown.has("hint") || shown.has("reference") || shown.has("people"), "only what everybody may see");
+
+    // A call takes the screen at once; the relay comes back when nobody is called.
+    long call = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":" + user + ",\"language\":\"JAVA\"}")).path("id").asLong();
+    var called = station(station);
+    assertTrue(called.path("relay").isNull());
+    assertEquals(call, called.path("calls").get(0).path("id").asLong());
+    read(admin, post("/api/admin/board/tests/{id}/cancel", call));
+    assertEquals(id, station(station).path("relay").path("id").asLong());
+
+    // One relay on the board: another one replaces it; taken off and finished relays are gone from it.
+    long other = read(admin, post("/api/admin/relay").contentType(MediaType.APPLICATION_JSON).content("{\"group\":\"RL-C\",\"taskKey\":\"java-max\"}")).path("id").asLong();
+    read(admin, post("/api/admin/relay/" + other + "/board"));
+    assertEquals(other, station(station).path("relay").path("id").asLong(), "a relay in the lobby can be shown too");
+    assertFalse(read(admin, get("/api/admin/relay").param("id", String.valueOf(id))).path("relay").path("onBoard").asBoolean());
+    assertFalse(read(admin, post("/api/admin/relay/" + other + "/unboard")).path("onBoard").asBoolean());
+    assertTrue(station(station).path("relay").isNull());
+    read(admin, post("/api/admin/relay/" + id + "/board"));
+    read(admin, post("/api/admin/relay/" + id + "/finish"));
+    assertTrue(station(station).path("relay").isNull());
+    expect(admin, post("/api/admin/relay/" + id + "/board"), "RELAY_FINISHED");
+    read(admin, post("/api/admin/relay/" + other + "/finish"));
+  }
+
+  private JsonNode station(String token) throws Exception {
+    return json.readTree(mvc.perform(get("/api/station/current").cookie(new jakarta.servlet.http.Cookie("adaptive_station", token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+  }
   /** Moves the clock in steps of 5 seconds, the given students polling as their pages do. */
   private void advance(int seconds, Collection<String> polling) throws Exception {
     for (int s = 0; s < seconds; s += 5) { now.set(now.get().plusSeconds(5)); for (String t : polling) read(t, get("/api/relay/me")); }

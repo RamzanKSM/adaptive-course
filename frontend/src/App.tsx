@@ -9,6 +9,7 @@ import { ProgressAnalytics } from './progress'
 import { PairWork } from './pairs'
 import { AttestationDone, BoardAdmin, BoardCallDialog, BoardDone, BoardElsewhere, BoardTestScreen, clock, StudentBoardGrades, useBoardCurrent, useNow } from './board'
 import { StudentSessionCard } from './session'
+import { RelayLayer } from './relay'
 import { StationScreen } from './station'
 import { LlmSettingsView } from './settings'
 import { DrawSettingsView } from './wheel'
@@ -251,7 +252,7 @@ function Shell() {
     {!isStudent ? <TeacherPage key={epoch} request={request} onBecomeStation={becomeStation} />
       : !language ? <LanguagePicker key={epoch} request={request} onPick={chooseLanguage} />
         : <CourseContext.Provider value={COURSES[language]}><StudentPage key={`${language}:${lessonReload}:${epoch}`} request={request} /></CourseContext.Provider>}
-  </main></UserContext.Provider>
+  </main><RelayLayer /></UserContext.Provider>
 }
 
 /** «Сессия истекла»: signs in again over the current screen; nothing under it is unmounted, so the code on screen stays. */

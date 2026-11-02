@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, post } from './api'
 import { attestationMinutes, BoardTestScreen, canonical, clock, isAttestation, KIND, minutesOf, minutesText, ms, STATION_BOARD_API, useNow } from './board'
 import { Icon, initials } from './fx'
-import { RelayProjector, type RelayView } from './relay'
+import { RelayProjector } from './relay'
 import { plural } from './session'
 import type { BoardStudentTest, Id, StationCall, StationCurrent } from './types'
 
@@ -12,7 +12,9 @@ const COURSE: Record<string, string> = { JAVA: 'Java', PYTHON: 'Python' }
 /**
  * «Компьютер у доски»: a browser the teacher turned into the board station. Nobody is signed in here: it shows the active
  * calls, the called student presses «Начать тест» next to their name and takes the test on this screen; afterwards
- * «Тест сдан» and back to the calls. onGone — the station was switched off (401); onTeacherLogin — the usual login form.
+ * «Тест сдан» and back to the calls. While nobody is called, the server may send the relay the teacher put on the board:
+ * one answer of /station/current says what this screen shows. onGone — the station was switched off (401);
+ * onTeacherLogin — the usual login form.
  */
 export function StationScreen({ onTeacherLogin, onGone }: { onTeacherLogin: () => void; onGone: () => void }) {
   const [current, setCurrent] = useState<StationCurrent | null>(null)
@@ -22,6 +24,7 @@ export function StationScreen({ onTeacherLogin, onGone }: { onTeacherLogin: () =
   const running = useRef<Id | null>(null)
   /** The running test was an attestation: «Работа сдана» instead of «Тест сдан». */
   const attestation = useRef(false)
+  const period = current?.relay ? RELAY_POLL_MS : POLL_MS
   useEffect(() => {
     if (done) return
     let alive = true
@@ -31,9 +34,9 @@ export function StationScreen({ onTeacherLogin, onGone }: { onTeacherLogin: () =
         e => { if (!alive) return; if (e instanceof ApiError && e.status === 401) onGone(); else setFailed(true) })
     }
     tick()
-    const timer = setInterval(tick, POLL_MS)
+    const timer = setInterval(tick, period)
     return () => { alive = false; clearInterval(timer) }
-  }, [done, onGone])
+  }, [done, onGone, period])
   // The running test disappeared (the teacher finished or removed it, the time ran out): it is over for this screen too.
   useEffect(() => {
     if (current?.test) { running.current = current.test.id; attestation.current = isAttestation(current.test) }
@@ -43,21 +46,9 @@ export function StationScreen({ onTeacherLogin, onGone }: { onTeacherLogin: () =
   const finished = useCallback(() => { running.current = null; seq.current++; setCurrent(null); setDone(true) }, [])
   const started = useCallback((test: BoardStudentTest) => { seq.current++; setCurrent(c => c && { ...c, test: { ...test, format: test.format ?? c.calls.find(call => call.id === test.id)?.format } }) }, [])
 
-  // «Эстафета» running in any group is projected here while no test runs.
-  const [relay, setRelay] = useState<RelayView | null>(null)
-  const relaySeq = useRef(0)
-  useEffect(() => {
-    if (current?.test) { setRelay(null); return }
-    let alive = true
-    const tick = () => { const id = ++relaySeq.current; api<{ relay: RelayView | null }>('/station/relay').then(v => { if (alive && id === relaySeq.current) setRelay(v.relay) }, () => {}) }
-    tick()
-    const timer = setInterval(tick, RELAY_POLL_MS)
-    return () => { alive = false; clearInterval(timer) }
-  }, [current?.test])
-
   if (done) return <StationDone attestation={attestation.current} onBack={() => setDone(false)} />
-  if (!current?.test && relay) return <RelayProjector view={relay} />
   if (current?.test) return <BoardTestScreen key={current.test.id} test={current.test} name={current.test.displayName ?? ''} onFinished={finished} endpoints={STATION_BOARD_API} />
+  if (current?.relay) return <RelayProjector view={current.relay} onTeacherLogin={onTeacherLogin} />
   return <StationWaiting current={current} failed={failed} onStarted={started} onTeacherLogin={onTeacherLogin} />
 }
 

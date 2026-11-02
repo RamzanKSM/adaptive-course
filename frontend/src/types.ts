@@ -205,7 +205,27 @@ export interface StationCall {
   calledAt: string; expiresAt: string; canStart: boolean; format?: BoardFormat
 }
 /** GET /station/current: the active calls and the test running on this station (at most one). now — the server clock. */
-export interface StationCurrent { station: { id: Id; name: string }; now: string; calls: StationCall[]; test: BoardStudentTest | null }
+export interface StationCurrent { station: { id: Id; name: string }; now: string; calls: StationCall[]; test: BoardStudentTest | null; relay: RelayView | null }
+/** «Эстафета» as everybody sees it; me — the student's own view, the fields after it — the teacher's. */
+export type RelayOutcome = 'DONE' | 'PASS' | 'TIMEOUT' | 'TEACHER_DONE' | 'TEACHER_SKIP' | 'STOPPED'
+export interface RelayPerson { userId: Id; name: string; present: boolean }
+export interface RelayRun extends Partial<Omit<ConsoleRun, 'status'>> { status: ConsoleRun['status'] | 'PENDING'; matches?: boolean; at?: string }
+export interface RelayView {
+  id: Id; group: string; language: CourseLanguage; status: 'LOBBY' | 'RUNNING' | 'PAUSED' | 'SOLVED' | 'FINISHED'
+  task: { key: string; title: string; statement: string; steps: number }
+  code: string; version: number; step: number; steps: number
+  stepPrompt: string | null; nextPrompt: string | null; donePrompts: string[]
+  turn: number; turnSeconds: number; writer: { userId: Id; name: string } | null
+  turnEndsAt: string | null; pausedLeftMs: number | null
+  queue: RelayPerson[]; members: number
+  streak: number; bestStreak: number; record: number; skips: number
+  lastTurn: { outcome: RelayOutcome; step: number; at: string; name: string } | null
+  run: RelayRun | null; now: string
+  me?: { userId: Id; member: boolean; writing: boolean; turnsAhead: number }
+  hint?: string | null; reference?: string; credited?: number[]; onBoard?: boolean
+  people?: (RelayPerson & { done: number; skipped: number; other: number })[]
+  log?: { turn: number; step: number; outcome: RelayOutcome | null; startedAt: string; endedAt: string | null; name: string }[]
+}
 /** A board station (a browser of the classroom PC that shows only the calls and the tests). */
 export interface BoardStation { id: Id; name: string; createdAt: string; lastSeenAt: string | null; current?: boolean }
 /** attestationPlanDate — the day whose plan line attestations cover (null: the day of each attestation). */

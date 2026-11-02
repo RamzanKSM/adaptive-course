@@ -14,7 +14,8 @@ import java.util.*;
  * «Компьютер у доски»: a browser of the classroom PC the teacher turned into a board station. It holds the cookie
  * adaptive_station (Path=/api/station, a random token; the table keeps its SHA-256) and sees only the active calls and
  * the test running at it (BoardTests.station*): the student walks up, starts his test there without signing in, and the
- * station goes back to waiting after the finish. A revoked station is no station. Rules: backend/README.md, «К доске».
+ * station goes back to waiting after the finish. While nobody is called it projects the relay the teacher put on the
+ * board (CodeRelay.onBoard). A revoked station is no station. Rules: backend/README.md, «К доске».
  */
 @Component
 class BoardStations {

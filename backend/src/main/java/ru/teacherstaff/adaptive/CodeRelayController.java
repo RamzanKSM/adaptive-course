@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 /**
- * «Эстафета» (CodeRelay): the teacher's /api/admin/relay…, the student's /api/relay…, the board station's /api/station/relay
+ * «Эстафета» (CodeRelay): the teacher's /api/admin/relay…, the student's /api/relay… (the board station gets its relay in /api/station/current)
  * (authenticated by the station cookie, AuthFilter).
  */
 @RestController @RequestMapping("/api")
@@ -30,8 +30,6 @@ class CodeRelayController {
   @PostMapping("/relay/{id}/join") Map<String, Object> join(@PathVariable long id, HttpServletRequest r) { return relay.join(student(r), id); }
   @PutMapping("/relay/{id}/code") Map<String, Object> code(@PathVariable long id, @RequestBody(required = false) Map<String, Object> b, HttpServletRequest r) { return relay.code(student(r), id, b == null ? Map.of() : b); }
   @PostMapping("/relay/{id}/pass") Map<String, Object> pass(@PathVariable long id, @RequestBody(required = false) Map<String, Object> b, HttpServletRequest r) { return relay.pass(student(r), id, b == null ? Map.of() : b); }
-
-  @GetMapping("/station/relay") Map<String, Object> station() { return relay.station(); }
 
   @SuppressWarnings("unchecked") private static Map<String, Object> user(HttpServletRequest r) { return (Map<String, Object>) r.getAttribute("user"); }
   private static long admin(HttpServletRequest r) {
