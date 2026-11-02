@@ -76,6 +76,7 @@
 /* the teacher */
 .relay-console-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .relay-console-bar > b { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; margin-right: auto; }
+.relay-console-bar label { display: flex; align-items: center; }
 .relay-console-bar select { margin-left: 6px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); }
 .relay-console { display: grid; grid-template-columns: 1fr 320px; gap: 12px; flex: 1; min-height: 0; }
 .relay-panel { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 16px; }
@@ -94,8 +95,9 @@
 .relay-new .title, .relay-new p { margin: 0; }
 .relay-task-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .relay-task { display: flex; gap: 10px; padding: 12px; border: 1.5px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface); }
+.relay-task input { flex: none; align-self: flex-start; width: auto; margin: 3px 0 0; padding: 0; }
 .relay-task.chosen { border-color: var(--brand); background: var(--brand-soft); }
-.relay-task span { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.relay-task span { display: flex; flex-direction: column; gap: 4px; font-size: 14px; min-width: 0; }
 .relay-task small { color: var(--muted); font-weight: 700; }
 .relay-task .markdown p { margin: 0; color: var(--ink-2); font-size: 13px; }
 .relay-seconds { display: flex; align-items: center; gap: 8px; font-weight: 700; }
