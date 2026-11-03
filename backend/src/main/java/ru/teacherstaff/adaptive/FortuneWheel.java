@@ -227,7 +227,8 @@ class FortuneWheel {
         (RowCallbackHandler) rs -> {
           long user = rs.getLong(1); String grade = rs.getString(2);
           Integer g = grade == null ? null : Integer.valueOf(grade), old = result.get(user);
-          result.put(user, old == null ? g : g == null ? old : Math.max(old, g));
+          if (g == null) result.putIfAbsent(user, null); // called, but not graded yet
+          else result.put(user, old == null ? g : Math.max(old, g));
         }, concat(null, users, w.start().getEpochSecond(), w.end().getEpochSecond()));
     return result;
   }

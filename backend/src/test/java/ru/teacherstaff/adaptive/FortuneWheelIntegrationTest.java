@@ -139,6 +139,27 @@ class FortuneWheelIntegrationTest {
     expect(student, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", List.of(nine)))), status().isBadRequest(), "FORBIDDEN");
   }
 
+  @Test void aCallWithoutAGradeStaysCalledAndDoesNotCrashTheWheel() throws Exception {
+    String admin = login("admin", "admin-pass");
+    Instant start = Instant.parse("2041-03-05T08:00:00Z");
+    long pending = studentRow("w-pending", "Ждёт оценки", "WH-PENDING");
+    long graded = studentRow("w-graded-pending", "Оценён", "WH-PENDING");
+    db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade) values(?,'WH-PENDING','JAVA','FINISHED',?,?,null)",
+        pending, at(start, 20).toString(), at(start, 25).toString());
+    db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade) values(?,'WH-PENDING','JAVA','FINISHED',?,?,?)",
+        graded, at(start, 21).toString(), at(start, 26).toString(), "5");
+    db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade) values(?,'WH-PENDING','JAVA','FINISHED',?,?,null)",
+        graded, at(start, 22).toString(), at(start, 27).toString());
+
+    long pair = save(admin, "WH-PENDING", "JAVA", start);
+    var wheel = read(admin, get("/api/admin/pairs/{id}/wheel", pair));
+    assertEquals(List.of("w-graded-pending"), wheel.path("candidates").findValuesAsText("login"));
+    assertEquals(List.of("w-pending"), wheel.path("called").findValuesAsText("login"));
+    assertTrue(wheel.path("called").get(0).path("grade").isNull());
+    assertEquals("5", wheel.path("candidates").get(0).path("grade").asText());
+    assertEquals(0, wheel.path("pool").asInt(), "an ungraded call excludes the student from the points pool");
+  }
+
   @Test void settingsHaveDefaultsAndNoLimits() throws Exception {
     String admin = login("admin", "admin-pass");
     var s = read(admin, get("/api/admin/draw/settings"));
