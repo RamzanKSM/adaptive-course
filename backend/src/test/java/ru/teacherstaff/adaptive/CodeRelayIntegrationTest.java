@@ -60,7 +60,7 @@ class CodeRelayIntegrationTest {
   }
 
   @Test void everyStepPassesOnItsSnapshotOnly() {
-    assertEquals(6, relay.tasks().size());
+    assertEquals(12, relay.tasks().size());
     for (var task : relay.tasks()) {
       assertEquals(0, CodeRelay.doneSteps(task, task.starter(), Set.of()), task.key() + ": the starter does no step");
       for (int k = 0; k < task.steps().size(); k++)

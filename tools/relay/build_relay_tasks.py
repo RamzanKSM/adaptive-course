@@ -46,6 +46,20 @@ def java_print_concat(label: str, var: str) -> str:
     return rf'System\.out\.println\("{re.escape(label)} "\+{var}\);'
 
 
+def py_inc(v: str) -> str:
+    return rf"(?:{v}\+=1|{v}={v}\+1|{v}=1\+{v})"
+
+
+SCORE_AT = r"scores\[i\]"
+SCORE_PASS = r"(?:scores\[i\]>=60|60<=scores\[i\]|scores\[i\]>59)"
+SCORE_BEST = r"(?:scores\[i\]>best|best<scores\[i\])"
+VOWEL_CHECK = r'"aeiou"\.indexOf\(c\)(?:>=0|>-1|!=-1)'
+PRIME_CHECK = r"(?:prime|prime==true)"
+PY_PASS = r"(?:score>=60|60<=score|score>59)"
+PY_BEST = r"(?:score>best|best<score)"
+PY_PRIME = r"(?:prime|prime==True)"
+PY_FAILED = r"len\(scores\)-passed"
+
 TASKS = [
     {
         "key": "java-evens", "language": "JAVA", "title": "Чётные и нечётные",
@@ -151,6 +165,151 @@ TASKS = [
         ],
     },
     {
+        "key": "java-scores", "language": "JAVA", "title": "Оценки группы",
+        "statement": "В массиве `scores` — баллы группы, зачёт от 60. Программа выводит сумму баллов, сколько сдали и не сдали, лучший балл и средний: `Total: 545`, `Passed: 5`, `Failed: 3`, `Best: 100`, `Average: 68.125`.",
+        "expected": "Total: 545\nPassed: 5\nFailed: 3\nBest: 100\nAverage: 68.125\n",
+        "program": """
+0|public class Solution {
+0|    public static void main(String[] args) {
+0|        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};
+1|        int total = 0;
+2|        int passed = 0;
+3|        int best = scores[0];
+4|        for (int i = 0; i < scores.length; i++) {
+5|            total += scores[i];
+6|            if (scores[i] >= 60) {
+7|                passed++;
+6|            }
+8|            if (scores[i] > best) {
+9|                best = scores[i];
+8|            }
+4|        }
+10|        double average = (double) total / scores.length;
+11|        System.out.println("Total: " + total);
+12|        System.out.println("Passed: " + passed);
+13|        System.out.println("Failed: " + (scores.length - passed));
+14|        System.out.println("Best: " + best);
+15|        System.out.println("Average: " + average);
+0|    }
+0|}
+""",
+        "steps": [
+            ("Заведи сумму баллов `total`, сначала 0.", [r"int total=0;"]),
+            ("Заведи счётчик сдавших `passed`, сначала 0.", [r"int passed=0;"]),
+            ("Заведи `best`: пока лучший балл — первый элемент массива.", [r"int best=scores\[0\];"]),
+            ("Начни цикл по индексам массива `i`, с нуля до конца.", [rf"for\(int i=0;i<scores\.length;{inc('i')}\)\{{"]),
+            ("В цикле прибавь текущий балл к `total`.", [rf"\)\{{{add('total', SCORE_AT)};"]),
+            ("Следом проверь, набран ли зачёт: балл не меньше 60.", [rf"{add('total', SCORE_AT)};if\({SCORE_PASS}\)\{{"]),
+            ("Если да, увеличь `passed` на 1.", [rf"if\({SCORE_PASS}\)\{{{inc('passed')};"]),
+            ("После этого `if` проверь, больше ли балл, чем `best`.", [rf"{inc('passed')};\}}if\({SCORE_BEST}\)\{{"]),
+            ("Если больше, запомни его в `best`.", [rf"if\({SCORE_BEST}\)\{{best=scores\[i\];"]),
+            ("После цикла посчитай дробное среднее: `double average`, сумма делить на длину массива. Не забудь `(double)`.",
+             [r"\}\}double average=(?:\(double\)total/scores\.length|total/\(double\)scores\.length|total\*1\.0/scores\.length|1\.0\*total/scores\.length);"]),
+            ("Выведи `Total: ` и значение `total`.", [r";" + java_print_concat("Total:", "total")]),
+            ("Выведи `Passed: ` и значение `passed`.", [java_print_concat("Total:", "total") + java_print_concat("Passed:", "passed")]),
+            ("Выведи `Failed: ` и число не сдавших: длина массива минус `passed`. Разность возьми в скобки.",
+             [java_print_concat("Passed:", "passed") + r'System\.out\.println\("Failed: "\+\(scores\.length-passed\)\);']),
+            ("Выведи `Best: ` и значение `best`.", [r'\(scores\.length-passed\)\);' + java_print_concat("Best:", "best")]),
+            ("Выведи `Average: ` и значение `average`.", [java_print_concat("Best:", "best") + java_print_concat("Average:", "average")]),
+        ],
+    },
+    {
+        "key": "java-letters", "language": "JAVA", "title": "Гласные и согласные",
+        "statement": "Разбери строку `text` по символам: сколько в ней гласных, согласных и слов. Слова разделены одним пробелом. Программа выводит `Vowels: 7`, `Consonants: 9`, `Words: 5`.",
+        "expected": "Vowels: 7\nConsonants: 9\nWords: 5\n",
+        "program": """
+0|public class Solution {
+0|    public static void main(String[] args) {
+0|        String text = "java is fun to learn";
+1|        int vowels = 0;
+2|        int consonants = 0;
+3|        int spaces = 0;
+4|        for (int i = 0; i < text.length(); i++) {
+5|            char c = text.charAt(i);
+6|            if (c == ' ') {
+7|                spaces++;
+6|            }
+8|            else if ("aeiou".indexOf(c) >= 0) {
+9|                vowels++;
+8|            }
+10|            else {
+11|                consonants++;
+10|            }
+4|        }
+12|        int words = spaces + 1;
+13|        System.out.println("Vowels: " + vowels);
+14|        System.out.println("Consonants: " + consonants);
+15|        System.out.println("Words: " + words);
+0|    }
+0|}
+""",
+        "steps": [
+            ("Заведи счётчик гласных `vowels`, сначала 0.", [r"int vowels=0;"]),
+            ("Заведи счётчик согласных `consonants`, сначала 0.", [r"int consonants=0;"]),
+            ("Заведи счётчик пробелов `spaces`, сначала 0.", [r"int spaces=0;"]),
+            ("Начни цикл по индексам строки `i`: с нуля, пока `i` меньше `text.length()`.", [rf"for\(int i=0;i<text\.length\(\);{inc('i')}\)\{{"]),
+            ("В цикле достань текущий символ: `char c`, через `text.charAt(i)`.", [r"\)\{char c=text\.charAt\(i\);"]),
+            ("Проверь, пробел ли `c`. Символ пиши в одинарных кавычках.", [r"charAt\(i\);if\(c==' '\)\{"]),
+            ("Если пробел, увеличь `spaces` на 1.", [rf"if\(c==' '\)\{{{inc('spaces')};"]),
+            ("Иначе, если `c` есть среди гласных: `\"aeiou\".indexOf(c) >= 0`…", [rf"{inc('spaces')};\}}else if\({VOWEL_CHECK}\)\{{"]),
+            ("…увеличь `vowels` на 1.", [rf"else if\({VOWEL_CHECK}\)\{{{inc('vowels')};"]),
+            ("Добавь последнюю ветку «иначе».", [rf"{inc('vowels')};\}}else\{{"]),
+            ("В ней увеличь `consonants` на 1.", [rf"else\{{{inc('consonants')};"]),
+            ("После цикла заведи `words`: слов на одно больше, чем пробелов.", [r"\}\}int words=(?:spaces\+1|1\+spaces);"]),
+            ("Выведи `Vowels: ` и значение `vowels`.", [r"int words=[^;]*;" + java_print_concat("Vowels:", "vowels")]),
+            ("Выведи `Consonants: ` и значение `consonants`.", [java_print_concat("Vowels:", "vowels") + java_print_concat("Consonants:", "consonants")]),
+            ("Выведи `Words: ` и значение `words`.", [java_print_concat("Consonants:", "consonants") + java_print_concat("Words:", "words")]),
+        ],
+    },
+    {
+        "key": "java-primes", "language": "JAVA", "title": "Простые числа",
+        "statement": "Выведи все простые числа от 2 до `limit`, а затем их количество и сумму. Число простое, если не делится ни на что, кроме 1 и себя. Для `limit = 30` в конце идут `Count: 10` и `Total: 129`.",
+        "expected": "Primes:\n2\n3\n5\n7\n11\n13\n17\n19\n23\n29\nCount: 10\nTotal: 129\n",
+        "program": """
+0|public class Solution {
+0|    public static void main(String[] args) {
+0|        int limit = 30;
+1|        int count = 0;
+2|        int total = 0;
+3|        System.out.println("Primes:");
+4|        for (int n = 2; n <= limit; n++) {
+5|            boolean prime = true;
+6|            for (int d = 2; d < n; d++) {
+7|                if (n % d == 0) {
+8|                    prime = false;
+9|                    break;
+7|                }
+6|            }
+10|            if (prime) {
+11|                count++;
+12|                total += n;
+13|                System.out.println(n);
+10|            }
+4|        }
+14|        System.out.println("Count: " + count);
+15|        System.out.println("Total: " + total);
+0|    }
+0|}
+""",
+        "steps": [
+            ("Заведи счётчик простых чисел `count`, сначала 0.", [r"int count=0;"]),
+            ("Заведи их сумму `total`, сначала 0.", [r"int total=0;"]),
+            ("Выведи заголовок `Primes:`.", [r'int total=0;System\.out\.println\("Primes:"\);']),
+            ("Начни цикл: `n` от 2 до `limit` включительно.", [rf'println\("Primes:"\);for\(int n=2;(?:n<=limit|n<limit\+1);{inc("n")}\)\{{']),
+            ("В цикле заведи `boolean prime`: пока считаем `n` простым.", [r"\)\{boolean prime=true;"]),
+            ("Начни вложенный цикл: делитель `d` от 2, пока `d` меньше `n`.", [rf"boolean prime=true;for\(int d=2;(?:d<n|d\*d<=n|d<=n/2);{inc('d')}\)\{{"]),
+            ("Во вложенном цикле проверь, делится ли `n` на `d`.", [r"\)\{if\(n%d==0\)\{"]),
+            ("Если делится, `n` не простое: запиши это в `prime`.", [r"if\(n%d==0\)\{prime=false;"]),
+            ("И выйди из вложенного цикла.", [r"prime=false;break;"]),
+            ("После вложенного цикла проверь, осталось ли `n` простым.", [rf"\}}\}}if\({PRIME_CHECK}\)\{{"]),
+            ("Если да, увеличь `count` на 1.", [rf"if\({PRIME_CHECK}\)\{{{inc('count')};"]),
+            ("Прибавь `n` к `total`.", [rf"{inc('count')};{add('total', 'n')};"]),
+            ("Выведи само число `n`.", [rf"{add('total', 'n')};System\.out\.println\(n\);"]),
+            ("После внешнего цикла выведи `Count: ` и значение `count`.", [r"\}\}" + java_print_concat("Count:", "count")]),
+            ("Выведи `Total: ` и значение `total`.", [java_print_concat("Count:", "count") + java_print_concat("Total:", "total")]),
+        ],
+    },
+    {
         "key": "python-evens", "language": "PYTHON", "title": "Чётные и нечётные",
         "statement": "Посчитай, сколько чётных чисел от 1 до `n`, и сумму нечётных. Для `n = 10` программа выводит `Even: 5` и `Odd sum: 25`.",
         "expected": "Even: 5\nOdd sum: 25\n",
@@ -229,6 +388,126 @@ TASKS = [
             ("…выведи `Buzz`.", [r"^>elif i%5==0:\n>>print\(\"Buzz\"\)$"]),
             ("Добавь последнюю ветку «иначе».", [r"^>>print\(\"Buzz\"\)\n>else:$"]),
             ("В ней выведи само число `i`.", [r"^>else:\n>>print\(i\)$"]),
+        ],
+    },
+    {
+        "key": "python-scores", "language": "PYTHON", "title": "Оценки группы",
+        "statement": "В списке `scores` — баллы группы, зачёт от 60. Программа выводит сумму баллов, сколько сдали и не сдали, лучший балл и средний (без `sum()` и `max()`): `Total: 545`, `Passed: 5`, `Failed: 3`, `Best: 100`, `Average: 68.125`.",
+        "expected": "Total: 545\nPassed: 5\nFailed: 3\nBest: 100\nAverage: 68.125\n",
+        "program": """
+0|scores = [72, 45, 90, 58, 66, 100, 33, 81]
+1|total = 0
+2|passed = 0
+3|best = scores[0]
+4|for score in scores:
+5|    total += score
+6|    if score >= 60:
+7|        passed += 1
+8|    if score > best:
+9|        best = score
+10|average = total / len(scores)
+11|print("Total:", total)
+12|print("Passed:", passed)
+13|print("Failed:", len(scores) - passed)
+14|print("Best:", best)
+15|print("Average:", average)
+""",
+        "steps": [
+            ("Заведи сумму баллов `total`, сначала 0.", [r"^total=0$"]),
+            ("Заведи счётчик сдавших `passed`, сначала 0.", [r"^passed=0$"]),
+            ("Заведи `best`: пока лучший балл — первый элемент списка.", [r"^best=scores\[0\]$"]),
+            ("Начни цикл по списку: каждый балл называй `score`.", [r"^for score in scores:$"]),
+            ("В цикле прибавь `score` к `total`.", [rf"^for score in scores:\n>{add('total', 'score')}$"]),
+            ("Следом проверь, набран ли зачёт: балл не меньше 60.", [rf"^>{add('total', 'score')}\n>if {PY_PASS}:$"]),
+            ("Если да, увеличь `passed` на 1.", [rf"^>if {PY_PASS}:\n>>{py_inc('passed')}$"]),
+            ("После этого `if` проверь, больше ли `score`, чем `best`.", [rf"^>>{py_inc('passed')}\n>if {PY_BEST}:$"]),
+            ("Если больше, запомни его в `best`.", [rf"^>if {PY_BEST}:\n>>best=score$"]),
+            ("После цикла посчитай среднее `average`: сумма делить на длину списка.", [r"^>>best=score\naverage=total/len\(scores\)$"]),
+            ("Выведи `Total:` и значение `total`.", [rf"^average=[^\n]*\n{py_print('Total:', 'total')}$"]),
+            ("Выведи `Passed:` и значение `passed`.", [rf"^{py_print('Total:', 'total')}\n{py_print('Passed:', 'passed')}$"]),
+            ("Выведи `Failed:` и число не сдавших: длина списка минус `passed`.", [rf"^{py_print('Passed:', 'passed')}\n{py_print('Failed:', PY_FAILED)}$"]),
+            ("Выведи `Best:` и значение `best`.", [rf"^{py_print('Failed:', PY_FAILED)}\n{py_print('Best:', 'best')}$"]),
+            ("Выведи `Average:` и значение `average`.", [rf"^{py_print('Best:', 'best')}\n{py_print('Average:', 'average')}$"]),
+        ],
+    },
+    {
+        "key": "python-letters", "language": "PYTHON", "title": "Гласные и согласные",
+        "statement": "Разбери строку `text` по символам: сколько в ней гласных, согласных, пробелов и слов. Слова разделены одним пробелом. Программа выводит `Vowels: 6`, `Consonants: 12`, `Spaces: 4`, `Words: 5`.",
+        "expected": "Vowels: 6\nConsonants: 12\nSpaces: 4\nWords: 5\n",
+        "program": """
+0|text = "python is fun to learn"
+1|vowels = 0
+2|consonants = 0
+3|spaces = 0
+4|for ch in text:
+5|    if ch == " ":
+6|        spaces += 1
+7|    elif ch in "aeiou":
+8|        vowels += 1
+9|    else:
+10|        consonants += 1
+11|words = spaces + 1
+12|print("Vowels:", vowels)
+13|print("Consonants:", consonants)
+14|print("Spaces:", spaces)
+15|print("Words:", words)
+""",
+        "steps": [
+            ("Заведи счётчик гласных `vowels`, сначала 0.", [r"^vowels=0$"]),
+            ("Заведи счётчик согласных `consonants`, сначала 0.", [r"^consonants=0$"]),
+            ("Заведи счётчик пробелов `spaces`, сначала 0.", [r"^spaces=0$"]),
+            ("Начни цикл по строке: каждый символ называй `ch`.", [r"^for ch in text:$"]),
+            ("В цикле проверь, пробел ли `ch`.", [r'^for ch in text:\n>if ch==(?:" "|\' \'):$']),
+            ("Если пробел, увеличь `spaces` на 1.", [rf'^>if ch==[^\n]*:\n>>{py_inc("spaces")}$']),
+            ("Иначе, если `ch` есть в строке `\"aeiou\"`…", [rf'^>>{py_inc("spaces")}\n>elif ch in (?:"aeiou"|\'aeiou\'):$']),
+            ("…увеличь `vowels` на 1.", [rf'^>elif ch in [^\n]*:\n>>{py_inc("vowels")}$']),
+            ("Добавь последнюю ветку «иначе».", [rf'^>>{py_inc("vowels")}\n>else:$']),
+            ("В ней увеличь `consonants` на 1.", [rf'^>else:\n>>{py_inc("consonants")}$']),
+            ("После цикла заведи `words`: слов на одно больше, чем пробелов.", [rf'^>>{py_inc("consonants")}\nwords=(?:spaces\+1|1\+spaces)$']),
+            ("Выведи `Vowels:` и значение `vowels`.", [rf"^words=[^\n]*\n{py_print('Vowels:', 'vowels')}$"]),
+            ("Выведи `Consonants:` и значение `consonants`.", [rf"^{py_print('Vowels:', 'vowels')}\n{py_print('Consonants:', 'consonants')}$"]),
+            ("Выведи `Spaces:` и значение `spaces`.", [rf"^{py_print('Consonants:', 'consonants')}\n{py_print('Spaces:', 'spaces')}$"]),
+            ("Выведи `Words:` и значение `words`.", [rf"^{py_print('Spaces:', 'spaces')}\n{py_print('Words:', 'words')}$"]),
+        ],
+    },
+    {
+        "key": "python-primes", "language": "PYTHON", "title": "Простые числа",
+        "statement": "Выведи все простые числа от 2 до `limit`, а затем их количество и сумму. Число простое, если не делится ни на что, кроме 1 и себя. Для `limit = 30` в конце идут `Count: 10` и `Total: 129`.",
+        "expected": "Primes:\n2\n3\n5\n7\n11\n13\n17\n19\n23\n29\nCount: 10\nTotal: 129\n",
+        "program": """
+0|limit = 30
+1|count = 0
+2|total = 0
+3|print("Primes:")
+4|for n in range(2, limit + 1):
+5|    prime = True
+6|    for d in range(2, n):
+7|        if n % d == 0:
+8|            prime = False
+9|            break
+10|    if prime:
+11|        count += 1
+12|        total += n
+13|        print(n)
+14|print("Count:", count)
+15|print("Total:", total)
+""",
+        "steps": [
+            ("Заведи счётчик простых чисел `count`, сначала 0.", [r"^count=0$"]),
+            ("Заведи их сумму `total`, сначала 0.", [r"^total=0$"]),
+            ("Выведи заголовок `Primes:`.", [r'^total=0\nprint\("Primes:"\)$']),
+            ("Начни цикл: `n` от 2 до `limit` включительно.", [r'^print\("Primes:"\)\nfor n in range\(2,(?:limit\+1|1\+limit)\):$']),
+            ("В цикле заведи `prime`: пока считаем `n` простым.", [r"^for n in range[^\n]*\n>prime=True$"]),
+            ("Начни вложенный цикл: делитель `d` от 2, пока `d` меньше `n`.", [r"^>prime=True\n>for d in range\(2,n\):$"]),
+            ("Во вложенном цикле проверь, делится ли `n` на `d`.", [r"^>for d in range[^\n]*\n>>if n%d==0:$"]),
+            ("Если делится, `n` не простое: запиши это в `prime`.", [r"^>>if n%d==0:\n>>>prime=False$"]),
+            ("И выйди из вложенного цикла.", [r"^>>>prime=False\n>>>break$"]),
+            ("После вложенного цикла проверь, осталось ли `n` простым.", [rf"^>>>break\n>if {PY_PRIME}:$"]),
+            ("Если да, увеличь `count` на 1.", [rf"^>if {PY_PRIME}:\n>>{py_inc('count')}$"]),
+            ("Прибавь `n` к `total`.", [rf"^>>{py_inc('count')}\n>>{add('total', 'n')}$"]),
+            ("Выведи само число `n`.", [rf"^>>{add('total', 'n')}\n>>print\(n\)$"]),
+            ("После внешнего цикла выведи `Count:` и значение `count`.", [rf"^>>print\(n\)\n{py_print('Count:', 'count')}$"]),
+            ("Выведи `Total:` и значение `total`.", [rf"^{py_print('Count:', 'count')}\n{py_print('Total:', 'total')}$"]),
         ],
     },
 ]

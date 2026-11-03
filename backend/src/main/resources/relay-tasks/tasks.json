@@ -239,6 +239,396 @@
    ]
   },
   {
+   "key": "java-scores",
+   "language": "JAVA",
+   "title": "Оценки группы",
+   "statement": "В массиве `scores` — баллы группы, зачёт от 60. Программа выводит сумму баллов, сколько сдали и не сдали, лучший балл и средний: `Total: 545`, `Passed: 5`, `Failed: 3`, `Best: 100`, `Average: 68.125`.",
+   "starter": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n    }\n}\n",
+   "expectedOutput": "Total: 545\nPassed: 5\nFailed: 3\nBest: 100\nAverage: 68.125\n",
+   "steps": [
+    {
+     "prompt": "Заведи сумму баллов `total`, сначала 0.",
+     "check": [
+      "int total=0;"
+     ],
+     "hint": "int total = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи счётчик сдавших `passed`, сначала 0.",
+     "check": [
+      "int passed=0;"
+     ],
+     "hint": "int passed = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи `best`: пока лучший балл — первый элемент массива.",
+     "check": [
+      "int best=scores\\[0\\];"
+     ],
+     "hint": "int best = scores[0];",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n    }\n}\n"
+    },
+    {
+     "prompt": "Начни цикл по индексам массива `i`, с нуля до конца.",
+     "check": [
+      "for\\(int i=0;i<scores\\.length;(?:i\\+\\+|\\+\\+i|i\\+=1|i=(?:i\\+1|1\\+i))\\)\\{"
+     ],
+     "hint": "for (int i = 0; i < scores.length; i++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В цикле прибавь текущий балл к `total`.",
+     "check": [
+      "\\)\\{(?:total\\+=scores\\[i\\]|total=total\\+scores\\[i\\]|total=scores\\[i\\]\\+total);"
+     ],
+     "hint": "total += scores[i];",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Следом проверь, набран ли зачёт: балл не меньше 60.",
+     "check": [
+      "(?:total\\+=scores\\[i\\]|total=total\\+scores\\[i\\]|total=scores\\[i\\]\\+total);if\\((?:scores\\[i\\]>=60|60<=scores\\[i\\]|scores\\[i\\]>59)\\)\\{"
+     ],
+     "hint": "if (scores[i] >= 60) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если да, увеличь `passed` на 1.",
+     "check": [
+      "if\\((?:scores\\[i\\]>=60|60<=scores\\[i\\]|scores\\[i\\]>59)\\)\\{(?:passed\\+\\+|\\+\\+passed|passed\\+=1|passed=(?:passed\\+1|1\\+passed));"
+     ],
+     "hint": "passed++;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После этого `if` проверь, больше ли балл, чем `best`.",
+     "check": [
+      "(?:passed\\+\\+|\\+\\+passed|passed\\+=1|passed=(?:passed\\+1|1\\+passed));\\}if\\((?:scores\\[i\\]>best|best<scores\\[i\\])\\)\\{"
+     ],
+     "hint": "if (scores[i] > best) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если больше, запомни его в `best`.",
+     "check": [
+      "if\\((?:scores\\[i\\]>best|best<scores\\[i\\])\\)\\{best=scores\\[i\\];"
+     ],
+     "hint": "best = scores[i];",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После цикла посчитай дробное среднее: `double average`, сумма делить на длину массива. Не забудь `(double)`.",
+     "check": [
+      "\\}\\}double average=(?:\\(double\\)total/scores\\.length|total/\\(double\\)scores\\.length|total\\*1\\.0/scores\\.length|1\\.0\\*total/scores\\.length);"
+     ],
+     "hint": "double average = (double) total / scores.length;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n        double average = (double) total / scores.length;\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Total: ` и значение `total`.",
+     "check": [
+      ";System\\.out\\.println\\(\"Total: \"\\+total\\);"
+     ],
+     "hint": "System.out.println(\"Total: \" + total);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n        double average = (double) total / scores.length;\n        System.out.println(\"Total: \" + total);\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Passed: ` и значение `passed`.",
+     "check": [
+      "System\\.out\\.println\\(\"Total: \"\\+total\\);System\\.out\\.println\\(\"Passed: \"\\+passed\\);"
+     ],
+     "hint": "System.out.println(\"Passed: \" + passed);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n        double average = (double) total / scores.length;\n        System.out.println(\"Total: \" + total);\n        System.out.println(\"Passed: \" + passed);\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Failed: ` и число не сдавших: длина массива минус `passed`. Разность возьми в скобки.",
+     "check": [
+      "System\\.out\\.println\\(\"Passed: \"\\+passed\\);System\\.out\\.println\\(\"Failed: \"\\+\\(scores\\.length-passed\\)\\);"
+     ],
+     "hint": "System.out.println(\"Failed: \" + (scores.length - passed));",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n        double average = (double) total / scores.length;\n        System.out.println(\"Total: \" + total);\n        System.out.println(\"Passed: \" + passed);\n        System.out.println(\"Failed: \" + (scores.length - passed));\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Best: ` и значение `best`.",
+     "check": [
+      "\\(scores\\.length-passed\\)\\);System\\.out\\.println\\(\"Best: \"\\+best\\);"
+     ],
+     "hint": "System.out.println(\"Best: \" + best);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n        double average = (double) total / scores.length;\n        System.out.println(\"Total: \" + total);\n        System.out.println(\"Passed: \" + passed);\n        System.out.println(\"Failed: \" + (scores.length - passed));\n        System.out.println(\"Best: \" + best);\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Average: ` и значение `average`.",
+     "check": [
+      "System\\.out\\.println\\(\"Best: \"\\+best\\);System\\.out\\.println\\(\"Average: \"\\+average\\);"
+     ],
+     "hint": "System.out.println(\"Average: \" + average);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int[] scores = {72, 45, 90, 58, 66, 100, 33, 81};\n        int total = 0;\n        int passed = 0;\n        int best = scores[0];\n        for (int i = 0; i < scores.length; i++) {\n            total += scores[i];\n            if (scores[i] >= 60) {\n                passed++;\n            }\n            if (scores[i] > best) {\n                best = scores[i];\n            }\n        }\n        double average = (double) total / scores.length;\n        System.out.println(\"Total: \" + total);\n        System.out.println(\"Passed: \" + passed);\n        System.out.println(\"Failed: \" + (scores.length - passed));\n        System.out.println(\"Best: \" + best);\n        System.out.println(\"Average: \" + average);\n    }\n}\n"
+    }
+   ]
+  },
+  {
+   "key": "java-letters",
+   "language": "JAVA",
+   "title": "Гласные и согласные",
+   "statement": "Разбери строку `text` по символам: сколько в ней гласных, согласных и слов. Слова разделены одним пробелом. Программа выводит `Vowels: 7`, `Consonants: 9`, `Words: 5`.",
+   "starter": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n    }\n}\n",
+   "expectedOutput": "Vowels: 7\nConsonants: 9\nWords: 5\n",
+   "steps": [
+    {
+     "prompt": "Заведи счётчик гласных `vowels`, сначала 0.",
+     "check": [
+      "int vowels=0;"
+     ],
+     "hint": "int vowels = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи счётчик согласных `consonants`, сначала 0.",
+     "check": [
+      "int consonants=0;"
+     ],
+     "hint": "int consonants = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи счётчик пробелов `spaces`, сначала 0.",
+     "check": [
+      "int spaces=0;"
+     ],
+     "hint": "int spaces = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Начни цикл по индексам строки `i`: с нуля, пока `i` меньше `text.length()`.",
+     "check": [
+      "for\\(int i=0;i<text\\.length\\(\\);(?:i\\+\\+|\\+\\+i|i\\+=1|i=(?:i\\+1|1\\+i))\\)\\{"
+     ],
+     "hint": "for (int i = 0; i < text.length(); i++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В цикле достань текущий символ: `char c`, через `text.charAt(i)`.",
+     "check": [
+      "\\)\\{char c=text\\.charAt\\(i\\);"
+     ],
+     "hint": "char c = text.charAt(i);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Проверь, пробел ли `c`. Символ пиши в одинарных кавычках.",
+     "check": [
+      "charAt\\(i\\);if\\(c==' '\\)\\{"
+     ],
+     "hint": "if (c == ' ') {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если пробел, увеличь `spaces` на 1.",
+     "check": [
+      "if\\(c==' '\\)\\{(?:spaces\\+\\+|\\+\\+spaces|spaces\\+=1|spaces=(?:spaces\\+1|1\\+spaces));"
+     ],
+     "hint": "spaces++;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Иначе, если `c` есть среди гласных: `\"aeiou\".indexOf(c) >= 0`…",
+     "check": [
+      "(?:spaces\\+\\+|\\+\\+spaces|spaces\\+=1|spaces=(?:spaces\\+1|1\\+spaces));\\}else if\\(\"aeiou\"\\.indexOf\\(c\\)(?:>=0|>-1|!=-1)\\)\\{"
+     ],
+     "hint": "else if (\"aeiou\".indexOf(c) >= 0) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "…увеличь `vowels` на 1.",
+     "check": [
+      "else if\\(\"aeiou\"\\.indexOf\\(c\\)(?:>=0|>-1|!=-1)\\)\\{(?:vowels\\+\\+|\\+\\+vowels|vowels\\+=1|vowels=(?:vowels\\+1|1\\+vowels));"
+     ],
+     "hint": "vowels++;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Добавь последнюю ветку «иначе».",
+     "check": [
+      "(?:vowels\\+\\+|\\+\\+vowels|vowels\\+=1|vowels=(?:vowels\\+1|1\\+vowels));\\}else\\{"
+     ],
+     "hint": "else {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n            else {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В ней увеличь `consonants` на 1.",
+     "check": [
+      "else\\{(?:consonants\\+\\+|\\+\\+consonants|consonants\\+=1|consonants=(?:consonants\\+1|1\\+consonants));"
+     ],
+     "hint": "consonants++;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n            else {\n                consonants++;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После цикла заведи `words`: слов на одно больше, чем пробелов.",
+     "check": [
+      "\\}\\}int words=(?:spaces\\+1|1\\+spaces);"
+     ],
+     "hint": "int words = spaces + 1;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n            else {\n                consonants++;\n            }\n        }\n        int words = spaces + 1;\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Vowels: ` и значение `vowels`.",
+     "check": [
+      "int words=[^;]*;System\\.out\\.println\\(\"Vowels: \"\\+vowels\\);"
+     ],
+     "hint": "System.out.println(\"Vowels: \" + vowels);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n            else {\n                consonants++;\n            }\n        }\n        int words = spaces + 1;\n        System.out.println(\"Vowels: \" + vowels);\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Consonants: ` и значение `consonants`.",
+     "check": [
+      "System\\.out\\.println\\(\"Vowels: \"\\+vowels\\);System\\.out\\.println\\(\"Consonants: \"\\+consonants\\);"
+     ],
+     "hint": "System.out.println(\"Consonants: \" + consonants);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n            else {\n                consonants++;\n            }\n        }\n        int words = spaces + 1;\n        System.out.println(\"Vowels: \" + vowels);\n        System.out.println(\"Consonants: \" + consonants);\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Words: ` и значение `words`.",
+     "check": [
+      "System\\.out\\.println\\(\"Consonants: \"\\+consonants\\);System\\.out\\.println\\(\"Words: \"\\+words\\);"
+     ],
+     "hint": "System.out.println(\"Words: \" + words);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        String text = \"java is fun to learn\";\n        int vowels = 0;\n        int consonants = 0;\n        int spaces = 0;\n        for (int i = 0; i < text.length(); i++) {\n            char c = text.charAt(i);\n            if (c == ' ') {\n                spaces++;\n            }\n            else if (\"aeiou\".indexOf(c) >= 0) {\n                vowels++;\n            }\n            else {\n                consonants++;\n            }\n        }\n        int words = spaces + 1;\n        System.out.println(\"Vowels: \" + vowels);\n        System.out.println(\"Consonants: \" + consonants);\n        System.out.println(\"Words: \" + words);\n    }\n}\n"
+    }
+   ]
+  },
+  {
+   "key": "java-primes",
+   "language": "JAVA",
+   "title": "Простые числа",
+   "statement": "Выведи все простые числа от 2 до `limit`, а затем их количество и сумму. Число простое, если не делится ни на что, кроме 1 и себя. Для `limit = 30` в конце идут `Count: 10` и `Total: 129`.",
+   "starter": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n    }\n}\n",
+   "expectedOutput": "Primes:\n2\n3\n5\n7\n11\n13\n17\n19\n23\n29\nCount: 10\nTotal: 129\n",
+   "steps": [
+    {
+     "prompt": "Заведи счётчик простых чисел `count`, сначала 0.",
+     "check": [
+      "int count=0;"
+     ],
+     "hint": "int count = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Заведи их сумму `total`, сначала 0.",
+     "check": [
+      "int total=0;"
+     ],
+     "hint": "int total = 0;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи заголовок `Primes:`.",
+     "check": [
+      "int total=0;System\\.out\\.println\\(\"Primes:\"\\);"
+     ],
+     "hint": "System.out.println(\"Primes:\");",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n    }\n}\n"
+    },
+    {
+     "prompt": "Начни цикл: `n` от 2 до `limit` включительно.",
+     "check": [
+      "println\\(\"Primes:\"\\);for\\(int n=2;(?:n<=limit|n<limit\\+1);(?:n\\+\\+|\\+\\+n|n\\+=1|n=(?:n\\+1|1\\+n))\\)\\{"
+     ],
+     "hint": "for (int n = 2; n <= limit; n++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "В цикле заведи `boolean prime`: пока считаем `n` простым.",
+     "check": [
+      "\\)\\{boolean prime=true;"
+     ],
+     "hint": "boolean prime = true;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Начни вложенный цикл: делитель `d` от 2, пока `d` меньше `n`.",
+     "check": [
+      "boolean prime=true;for\\(int d=2;(?:d<n|d\\*d<=n|d<=n/2);(?:d\\+\\+|\\+\\+d|d\\+=1|d=(?:d\\+1|1\\+d))\\)\\{"
+     ],
+     "hint": "for (int d = 2; d < n; d++) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Во вложенном цикле проверь, делится ли `n` на `d`.",
+     "check": [
+      "\\)\\{if\\(n%d==0\\)\\{"
+     ],
+     "hint": "if (n % d == 0) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                }\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если делится, `n` не простое: запиши это в `prime`.",
+     "check": [
+      "if\\(n%d==0\\)\\{prime=false;"
+     ],
+     "hint": "prime = false;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                }\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "И выйди из вложенного цикла.",
+     "check": [
+      "prime=false;break;"
+     ],
+     "hint": "break;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После вложенного цикла проверь, осталось ли `n` простым.",
+     "check": [
+      "\\}\\}if\\((?:prime|prime==true)\\)\\{"
+     ],
+     "hint": "if (prime) {",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n            if (prime) {\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Если да, увеличь `count` на 1.",
+     "check": [
+      "if\\((?:prime|prime==true)\\)\\{(?:count\\+\\+|\\+\\+count|count\\+=1|count=(?:count\\+1|1\\+count));"
+     ],
+     "hint": "count++;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n            if (prime) {\n                count++;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Прибавь `n` к `total`.",
+     "check": [
+      "(?:count\\+\\+|\\+\\+count|count\\+=1|count=(?:count\\+1|1\\+count));(?:total\\+=n|total=total\\+n|total=n\\+total);"
+     ],
+     "hint": "total += n;",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n            if (prime) {\n                count++;\n                total += n;\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи само число `n`.",
+     "check": [
+      "(?:total\\+=n|total=total\\+n|total=n\\+total);System\\.out\\.println\\(n\\);"
+     ],
+     "hint": "System.out.println(n);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n            if (prime) {\n                count++;\n                total += n;\n                System.out.println(n);\n            }\n        }\n    }\n}\n"
+    },
+    {
+     "prompt": "После внешнего цикла выведи `Count: ` и значение `count`.",
+     "check": [
+      "\\}\\}System\\.out\\.println\\(\"Count: \"\\+count\\);"
+     ],
+     "hint": "System.out.println(\"Count: \" + count);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n            if (prime) {\n                count++;\n                total += n;\n                System.out.println(n);\n            }\n        }\n        System.out.println(\"Count: \" + count);\n    }\n}\n"
+    },
+    {
+     "prompt": "Выведи `Total: ` и значение `total`.",
+     "check": [
+      "System\\.out\\.println\\(\"Count: \"\\+count\\);System\\.out\\.println\\(\"Total: \"\\+total\\);"
+     ],
+     "hint": "System.out.println(\"Total: \" + total);",
+     "code": "public class Solution {\n    public static void main(String[] args) {\n        int limit = 30;\n        int count = 0;\n        int total = 0;\n        System.out.println(\"Primes:\");\n        for (int n = 2; n <= limit; n++) {\n            boolean prime = true;\n            for (int d = 2; d < n; d++) {\n                if (n % d == 0) {\n                    prime = false;\n                    break;\n                }\n            }\n            if (prime) {\n                count++;\n                total += n;\n                System.out.println(n);\n            }\n        }\n        System.out.println(\"Count: \" + count);\n        System.out.println(\"Total: \" + total);\n    }\n}\n"
+    }
+   ]
+  },
+  {
    "key": "python-evens",
    "language": "PYTHON",
    "title": "Чётные и нечётные",
@@ -473,6 +863,396 @@
      ],
      "hint": "print(i)",
      "code": "for i in range(1, 16):\n    if i % 15 == 0:\n        print(\"FizzBuzz\")\n    elif i % 3 == 0:\n        print(\"Fizz\")\n    elif i % 5 == 0:\n        print(\"Buzz\")\n    else:\n        print(i)\n"
+    }
+   ]
+  },
+  {
+   "key": "python-scores",
+   "language": "PYTHON",
+   "title": "Оценки группы",
+   "statement": "В списке `scores` — баллы группы, зачёт от 60. Программа выводит сумму баллов, сколько сдали и не сдали, лучший балл и средний (без `sum()` и `max()`): `Total: 545`, `Passed: 5`, `Failed: 3`, `Best: 100`, `Average: 68.125`.",
+   "starter": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\n",
+   "expectedOutput": "Total: 545\nPassed: 5\nFailed: 3\nBest: 100\nAverage: 68.125\n",
+   "steps": [
+    {
+     "prompt": "Заведи сумму баллов `total`, сначала 0.",
+     "check": [
+      "^total=0$"
+     ],
+     "hint": "total = 0",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\n"
+    },
+    {
+     "prompt": "Заведи счётчик сдавших `passed`, сначала 0.",
+     "check": [
+      "^passed=0$"
+     ],
+     "hint": "passed = 0",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\n"
+    },
+    {
+     "prompt": "Заведи `best`: пока лучший балл — первый элемент списка.",
+     "check": [
+      "^best=scores\\[0\\]$"
+     ],
+     "hint": "best = scores[0]",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\n"
+    },
+    {
+     "prompt": "Начни цикл по списку: каждый балл называй `score`.",
+     "check": [
+      "^for score in scores:$"
+     ],
+     "hint": "for score in scores:",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n"
+    },
+    {
+     "prompt": "В цикле прибавь `score` к `total`.",
+     "check": [
+      "^for score in scores:\\n>(?:total\\+=score|total=total\\+score|total=score\\+total)$"
+     ],
+     "hint": "total += score",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n"
+    },
+    {
+     "prompt": "Следом проверь, набран ли зачёт: балл не меньше 60.",
+     "check": [
+      "^>(?:total\\+=score|total=total\\+score|total=score\\+total)\\n>if (?:score>=60|60<=score|score>59):$"
+     ],
+     "hint": "if score >= 60:",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n"
+    },
+    {
+     "prompt": "Если да, увеличь `passed` на 1.",
+     "check": [
+      "^>if (?:score>=60|60<=score|score>59):\\n>>(?:passed\\+=1|passed=passed\\+1|passed=1\\+passed)$"
+     ],
+     "hint": "passed += 1",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n"
+    },
+    {
+     "prompt": "После этого `if` проверь, больше ли `score`, чем `best`.",
+     "check": [
+      "^>>(?:passed\\+=1|passed=passed\\+1|passed=1\\+passed)\\n>if (?:score>best|best<score):$"
+     ],
+     "hint": "if score > best:",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n"
+    },
+    {
+     "prompt": "Если больше, запомни его в `best`.",
+     "check": [
+      "^>if (?:score>best|best<score):\\n>>best=score$"
+     ],
+     "hint": "best = score",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\n"
+    },
+    {
+     "prompt": "После цикла посчитай среднее `average`: сумма делить на длину списка.",
+     "check": [
+      "^>>best=score\\naverage=total/len\\(scores\\)$"
+     ],
+     "hint": "average = total / len(scores)",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\naverage = total / len(scores)\n"
+    },
+    {
+     "prompt": "Выведи `Total:` и значение `total`.",
+     "check": [
+      "^average=[^\\n]*\\nprint\\((?:\"Total:\",total|\"Total: \"\\+str\\(total\\)|f\"Total: \\{total\\}\")\\)$"
+     ],
+     "hint": "print(\"Total:\", total)",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\naverage = total / len(scores)\nprint(\"Total:\", total)\n"
+    },
+    {
+     "prompt": "Выведи `Passed:` и значение `passed`.",
+     "check": [
+      "^print\\((?:\"Total:\",total|\"Total: \"\\+str\\(total\\)|f\"Total: \\{total\\}\")\\)\\nprint\\((?:\"Passed:\",passed|\"Passed: \"\\+str\\(passed\\)|f\"Passed: \\{passed\\}\")\\)$"
+     ],
+     "hint": "print(\"Passed:\", passed)",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\naverage = total / len(scores)\nprint(\"Total:\", total)\nprint(\"Passed:\", passed)\n"
+    },
+    {
+     "prompt": "Выведи `Failed:` и число не сдавших: длина списка минус `passed`.",
+     "check": [
+      "^print\\((?:\"Passed:\",passed|\"Passed: \"\\+str\\(passed\\)|f\"Passed: \\{passed\\}\")\\)\\nprint\\((?:\"Failed:\",len\\(scores\\)-passed|\"Failed: \"\\+str\\(len\\(scores\\)-passed\\)|f\"Failed: \\{len\\(scores\\)-passed\\}\")\\)$"
+     ],
+     "hint": "print(\"Failed:\", len(scores) - passed)",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\naverage = total / len(scores)\nprint(\"Total:\", total)\nprint(\"Passed:\", passed)\nprint(\"Failed:\", len(scores) - passed)\n"
+    },
+    {
+     "prompt": "Выведи `Best:` и значение `best`.",
+     "check": [
+      "^print\\((?:\"Failed:\",len\\(scores\\)-passed|\"Failed: \"\\+str\\(len\\(scores\\)-passed\\)|f\"Failed: \\{len\\(scores\\)-passed\\}\")\\)\\nprint\\((?:\"Best:\",best|\"Best: \"\\+str\\(best\\)|f\"Best: \\{best\\}\")\\)$"
+     ],
+     "hint": "print(\"Best:\", best)",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\naverage = total / len(scores)\nprint(\"Total:\", total)\nprint(\"Passed:\", passed)\nprint(\"Failed:\", len(scores) - passed)\nprint(\"Best:\", best)\n"
+    },
+    {
+     "prompt": "Выведи `Average:` и значение `average`.",
+     "check": [
+      "^print\\((?:\"Best:\",best|\"Best: \"\\+str\\(best\\)|f\"Best: \\{best\\}\")\\)\\nprint\\((?:\"Average:\",average|\"Average: \"\\+str\\(average\\)|f\"Average: \\{average\\}\")\\)$"
+     ],
+     "hint": "print(\"Average:\", average)",
+     "code": "scores = [72, 45, 90, 58, 66, 100, 33, 81]\ntotal = 0\npassed = 0\nbest = scores[0]\nfor score in scores:\n    total += score\n    if score >= 60:\n        passed += 1\n    if score > best:\n        best = score\naverage = total / len(scores)\nprint(\"Total:\", total)\nprint(\"Passed:\", passed)\nprint(\"Failed:\", len(scores) - passed)\nprint(\"Best:\", best)\nprint(\"Average:\", average)\n"
+    }
+   ]
+  },
+  {
+   "key": "python-letters",
+   "language": "PYTHON",
+   "title": "Гласные и согласные",
+   "statement": "Разбери строку `text` по символам: сколько в ней гласных, согласных, пробелов и слов. Слова разделены одним пробелом. Программа выводит `Vowels: 6`, `Consonants: 12`, `Spaces: 4`, `Words: 5`.",
+   "starter": "text = \"python is fun to learn\"\n",
+   "expectedOutput": "Vowels: 6\nConsonants: 12\nSpaces: 4\nWords: 5\n",
+   "steps": [
+    {
+     "prompt": "Заведи счётчик гласных `vowels`, сначала 0.",
+     "check": [
+      "^vowels=0$"
+     ],
+     "hint": "vowels = 0",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\n"
+    },
+    {
+     "prompt": "Заведи счётчик согласных `consonants`, сначала 0.",
+     "check": [
+      "^consonants=0$"
+     ],
+     "hint": "consonants = 0",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\n"
+    },
+    {
+     "prompt": "Заведи счётчик пробелов `spaces`, сначала 0.",
+     "check": [
+      "^spaces=0$"
+     ],
+     "hint": "spaces = 0",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\n"
+    },
+    {
+     "prompt": "Начни цикл по строке: каждый символ называй `ch`.",
+     "check": [
+      "^for ch in text:$"
+     ],
+     "hint": "for ch in text:",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n"
+    },
+    {
+     "prompt": "В цикле проверь, пробел ли `ch`.",
+     "check": [
+      "^for ch in text:\\n>if ch==(?:\" \"|\\' \\'):$"
+     ],
+     "hint": "if ch == \" \":",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n"
+    },
+    {
+     "prompt": "Если пробел, увеличь `spaces` на 1.",
+     "check": [
+      "^>if ch==[^\\n]*:\\n>>(?:spaces\\+=1|spaces=spaces\\+1|spaces=1\\+spaces)$"
+     ],
+     "hint": "spaces += 1",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n"
+    },
+    {
+     "prompt": "Иначе, если `ch` есть в строке `\"aeiou\"`…",
+     "check": [
+      "^>>(?:spaces\\+=1|spaces=spaces\\+1|spaces=1\\+spaces)\\n>elif ch in (?:\"aeiou\"|\\'aeiou\\'):$"
+     ],
+     "hint": "elif ch in \"aeiou\":",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n"
+    },
+    {
+     "prompt": "…увеличь `vowels` на 1.",
+     "check": [
+      "^>elif ch in [^\\n]*:\\n>>(?:vowels\\+=1|vowels=vowels\\+1|vowels=1\\+vowels)$"
+     ],
+     "hint": "vowels += 1",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n"
+    },
+    {
+     "prompt": "Добавь последнюю ветку «иначе».",
+     "check": [
+      "^>>(?:vowels\\+=1|vowels=vowels\\+1|vowels=1\\+vowels)\\n>else:$"
+     ],
+     "hint": "else:",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n"
+    },
+    {
+     "prompt": "В ней увеличь `consonants` на 1.",
+     "check": [
+      "^>else:\\n>>(?:consonants\\+=1|consonants=consonants\\+1|consonants=1\\+consonants)$"
+     ],
+     "hint": "consonants += 1",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n        consonants += 1\n"
+    },
+    {
+     "prompt": "После цикла заведи `words`: слов на одно больше, чем пробелов.",
+     "check": [
+      "^>>(?:consonants\\+=1|consonants=consonants\\+1|consonants=1\\+consonants)\\nwords=(?:spaces\\+1|1\\+spaces)$"
+     ],
+     "hint": "words = spaces + 1",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n        consonants += 1\nwords = spaces + 1\n"
+    },
+    {
+     "prompt": "Выведи `Vowels:` и значение `vowels`.",
+     "check": [
+      "^words=[^\\n]*\\nprint\\((?:\"Vowels:\",vowels|\"Vowels: \"\\+str\\(vowels\\)|f\"Vowels: \\{vowels\\}\")\\)$"
+     ],
+     "hint": "print(\"Vowels:\", vowels)",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n        consonants += 1\nwords = spaces + 1\nprint(\"Vowels:\", vowels)\n"
+    },
+    {
+     "prompt": "Выведи `Consonants:` и значение `consonants`.",
+     "check": [
+      "^print\\((?:\"Vowels:\",vowels|\"Vowels: \"\\+str\\(vowels\\)|f\"Vowels: \\{vowels\\}\")\\)\\nprint\\((?:\"Consonants:\",consonants|\"Consonants: \"\\+str\\(consonants\\)|f\"Consonants: \\{consonants\\}\")\\)$"
+     ],
+     "hint": "print(\"Consonants:\", consonants)",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n        consonants += 1\nwords = spaces + 1\nprint(\"Vowels:\", vowels)\nprint(\"Consonants:\", consonants)\n"
+    },
+    {
+     "prompt": "Выведи `Spaces:` и значение `spaces`.",
+     "check": [
+      "^print\\((?:\"Consonants:\",consonants|\"Consonants: \"\\+str\\(consonants\\)|f\"Consonants: \\{consonants\\}\")\\)\\nprint\\((?:\"Spaces:\",spaces|\"Spaces: \"\\+str\\(spaces\\)|f\"Spaces: \\{spaces\\}\")\\)$"
+     ],
+     "hint": "print(\"Spaces:\", spaces)",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n        consonants += 1\nwords = spaces + 1\nprint(\"Vowels:\", vowels)\nprint(\"Consonants:\", consonants)\nprint(\"Spaces:\", spaces)\n"
+    },
+    {
+     "prompt": "Выведи `Words:` и значение `words`.",
+     "check": [
+      "^print\\((?:\"Spaces:\",spaces|\"Spaces: \"\\+str\\(spaces\\)|f\"Spaces: \\{spaces\\}\")\\)\\nprint\\((?:\"Words:\",words|\"Words: \"\\+str\\(words\\)|f\"Words: \\{words\\}\")\\)$"
+     ],
+     "hint": "print(\"Words:\", words)",
+     "code": "text = \"python is fun to learn\"\nvowels = 0\nconsonants = 0\nspaces = 0\nfor ch in text:\n    if ch == \" \":\n        spaces += 1\n    elif ch in \"aeiou\":\n        vowels += 1\n    else:\n        consonants += 1\nwords = spaces + 1\nprint(\"Vowels:\", vowels)\nprint(\"Consonants:\", consonants)\nprint(\"Spaces:\", spaces)\nprint(\"Words:\", words)\n"
+    }
+   ]
+  },
+  {
+   "key": "python-primes",
+   "language": "PYTHON",
+   "title": "Простые числа",
+   "statement": "Выведи все простые числа от 2 до `limit`, а затем их количество и сумму. Число простое, если не делится ни на что, кроме 1 и себя. Для `limit = 30` в конце идут `Count: 10` и `Total: 129`.",
+   "starter": "limit = 30\n",
+   "expectedOutput": "Primes:\n2\n3\n5\n7\n11\n13\n17\n19\n23\n29\nCount: 10\nTotal: 129\n",
+   "steps": [
+    {
+     "prompt": "Заведи счётчик простых чисел `count`, сначала 0.",
+     "check": [
+      "^count=0$"
+     ],
+     "hint": "count = 0",
+     "code": "limit = 30\ncount = 0\n"
+    },
+    {
+     "prompt": "Заведи их сумму `total`, сначала 0.",
+     "check": [
+      "^total=0$"
+     ],
+     "hint": "total = 0",
+     "code": "limit = 30\ncount = 0\ntotal = 0\n"
+    },
+    {
+     "prompt": "Выведи заголовок `Primes:`.",
+     "check": [
+      "^total=0\\nprint\\(\"Primes:\"\\)$"
+     ],
+     "hint": "print(\"Primes:\")",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\n"
+    },
+    {
+     "prompt": "Начни цикл: `n` от 2 до `limit` включительно.",
+     "check": [
+      "^print\\(\"Primes:\"\\)\\nfor n in range\\(2,(?:limit\\+1|1\\+limit)\\):$"
+     ],
+     "hint": "for n in range(2, limit + 1):",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n"
+    },
+    {
+     "prompt": "В цикле заведи `prime`: пока считаем `n` простым.",
+     "check": [
+      "^for n in range[^\\n]*\\n>prime=True$"
+     ],
+     "hint": "prime = True",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n"
+    },
+    {
+     "prompt": "Начни вложенный цикл: делитель `d` от 2, пока `d` меньше `n`.",
+     "check": [
+      "^>prime=True\\n>for d in range\\(2,n\\):$"
+     ],
+     "hint": "for d in range(2, n):",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n"
+    },
+    {
+     "prompt": "Во вложенном цикле проверь, делится ли `n` на `d`.",
+     "check": [
+      "^>for d in range[^\\n]*\\n>>if n%d==0:$"
+     ],
+     "hint": "if n % d == 0:",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n"
+    },
+    {
+     "prompt": "Если делится, `n` не простое: запиши это в `prime`.",
+     "check": [
+      "^>>if n%d==0:\\n>>>prime=False$"
+     ],
+     "hint": "prime = False",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n"
+    },
+    {
+     "prompt": "И выйди из вложенного цикла.",
+     "check": [
+      "^>>>prime=False\\n>>>break$"
+     ],
+     "hint": "break",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n"
+    },
+    {
+     "prompt": "После вложенного цикла проверь, осталось ли `n` простым.",
+     "check": [
+      "^>>>break\\n>if (?:prime|prime==True):$"
+     ],
+     "hint": "if prime:",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n    if prime:\n"
+    },
+    {
+     "prompt": "Если да, увеличь `count` на 1.",
+     "check": [
+      "^>if (?:prime|prime==True):\\n>>(?:count\\+=1|count=count\\+1|count=1\\+count)$"
+     ],
+     "hint": "count += 1",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n    if prime:\n        count += 1\n"
+    },
+    {
+     "prompt": "Прибавь `n` к `total`.",
+     "check": [
+      "^>>(?:count\\+=1|count=count\\+1|count=1\\+count)\\n>>(?:total\\+=n|total=total\\+n|total=n\\+total)$"
+     ],
+     "hint": "total += n",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n    if prime:\n        count += 1\n        total += n\n"
+    },
+    {
+     "prompt": "Выведи само число `n`.",
+     "check": [
+      "^>>(?:total\\+=n|total=total\\+n|total=n\\+total)\\n>>print\\(n\\)$"
+     ],
+     "hint": "print(n)",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n    if prime:\n        count += 1\n        total += n\n        print(n)\n"
+    },
+    {
+     "prompt": "После внешнего цикла выведи `Count:` и значение `count`.",
+     "check": [
+      "^>>print\\(n\\)\\nprint\\((?:\"Count:\",count|\"Count: \"\\+str\\(count\\)|f\"Count: \\{count\\}\")\\)$"
+     ],
+     "hint": "print(\"Count:\", count)",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n    if prime:\n        count += 1\n        total += n\n        print(n)\nprint(\"Count:\", count)\n"
+    },
+    {
+     "prompt": "Выведи `Total:` и значение `total`.",
+     "check": [
+      "^print\\((?:\"Count:\",count|\"Count: \"\\+str\\(count\\)|f\"Count: \\{count\\}\")\\)\\nprint\\((?:\"Total:\",total|\"Total: \"\\+str\\(total\\)|f\"Total: \\{total\\}\")\\)$"
+     ],
+     "hint": "print(\"Total:\", total)",
+     "code": "limit = 30\ncount = 0\ntotal = 0\nprint(\"Primes:\")\nfor n in range(2, limit + 1):\n    prime = True\n    for d in range(2, n):\n        if n % d == 0:\n            prime = False\n            break\n    if prime:\n        count += 1\n        total += n\n        print(n)\nprint(\"Count:\", count)\nprint(\"Total:\", total)\n"
     }
    ]
   }
