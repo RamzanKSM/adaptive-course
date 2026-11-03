@@ -1,8 +1,7 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
 import { Tile } from './analytics'
 import { ChartPoint, ChartSeries, LineChart, LineKey, SERIES_COLORS } from './charts'
-import { ClassroomScreen } from './classroom'
 import { Icon, initials, useToast } from './fx'
 import { parseDate } from './game'
 import { GroupFilter, groupCounts, inGroup, NO_GROUP, useGroupFilter } from './groups'
@@ -27,7 +26,7 @@ const FLAG_CHIPS: [ProgressFlag, string, string][] = [
   ['NOT_STARTED', 'Не начал', 'Ещё не было ни одного урока на этом курсе'],
   ['GONE', 'Пропал', 'Нет активности 7 дней и больше'],
 ]
-/** Fewer members than this: group numbers are noisy, and the classroom screen hides them. */
+/** Fewer members than this: group numbers are noisy. */
 const SMALL_GROUP = 5
 const LANGUAGE_KEY = 'rmzn-progress-language'
 const collator = new Intl.Collator('ru', { numeric: true, sensitivity: 'base' })
@@ -109,7 +108,7 @@ function storedLanguage(): CourseLanguage {
   try { return localStorage.getItem(LANGUAGE_KEY) === 'PYTHON' ? 'PYTHON' : 'JAVA' } catch { return 'JAVA' }
 }
 
-/** Teacher: growth of a group, forecast to the session per student, comparison of groups, and the classroom screen. */
+/** Teacher: growth of a group, forecast to the session per student, and comparison of groups. */
 /** focus: a student to show (from their card) — the page switches to their course and group and opens their panel. */
 export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: Request; onOpenStudent?: (id: Id) => void; focus?: { id: Id; nonce: number } | null }) {
   const [language, setLanguageState] = useState<CourseLanguage>(storedLanguage)
@@ -123,7 +122,6 @@ export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: 
   const [showOthers, setShowOthers] = useState(false)
   const [view, setView] = useState<View>({ metric: 'skills', scale: 'level', axis: 'dates', diagnostic: true })
   const [selectedId, setSelectedId] = useState<Id | null>(null)
-  const [classroom, setClassroom] = useState<string | null>(null)
   const [group, setGroup] = useGroupFilter('rmzn-progress-group', report ? [...new Set(report.students.map(s => s.group).filter((g): g is string => !!g))] : null)
   const toast = useToast()
   /** The student from `focus` and the courses already looked at for them. */
@@ -177,8 +175,6 @@ export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: 
   }, [report, showOthers, group])
   const selected = report?.students.find(s => s.id === selectedId) ?? null
   const comparison = group === ''
-  const canShow = !!group && group !== NO_GROUP
-  const closeClassroom = useCallback(() => setClassroom(null), [])
   const rangeLabel = report ? `${shortDay(dayNumber(report.from))} — ${shortDay(dayNumber(report.to))}` : ''
 
   return <section className="analytics progress-admin">
@@ -217,8 +213,6 @@ export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: 
 
     {report && scope && <div className="group-bar enter">
       <GroupFilter allLabel="Все группы" total={scope.total} groups={scope.counts.groups} ungrouped={scope.counts.ungrouped} value={group} onChange={value => { setGroup(value); setSelectedId(null) }} />
-      <button type="button" className="secondary show-group" disabled={!canShow} title={canShow ? 'Экран для проектора: только общие цифры группы, без имён' : 'Выбери одну группу'} onClick={() => setClassroom(group)}>
-        <Icon name="play" size={15} /> Показ группе</button>
     </div>}
 
     {!report || !scope || !ctx ? <div className="sk sk-card" /> : <div className={`progress-body ${loading ? 'is-refreshing' : ''}`}>
@@ -237,7 +231,6 @@ export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: 
           {selected && <StudentPanel key={selected.id} student={selected} ctx={ctx} diagnostic={view.diagnostic} onClose={() => setSelectedId(null)} onOpenStudent={onOpenStudent} />}
         </>}
     </div>}
-    {classroom && <ClassroomScreen language={language} group={classroom} onClose={closeClassroom} />}
   </section>
 }
 

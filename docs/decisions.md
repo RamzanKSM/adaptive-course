@@ -142,7 +142,7 @@ class the teacher calls students one by one to a short individual test, projecte
   at 3 at the board. Now the plan is one line from 0 topics at the group's start (its first lesson in the course) to all
   topics at the session; status by the lag = plan for today − topics closed (diagnostic included): ≤ 0 on track, 1–2
   borderline (the owner chose an absolute lag over 75%: early in the course percentages jump), ≥ 3 behind. The same line is
-  the board's «по темпу на сегодня» minimum and the classroom's week goal. The forecast at the current pace (dotted line,
+  the board's «по темпу на сегодня» minimum. The forecast at the current pace (dotted line,
   date) stays for display only, computed as before.
 - Tab «Прогресс»: growth per day (skills %, solved, XP — same formula as the student sees), a line per group member +
   median (mean in the tooltip), group comparison per member (never totals), blocks heat map, students table with flags.
@@ -153,8 +153,9 @@ class the teacher calls students one by one to a short individual test, projecte
   gone, not started). The «≥ 5 topics below the group median» flag was dropped: it mostly reflected diagnostic results.
 - «Участвует в сессии» flag: off for the teacher, volunteers, test accounts — excluded from forecasts, group statistics
   and «Работа на паре»; no pace cap at the board.
-- Visibility (pedagogy agreed with the owner): projected «Показ группе» = anonymous group aggregates only, no counts of
-  students behind; students never get rankings or group medians; no CSV export (not needed).
+- Visibility (pedagogy agreed with the owner): students never get rankings or group medians; no CSV export (not needed).
+- The projected «Показ группе» screen (anonymous group aggregates) was removed at the owner's request on 2026-11-03,
+  together with `GET /api/admin/classroom`.
 
 ## Topic re-take («Повторить тему», 2026-10-27…28)
 Several students asked to go through topics again. Agreed with the owner:

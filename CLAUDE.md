@@ -68,8 +68,7 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
 - Task text: everything a student types or reads as program text/output is plain English ASCII; statements, hints and
   check messages are Russian and quote the English strings. Applies to the curated bank, hard bank, seeds and the LLM
   generator prompt.
-- Teacher analytics «Прогресс» and the session forecast; «Показ группе» shows only anonymous group aggregates; students
-  see only their own data — never medians, rankings or other students.
+- Teacher analytics «Прогресс» and the session forecast; students see only their own data — never medians, rankings or other students.
 - Grades: individual tests at the board («К доске», `BoardTests`): the teacher calls a student from his laptop, the
   student takes a timed test on the classroom PC (projected) with the items the teacher chose: «Собери программу»,
   «Исправь ошибку», «Напиши код» (2/2/3 minutes, weights 1/2/3) on topics from the group's minimum for today up to the

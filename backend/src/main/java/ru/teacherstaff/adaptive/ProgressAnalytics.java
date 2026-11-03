@@ -11,8 +11,8 @@ import java.time.*;
 import java.util.*;
 
 /**
- * Progress analytics of a course: the teacher's «Прогресс» (growth per day, forecast to the session, flags), the
- * classroom screen projected to a group (anonymous aggregates only) and the student's own pace to the session.
+ * Progress analytics of a course: the teacher's «Прогресс» (growth per day, forecast to the session, flags) and
+ * the student's own pace to the session.
  * <p>Nothing is stored for it. The history is rebuilt from the rows the course keeps anyway: credited tasks are dated by
  * their first passed, non-revoked submission; iterations are replayed lesson by lesson with IterationRule, the rule live
  * crediting uses, each credited task at the moment of its first pass in the lesson; diagnostic confirmations count from
@@ -27,8 +27,6 @@ class ProgressAnalytics {
   static final int BORDERLINE_LAG = 2;
   /** A member silent this many days is GONE; this many failed submissions in a row on the current task is STUCK. */
   static final int GONE_DAYS = 7, STUCK_FAILURES = 5;
-  /** The classroom shows no totals for fewer members: in a tiny group they would identify people. */
-  static final int CLASSROOM_MIN_MEMBERS = 5, CLASSROOM_DAYS = 28, HARD_TOPICS = 5, HARD_TOPIC_MIN_STUDENTS = 3;
   /** Longest stretch of the teacher's charts, in days: an earlier `from` starts the lines this many days before `to`. */
   static final int MAX_DAYS = 1100;
   /** XP as the student's game.ts experience(): a task, a hard task, an iteration, a mastered topic, a confirmed one. */
@@ -142,66 +140,6 @@ class ProgressAnalytics {
         "total", f.total(), "closed", f.closed(), "remaining", f.remaining(), "pace", round(f.pace(), 2),
         "planStart", f.planStart() == null ? null : f.planStart().toString(), "planToday", f.planToday(), "lag", f.lag(), "status", f.status(),
         "forecastDate", f.forecastDate() == null ? null : f.forecastDate().toString(), "days", days, "closedSeries", closed);
-  }
-
-  /**
-   * GET /api/admin/classroom: aggregates over the group's members, projected to the whole group, so it never holds an id,
-   * a login or a name. Null when the group has no members in this course (unknown group included).
-   */
-  Map<String, Object> classroom(Language lang, String group, Instant at) {
-    if (group == null || group.isBlank()) return null;
-    long now = at.getEpochSecond(); LocalDate today = day(now), session = sessionDate();
-    var course = load(lang, Scope.group(group.strip()));
-    var members = course.students().stream().filter(s -> member(s, lang)).toList();
-    if (members.isEmpty()) return null;
-    int total = course.topics().size();
-    boolean tooSmall = members.size() < CLASSROOM_MIN_MEMBERS;
-    var view = obj("group", group.strip(), "language", lang.name(), "members", members.size(), "tooSmall", tooSmall,
-        "session", sessionView(session, today), "totalTopics", total, "week", null, "daily", List.of(), "blocks", List.of(), "hardTopics", List.of());
-    if (tooSmall) return view;
-
-    // Topics closed by practice (a first iteration of a topic the diagnostic did not confirm), by moment.
-    LocalDate monday = today.with(DayOfWeek.MONDAY); long weekStart = startOf(monday);
-    var plan = plan(session, planStart(group.strip(), lang), total);
-    var closures = new ArrayList<Long>(); int behindBySunday = 0;
-    for (var s : members) {
-      // The goal of the week: what each member lacks at the week start to be on the plan line on Sunday.
-      if (plan != null) behindBySunday += Math.max(0, plan.topics(monday.plusDays(6)) - new Cursor(s).at(weekStart).closed());
-      for (int i = 0; i < total; i++) if (!s.confirmed[i] && s.firstIteration[i] != Long.MAX_VALUE) closures.add(s.firstIteration[i]);
-    }
-    Integer goal = plan == null ? null : behindBySunday;
-    view.put("week", obj("from", monday.toString(), "closedTopics", closures.stream().filter(t -> t >= weekStart && t <= now).count(), "goal", goal));
-
-    Map<Long, Integer> perDay = new HashMap<>();
-    for (long t : closures) perDay.merge(Math.floorDiv(t, DAY), 1, Integer::sum);
-    var daily = new ArrayList<Map<String, Object>>();
-    for (var d = today.minusDays(CLASSROOM_DAYS - 1); !d.isAfter(today); d = d.plusDays(1)) daily.add(obj("day", d.toString(), "closedTopics", perDay.getOrDefault(d.toEpochDay(), 0)));
-    view.put("daily", daily);
-
-    var cursors = members.stream().map(s -> new Cursor(s).at(now + 1)).toList();
-    var blocks = new TreeMap<Integer, List<Integer>>();
-    for (int i = 0; i < total; i++) blocks.computeIfAbsent(course.topics().get(i).block(), b -> new ArrayList<>()).add(i);
-    var blockViews = new ArrayList<Map<String, Object>>();
-    for (var block : blocks.entrySet()) {
-      double sum = 0;
-      for (var c : cursors) for (int i : block.getValue()) sum += c.confirmed(i) ? 1 : c.share(i);
-      blockViews.add(obj("block", block.getKey(), "topics", block.getValue().stream().map(i -> course.topics().get(i).title()).toList(),
-          "avgShare", round(sum / (cursors.size() * block.getValue().size()), 2)));
-    }
-    view.put("blocks", blockViews);
-
-    int[] attempts = new int[total], solved = new int[total], students = new int[total];
-    for (var s : members) {
-      boolean[] tried = new boolean[total];
-      for (var x : s.submissions) for (int i : course.targets(x.taskId())) { attempts[i]++; tried[i] = true; }
-      for (var credit : s.credits) for (int i : course.targets(credit.taskId())) solved[i]++;
-      for (int i = 0; i < total; i++) if (tried[i]) students[i]++;
-    }
-    view.put("hardTopics", java.util.stream.IntStream.range(0, total).filter(i -> students[i] >= HARD_TOPIC_MIN_STUDENTS).boxed()
-        .sorted(Comparator.<Integer>comparingDouble(i -> -attempts[i] / (double) Math.max(1, solved[i])).thenComparingInt(i -> i)).limit(HARD_TOPICS)
-        .map(i -> obj("code", course.topics().get(i).code(), "title", course.topics().get(i).title(),
-            "attemptsPerSolve", round(attempts[i] / (double) Math.max(1, solved[i]), 1), "students", students[i])).toList());
-    return view;
   }
 
   private Map<String, Object> studentView(Course course, Student s, List<LocalDate> days, LocalDate from, LocalDate to, long now, LocalDate today, LocalDate session, LocalDate planStart) {

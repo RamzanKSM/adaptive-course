@@ -87,7 +87,7 @@ export interface LlmSettings {
   logging: LlmLogging; loggingDefaults: LlmLogging
 }
 
-// ───────── Progress analytics (GET /admin/progress, /admin/classroom, /admin/session; session in GET /progress) ─────────
+// ───────── Progress analytics (GET /admin/progress, /admin/session; session in GET /progress) ─────────
 /** Forecast status: DONE — every topic closed; null — no session date. */
 export type SessionStatus = 'ON_TRACK' | 'BORDERLINE' | 'BEHIND' | 'DONE'
 /** Teacher-only flags of a member. */
@@ -127,15 +127,6 @@ export interface ProgressStudent {
 export interface ProgressReport {
   language: CourseLanguage; from: string; to: string; today: string
   days: string[]; session: SessionInfo; topics: ProgressTopic[]; students: ProgressStudent[]
-}
-/** The screen projected to a whole group: anonymous aggregates over its members only. tooSmall (members < 5) leaves week/daily/blocks/hardTopics empty. */
-export interface Classroom {
-  group: string; language: CourseLanguage; members: number; tooSmall: boolean
-  session: SessionInfo; totalTopics: number
-  week: { from: string; closedTopics: number; goal: number | null } | null
-  daily: { day: string; closedTopics: number }[] | null
-  blocks: { block: number; topics: string[]; avgShare: number }[] | null
-  hardTopics: { code: string; title: string; attemptsPerSolve: number; students: number }[] | null
 }
 /** The student's own pace to the session (GET /progress → session). closedSeries: closed topics at the end of each of `days`. */
 export interface StudentSession extends SessionPlanFields {

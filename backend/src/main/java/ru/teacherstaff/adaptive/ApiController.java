@@ -731,14 +731,6 @@ public class ApiController {
     if(!Objects.equals(before,date)) log.info("Session date changed by admin {}: {} → {}",uid(r),before==null?"—":before,date==null?"—":date);
     return obj("date",date==null?null:date.toString());
   }
-  /**
-   * The screen projected to a whole group: anonymous aggregates over the group's members in the course — no ids, logins
-   * or names, no per-student lines, and no totals at all for fewer than five members. 404 when there are no members.
-   */
-  @GetMapping("/admin/classroom") public ResponseEntity<?> classroom(@RequestParam(name="language",required=false) String language,@RequestParam(name="group",required=false) String group,HttpServletRequest r){
-    admin(r); var view=analytics.classroom(Language.parse(language),group,analytics.now());
-    return view==null?ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error","GROUP_NOT_FOUND","message","В группе нет участников сессии этого курса")):ResponseEntity.ok(view);
-  }
 
   /** «Работа на паре»: teacher-only analytics of a class period (PairWork; rules in README «Работа на паре»). */
   @GetMapping("/admin/pairs/course") public Map<String,Object> pairCourse(@RequestParam(name="group",required=false) String group,HttpServletRequest r){ admin(r); return pairWork.course(group); }

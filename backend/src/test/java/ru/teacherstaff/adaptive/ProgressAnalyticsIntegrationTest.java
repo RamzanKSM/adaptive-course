@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Progress analytics end to end: the replayed history ends exactly where the live progress is, the forecast, flags and
- * membership follow the definitions, and the classroom screen never shows a person.
+ * membership follow the definitions.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -275,60 +275,6 @@ class ProgressAnalyticsIntegrationTest {
     assertTrue(read(admin, get("/api/progress")).path("session").isNull(), "an admin has no session block");
   }
 
-  @Test void theClassroomShowsOnlyAnonymousAggregatesOfMembers() throws Exception {
-    fixedNow.set(NOW); String admin = login("admin", "admin-pass"); setSession(admin, TODAY.plusDays(70));
-    String group = "Класс-7Б"; var people = new ArrayList<String>();
-    Instant tuesday = Instant.parse("2030-03-12T10:00:00Z");
-    for (int i = 0; i < 5; i++) {
-      long id = studentRow("secret-login-" + i, "Скрытая Персона " + i, group); people.add("secret-login-" + i); people.add("Скрытая Персона " + i);
-      diagnostic(id, "JAVA", NOW.minus(Duration.ofDays(10)));
-      long lesson = lesson(id, "JAVA", 1, tuesday, false);
-      if (i < 3) for (int k = 0; k < 3; k++) { long t = task("VARIABLE_BASIC", "JAVA"); submit(lesson, t, true, tuesday.plusSeconds(60 * k)); credit(id, t); }
-      else { long t = task("VARIABLE_BASIC", "JAVA"); submit(lesson, t, false, tuesday); submit(lesson, t, false, tuesday.plusSeconds(60)); }
-    }
-    // In the group but not members of the Java statistics: a volunteer and a student whose session is Python.
-    long volunteer = studentRow("secret-volunteer", "Скрытый Волонтёр", group); people.add("secret-volunteer"); people.add("Скрытый Волонтёр");
-    db.update("update users set session_participant=0 where id=?", volunteer); diagnostic(volunteer, "JAVA", NOW.minus(Duration.ofDays(10)));
-    long volunteerLesson = lesson(volunteer, "JAVA", 1, tuesday, false);
-    for (int k = 0; k < 3; k++) { long t = task("ASSIGNMENT_OPERATORS", "JAVA"); submit(volunteerLesson, t, true, tuesday.plusSeconds(60 * k)); credit(volunteer, t); }
-    long pythonist = studentRow("secret-python", "Скрытый Питонист", group); people.add("secret-python"); people.add("Скрытый Питонист");
-    lesson(pythonist, "JAVA", 1, tuesday, false); lesson(pythonist, "PYTHON", 1, tuesday.plusSeconds(3600), false); lesson(pythonist, "PYTHON", 2, tuesday.plusSeconds(7200), false);
-
-    String body = mvc.perform(get("/api/admin/classroom").param("language", "JAVA").param("group", group).cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
-    for (String person : people) assertFalse(body.contains(person), "the projected screen names nobody: " + person);
-    var view = json.readTree(body);
-    assertNoPersonalFields(view);
-    assertEquals(group, view.path("group").asText()); assertEquals(5, view.path("members").asInt(), "only participants whose session course is Java");
-    assertFalse(view.path("tooSmall").asBoolean()); assertEquals(44, view.path("totalTopics").asInt());
-    assertEquals(TODAY.plusDays(70).toString(), view.path("session").path("date").asText());
-    var week = view.path("week");
-    assertEquals("2030-03-11", week.path("from").asText(), "the UTC week from Monday");
-    assertEquals(3, week.path("closedTopics").asInt(), "three first iterations this week");
-    assertEquals(20, week.path("goal").asInt(), "the plan from Tuesday's first lesson to the session (72 days) is ⌈44 × 5 / 72⌉ = 4 topics on Sunday; 5 members × 4, nothing closed on Monday");
-    var daily = view.path("daily");
-    assertEquals(28, daily.size()); assertEquals("2030-03-14", daily.get(27).path("day").asText());
-    assertEquals("2030-03-12", daily.get(25).path("day").asText()); assertEquals(3, daily.get(25).path("closedTopics").asInt());
-    var firstBlock = view.path("blocks").get(0);
-    assertEquals(0, firstBlock.path("block").asInt()); assertEquals(5, firstBlock.path("topics").size());
-    assertEquals(0.06, firstBlock.path("avgShare").asDouble(), "three halves of VARIABLE_BASIC over 5 members × 5 topics");
-    var hard = view.path("hardTopics");
-    assertEquals(1, hard.size(), "only VARIABLE_BASIC was tried by three members or more");
-    assertEquals("VARIABLE_BASIC", hard.get(0).path("code").asText()); assertEquals(5, hard.get(0).path("students").asInt());
-    assertEquals(1.4, hard.get(0).path("attemptsPerSolve").asDouble(), "13 submissions, 9 solved");
-
-    // Fewer than five members: no totals at all, they would identify people.
-    for (int i = 0; i < 4; i++) { long id = studentRow("mini-" + i, "Мини " + i, "Класс-Мини"); diagnostic(id, "JAVA", NOW.minus(Duration.ofDays(3))); }
-    var small = read(admin, get("/api/admin/classroom").param("language", "JAVA").param("group", "Класс-Мини"));
-    assertTrue(small.path("tooSmall").asBoolean()); assertEquals(4, small.path("members").asInt());
-    assertTrue(small.path("week").isNull()); assertEquals(0, small.path("daily").size()); assertEquals(0, small.path("blocks").size()); assertEquals(0, small.path("hardTopics").size());
-    assertNoPersonalFields(small);
-    // An unknown group, or a group without members in the course: 404.
-    var unknown = json.readTree(mvc.perform(get("/api/admin/classroom").param("language", "JAVA").param("group", "Нет-такой").cookie(cookie(admin))).andExpect(status().isNotFound()).andReturn().getResponse().getContentAsString());
-    assertEquals("GROUP_NOT_FOUND", unknown.path("error").asText());
-    mvc.perform(get("/api/admin/classroom").param("language", "PYTHON").param("group", "Класс-Мини").cookie(cookie(admin))).andExpect(status().isNotFound());
-    mvc.perform(get("/api/admin/classroom").param("language", "JAVA").cookie(cookie(admin))).andExpect(status().isNotFound());
-  }
-
   @Test void theSessionDateIsValidatedAndTheAnalyticsAreForAdminsOnly() throws Exception {
     String admin = login("admin", "admin-pass"); String student = createStudent("nosy-analytics", "Любопытный", "Поток-1");
     for (String bad : List.of("{\"date\":\"2030-02-30\"}", "{\"date\":\"30.06.2030\"}", "{\"date\":5}", "{}")) {
@@ -342,8 +288,7 @@ class ProgressAnalyticsIntegrationTest {
     assertTrue(read(admin, get("/api/admin/session")).path("date").isNull(), "null removes the date");
     assertEquals(0, db.queryForObject("select count(*) from app_settings where key='session_date'", Integer.class));
 
-    for (var request : List.of(get("/api/admin/progress"), get("/api/admin/session"), put("/api/admin/session").contentType(MediaType.APPLICATION_JSON).content("{\"date\":null}"),
-        get("/api/admin/classroom").param("group", "Поток-1"))) {
+    for (var request : List.of(get("/api/admin/progress"), get("/api/admin/session"), put("/api/admin/session").contentType(MediaType.APPLICATION_JSON).content("{\"date\":null}"))) {
       var refused = json.readTree(mvc.perform(request.cookie(cookie(student))).andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString());
       assertEquals("FORBIDDEN", refused.path("error").asText());
     }
@@ -384,10 +329,6 @@ class ProgressAnalyticsIntegrationTest {
     int[] tasks = {3, 2, 1}; int completed = s.path("completedIterations").asInt(), done = 0;
     for (int i = 0; i < Math.min(completed, 3); i++) done += tasks[i];
     return (done + Math.min(s.path("iterationSuccesses").asInt(), tasks[Math.min(completed, 2)])) / 6.0;
-  }
-  private static void assertNoPersonalFields(JsonNode node) {
-    if (node.isObject()) node.fieldNames().forEachRemaining(name -> assertFalse(Set.of("id", "userId", "login", "displayName", "name").contains(name), "field " + name));
-    for (var child : node) assertNoPersonalFields(child);
   }
   private static List<Double> doubles(JsonNode array, int from) { var list = new ArrayList<Double>(); for (int i = from; i < array.size(); i++) list.add(array.get(i).asDouble()); return list; }
   private static List<String> strings(JsonNode array) { var list = new ArrayList<String>(); for (var x : array) list.add(x.asText()); return list; }
