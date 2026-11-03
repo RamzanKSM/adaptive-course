@@ -1286,10 +1286,10 @@ th.text .sort { justify-content: flex-start; }
 .board-questions b { display: inline-flex; align-items: center; gap: 6px; color: var(--brand-ink); }
 .board-questions ol { margin: 0; padding-left: 22px; display: grid; gap: 4px; font-size: 14.5px; }
 .board-journal { margin-top: 0; }
+.board-journal-period { margin-bottom: 14px; }
 .board-journal-grades { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .board-journal-table td, .board-journal-table th { white-space: nowrap; }
 @media (max-width: 1200px) {
-.board-journal-period { margin-bottom: 14px; }
   .board-console { grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: "left active" "left detail" "left summary"; }
   .board-summary { position: static; max-height: none; overflow: visible; }
 }

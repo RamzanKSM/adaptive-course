@@ -1483,7 +1483,6 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
 /** Journal entries may be bare grades or objects with a grade. */
 const gradeOf = (value: unknown): string | null => value && typeof value === 'object' ? (value as { grade?: string | null }).grade ?? null : (value as string | null) ?? null
 
-function BoardJournalCard({ journal, openId, onOpen }: { journal: BoardJournal | null; openId: Id | null; onOpen: (id: Id) => void }) {
 /** The journal's period: Moscow days, inclusive; an empty end is open. */
 function periodOf(tests: BoardJournal['tests'], students: BoardJournal['students'], from: string, to: string) {
   const inPeriod = tests.filter(t => { const day = moscow(t.calledAt).date; return (!from || day >= from) && (!to || day <= to) })
@@ -1499,6 +1498,7 @@ function periodOf(tests: BoardJournal['tests'], students: BoardJournal['students
   }
 }
 
+function BoardJournalCard({ journal, openId, onOpen }: { journal: BoardJournal | null; openId: Id | null; onOpen: (id: Id) => void }) {
   const [all, setAll] = useState(false)
   const [{ from, to }, setRange] = useState({ from: '', to: '' })
   const today = moscow(Date.now()).date, weekAgo = dayString(dayNumber(today) - 6)
@@ -1506,8 +1506,8 @@ function periodOf(tests: BoardJournal['tests'], students: BoardJournal['students
   const whole = !from && !to
   const { tests, students } = useMemo(() => periodOf(journal?.tests ?? [], journal?.students ?? [], from, to), [journal, from, to])
   const shown = all ? tests : tests.slice(0, 12)
-  return <div className="list-stack board-journal">
   const presets: [string, string, string][] = [['Сегодня', today, today], ['7 дн.', weekAgo, today], ['Весь курс', '', '']]
+  return <div className="list-stack board-journal">
     <div className="card">
       <h2 className="card-title">Журнал</h2>
       {!!journal?.tests.length && <div className="control-row board-journal-period">
