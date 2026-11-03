@@ -238,3 +238,4 @@ The owner's idea: the group shares one editor and passes the right to write down
   2/3 by ending lessons). Accepted task credits remain the source of truth: restore existing topic counters and iteration
   history from them once, excluding re-take and practice tasks. At most one iteration of a topic completes per lesson;
   the schedule for later iterations still uses the lesson where the first iteration completed.
+- 2026-11-03 answers at the board by date (owner: «ответы у доски можно было смотреть по датам»): a period over the teacher's journal in «К доске», nothing else on the screen changes. Client-side, no new endpoint: the journal already returns every call with its date. Days are Moscow days. The student's «Оценки и план» has no such filter: the list is short and holds only their own answers. A period's table leaves out students with nothing finished in it; «Все вызовы» keeps cancelled and expired calls, as without a period.

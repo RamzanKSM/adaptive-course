@@ -7,7 +7,7 @@ import { Icon, initials, useToast } from './fx'
 import { parseDate } from './game'
 import { groupCourse, moscow } from './pairs'
 import { NO_GROUP, useGroupFilter } from './groups'
-import { dayNumber, lagText, plural, shortDay, StatusChip } from './session'
+import { dayNumber, dayString, lagText, plural, shortDay, StatusChip } from './session'
 import type {
   BoardAdminItem, BoardAdminTest, BoardAnswers, BoardAssessment, BoardAttestationPool, BoardCheck, BoardCoverage, BoardCurrent, BoardFormat, BoardGrade, BoardItemKind, BoardJournal, BoardLine,
   BoardMember, BoardOverview, BoardPacePlan, BoardReportItem, BoardRun, BoardScore, BoardSettings, BoardStation, BoardStatus, BoardStudentGrade, BoardStudentItem,
@@ -1043,7 +1043,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
         : <aside className="card board-summary" aria-label="Итог"><h2 className="card-title">Итог</h2><p className="muted small">{SUMMARY_HINT}</p></aside>}
     </div>
 
-    <BoardJournalCard journal={journal} openId={openId} onOpen={open} />
+    <BoardJournalCard key={query} journal={journal} openId={openId} onOpen={open} />
     <BoardStations request={request} onBecomeStation={onBecomeStation} />
   </section>
 }
@@ -1484,16 +1484,47 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
 const gradeOf = (value: unknown): string | null => value && typeof value === 'object' ? (value as { grade?: string | null }).grade ?? null : (value as string | null) ?? null
 
 function BoardJournalCard({ journal, openId, onOpen }: { journal: BoardJournal | null; openId: Id | null; onOpen: (id: Id) => void }) {
+/** The journal's period: Moscow days, inclusive; an empty end is open. */
+function periodOf(tests: BoardJournal['tests'], students: BoardJournal['students'], from: string, to: string) {
+  const inPeriod = tests.filter(t => { const day = moscow(t.calledAt).date; return (!from || day >= from) && (!to || day <= to) })
+  if (!from && !to) return { tests, students }
+  // tests are newest first, grades in the table oldest first; as on the server, only finished tests count, a student without any in the period is left out.
+  const finished = inPeriod.filter(t => t.status === 'FINISHED').reverse()
+  return {
+    tests: inPeriod,
+    students: students.flatMap(s => {
+      const own = finished.filter(t => t.userId === s.userId), plain = own.filter(t => !isAttestation(t))
+      return own.length ? [{ ...s, grades: plain.map(t => t.finalGrade), attestations: own.filter(isAttestation).map(t => t.finalGrade), lastTestAt: plain[plain.length - 1]?.calledAt ?? null }] : []
+    }),
+  }
+}
+
   const [all, setAll] = useState(false)
-  const tests = journal?.tests ?? []
+  const [{ from, to }, setRange] = useState({ from: '', to: '' })
+  const today = moscow(Date.now()).date, weekAgo = dayString(dayNumber(today) - 6)
+  const valid = !from || !to || from <= to
+  const whole = !from && !to
+  const { tests, students } = useMemo(() => periodOf(journal?.tests ?? [], journal?.students ?? [], from, to), [journal, from, to])
   const shown = all ? tests : tests.slice(0, 12)
   return <div className="list-stack board-journal">
+  const presets: [string, string, string][] = [['Сегодня', today, today], ['7 дн.', weekAgo, today], ['Весь курс', '', '']]
     <div className="card">
       <h2 className="card-title">Журнал</h2>
-      {!journal ? <p className="muted">Загружаем…</p> : !journal.students.length ? <p className="muted">Пока никого не вызывали.</p>
+      {!!journal?.tests.length && <div className="control-row board-journal-period">
+        <span className="control-label">Период</span>
+        <div className="period" role="group" aria-label="Период">
+          {presets.map(([title, a, b]) => <button key={title} type="button" className={from === a && to === b ? 'active' : ''} aria-pressed={from === a && to === b} onClick={() => setRange({ from: a, to: b })}>{title}</button>)}
+        </div>
+        <div className="date-range" role="group" aria-label="Свой период">
+          <input type="date" aria-label="С" value={from} max={to || today} aria-invalid={!valid} onChange={e => setRange({ from: e.target.value, to })} />
+          <span aria-hidden="true">—</span>
+          <input type="date" aria-label="По" value={to} min={from} max={today} aria-invalid={!valid} onChange={e => setRange({ from, to: e.target.value })} />
+        </div>
+      </div>}
+      {!journal ? <p className="muted">Загружаем…</p> : !students.length ? <p className="muted">{whole ? 'Пока никого не вызывали.' : 'За этот период оценок нет.'}</p>
         : <div className="table-scroll"><table className="data-table board-journal-table">
           <thead><tr><th className="text">Студент</th><th className="text">Оценки у доски</th><th className="text">Аттестация</th><th>Последний раз</th></tr></thead>
-          <tbody>{journal.students.map(s => <tr key={s.userId}>
+          <tbody>{students.map(s => <tr key={s.userId}>
             <td className="text"><b>{s.displayName}</b></td>
             <td className="text"><span className="board-journal-grades">{s.grades.length ? s.grades.map((g, i) => <GradeChip key={i} grade={gradeOf(g)} small />) : <span className="muted">—</span>}</span></td>
             <td className="text"><span className="board-journal-grades">{s.attestations?.length ? s.attestations.map((g, i) => <GradeChip key={i} grade={gradeOf(g)} small />) : <span className="muted">—</span>}</span></td>

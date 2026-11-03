@@ -1289,6 +1289,7 @@ th.text .sort { justify-content: flex-start; }
 .board-journal-grades { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .board-journal-table td, .board-journal-table th { white-space: nowrap; }
 @media (max-width: 1200px) {
+.board-journal-period { margin-bottom: 14px; }
   .board-console { grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: "left active" "left detail" "left summary"; }
   .board-summary { position: static; max-height: none; overflow: visible; }
 }
