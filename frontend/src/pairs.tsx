@@ -66,7 +66,9 @@ export function PairWork({ request, groups }: { request: Request; groups: string
   /** The course chosen for the group: pre-selected from the backend, then the teacher's choice. */
   const [course, setCourse] = useState<{ group: string; language: CourseLanguage } | null>(null)
   const language = course && course.group === group ? course.language : null
-  const [form, setForm] = useState<{ date: string; start: string; end: string; group: string; language: CourseLanguage } | null>(null)
+  const [form, setForm] = useState<{ date: string; start: string; end: string; groups: string[]; language: CourseLanguage } | null>(null)
+  /** The courses the groups of the form study: to pre-select one and to warn about a mix. */
+  const [courseOf, setCourseOf] = useState<Record<string, CourseLanguage>>({})
   const [preview, setPreview] = useState<Pair | null>(null)
   const [open, setOpen] = useState<Pair | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -100,16 +102,28 @@ export function PairWork({ request, groups }: { request: Request; groups: string
 
   function chooseGroup(value: string) { if (value === group) return; setGroup(value); setOpen(null); setList(null); setJournal(null) }
   function chooseCourse(value: CourseLanguage) { setCourse({ group, language: value }); setOpen(null); setList(null); setJournal(null) }
-  function startForm() { setForm({ ...defaultWindow(), group, language: language ?? 'JAVA' }); setOpen(null) }
-  function formGroup(value: string) {
-    setForm(f => f && { ...f, group: value })
-    groupCourse(value).then(found => { if (found) setForm(f => f && f.group === value ? { ...f, language: found } : f) })
+  async function learnCourses(list: string[]) {
+    const found = await Promise.all(list.map(async g => [g, courseOf[g] ?? await groupCourse(g)] as const))
+    const known = Object.fromEntries(found.filter(([, c]) => c)) as Record<string, CourseLanguage>
+    setCourseOf(c => ({ ...c, ...known }))
+    return known
   }
+  function startForm() { setForm({ ...defaultWindow(), groups: [group], language: language ?? 'JAVA' }); setOpen(null); learnCourses([group]) }
+  function toggleFormGroup(value: string) {
+    if (!form) return
+    const next = form.groups.includes(value) ? form.groups.filter(g => g !== value) : [...form.groups, value]
+    setForm({ ...form, groups: next }); setPreview(null)
+    learnCourses(next).then(known => {
+      const courses = [...new Set(next.map(g => known[g]).filter(Boolean))]
+      if (courses.length === 1) setForm(f => f && f.groups.join() === next.join() ? { ...f, language: courses[0] } : f)
+    })
+  }
+  const mixedCourses = !!form && new Set(form.groups.map(g => courseOf[g]).filter(Boolean)).size > 1
 
   const formError = !form ? '' : !form.date || !form.start || !form.end ? 'Укажи дату, начало и конец пары'
     : minutes(form.end) <= minutes(form.start) ? 'Конец пары должен быть позже начала'
-      : minutes(form.end) - minutes(form.start) > 360 ? 'Пара не может быть длиннее 6 часов' : !form.group ? 'Выбери группу' : ''
-  const body = form && { group: form.group, language: form.language, startsAt: instant(form.date, form.start), endsAt: instant(form.date, form.end) }
+      : minutes(form.end) - minutes(form.start) > 360 ? 'Пара не может быть длиннее 6 часов' : !form.groups.length ? 'Выбери группу' : ''
+  const body = form && { groups: form.groups, language: form.language, startsAt: instant(form.date, form.start), endsAt: instant(form.date, form.end) }
 
   async function calculate(e: FormEvent) {
     e.preventDefault()
@@ -127,7 +141,8 @@ export function PairWork({ request, groups }: { request: Request; groups: string
     if (!saved) return
     toast({ tone: 'info', icon: 'check', title: 'Пара сохранена', text: `${saved.group} · ${windowText(saved)}` })
     setPreview(null); setForm(null); setOpen(saved)
-    setGroup(saved.group); setCourse({ group: saved.group, language: saved.language }); setReload(n => n + 1)
+    const home = saved.groups.includes(group) ? group : saved.groups[0]
+    setGroup(home); setCourse({ group: home, language: saved.language }); setReload(n => n + 1)
   }
   async function openPair(id: Id) {
     setPreview(null)
@@ -186,9 +201,14 @@ export function PairWork({ request, groups }: { request: Request; groups: string
         <label>Дата<input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required /></label>
         <label>Начало, МСК<input type="time" step={300} value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} required /></label>
         <label>Конец, МСК<input type="time" step={300} value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} required /></label>
-        <label>Группа<select value={form.group} onChange={e => formGroup(e.target.value)}>{(groups ?? []).map(g => <option key={g} value={g}>{g}</option>)}</select></label>
         <div className="pair-form-course"><span>Курс</span><Segment label="Курс пары" value={form.language} options={COURSES} onChange={value => setForm({ ...form, language: value })} /></div>
       </div>
+      <div className="pair-form-groups">
+        <span>Группы <small className="muted">— объединённая пара: отметь несколько</small></span>
+        <div className="topic-filters group-filters" role="group" aria-label="Группы пары">{(groups ?? []).map(g =>
+          <button key={g} type="button" className={form.groups.includes(g) ? 'active' : ''} aria-pressed={form.groups.includes(g)} onClick={() => toggleFormGroup(g)}>{g}</button>)}</div>
+      </div>
+      {mixedCourses && <p className="form-error">Группы учат разные курсы: {form.groups.map(g => `${g} — ${courseOf[g] ? courseTitle(courseOf[g]) : '?'}`).join(', ')}. Считается только выбранный курс: кто учит другой, будет «не был».</p>}
       <div className="pair-form-actions">
         <button className="primary" disabled={!!formError || busy === 'preview'}>{busy === 'preview' ? <><span className="spinner" aria-hidden="true" /> Считаем…</> : 'Рассчитать'}</button>
         <span className={formError ? 'form-error' : 'muted small'}>{formError || 'Время — московское. Ничего не сохраняется, пока не нажмёшь «Сохранить».'}</span>
@@ -216,7 +236,7 @@ export function PairWork({ request, groups }: { request: Request; groups: string
               const from = moscow(p.startsAt), to = moscow(p.endsAt)
               return <tr key={p.id} className={open?.id === p.id ? 'selected' : ''} onClick={() => p.id !== null && openPair(p.id)}>
                 <td className="text"><button type="button" className="row-link" onClick={e => { e.stopPropagation(); if (p.id !== null) openPair(p.id) }}>{shortDay(dayNumber(from.date))}</button></td>
-                <td className="text">{from.time}–{to.time}</td>
+                <td className="text">{from.time}–{to.time}{p.groups.length > 1 && <small className="muted"> · вместе с {p.groups.filter(g => g !== group).join(', ')}</small>}</td>
                 <td>{p.median !== null ? points.format(p.median) : '—'}</td>
               </tr>
             })}</tbody>
@@ -248,6 +268,7 @@ function SavedActions({ pair, busy, onWheel, onRecalculate, onDelete }: { pair: 
 /** The header of a pair (window, median, attendance) and its table. */
 function PairCard({ pair, onClose, actions }: { pair: Pair; onClose?: () => void; actions: ReactNode }) {
   const saved = pair.id !== null
+  const combined = pair.groups.length > 1
   const rows = pair.rows ?? []
   const attended = rows.filter(r => r.attended).length
   const solved = rows.reduce((sum, r) => sum + r.tasks['1'] + r.tasks['2'] + r.tasks['3'] + r.tasks.hard, 0)
@@ -269,10 +290,10 @@ function PairCard({ pair, onClose, actions }: { pair: Pair; onClose?: () => void
       </span>
     </div>
     <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — студенты этого не видят.</p>
-    {!rows.length ? <p className="muted">В группе нет участников сессии.</p>
+    {!rows.length ? <p className="muted">{combined ? 'В этих группах' : 'В группе'} нет участников сессии.</p>
       : <div className="table-scroll"><table className="data-table pair-table">
         <thead>
-          <tr><th className="text" rowSpan={2}>Студент</th><th rowSpan={2}>Был</th><th colSpan={4} className="group-head" title="Задачи, впервые решённые за время пары, по сложности">Задачи</th>
+          <tr><th className="text" rowSpan={2}>Студент</th>{combined && <th className="text" rowSpan={2}>Группа</th>}<th rowSpan={2}>Был</th><th colSpan={4} className="group-head" title="Задачи, впервые решённые за время пары, по сложности">Задачи</th>
             <th rowSpan={2} title="Сумма сложностей; задача hard mode — ×10">Баллы</th><th rowSpan={2} title="Баллы от медианы — темп относительно группы">% медианы</th>
             <th rowSpan={2} title="5 минут за каждый пятиминутный отрезок пары, в котором была отправка или вопрос помощнику">Активно, мин</th>
             <th rowSpan={2} title="Отправки на проверку за пару: всего / из них не принято">Отправки</th>
@@ -282,6 +303,7 @@ function PairCard({ pair, onClose, actions }: { pair: Pair; onClose?: () => void
         <tbody>{rows.map(row => <tr key={row.userId} className={row.attended ? '' : 'absent'}>
           <td className="text"><b>{row.displayName}</b> <small className="muted">{row.login}</small>
             {row.hard && <span className="pill hard" title="Hard mode: в медиану не входит"><Icon name="flame" size={11} /> HARD</span>}</td>
+          {combined && <td className="text">{row.group ?? '—'}</td>}
           <td>{row.attended ? <span className="attended"><Icon name="check" size={15} /><span className="sr-only">был</span></span> : <span className="muted">не был</span>}</td>
           <td>{row.tasks['1'] || '·'}</td><td>{row.tasks['2'] || '·'}</td><td>{row.tasks['3'] || '·'}</td><td>{row.tasks.hard || '·'}</td>
           <td><b>{row.points}</b></td>
@@ -309,7 +331,7 @@ function Journal({ journal, openId, onOpen }: { journal: PairJournal | null; ope
       : <div className="table-scroll"><table className="data-table journal-table">
         <thead><tr><th className="text">Студент</th>
           {journal.pairs.map(p => { const from = moscow(p.startsAt); return <th key={p.id} className={openId === p.id ? 'selected' : ''}>
-            <button type="button" className="journal-pair" onClick={() => onOpen(p.id)} title={`Открыть пару ${windowText(p)}`}>
+            <button type="button" className="journal-pair" onClick={() => onOpen(p.id)} title={`Открыть пару ${windowText(p)}${p.groups.length > 1 ? ` · вместе с ${p.groups.filter(g => g !== journal.group).join(', ')}` : ''}`}>
               <span>{shortDay(dayNumber(from.date))}</span><small>{from.time}</small></button></th> })}
           <th title="Сколько пар студент был на занятии">Был</th></tr></thead>
         <tbody>{journal.students.map(s => <tr key={s.userId}>

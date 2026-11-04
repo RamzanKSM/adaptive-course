@@ -19,11 +19,18 @@ export const humanize = (reason?: string | null) => reason ? REASONS[reason] ?? 
 let unauthorizedHandler: (() => void) | null = null
 export const onUnauthorized = (handler: (() => void) | null) => { unauthorizedHandler = handler }
 
+/** The board station's token: it lives in this tab's sessionStorage, so closing the tab ends the station. */
+const STATION_KEY = 'rmzn-board-station'
+export function stationToken(): string | null { try { return sessionStorage.getItem(STATION_KEY) } catch { return null } }
+export function setStationToken(token: string | null) {
+  try { if (token) sessionStorage.setItem(STATION_KEY, token); else sessionStorage.removeItem(STATION_KEY) } catch { /* no storage: no station */ }
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...options,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) }
+    headers: { 'Content-Type': 'application/json', ...(path.startsWith('/station') ? { 'X-Board-Station': stationToken() ?? '' } : {}), ...(options.headers ?? {}) }
   })
   if (!response.ok) throw await failure(response, path)
   if (response.status === 204) return undefined as T
@@ -31,12 +38,12 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 }
 
 /**
- * A 401 means the user's session has expired — except for /station (the board station's own cookie, never the user's
+ * A 401 means the user's session has expired — except for /station (the board station's own token, never the user's
  * session) and the login itself; those report their own error and leave the app as it is.
  */
 async function failure(response: Response, path: string): Promise<ApiError> {
   const body = await response.json().catch(() => null) as { message?: string; error?: string } | null
-  if (response.status === 401 && path.startsWith('/station')) return new ApiError('Компьютер у доски отключён', 401)
+  if (response.status === 401 && path.startsWith('/station')) { setStationToken(null); return new ApiError('Компьютер у доски отключён', 401) }
   if (response.status === 401 && !path.startsWith('/auth/login')) {
     unauthorizedHandler?.()
     return new ApiError('Сессия истекла. Войдите снова.', 401)

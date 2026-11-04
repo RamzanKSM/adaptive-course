@@ -166,6 +166,36 @@ class ProgressAnalyticsIntegrationTest {
     assertEquals(List.of(1.0, 5.0, 5.0), doubles(session.path("closedSeries"), 0));
   }
 
+  @Test void aReopenedTopicFallsInTheHistoryFromThatMoment() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("reopen-analytics", "Снятие", "Снятие-1"); long student = studentId("reopen-analytics");
+    submitDiagnostic(token); // block 0 right: its topics confirmed, VARIABLE_BASIC is not
+    String confirmedTopic = db.queryForObject("select skill_code from diagnostic_skill_results where user_id=? and confirmed=1 limit 1", String.class, student);
+    for (int i = 1; i <= 9; i++) addTask("VARIABLE_BASIC", "reopen var " + i);
+    // VARIABLE_BASIC is mastered over four lessons, two days ago.
+    start(token); for (int i = 0; i < 3; i++) solve(token, "VARIABLE_BASIC", false); finish(token, openLesson(student));
+    start(token); for (int i = 0; i < 2; i++) solve(token, "VARIABLE_BASIC", false); finish(token, openLesson(student));
+    start(token); finish(token, openLesson(student));
+    start(token); solve(token, "VARIABLE_BASIC", false); finish(token, openLesson(student));
+    assertEquals(1, db.queryForObject("select mastered from student_skills where user_id=? and skill_code='VARIABLE_BASIC'", Integer.class, student));
+    db.update("update submissions set created_at=datetime(created_at,'-2 days') where lesson_id in (select id from lessons where user_id=?)", student);
+    db.update("update lessons set started_at=datetime(started_at,'-2 days'),finished_at=datetime(finished_at,'-2 days'),last_activity_at=datetime(last_activity_at,'-2 days') where user_id=?", student);
+    db.update("update student_languages set diagnostic_completed_at=datetime(diagnostic_completed_at,'-2 days') where user_id=?", student);
+    setSession(admin, LocalDate.now(ZoneOffset.UTC).plusDays(70));
+    var before = findStudent(read(admin, get("/api/admin/progress").param("language", "JAVA")), "reopen-analytics").path("series").path("closed");
+    int closedBefore = before.get(before.size() - 1).asInt();
+
+    // The teacher takes both back yesterday; one new solution today does not close the topic yet.
+    mvc.perform(post("/api/admin/students/{id}/topics/{skill}/reopen", student, "VARIABLE_BASIC").cookie(cookie(admin))).andExpect(status().isOk());
+    mvc.perform(post("/api/admin/students/{id}/topics/{skill}/reopen", student, confirmedTopic).cookie(cookie(admin))).andExpect(status().isOk());
+    db.update("update topic_reopens set reopened_at=? where user_id=?", Instant.now().minusSeconds(86_400).toString(), student);
+    start(token);
+    assertEquals("VARIABLE_BASIC", read(token, get("/api/learning/next")).path("skill").path("code").asText(), "given again (without generation the first topic with tasks comes first)");
+    var closed = findStudent(read(admin, get("/api/admin/progress").param("language", "JAVA")), "reopen-analytics").path("series").path("closed");
+    assertEquals(closedBefore - 2, closed.get(closed.size() - 1).asInt(), "both topics left the closed line");
+    assertEquals(closedBefore, closed.get(closed.size() - 3).asInt(), "the history before the reopen stays");
+  }
+
   @Test void forecastCountsPracticeClosuresOfTheLastThreeWeeks() throws Exception {
     fixedNow.set(NOW); String admin = login("admin", "admin-pass"); setSession(admin, TODAY.plusDays(70));
     long id = studentRow("pace-student", "Темп", "Темп-1"); diagnostic(id, "JAVA", NOW.minus(Duration.ofDays(31)));

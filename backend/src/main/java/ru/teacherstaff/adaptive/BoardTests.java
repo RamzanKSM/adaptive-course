@@ -198,9 +198,9 @@ class BoardTests implements DisposableBean {
       String pace = paceStatus(user, lang, now);
       var answers = new LinkedHashMap<String, Object>();
       for (var item : items) answers.put((String) item.get("kind"), initialAnswer(item));
-      var params = new ArrayList<Object>(Arrays.asList(iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), station, id, iso(now), t.get("kinds"), t.get("source"), t.get("duration_seconds")));
+      var params = new ArrayList<Object>(Arrays.asList(iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), station, station, id, iso(now), t.get("kinds"), t.get("source"), t.get("duration_seconds")));
       if (station != null) params.add(station);
-      int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=?,device=?,station_id=? "
+      int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=?,device=?,station_id=?,station_name=(select name from board_stations where id=?) "
           + "where id=? and status='CALLED' and call_expires_at>=? and kinds is ? and source is ? and duration_seconds is ?"
           + (station == null ? "" : " and not exists(select 1 from board_tests x where x.station_id=? and x.status='STARTED')"), params.toArray());
       var after = load(id);
@@ -1194,7 +1194,7 @@ class BoardTests implements DisposableBean {
   // ---------------------------------------------------------------- loading and helpers
 
   private Map<String, Object> load(long id) {
-    var rows = db.queryForList("select b.*,u.login,u.display_name,s.name as station_name from board_tests b join users u on u.id=b.user_id left join board_stations s on s.id=b.station_id where b.id=?", id);
+    var rows = db.queryForList("select b.*,u.login,u.display_name from board_tests b join users u on u.id=b.user_id where b.id=?", id);
     if (rows.isEmpty()) throw new NotFoundError("BOARD_TEST_NOT_FOUND", "Тест не найден");
     var t = rows.getFirst();
     t.put("assessment", t.get("assessment_json") == null ? null : read((String) t.get("assessment_json"), new TypeReference<LinkedHashMap<String, Object>>() {}));

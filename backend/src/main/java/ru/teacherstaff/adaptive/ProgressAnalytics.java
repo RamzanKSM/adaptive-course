@@ -290,12 +290,16 @@ class ProgressAnalytics {
   record Credit(long taskId, long at, boolean hard, boolean firstTry) {}
   /** A topic's practice after a credited task, at the moment of that task's pass. */
   record Step(long at, int topic, int completed, int successes) {}
+  /** «Снять освоение» (TopicReopens): the topic's practice starts over after this submission of the student. */
+  record Reopen(long lastSubmission, long at) {}
 
   static final class Student {
     final long id; final String login, name, group; final boolean participant;
     Language sessionCourse; Long diagnosticAt, firstLessonAt, lastActivityAt;
-    /** Topics the diagnostic confirmed (from diagnosticAt on). */
-    final boolean[] confirmed;
+    /** Topics the diagnostic confirmed (from diagnosticAt on, until a reopen took it back: confirmedUntil, epoch seconds). */
+    final boolean[] confirmed; final long[] confirmedUntil;
+    /** The topics' reopens, in order. */
+    final Map<Integer, List<Reopen>> reopens = new HashMap<>();
     final List<Lesson> lessons = new ArrayList<>();
     final List<Submission> submissions = new ArrayList<>();
     /** Credited tasks of the course: task → hard. */
@@ -310,7 +314,7 @@ class ProgressAnalytics {
     /** Moment of each topic's first iteration, Long.MAX_VALUE if none. */
     long[] firstIteration;
     Student(long id, String login, String name, String group, boolean participant, int topics) {
-      this.id = id; this.login = login; this.name = name; this.group = group; this.participant = participant; this.confirmed = new boolean[topics];
+      this.id = id; this.login = login; this.name = name; this.group = group; this.participant = participant; this.confirmed = new boolean[topics]; this.confirmedUntil = new long[topics]; Arrays.fill(confirmedUntil, Long.MAX_VALUE);
     }
   }
 
@@ -380,6 +384,14 @@ class ProgressAnalytics {
     db.query("select d.user_id,d.skill_code from diagnostic_skill_results d join skills k on k.code=d.skill_code where k.language=? and d.confirmed=1" + scope.on("d.user_id"),
         (RowCallbackHandler) rs -> { var s = students.get(rs.getLong(1)); Integer i = topicIndex.get(rs.getString(2)); if (s != null && i != null) s.confirmed[i] = true; },
         scope.with(language));
+    db.query("select o.user_id,o.skill_code,o.last_submission_id," + epoch("o.reopened_at") + ",o.was_confirmed from topic_reopens o join skills k on k.code=o.skill_code where k.language=?" + scope.on("o.user_id") + " order by o.id",
+        (RowCallbackHandler) rs -> {
+          var s = students.get(rs.getLong(1)); Integer i = topicIndex.get(rs.getString(2)); Long at = epoch(rs, 4);
+          if (s == null || i == null || at == null) return;
+          s.reopens.computeIfAbsent(i, k -> new ArrayList<>()).add(new Reopen(rs.getLong(3), at));
+          if (rs.getInt(5) == 1) { s.confirmed[i] = true; s.confirmedUntil[i] = at; }
+        },
+        scope.with(language));
     db.query("select l.user_id," + epoch("m.created_at") + "/86400 as day,max(" + epoch("m.created_at") + ") from chat_messages m join lessons l on l.id=m.lesson_id where l.language=? and m.role='STUDENT'"
         + scope.on("l.user_id") + " group by l.user_id,day",
         (RowCallbackHandler) rs -> { var s = students.get(rs.getLong(1)); Long last = epoch(rs, 3); if (s != null && last != null) { s.activeDays.add(rs.getLong(2)); s.chatLast = s.chatLast == null ? last : Math.max(s.chatLast, last); } },
@@ -397,7 +409,7 @@ class ProgressAnalytics {
   /** Credits, activity and the topic steps of one student, rebuilt from the loaded rows. */
   private static void replay(Student s, Map<Long, List<Integer>> targets, int topicCount) {
     Map<Long, Submission> firstSubmission = new HashMap<>(), firstPass = new HashMap<>();
-    Map<Long, LinkedHashMap<Long, Long>> passes = new HashMap<>(); // lesson → credited task → its first pass in the lesson
+    Map<Long, LinkedHashMap<Long, Submission>> passes = new HashMap<>(); // lesson → credited task → its first pass in the lesson
     Set<Long> practiced = new HashSet<>();
     for (var x : s.submissions) {
       firstSubmission.putIfAbsent(x.taskId(), x);
@@ -405,7 +417,7 @@ class ProgressAnalytics {
       if (!x.passed() || x.revoked() || !s.credited.containsKey(x.taskId())) continue;
       firstPass.putIfAbsent(x.taskId(), x);
       if (s.retakeTasks.getOrDefault(x.lessonId(), Set.of()).contains(x.taskId())) continue; // solved, but not practice of the topic
-      if (practiced.add(x.taskId())) passes.computeIfAbsent(x.lessonId(), k -> new LinkedHashMap<>()).putIfAbsent(x.taskId(), x.at());
+      if (practiced.add(x.taskId())) passes.computeIfAbsent(x.lessonId(), k -> new LinkedHashMap<>()).putIfAbsent(x.taskId(), x);
     }
     for (var e : s.credited.entrySet()) {
       var pass = firstPass.get(e.getKey());
@@ -417,19 +429,22 @@ class ProgressAnalytics {
     // Lesson by lesson in lesson order, as ApiController.replayProgress; inside a lesson task by task, as live credit() ran.
     var state = new IterationRule.Topic[topicCount]; Arrays.fill(state, IterationRule.Topic.NEW);
     s.firstIteration = new long[topicCount]; Arrays.fill(s.firstIteration, Long.MAX_VALUE);
+    int[] reopened = new int[topicCount]; // the topic's reopens already applied
     for (var lesson : s.lessons) {
       var credited = passes.get(lesson.id());
       if (credited == null) continue;
       Set<Integer> iterated = new HashSet<>();
       for (var task : credited.entrySet()) for (int topic : targets.getOrDefault(task.getKey(), List.of())) {
+        if (reopen(s, topic, task.getValue().id(), reopened, state)) iterated.remove(topic);
         var before = state[topic];
         var after = IterationRule.credit(before, lesson.number(), iterated.contains(topic));
         if (after.equals(before)) continue;
-        if (after.completed() > before.completed()) { iterated.add(topic); if (before.completed() == 0) s.firstIteration[topic] = task.getValue(); }
+        if (after.completed() > before.completed()) { iterated.add(topic); if (before.completed() == 0) s.firstIteration[topic] = task.getValue().at(); }
         state[topic] = after;
-        s.steps.add(new Step(task.getValue(), topic, after.completed(), after.successes()));
+        s.steps.add(new Step(task.getValue().at(), topic, after.completed(), after.successes()));
       }
     }
+    for (int topic : s.reopens.keySet()) reopen(s, topic, Long.MAX_VALUE, reopened, state);
     s.steps.sort(Comparator.comparingLong(Step::at));
 
     for (var l : s.lessons) {
@@ -438,6 +453,16 @@ class ProgressAnalytics {
     }
     if (!s.submissions.isEmpty()) s.lastActivityAt = later(s.lastActivityAt, s.submissions.getLast().at());
     s.lastActivityAt = later(s.lastActivityAt, s.chatLast);
+  }
+  /** Applies the topic's reopens that happened before this submission: the topic is new again from each one. True if any was. */
+  private static boolean reopen(Student s, int topic, long submission, int[] reopened, IterationRule.Topic[] state) {
+    var reopens = s.reopens.getOrDefault(topic, List.of()); boolean any = false;
+    while (reopened[topic] < reopens.size() && reopens.get(reopened[topic]).lastSubmission() < submission) {
+      var reopen = reopens.get(reopened[topic]++); any = true;
+      state[topic] = IterationRule.Topic.NEW; s.firstIteration[topic] = Long.MAX_VALUE;
+      s.steps.add(new Step(reopen.at(), topic, 0, 0));
+    }
+    return any;
   }
   private static Long later(Long a, Long b) { return a == null ? b : b == null ? a : (Long) Math.max(a, b); }
 
@@ -453,7 +478,7 @@ class ProgressAnalytics {
     }
     double share(int topic) { return IterationRule.share(completed[topic], successes[topic]); }
     boolean mastered(int topic) { return completed[topic] >= ApiController.ITERATION_TASKS.length; }
-    boolean confirmed(int topic) { return s.confirmed[topic] && (s.diagnosticAt == null || s.diagnosticAt < until); }
+    boolean confirmed(int topic) { return s.confirmed[topic] && (s.diagnosticAt == null || s.diagnosticAt < until) && until <= s.confirmedUntil[topic]; }
     /** Topics closed so far: an iteration completed (or mastered), or confirmed by the diagnostic. */
     int closed() { int n = 0; for (int i = 0; i < completed.length; i++) if (completed[i] >= 1 || confirmed(i)) n++; return n; }
   }

@@ -742,6 +742,7 @@ public class ApiController {
   @PostMapping("/admin/pairs/{id}/recalculate") @Transactional public Map<String,Object> recalculatePair(@PathVariable long id,HttpServletRequest r){ admin(r); var pair=pairWork.recalculate(id); log.info("Pair {} recalculated by admin {}",id,uid(r)); return pair; }
   @DeleteMapping("/admin/pairs/{id}") @Transactional public Map<String,Object> deletePair(@PathVariable long id,HttpServletRequest r){ admin(r); var result=pairWork.delete(id); log.info("Pair {} deleted by admin {}",id,uid(r)); return result; }
   @GetMapping("/admin/pairs/{id}/wheel") public Map<String,Object> pairWheel(@PathVariable long id,HttpServletRequest r){ admin(r); return wheel.wheel(id); }
+  @GetMapping("/admin/pairs/{id}/wheel/outsiders") public Map<String,Object> pairWheelOutsiders(@PathVariable long id,HttpServletRequest r){ admin(r); return wheel.outsiders(id); }
   @PostMapping("/admin/pairs/{id}/wheel/runs") @Transactional public Map<String,Object> startDraw(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var run=wheel.start(id,b,uid(r)); log.info("Draw {} of pair {} started by admin {}",((Map<?,?>)run.get("run")).get("id"),id,uid(r)); return run; }
   @PostMapping("/admin/pairs/{id}/wheel/runs/{runId}/step") @Transactional public Map<String,Object> drawStep(@PathVariable long id,@PathVariable long runId,HttpServletRequest r){ admin(r); var step=wheel.step(id,runId); log.info("Draw {} of pair {}: {} won {}",runId,id,step.get("pick"),step.get("won")); return step; }
   @PostMapping("/admin/pairs/{id}/wheel/runs/{runId}/absent") @Transactional public Map<String,Object> drawAbsent(@PathVariable long id,@PathVariable long runId,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); var run=wheel.absent(id,runId,b); log.info("Draw {} of pair {}: winner {} marked absent by admin {}",runId,id,b.get("userId"),uid(r)); return run; }
@@ -788,12 +789,12 @@ public class ApiController {
   @PostMapping("/admin/board/tests/{id}/items/{kind}/replace") public Map<String,Object> replaceBoardItem(@PathVariable long id,@PathVariable String kind,HttpServletRequest r){ admin(r); return boardTests.replaceItem(id,kind); }
   @GetMapping("/admin/board/settings") public Map<String,Object> boardSettings(HttpServletRequest r){ admin(r); return boardTests.settings(); }
   @PutMapping("/admin/board/settings") public Map<String,Object> saveBoardSettings(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ admin(r); return boardTests.saveSettings(uid(r),b); }
-  /** «Компьютер у доски» (BoardStations): the teacher makes this browser a station; the student starts his test there without signing in. */
-  @PostMapping("/admin/board/stations") public Map<String,Object> createBoardStation(@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r,HttpServletResponse p){ admin(r); return boardStations.create(uid(r),b,p); }
+  /** «Компьютер у доски» (BoardStations): the teacher makes this browser tab a station; the student starts his test there without signing in. */
+  @PostMapping("/admin/board/stations") public Map<String,Object> createBoardStation(HttpServletRequest r){ admin(r); return boardStations.create(uid(r)); }
   @GetMapping("/admin/board/stations") public Map<String,Object> boardStations(HttpServletRequest r){ admin(r); return boardStations.list(); }
   @DeleteMapping("/admin/board/stations/{id}") public Map<String,Object> revokeBoardStation(@PathVariable long id,HttpServletRequest r){ admin(r); var result=boardStations.revoke(id); log.info("Board station {} revoked by admin {}",id,uid(r)); return result; }
-  /** /api/station/**: authenticated by the station cookie (AuthFilter), request attribute «station» = {id, name}. */
-  @DeleteMapping("/station") @ResponseStatus(HttpStatus.NO_CONTENT) public void leaveBoardStation(HttpServletRequest r,HttpServletResponse p){ boardStations.leave(station(r),p); }
+  /** /api/station/**: authenticated by the station token (AuthFilter), request attribute «station» = {id, name}. */
+  @DeleteMapping("/station") @ResponseStatus(HttpStatus.NO_CONTENT) public void leaveBoardStation(HttpServletRequest r){ boardStations.leave(station(r)); }
   @GetMapping("/station/current") @SuppressWarnings("unchecked") public Map<String,Object> stationCurrent(HttpServletRequest r){ var current=boardTests.stationCurrent((Map<String,Object>)r.getAttribute("station")); current.put("relay",current.get("test")==null&&((List<?>)current.get("calls")).isEmpty()?relays.onBoard():null); return current; }
   @PostMapping("/station/tests/{id}/start") public Map<String,Object> stationStart(@PathVariable long id,HttpServletRequest r){ return boardTests.stationStart(station(r),id); }
   @PutMapping("/station/tests/{id}/answers") public Map<String,Object> stationAnswers(@PathVariable long id,@RequestBody(required=false) Map<String,Object> b,HttpServletRequest r){ return boardTests.stationAnswers(station(r),id,b); }
@@ -915,6 +916,7 @@ public class ApiController {
     int messages=db.update("delete from chat_messages where lesson_id in "+lessons,id);
     db.update("delete from lesson_tasks where lesson_id in "+lessons,id);
     db.update("delete from topic_retakes where user_id=?",id);
+    db.update("delete from topic_reopens where user_id=?",id);
     db.update("delete from skill_iterations where user_id=? or lesson_id in "+lessons,id,id);
     int lessonCount=db.update("delete from lessons where user_id=?",id);
     db.update("update submissions set revoked_by=null where revoked_by=?",id);
@@ -977,7 +979,8 @@ public class ApiController {
 
   /**
    * Rebuilds one skill's practice progress from the credited solutions that remain, lesson by lesson, with the same
-   * credit() rules that produced it. Diagnostic confirmation is separate and untouched.
+   * credit() rules that produced it, without solutions from before the topic was reopened (TopicReopens). Diagnostic
+   * confirmation is separate and untouched.
    */
   /** A task sent back during a lesson and not solved before the lesson ended must not get lost: it moves to the redo queue. */
   private void queueUnsolvedRedos(long user,long lessonId){
@@ -988,7 +991,7 @@ public class ApiController {
   private void replayProgress(long user,String skill){
     db.update("delete from skill_iterations where user_id=? and skill_code=?",user,skill);
     db.update("update student_skills set completed_iterations=0,iteration_successes=0,first_iteration_lesson_number=null,mastered=0 where user_id=? and skill_code=?",user,skill);
-    var events=db.queryForList("select l.id,coalesce(l.language_lesson_number,l.lesson_number) as number,s.task_id from lessons l join submissions s on s.lesson_id=l.id and s.passed=1 and s.revoked_at is null join successful_task_credit c on c.task_id=s.task_id and c.user_id=l.user_id join task_target_skills ts on ts.task_id=s.task_id and ts.skill_code=? where l.user_id=? and not exists(select 1 from lesson_tasks lt where lt.lesson_id=l.id and lt.task_id=s.task_id and lt.retake_id is not null) group by l.id,s.task_id order by number,l.id,min(s.id)",skill,user);
+    var events=db.queryForList("select l.id,coalesce(l.language_lesson_number,l.lesson_number) as number,s.task_id from lessons l join submissions s on s.lesson_id=l.id and s.passed=1 and s.revoked_at is null join successful_task_credit c on c.task_id=s.task_id and c.user_id=l.user_id join task_target_skills ts on ts.task_id=s.task_id and ts.skill_code=? where l.user_id=? and not exists(select 1 from lesson_tasks lt where lt.lesson_id=l.id and lt.task_id=s.task_id and lt.retake_id is not null) and s.id>coalesce((select max(o.last_submission_id) from topic_reopens o where o.user_id=l.user_id and o.skill_code=ts.skill_code),0) group by l.id,s.task_id order by number,l.id,min(s.id)",skill,user);
     var seen=new HashSet<Long>();
     for(var e:events) if(seen.add(((Number)e.get("task_id")).longValue())) credit(user,skill,((Number)e.get("id")).longValue(),((Number)e.get("number")).intValue());
   }

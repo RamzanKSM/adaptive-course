@@ -1,7 +1,7 @@
 import { createContext, CSSProperties, FormEvent, KeyboardEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { EDITOR_EXTENSIONS, FALLBACK_CODE, Markdown } from './editor'
-import { api, ApiError, humanize, onUnauthorized, patch, post, remove } from './api'
+import { api, ApiError, humanize, onUnauthorized, patch, post, remove, stationToken } from './api'
 import { achievements, commonAchievements, experience, skillState, type SkillState, ITERATIONS, iterationTasks, parseDate, skillClosed, skillPercent, skillStarted, streak, XP } from './game'
 import { Burst, Icon, initials, Ring, ToastProvider, useCountUp, useToast } from './fx'
 import { LlmAnalytics } from './analytics'
@@ -94,7 +94,7 @@ function Shell() {
   const [me, setMe] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  /** This browser is the board station (it answers /station/current): without a signed-in user it shows the station screen. */
+  /** This tab is the board station (it holds a token that /station/current accepts): without a signed-in user it shows the station screen. */
   const [station, setStation] = useState(false)
   /** «Войти как преподаватель» on the station: the usual login form instead of the station screen. */
   const [stationLogin, setStationLogin] = useState(false)
@@ -102,7 +102,7 @@ function Shell() {
   const [expired, setExpired] = useState(false)
   /** Bumped when another user signs in through the re-login form: the pages mount afresh. */
   const [epoch, setEpoch] = useState(0)
-  const detectStation = useCallback(() => api<unknown>('/station/current').then(() => true, () => false).then(found => { setStation(found); setStationLogin(false); return found }), [])
+  const detectStation = useCallback(() => (stationToken() ? api<unknown>('/station/current').then(() => true, () => false) : Promise.resolve(false)).then(found => { setStation(found); setStationLogin(false); return found }), [])
   const [language, setLanguage] = useState<CourseLanguage | null>(storedLanguage)
   const chooseLanguage = (value: CourseLanguage) => { storeLanguage(value); setLanguage(value); window.scrollTo({ top: 0 }) }
   const isStudent = me?.role === 'STUDENT'
@@ -197,7 +197,7 @@ function Shell() {
     if (user.id === me?.id) { setMe(user); return }
     setMe(user); setEpoch(n => n + 1); setBoardDone(null); setBoard(null); boardTest.current = null
   }
-  /** «Сделать этот компьютер компьютером у доски»: the station cookie is set; the teacher signs out here and the station screen shows. */
+  /** «Сделать этот компьютер компьютером у доски»: the station's token is in this tab; the teacher signs out here and the station screen shows. */
   const becomeStation = useCallback(async () => {
     await post<void>('/auth/logout').catch(() => {})
     setError(''); setMe(null); setStation(true); setStationLogin(false)
@@ -1411,6 +1411,19 @@ function DiagnosticSummary({ skills }: { skills: SkillProgress[] }) {
   </div>
 }
 
+/** The course's closed topics in the teacher's card, each with «Снять освоение»: the topic starts over for the student. */
+function ClosedTopics({ skills, onReopen }: { skills: SkillProgress[]; onReopen: (skill: SkillProgress) => void }) {
+  const closed = skills.filter(skillClosed)
+  if (!closed.length) return null
+  return <details className="closed-topics">
+    <summary className="small"><b>Закрытые темы:</b> {closed.length}</summary>
+    <ul>{closed.map(s => <li key={s.skillCode}>
+      <span className="small">{s.title} <span className="muted">{s.mastered ? 'освоена' : 'подтверждена диагностикой'}</span></span>
+      <button type="button" className="ghost danger small-button" onClick={() => onReopen(s)} title="Тема начнётся у студента заново: 3 + 2 + 1 задачи">Снять освоение</button>
+    </li>)}</ul>
+  </details>
+}
+
 /** The teacher's view of a course's «Тренировочная аттестация»: how many attempts, how many in time, then the list. */
 function PracticeSummary({ attempts }: { attempts: PracticeAttempt[] }) {
   const inTime = attempts.filter(a => a.result === 'IN_TIME').length
@@ -1548,6 +1561,13 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
     toast({ tone: 'info', icon: 'refresh', title: 'Зачёт отменён', text: result.redoInOpenLesson ? 'Задача снова ждёт решения в текущем уроке' : 'Задача будет первой в следующем уроке студента' })
     reloadProgress(); open(lesson, true)
   }
+  async function reopen(skill: SkillProgress) {
+    if (!window.confirm(`Снять освоение темы «${skill.title}» у студента ${student.displayName}? Тема начнётся заново: 3 + 2 + 1 задачи в ближайших уроках. Решённые задачи и баллы останутся, XP за тему вернётся при новом освоении. Отменить это кнопкой нельзя.`)) return
+    const result = await request(() => post<{ skillCode: string }>(`/admin/students/${student.id}/topics/${encodeURIComponent(skill.skillCode)}/reopen`))
+    if (!result) return
+    toast({ tone: 'info', icon: 'refresh', title: 'Освоение снято', text: `«${skill.title}» начнётся заново в ближайшем уроке` })
+    reloadProgress()
+  }
   return <aside className="card student-detail enter-side">
     <div className="detail-head">
       <span className="avatar big" aria-hidden="true">{initials(student.displayName)}</span>
@@ -1575,6 +1595,7 @@ function StudentDetail({ student, groups, request, toggle, onOpenProgress, onLlm
         <span className="mini-stats-cell"><b>{level.mastered}</b><small>тем освоено</small></span>
         {!!retakes[language] && <span className="mini-stats-cell" title="Повторений пройденных тем с хотя бы одной решённой задачей"><b>{retakes[language]}</b><small>повторений тем</small></span>}
         <DiagnosticSummary skills={progress[language]!} />
+        <ClosedTopics skills={progress[language]!} onReopen={reopen} />
         {!!practice[language]?.length && <PracticeSummary attempts={practice[language]!} />}
       </div>
     })}</div>}

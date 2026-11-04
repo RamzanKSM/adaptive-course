@@ -135,6 +135,15 @@ class the teacher calls students one by one to a short individual test, projecte
   also give a place on the wheel. Segments are drawn in proportion to the chance (the inverse in «Выбывание»), so the
   class sees who worked more — the owner accepted that over hidden weights. «Шансы: равные» keeps the old behaviour.
   Colours stay with the student for the whole draw (they used to shift when a name dropped out).
+- Weights by hand and other groups (owner, 2026-11-03): the teacher may change any weight before a run — no upper limit,
+  fractions allowed; only 0 and negatives are refused (no segment, an endless chance to drop out; the checkbox removes a
+  name). The weights stay with the run and last while the panel is open; the class sees them only as a segment's width. A
+  student of another group can be added behind a quiet link «Из другой группы» (rare, so hidden but not far); such a
+  student never gets on the wheel alone or affects the top.
+- Combined classes (owner, 2026-11-03): a pair may cover several groups with one course and one window. One list with a
+  «Группа» column, one own median, one «Жребий» with a common top (not a top per group). The pair is listed under each of its
+  groups, with «вместе с …»; a group's journal holds only its own students. Groups with different courses only get a warning,
+  and students of the other course come out «не был». An already saved pair cannot be combined: delete it and compute again.
 
 ## Teacher analytics and the session (since 2026-10-13)
 - Status by a global plan line (owner, 2026-10-22): the individual needed pace (remaining / weeks left vs the recent
@@ -164,6 +173,11 @@ Several students asked to go through topics again. Agreed with the owner:
 - Topics confirmed by the diagnostic have 0 iterations; a re-take of one must not start them either.
 - «Заполни банк ещё и для повторного прохождения»: a separate re-take pool, 3 new stories per topic (one per difficulty) × 3 variants (`tasks.mode='RETAKE'`). Regular lessons and «К доске» never take it, otherwise mastery would use it up and re-takes would get «the same task with other numbers» again. Order: the pool's and the bank's unsolved stories, then generation, then a variant of the story solved longest ago, marked «похожая на решённую».
 - The lesson's unsolved task waits during a re-take and comes back afterwards. Teacher screens change minimally: a chip on re-take tasks in the lesson review and a count in the student card.
+
+## «Снять освоение» (2026-11-03)
+- The teacher can take a closed topic back from a student who, in his view, has not learned it. Owner chose the full reset (3 + 2 + 1), not only the last iteration: one task proves too little.
+- A re-take is not reused: it is the student's choice and never moves progress, so the lessons would not give the topic.
+- Solved tasks, points and grades stay. XP for iterations and mastery falls until the topic is mastered again. No undo button, a confirmation only; the state before is kept in `topic_reopens`.
 
 ## Integrative 3rd iteration and «Тренировочная аттестация» (2026-10-28)
 Students found the attestation too hard because they had never met such tasks. The owner's idea, agreed:
@@ -196,6 +210,13 @@ The owner's idea: the group shares one editor and passes the right to write down
   first version projected any running relay by itself, so it hid the calls and stayed for hours when not finished. Now the
   teacher puts a relay on the board with a button, and one answer of `/station/current` decides the screen: test, then
   calls, then the relay. A call takes the screen at once; the relay keeps running on the students' PCs and returns after.
+- 2026-11-03, the board station lives only while its tab is open (owner: saved stations were only deleted by hand, nobody
+  ever switched back to one). This replaces «turns a browser into a station once» of 2026-10-22. The token moved from a
+  cookie for a year to `sessionStorage`, since a session cookie survives a closed window in Chrome; the list shows stations
+  online in the last 3 minutes, a row is deleted after an hour of silence, the name field is gone. Accepted by the owner:
+  the station is switched on again for every class, and a test whose tab was closed does not continue at a new station (the
+  teacher finishes or recalls it, the timer ends it anyway). `board_tests.station_name` keeps the mark in the history. Old
+  `adaptive_station` cookies are simply ignored and expire by themselves.
 
 ## Task bank and selection
 - 2026-10-14: a second story per topic and difficulty (18 tasks per topic, 1224 total) and story-aware selection:

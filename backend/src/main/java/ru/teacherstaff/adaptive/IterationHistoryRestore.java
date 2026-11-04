@@ -30,6 +30,7 @@ public final class IterationHistoryRestore {
         + "from submissions s join lessons l on l.id=s.lesson_id join successful_task_credit c on c.user_id=l.user_id and c.task_id=s.task_id "
         + "join task_target_skills ts on ts.task_id=s.task_id where s.passed=1 and s.revoked_at is null "
         + "and not exists(select 1 from lesson_tasks lt where lt.lesson_id=l.id and lt.task_id=s.task_id and lt.retake_id is not null) "
+        + "and s.id>coalesce((select max(o.last_submission_id) from topic_reopens o where o.user_id=l.user_id and o.skill_code=ts.skill_code),0) "
         + "group by l.user_id,ts.skill_code,l.id,s.task_id order by l.user_id,ts.skill_code,coalesce(l.language_lesson_number,l.lesson_number),l.id,min(s.id)";
     try (var statement = connection.createStatement(); var rs = statement.executeQuery(sql)) {
       while (rs.next()) history.computeIfAbsent(new Key(rs.getLong(1), rs.getString(2)), k -> new java.util.ArrayList<>())

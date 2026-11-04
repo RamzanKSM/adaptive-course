@@ -142,13 +142,13 @@ export type MedianSource = 'WEEK' | 'PAIR' | 'NONE'
 /** Tasks first solved in the window by difficulty, points (hard ×10), percent of the median; activeMinutes — 5 × the 5-minute
  *  slots with a submission or a chat message; submissions/failed and chatQuestions — this course, inside the window. */
 export interface PairResult {
-  userId: Id; login: string; displayName: string
+  userId: Id; login: string; displayName: string; group: string | null
   attended: boolean; points: number; tasks: { '1': number; '2': number; '3': number; hard: number }
   hard: boolean; percent: number | null; activeMinutes: number; submissions: number; failed: number; chatQuestions: number
 }
-/** id null — a preview, nothing saved. startsAt/endsAt — UTC instants. rows are absent in the list of pairs. */
+/** id null — a preview, nothing saved. startsAt/endsAt — UTC instants. rows are absent in the list of pairs. group — the label of groups (several in a combined class). */
 export interface Pair {
-  id: Id | null; group: string; language: CourseLanguage; startsAt: string; endsAt: string
+  id: Id | null; group: string; groups: string[]; language: CourseLanguage; startsAt: string; endsAt: string
   median: number | null; medianSource: MedianSource; medianWeek: string | null
   createdAt?: string | null; rows?: PairResult[]
 }
@@ -156,7 +156,7 @@ export interface PairCell { attended: boolean; points: number; percent: number |
 /** Students × pairs; cells are aligned with pairs (oldest first), null — not a member then; pairs — how many pairs attended. */
 export interface PairJournal {
   group: string; language: CourseLanguage
-  pairs: { id: Id; startsAt: string; endsAt: string }[]
+  pairs: { id: Id; groups: string[]; startsAt: string; endsAt: string }[]
   students: { userId: Id; login: string; displayName: string; cells: (PairCell | null)[]; pairs: number }[]
 }
 
@@ -217,8 +217,8 @@ export interface RelayView {
   people?: (RelayPerson & { done: number; skipped: number; other: number })[]
   log?: { turn: number; step: number; outcome: RelayOutcome | null; startedAt: string; endedAt: string | null; name: string }[]
 }
-/** A board station (a browser of the classroom PC that shows only the calls and the tests). */
-export interface BoardStation { id: Id; name: string; createdAt: string; lastSeenAt: string | null; current?: boolean }
+/** A board station (a tab of the classroom PC that shows only the calls and the tests while it is open). token — only in the answer to its creation. */
+export interface BoardStation { id: Id; name: string; createdAt: string; lastSeenAt: string | null; token?: string }
 /** attestationPlanDate — the day whose plan line attestations cover (null: the day of each attestation). */
 export interface BoardSettings { studentStart: boolean; attestationPlanDate?: string | null }
 /** The student's own board grades in «Оценки и план»: Moscow date, the teacher's final grade and comment. */

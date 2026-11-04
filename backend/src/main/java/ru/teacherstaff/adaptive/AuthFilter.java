@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 /**
  * Who makes an /api request: a user by the adaptive_session cookie (request attribute «user»), or — on /api/station/** —
- * a board station by the adaptive_station cookie (attribute «station», BoardStations; the user's session is ignored
+ * a board station by the X-Board-Station header (attribute «station», BoardStations; the user's session is ignored
  * there). Sessions slide: a request moves the session's end to now + app.session-hours and re-sends the cookie, so an
  * active user is never signed out (at most once an hour per session).
  */
@@ -30,7 +30,7 @@ public class AuthFilter extends OncePerRequestFilter {
   @Override protected boolean shouldNotFilter(HttpServletRequest r) { return !r.getRequestURI().startsWith("/api/") || r.getRequestURI().equals("/api/auth/login"); }
   @Override protected void doFilterInternal(HttpServletRequest r, HttpServletResponse s, FilterChain chain) throws ServletException, IOException {
     if (BoardStations.path(r.getRequestURI())) {
-      var station = stations.authenticate(cookie(r, BoardStations.COOKIE));
+      var station = stations.authenticate(r.getHeader(BoardStations.HEADER));
       if (station == null) { s.sendError(HttpStatus.UNAUTHORIZED.value(), "Board station required"); return; }
       r.setAttribute("station", station); LogContext.station(station.get("id"), station.get("name")); chain.doFilter(r, s); return;
     }

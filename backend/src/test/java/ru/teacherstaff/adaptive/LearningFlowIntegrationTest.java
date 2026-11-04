@@ -705,6 +705,55 @@ class LearningFlowIntegrationTest {
     assertEquals(1,db.queryForObject("select count(*) from successful_task_credit where user_id=? and task_id=?",Integer.class,student,task),"solving it again earns the credit back");
   }
 
+  @Test void aReopenedTopicStartsOverAndOldSolutionsNoLongerCount() throws Exception {
+    String token=createStudentAndLogin("reopen-student"); long student=studentId("reopen-student"); submitDiagnostic(token,student,false);
+    prepareOnlySkill(student,"BASIC_CODE_READING");
+    for(int i=1;i<=9;i++)addTask("reopen "+i);
+    int lesson1=start(token); solveThree(token); finish(token,lesson1);
+    int lesson2=start(token); solve(token,2); finish(token,lesson2);
+    start(token); finish(token,lesson2+1);
+    int lesson4=start(token); solve(token,1); assertProgress(student,3,1,0);
+    long solved=db.queryForObject("select count(*) from successful_task_credit where user_id=?",Long.class,student);
+    long lessonId=db.queryForObject("select id from lessons where user_id=? and lesson_number=?",Long.class,student,lesson1);
+    long oldTask=db.queryForObject("select task_id from lesson_tasks where lesson_id=? order by rowid limit 1",Long.class,lessonId);
+    String admin=login("admin","admin-pass");
+    String url="/api/admin/students/{id}/topics/{skill}/reopen";
+    mvc.perform(post(url,student,"BASIC_CODE_READING").cookie(cookie(token))).andExpect(status().isBadRequest());
+    mvc.perform(post(url,student,"BASIC_CODE_READING").cookie(cookie(admin))).andExpect(status().isOk());
+    assertProgress(student,0,0,0);
+    assertEquals(0,db.queryForObject("select count(*) from skill_iterations where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+    assertEquals(solved,db.queryForObject("select count(*) from successful_task_credit where user_id=?",Long.class,student),"solved tasks stay credited");
+    var row=db.queryForMap("select was_completed,was_mastered,was_confirmed from topic_reopens where user_id=?",student);
+    assertEquals(3,((Number)row.get("was_completed")).intValue()); assertEquals(1,((Number)row.get("was_mastered")).intValue()); assertEquals(0,((Number)row.get("was_confirmed")).intValue());
+    mvc.perform(post(url,student,"BASIC_CODE_READING").cookie(cookie(admin))).andExpect(status().isBadRequest());
+    // The topic is given again, in the same lesson too, with tasks not solved yet; a new iteration takes three of them.
+    long next=nextTaskId(token); assertNotEquals(oldTask,next);
+    solve(token,2); assertProgress(student,0,0,2);
+    // Revoking an old solution rebuilds the topic: the old ones must not bring the mastery back.
+    mvc.perform(post("/api/admin/students/{id}/lessons/{l}/tasks/{t}/revoke",student,lessonId,oldTask).cookie(cookie(admin))).andExpect(status().isOk());
+    assertProgress(student,0,0,2);
+    // A repair from the history respects it too.
+    try(var connection=db.getDataSource().getConnection()){connection.setAutoCommit(false);IterationHistoryRestore.restore(connection);connection.commit();}
+    assertProgress(student,0,0,2);
+    db.update("delete from pending_redos where user_id=?",student);
+    mvc.perform(delete("/api/admin/students/{id}",student).cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("confirmLogin","reopen-student")))).andExpect(status().isOk());
+    assertEquals(0,db.queryForObject("select count(*) from topic_reopens where user_id=?",Integer.class,student));
+  }
+
+  @Test void reopeningADiagnosticTopicTakesTheConfirmationAwayAndEndsItsRetake() throws Exception {
+    String token=createStudentAndLogin("reopen-diag"); long student=studentId("reopen-diag"); submitDiagnostic(token,student,true);
+    assertEquals(1,db.queryForObject("select confirmed from diagnostic_skill_results where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+    addTask("diag reopen 1"); addTask("diag reopen 2"); addTask("diag reopen 3");
+    start(token);
+    mvc.perform(post("/api/retakes").cookie(cookie(token)).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("skillCode","BASIC_CODE_READING","language","JAVA")))).andExpect(status().isOk());
+    assertEquals(1,db.queryForObject("select count(*) from topic_retakes where user_id=? and finished_at is null",Integer.class,student));
+    mvc.perform(post("/api/admin/students/{id}/topics/{skill}/reopen",student,"BASIC_CODE_READING").cookie(cookie(login("admin","admin-pass")))).andExpect(status().isOk());
+    assertEquals(0,db.queryForObject("select confirmed from diagnostic_skill_results where user_id=? and skill_code='BASIC_CODE_READING'",Integer.class,student));
+    assertEquals(0,db.queryForObject("select count(*) from topic_retakes where user_id=? and finished_at is null",Integer.class,student));
+    assertEquals(1,db.queryForObject("select was_confirmed from topic_reopens where user_id=?",Integer.class,student));
+    assertEquals("BASIC_CODE_READING",json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("skill").path("code").asText());
+  }
+
   @Test void revokingInsideTheOpenLessonMakesTheTaskUnsolvedAgain() throws Exception {
     String token=createStudentAndLogin("revoke-open"); long student=studentId("revoke-open"); submitDiagnostic(token,student,false); start(token);
     long task=json.readTree(mvc.perform(get("/api/learning/next").cookie(cookie(token))).andReturn().getResponse().getContentAsString()).path("task").path("id").asLong();

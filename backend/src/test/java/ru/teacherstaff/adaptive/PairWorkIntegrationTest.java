@@ -115,8 +115,8 @@ class PairWorkIntegrationTest {
     var rowB = row(pair, "pts-b");
     assertEquals(1, rowB.path("chatQuestions").asInt(), "the assistant's answers are not questions"); assertEquals(5, rowB.path("activeMinutes").asInt()); assertEquals(0, rowB.path("submissions").asInt());
     assertEquals(0, row(pair, "pts-d").path("activeMinutes").asInt(), "Python activity is not a Java pair");
-    assertEquals(Set.of("userId", "login", "displayName", "attended", "points", "tasks", "hard", "percent", "activeMinutes", "submissions", "failed", "chatQuestions"), fields(rowA), "no grades");
-    assertEquals(Set.of("id", "group", "language", "startsAt", "endsAt", "median", "medianSource", "medianWeek", "createdAt", "rows"), fields(pair), "no thresholds, counts or publishing");
+    assertEquals(Set.of("userId", "login", "displayName", "group", "attended", "points", "tasks", "hard", "percent", "activeMinutes", "submissions", "failed", "chatQuestions"), fields(rowA), "no grades");
+    assertEquals(Set.of("id", "group", "groups", "language", "startsAt", "endsAt", "median", "medianSource", "medianWeek", "createdAt", "rows"), fields(pair), "no thresholds, counts or publishing");
   }
 
   @Test void hardStudentsAreLeftOutOfTheMedian() throws Exception {
@@ -240,7 +240,7 @@ class PairWorkIntegrationTest {
     var journal = read(admin, get("/api/admin/pairs/journal").param("group", "J-1").param("language", "JAVA"));
     assertEquals("J-1", journal.path("group").asText()); assertEquals("JAVA", journal.path("language").asText());
     assertEquals(List.of(one, two, three, four), journal.path("pairs").findValues("id").stream().map(JsonNode::asLong).toList(), "oldest first");
-    assertEquals(Set.of("id", "startsAt", "endsAt"), fields(journal.path("pairs").get(0)));
+    assertEquals(Set.of("id", "groups", "startsAt", "endsAt"), fields(journal.path("pairs").get(0)));
     var students = journal.path("students");
     assertEquals(List.of("jr-a", "jr-b", "jr-c", "jr-d"), students.findValuesAsText("login"));
     var rowA = students.get(0);
@@ -309,6 +309,54 @@ class PairWorkIntegrationTest {
     }
     if (points == 0) submit(lesson, task(language, 1, false), false, at(start, 10));
   }
+  @Test void aCombinedPairCoversSeveralGroups() throws Exception {
+    String admin = login("admin", "admin-pass");
+    Instant start = Instant.parse("2036-05-14T08:00:00Z");
+    long a = studentRow("mix-a", "Анна", "CMB-1"), b = studentRow("mix-b", "Борис", "CMB-2"), c = studentRow("mix-c", "Вера", "CMB-3");
+    for (long[] solved : new long[][]{{a, 3}, {b, 1}, {c, 2}}) {
+      long task = task("JAVA", (int) solved[1], false); submit(lesson(solved[0], "JAVA", at(start, 1)), task, true, at(start, 2)); credit(solved[0], task);
+    }
+    String body = json.writeValueAsString(Map.of("groups", List.of("CMB-2", "CMB-1", "CMB-1"), "language", "JAVA", "startsAt", start.toString(), "endsAt", start.plusSeconds(5400).toString()));
+
+    var preview = read(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(body));
+    assertEquals("CMB-1, CMB-2", preview.path("group").asText(), "each group once, sorted");
+    assertEquals(List.of("mix-a", "mix-b"), logins(preview), "one list by name, the third group is out");
+    assertEquals("CMB-2", row(preview, "mix-b").path("group").asText());
+    assertEquals(2.0, preview.path("median").asDouble(), "the pair's own median over both groups");
+
+    var saved = read(admin, post("/api/admin/pairs").contentType(MediaType.APPLICATION_JSON).content(body));
+    long id = saved.path("id").asLong();
+    assertEquals(2, saved.path("groups").size());
+    for (String group : List.of("CMB-1", "CMB-2")) {
+      assertEquals(1, read(admin, get("/api/admin/pairs").param("group", group).param("language", "JAVA")).path("pairs").size(), "listed under each of its groups");
+      var journal = read(admin, get("/api/admin/pairs/journal").param("group", group).param("language", "JAVA"));
+      assertEquals(id, journal.path("pairs").get(0).path("id").asLong());
+      assertEquals(1, journal.path("students").size(), "a journal holds the group's own students");
+      assertEquals(group.equals("CMB-1") ? "mix-a" : "mix-b", journal.path("students").get(0).path("login").asText());
+      assertFalse(journal.path("students").get(0).path("cells").get(0).isNull());
+    }
+    assertEquals(0, read(admin, get("/api/admin/pairs").param("group", "CMB-3").param("language", "JAVA")).path("pairs").size());
+
+    // «Жребий» over all of them: one top for both groups (a pool of 2, 20% rounded up is 1), the rest to add by hand.
+    var wheel = read(admin, get("/api/admin/pairs/{id}/wheel", id));
+    assertEquals(2, wheel.path("pool").asInt()); assertEquals(3, wheel.path("threshold").asInt());
+    assertEquals("mix-a", wheel.path("candidates").get(0).path("login").asText());
+    assertEquals("mix-b", wheel.path("others").get(0).path("login").asText()); assertEquals("CMB-2", wheel.path("others").get(0).path("memberOf").asText());
+    var outsiders = read(admin, get("/api/admin/pairs/{id}/wheel/outsiders", id)).path("students").findValuesAsText("login");
+    assertTrue(outsiders.contains("mix-c")); assertFalse(outsiders.contains("mix-a")); assertFalse(outsiders.contains("mix-b"));
+
+    // A student who moved keeps the group of the pair; the new group's journal shows the cell too.
+    db.update("update users set group_name='CMB-1' where id=?", b);
+    assertEquals("CMB-2", row(read(admin, post("/api/admin/pairs/{id}/recalculate", id)), "mix-b").path("group").asText());
+    assertEquals(2, read(admin, get("/api/admin/pairs/journal").param("group", "CMB-1").param("language", "JAVA")).path("students").size());
+
+    expect(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("groups", List.of(), "language", "JAVA", "startsAt", start.toString(), "endsAt", start.plusSeconds(60).toString()))), status().isBadRequest(), "INVALID_PAIR");
+    expect(admin, post("/api/admin/pairs/preview").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("groups", List.of("CMB-1", "Нет такой"), "language", "JAVA", "startsAt", start.toString(), "endsAt", start.plusSeconds(60).toString()))), status().isNotFound(), "GROUP_NOT_FOUND");
+
+    read(admin, delete("/api/admin/pairs/{id}", id));
+    assertEquals(0, count("select count(*) from pair_groups where pair_id=" + id));
+  }
+
   /** Saved results of another group, straight into the tables: one pair with a row per value. */
   private void history(String language, Instant start, int[] points, boolean attended, boolean hard) {
     long pair = db.queryForObject("insert into pairs(group_name,language,starts_at,ends_at,median,median_source) values('Архив',?,?,?,null,'NONE') returning id", Long.class,

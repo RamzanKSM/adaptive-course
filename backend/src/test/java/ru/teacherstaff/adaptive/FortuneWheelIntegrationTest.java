@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * «Жребий» of a saved pair: who gets on the wheel (a grade at the board, the top share by points of those not called,
  * ties at the border, a minimum of points; everyone of the group, in the session or not), the settings, runs of steps in
- * both modes, an absent winner's replacement, deleting a run, validation.
+ * both modes, an absent winner's replacement, deleting a run, weights set by hand, students of other groups, validation.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -77,12 +77,12 @@ class FortuneWheelIntegrationTest {
     var equal = new DrawSettings.Values(6.5, "ARROW", 2, 1, false, 20, 1, 5, "Шоколадка", true, true, 70, "EQUAL", 25, 20, 15);
     assertEquals(1, FortuneWheel.weight(40, 5, equal));
     // 1 against 99: the heavy one wins about 99% of the time, and drops out about 1% of the time.
-    var random = new java.util.Random(42); var ids = List.of(1L, 2L); var weights = Map.of(1L, 1, 2L, 99);
+    var random = new java.util.Random(42); var ids = List.of(1L, 2L); var weights = Map.of(1L, 1.0, 2L, 99.0);
     int heavyWins = 0, heavyOuts = 0;
     for (int i = 0; i < 10_000; i++) { if (FortuneWheel.pick(ids, weights, false, random) == 2L) heavyWins++; if (FortuneWheel.pick(ids, weights, true, random) == 2L) heavyOuts++; }
     assertTrue(heavyWins > 9_800 && heavyWins < 9_970, "wins " + heavyWins); assertTrue(heavyOuts > 30 && heavyOuts < 200, "outs " + heavyOuts);
     var thirds = new int[3]; var three = List.of(1L, 2L, 3L);
-    for (int i = 0; i < 30_000; i++) thirds[(int) FortuneWheel.pick(three, Map.of(1L, 10, 2L, 20, 3L, 30), false, random) - 1]++;
+    for (int i = 0; i < 30_000; i++) thirds[(int) FortuneWheel.pick(three, Map.of(1L, 10.0, 2L, 20.0, 3L, 30.0), false, random) - 1]++;
     assertTrue(Math.abs(thirds[0] - 5_000) < 400 && Math.abs(thirds[1] - 10_000) < 400 && Math.abs(thirds[2] - 15_000) < 400, Arrays.toString(thirds));
   }
 
@@ -215,8 +215,8 @@ class FortuneWheelIntegrationTest {
     for (var bad : List.<Map<String, Object>>of(Map.of("userIds", List.of()), Map.of("userIds", List.of(ids.get(0), ids.get(0))), Map.of("userIds", List.of("ar-0")), Map.of(),
         Map.of("userIds", ids, "prize", "п".repeat(201)), Map.of("userIds", ids, "prize", 5)))
       expect(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(bad)), status().isBadRequest(), "INVALID_WHEEL");
-    long stranger = studentRow("ar-other", "Чужой", "AR-2");
-    expect(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", List.of(stranger)))), status().isBadRequest(), "INVALID_WHEEL");
+    for (long notAStudent : List.of(studentId("admin"), 987_654L))
+      expect(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", List.of(notAStudent)))), status().isBadRequest(), "INVALID_WHEEL");
     expect(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/step", id, 987_654), status().isNotFound(), "DRAW_NOT_FOUND");
 
     // Deleting a run deletes its steps; deleting the pair deletes its runs.
@@ -260,6 +260,77 @@ class FortuneWheelIntegrationTest {
     assertTrue(all.path("pick").isNull()); assertEquals(2, all.path("won").size()); assertTrue(all.path("run").path("finished").asBoolean());
   }
 
+  @Test void manualWeightsDecideTheRunAndStayWithIt() throws Exception {
+    String admin = login("admin", "admin-pass");
+    Instant start = Instant.parse("2044-05-05T08:00:00Z");
+    long heavy = studentRow("mw-heavy", "Тяжёлый", "MW-1"), light = studentRow("mw-light", "Лёгкий", "MW-1"), computed = studentRow("mw-points", "По баллам", "MW-1");
+    earn(light, "JAVA", start, 9); earn(computed, "JAVA", start, 3);
+    long id = save(admin, "MW-1", "JAVA", start);
+    // A weight far above any limit one might think of, and a fraction, against the computed 3: the heavy one wins every time.
+    for (int i = 0; i < 20; i++) {
+      var run = run(admin, id, Map.of("userIds", List.of(heavy, light, computed), "weights", Map.of(String.valueOf(heavy), 1_000_000_000, String.valueOf(light), 0.0000001)));
+      assertTrue(run.path("manualWeights").asBoolean());
+      assertEquals(heavy, step(admin, id, run.path("id").asLong()).path("pick").path("userId").asLong());
+    }
+    assertEquals(9, weightOf(read(admin, get("/api/admin/pairs/{id}/wheel", id)), "mw-light"), "the panel still computes its own weight");
+    assertFalse(run(admin, id, Map.of("userIds", List.of(heavy))).path("manualWeights").asBoolean());
+
+    // ELIMINATION: the inverse, the lightest drops out first and the heavy one stays; a replacement of an absent winner goes by the weights of the run.
+    settings(admin, Map.of("mode", "ELIMINATION"));
+    var run = run(admin, id, Map.of("userIds", List.of(heavy, light, computed), "weights", Map.of(String.valueOf(heavy), 1_000_000_000, String.valueOf(light), 0.0000001)));
+    long runId = run.path("id").asLong();
+    assertEquals(light, step(admin, id, runId).path("pick").path("userId").asLong(), "the lightest drops out first");
+    var decisive = step(admin, id, runId);
+    assertEquals(computed, decisive.path("pick").path("userId").asLong()); assertEquals(List.of(heavy), longs(decisive.path("won")));
+    read(admin, post("/api/admin/pairs/{id}/wheel/runs/{run}/absent", id, runId).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", heavy))));
+    assertEquals(computed, step(admin, id, runId).path("pick").path("userId").asLong(), "the replacement picks in proportion to the same weights");
+
+    var names = List.of(heavy, light);
+    for (var bad : List.<Object>of(Map.of(String.valueOf(heavy), 0), Map.of(String.valueOf(heavy), -1), Map.of(String.valueOf(heavy), "много"), Map.of(String.valueOf(computed), 5), Map.of("кто-то", 5), 5))
+      expect(admin, post("/api/admin/pairs/{id}/wheel/runs", id).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userIds", names, "weights", bad))), status().isBadRequest(), "INVALID_WHEEL");
+  }
+
+  @Test void aStudentOfAnotherGroupCanBeAdded() throws Exception {
+    String admin = login("admin", "admin-pass");
+    Instant start = Instant.parse("2045-06-05T08:00:00Z");
+    long own = studentRow("og-own", "Свой", "OG-1"); earn(own, "JAVA", start, 3);
+    long guest = studentRow("og-guest", "Гость", "OG-2"); earn(guest, "JAVA", start, 40);
+    long graded = studentRow("og-graded", "Гость с оценкой", "OG-3");
+    db.update("insert into board_tests(user_id,group_name,language,status,called_at,call_expires_at,final_grade) values(?,'OG-3','JAVA','FINISHED',?,?,'5')", graded, at(start, 20).toString(), at(start, 25).toString());
+    long noGroup = studentRow("og-none", "Без группы", null);
+    long id = save(admin, "OG-1", "JAVA", start);
+
+    // Not on the wheel on their own and not in its top, even with the most points.
+    var wheel = read(admin, get("/api/admin/pairs/{id}/wheel", id));
+    assertEquals(List.of("og-own"), wheel.path("candidates").findValuesAsText("login")); assertEquals(1, wheel.path("pool").asInt()); assertEquals(3, wheel.path("threshold").asInt());
+
+    var students = read(admin, get("/api/admin/pairs/{id}/wheel/outsiders", id)).path("students");
+    var logins = students.findValuesAsText("login");
+    assertTrue(logins.containsAll(List.of("og-guest", "og-graded", "og-none"))); assertFalse(logins.contains("og-own")); assertFalse(logins.contains("admin"));
+    assertTrue(logins.indexOf("og-none") < logins.indexOf("og-guest") && logins.indexOf("og-guest") < logins.indexOf("og-graded"), "by group: no group, OG-2, OG-3");
+    for (var p : students) if ("og-guest".equals(p.path("login").asText())) { assertEquals("OG-2", p.path("group").asText()); assertEquals(40, p.path("weight").asInt()); }
+    for (var p : students) if ("og-graded".equals(p.path("login").asText())) { assertEquals("5", p.path("grade").asText()); assertEquals(25, p.path("weight").asInt()); }
+
+    // The run takes them, computes their weight by this pair's window, and a winner gets a name in the history.
+    var run = run(admin, id, Map.of("userIds", List.of(guest), "weights", Map.of()));
+    assertFalse(run.path("manualWeights").asBoolean());
+    assertEquals(guest, step(admin, id, run.path("id").asLong()).path("pick").path("userId").asLong());
+    assertEquals("Гость", read(admin, get("/api/admin/pairs/{id}/wheel", id)).path("runs").get(0).path("wins").get(0).path("displayName").asText());
+    var both = run(admin, id, Map.of("userIds", List.of(own, noGroup, graded))).path("id").asLong();
+    assertEquals("WIN", step(admin, id, both).path("pick").path("kind").asText());
+
+    String student = createStudent("og-student", "Студент", "OG-4");
+    expect(student, get("/api/admin/pairs/{id}/wheel/outsiders", id), status().isBadRequest(), "FORBIDDEN");
+    expect(admin, get("/api/admin/pairs/{id}/wheel/outsiders", 987_654), status().isNotFound(), "PAIR_NOT_FOUND");
+  }
+
+  private JsonNode run(String admin, long pair, Map<String, Object> body) throws Exception {
+    return read(admin, post("/api/admin/pairs/{id}/wheel/runs", pair).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).path("run");
+  }
+  private static int weightOf(JsonNode wheel, String login) {
+    for (var list : List.of("candidates", "called", "others")) for (var p : wheel.path(list)) if (login.equals(p.path("login").asText())) return p.path("weight").asInt();
+    throw new AssertionError("no " + login);
+  }
   private JsonNode settings(String admin, Map<String, Object> values) throws Exception {
     return read(admin, put("/api/admin/draw/settings").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(values)));
   }

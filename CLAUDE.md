@@ -59,6 +59,8 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
 - «Повторить тему» (`TopicRetakes`): a closed topic can be re-taken any time — 3 tasks (difficulty 1→2→3) from its own
   pool (`tasks.mode='RETAKE'`, `tools/curated_python/retake*/`, never in lessons or at the board); a re-take never moves
   iterations/mastery/pace (`lesson_tasks.retake_id` is skipped by the iteration rule), its tasks count as solved and in pair points.
+- «Снять освоение» (`TopicReopens`): the teacher reopens a closed topic in the student's card, it starts over (3 + 2 + 1); old
+  solutions stay credited but no longer count for the topic (`topic_reopens.last_submission_id`).
 - The 3rd iteration of a topic outside block 0 is an integrative task from its own pool (`IntegrativeTasks`,
   `tasks.mode='INTEGRATIVE'`), no fallback to an ordinary task unless the pool has none. «Тренировочная аттестация»
   (`AttestationPractice`, a `topic_retakes` row with `kind='ATTESTATION'`): one attestation-sized task from its own pool,
@@ -76,4 +78,4 @@ Checking code needs Piston; locally use the production Piston through an SSH tun
   with the minimum items right gets at least 4) — visible only to the teacher, who sets the final grade and comment; the student sees date, grade, comment. «Аттестация» is a
   call format of «К доске»: several students at their own computers, one integrative task from the attestation pool
   (`AttestationBank`, `tools/curated_python/build_attestation.py`) over the group's plan, lessons and the assistant
-  closed meanwhile. «Работа на паре» (`PairWork`) is teacher-only analytics of a pair window.
+  closed meanwhile. «Работа на паре» (`PairWork`) is teacher-only analytics of a pair window, over one group or several for a combined class.

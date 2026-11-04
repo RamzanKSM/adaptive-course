@@ -175,8 +175,7 @@ class CodeRelayIntegrationTest {
     String admin = login("admin", "admin-pass"), student = createStudent("b1", "Студент b1", "RL-B");
     createStudent("b2", "Студент b2", "RL-C");
     long user = db.queryForObject("select id from users where login='b1'", Long.class);
-    String station = mvc.perform(post("/api/admin/board/stations").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isOk())
-        .andReturn().getResponse().getCookie("adaptive_station").getValue();
+    String station = read(admin, post("/api/admin/board/stations")).path("token").asText();
     long id = read(admin, post("/api/admin/relay").contentType(MediaType.APPLICATION_JSON).content("{\"group\":\"RL-B\",\"taskKey\":\"java-evens\"}")).path("id").asLong();
     read(student, post("/api/relay/" + id + "/join"));
     read(admin, post("/api/admin/relay/" + id + "/start"));
@@ -210,7 +209,7 @@ class CodeRelayIntegrationTest {
   }
 
   private JsonNode station(String token) throws Exception {
-    return json.readTree(mvc.perform(get("/api/station/current").cookie(new jakarta.servlet.http.Cookie("adaptive_station", token))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    return json.readTree(mvc.perform(get("/api/station/current").header("X-Board-Station", token)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
   }
   /** Moves the clock in steps of 5 seconds, the given students polling as their pages do. */
   private void advance(int seconds, Collection<String> polling) throws Exception {

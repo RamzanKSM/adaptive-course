@@ -14,9 +14,9 @@ export type DrawSettings = {
   chances: 'POINTS' | 'EQUAL'; bonus5: number; bonus4: number; bonus3: number
 }
 type SettingsView = DrawSettings & { defaults: DrawSettings }
-type Person = { userId: Id; login: string; displayName: string; attended: boolean; points: number; grade: string | null; weight: number; reason?: 'BOARD' | 'TOP' }
+type Person = { userId: Id; login: string; displayName: string; attended: boolean; points: number; grade: string | null; weight: number; reason?: 'BOARD' | 'TOP'; group?: string | null; memberOf?: string | null }
 type Win = { userId: Id; login: string; displayName: string; absent: boolean }
-type Run = { id: Id; mode: Mode; winners: number; prize: string; names: Id[]; wheel: Id[]; outs: Id[]; wins: Win[]; replacing: boolean; finished: boolean; createdAt: string }
+type Run = { id: Id; mode: Mode; winners: number; prize: string; names: Id[]; wheel: Id[]; outs: Id[]; wins: Win[]; replacing: boolean; finished: boolean; manualWeights: boolean; createdAt: string }
 type Step = { pick: { userId: Id; kind: 'WIN' | 'OUT' } | null; won: Id[]; run: Run }
 type Wheel = {
   pairId: Id; topPercent: number; minPoints: number; boardMinGrade: number; pool: number; topCount: number; threshold: number | null
@@ -32,6 +32,9 @@ const prizeIcon = (prize: string) => prize.toLowerCase().includes('шокола�
 const MODES: [Mode, string][] = [['ARROW', 'Стрелка'], ['ELIMINATION', 'Выбывание']]
 const GRADES: [number, string][] = [[5, 'только 5'], [4, '4 и 5'], [3, '3, 4 и 5'], [2, 'любая']]
 const gradeRule = (min: number) => min >= 5 ? 'пятёркой' : `оценкой ${min} и выше`
+/** A weight typed by hand: any number above 0, with a comma or a dot; null when it is not one. */
+const parseWeight = (text: string) => { const v = Number(text.trim().replace(',', '.')); return text.trim() && Number.isFinite(v) && v > 0 ? v : null }
+const groupName = (p: Person) => p.group || 'без группы'
 
 function Choice<T extends string | number | boolean>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (value: T) => void }) {
   return <div className="period" role="group" aria-label={label}>
@@ -133,6 +136,11 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
   const [prize, setPrize] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [deleting, setDeleting] = useState<Id | null>(null)
+  /** The weights typed by hand, as typed; they stay while the panel is open. */
+  const [typed, setTyped] = useState<Record<Id, string>>({})
+  /** The students of other groups: loaded when the teacher asks for them. */
+  const [outsiders, setOutsiders] = useState<Person[] | null>(null)
+  const [outsidersOpen, setOutsidersOpen] = useState(false)
   const toast = useToast()
 
   const load = useCallback((keepChoice: boolean) => request(() => api<Wheel>(`/admin/pairs/${pair.id}/wheel`)).then(v => {
@@ -141,20 +149,33 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
     if (!keepChoice) setChosen(v.candidates.map(c => c.userId))
   }), [pair.id, request])
   useEffect(() => { load(false) }, [load])
+  const loadOutsiders = useCallback(() => request(() => api<{ students: Person[] }>(`/admin/pairs/${pair.id}/wheel/outsiders`)).then(v => { if (v) setOutsiders(v.students) }), [pair.id, request])
 
   if (!wheel) return <section className="card wheel-panel enter"><p className="muted">Собираем претендентов…</p></section>
-  const everyone = [...wheel.candidates, ...wheel.called, ...wheel.others]
+  const others = [...wheel.called, ...wheel.others]
+  const everyone = [...wheel.candidates, ...others, ...(outsiders ?? [])]
   const byId = new Map(everyone.map(p => [p.userId, p]))
-  const added = [...wheel.called, ...wheel.others].filter(p => chosen.includes(p.userId))
-  const addable = [...wheel.called, ...wheel.others].filter(p => !chosen.includes(p.userId))
+  const added = [...others, ...(outsiders ?? [])].filter(p => chosen.includes(p.userId))
+  const addable = others.filter(p => !chosen.includes(p.userId))
+  const outsiderGroups = [...new Set((outsiders ?? []).filter(p => !chosen.includes(p.userId)).map(groupName))]
   const toggle = (id: Id) => setChosen(c => c.includes(id) ? c.filter(x => x !== id) : [...c, id])
-  const names = chosen.map(id => byId.get(id)).filter((p): p is Person => !!p)
+  const chosenPeople = chosen.map(id => byId.get(id)).filter((p): p is Person => !!p)
+  /** The hand-set weights of the chosen names that differ from the computed ones. */
+  const manual = (p: Person) => { const text = typed[p.userId]; if (text === undefined) return null; const v = parseWeight(text); return v === p.weight ? null : v }
+  const badWeight = chosenPeople.some(p => typed[p.userId] !== undefined && parseWeight(typed[p.userId]) === null)
+  const names = chosenPeople.map(p => ({ ...p, weight: manual(p) ?? Math.max(1, p.weight) }))
+  const manualWeights = Object.fromEntries(chosenPeople.flatMap(p => { const v = manual(p); return v === null ? [] : [[p.userId, v]] })) as Record<Id, number>
   const prizeName = prize.trim().replace(/\s+/g, ' ') || wheel.settings.defaultPrize
   const s = wheel.settings
-  const total = names.reduce((sum, p) => sum + Math.max(1, p.weight), 0)
-  /** A chosen student's weight and, with the arrow, the chance to win the first spin. */
-  const chance = (p: Person) => !chosen.includes(p.userId) || s.chances === 'EQUAL' ? null
-    : `вес ${p.weight}${s.mode === 'ARROW' ? ` · шанс ${Math.round(Math.max(1, p.weight) * 100 / total)}%` : ''}`
+  const total = names.reduce((sum, p) => sum + p.weight, 0)
+  /** With the arrow, a chosen student's chance to win the first spin. */
+  const chance = (p: Person) => {
+    const weight = names.find(n => n.userId === p.userId)?.weight
+    if (s.mode !== 'ARROW' || weight === undefined || badWeight) return null
+    const percent = weight * 100 / total
+    return `шанс ${percent < 1 ? '<1' : Math.round(percent)}%`
+  }
+  const typeWeight = (p: Person, text: string) => setTyped(t => { const { [p.userId]: _, ...rest } = t; return text === String(p.weight) ? rest : { ...t, [p.userId]: text } })
   const updateRun = (run: Run) => setWheel(w => w && { ...w, runs: w.runs.some(r => r.id === run.id) ? w.runs.map(r => r.id === run.id ? run : r) : [...w.runs, run] })
   async function deleteRun(id: Id) {
     const value = await request(() => remove<{ runs: Run[] }>(`/admin/pairs/${pair.id}/wheel/runs/${id}`))
@@ -179,37 +200,54 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
       {s.chances === 'POINTS' ? ` · шансы по баллам (+${s.bonus5}/${s.bonus4}/${s.bonus3} за 5/4/3)` : ' · равные шансы'}{s.surprisePrize ? ' · приз-сюрприз' : ''} · {s.sound ? `звук ${s.volume}%` : 'без звука'}
       <button type="button" className="row-link" onClick={() => setSettingsOpen(o => !o)}>{settingsOpen ? 'Скрыть настройки' : 'Настройки'}</button>
     </p>
-    {settingsOpen && <div className="draw-settings-inline"><DrawSettingsForm request={request} initial={wheel.settings} onSaved={() => { load(true); setSettingsOpen(false) }} /></div>}
+    {settingsOpen && <div className="draw-settings-inline"><DrawSettingsForm request={request} initial={wheel.settings} onSaved={() => { load(true); if (outsiders) loadOutsiders(); setSettingsOpen(false) }} /></div>}
     <label className="wheel-add">Приз
       <input type="text" value={prize} placeholder={wheel.settings.defaultPrize} onChange={e => setPrize(e.target.value)} /></label>
     {!wheel.candidates.length && !added.length && <p className="muted">Пока никто не заработал место на колесе. Можно добавить студента вручную.</p>}
     <ul className="wheel-people">
       {[...wheel.candidates, ...added].map(p => <li key={p.userId}>
         <label><input type="checkbox" checked={chosen.includes(p.userId)} onChange={() => toggle(p.userId)} />
-          <b>{p.displayName}</b> <small className="muted">{p.login}</small></label>
-        <span className="wheel-person-tags">{chance(p) && <small className="muted tabular">{chance(p)}</small>}
-          <span className={`pill ${p.reason === 'BOARD' ? 'wheel-board' : p.reason === 'TOP' ? 'wheel-top' : ''}`}>{p.reason ? reasonText(p) : `вручную · ${reasonText(p)}`}</span></span>
+          <b>{p.displayName}</b> <small className="muted">{p.login}</small>{p.memberOf && <span className="group-tag">{p.memberOf}</span>}</label>
+        <span className="wheel-person-tags">
+          {chosen.includes(p.userId) && <span className="wheel-weight">
+            <label>вес <input type="text" inputMode="decimal" className={`wheel-weight-input ${typed[p.userId] !== undefined ? 'changed' : ''}`} aria-label={`Вес: ${p.displayName}`}
+              aria-invalid={typed[p.userId] !== undefined && parseWeight(typed[p.userId]) === null} value={typed[p.userId] ?? String(p.weight)} onChange={e => typeWeight(p, e.target.value)} /></label>
+            {typed[p.userId] !== undefined && <button type="button" className="wheel-weight-reset" aria-label={`Вернуть расчётный вес ${p.weight}`} title={`Вернуть расчётный вес ${p.weight}`} onClick={() => typeWeight(p, String(p.weight))}>↺</button>}
+            {chance(p) && <small className="muted tabular">{chance(p)}</small>}
+          </span>}
+          <span className={`pill ${p.reason === 'BOARD' ? 'wheel-board' : p.reason === 'TOP' ? 'wheel-top' : ''}`}>{p.reason ? reasonText(p) : `${p.group !== undefined ? `другая группа · ${groupName(p)}` : 'вручную'} · ${reasonText(p)}`}</span></span>
       </li>)}
     </ul>
     {addable.length > 0 && <label className="wheel-add">Добавить вручную
       <select value="" onChange={e => { const id = Number(e.target.value); if (id) setChosen(c => [...c, id]) }}>
         <option value="">Выбери студента…</option>
-        {addable.map(p => <option key={p.userId} value={p.userId}>{p.displayName} — {reasonText(p)}</option>)}
+        {addable.map(p => <option key={p.userId} value={p.userId}>{p.displayName}{p.memberOf ? ` · ${p.memberOf}` : ''} — {reasonText(p)}</option>)}
       </select></label>}
+    <div className="wheel-outsiders">
+      <button type="button" className="row-link" aria-expanded={outsidersOpen} onClick={() => { setOutsidersOpen(o => !o); if (!outsiders) loadOutsiders() }}>{outsidersOpen ? 'Скрыть другие группы' : 'Из другой группы'}</button>
+      {outsidersOpen && (!outsiders ? <p className="muted small">Загружаем…</p> : !outsiderGroups.length ? <p className="muted small">Больше добавить некого.</p> : <label className="wheel-add">Студент другой группы
+        <select value="" onChange={e => { const id = Number(e.target.value); if (id) setChosen(c => [...c, id]) }}>
+          <option value="">Выбери студента…</option>
+          {outsiderGroups.map(g => <optgroup key={g} label={g}>
+            {outsiders.filter(p => groupName(p) === g && !chosen.includes(p.userId)).map(p => <option key={p.userId} value={p.userId}>{p.displayName} — {reasonText(p)}</option>)}
+          </optgroup>)}
+        </select></label>)}
+    </div>
     {wheel.runs.length > 0 && <div className="draw-history"><span className="control-label">Запуски этой пары</span>
       {wheel.runs.map(r => <div key={r.id} className="draw-run">
         <span className="pill wheel-winner-pill">{prizeIcon(r.prize)} {r.prize}</span>
         <span className="draw-run-winners">{r.wins.length ? r.wins.map(w => <span key={w.userId} className={w.absent ? 'absent' : ''} title={w.absent ? 'Не было на паре' : undefined}>{w.displayName}</span>) : <span className="muted">без победителя</span>}</span>
-        <small className="muted">{time(r.createdAt)} · {r.mode === 'ARROW' ? 'стрелка' : 'выбывание'}{r.finished ? '' : ' · не завершён'}</small>
+        <small className="muted">{time(r.createdAt)} · {r.mode === 'ARROW' ? 'стрелка' : 'выбывание'}{r.manualWeights ? ' · веса вручную' : ''}{r.finished ? '' : ' · не завершён'}</small>
         {deleting === r.id ? <span className="draw-run-confirm">Удалить запуск?
           <button type="button" className="danger-solid" onClick={() => deleteRun(r.id)}>Удалить</button>
           <button type="button" className="ghost" onClick={() => setDeleting(null)}>Нет</button></span>
           : <button type="button" className="icon-button" aria-label="Удалить запуск" title="Удалить запуск" onClick={() => setDeleting(r.id)}><Icon name="x" size={16} /></button>}
       </div>)}</div>}
     <div className="pair-actions">
-      <button type="button" className="primary" disabled={!names.length} onClick={() => setStage(true)}><Icon name="sparkle" size={16} /> Открыть колесо · {names.length}</button>
+      <button type="button" className="primary" disabled={!names.length || badWeight} onClick={() => setStage(true)}><Icon name="sparkle" size={16} /> Открыть колесо · {names.length}</button>
+      {badWeight && <small className="form-error">Вес — число больше нуля</small>}
     </div>
-    {stage && <WheelStage pairId={pair.id!} people={names} prize={prizeName} settings={wheel.settings} request={request} onRun={updateRun} onClose={() => setStage(false)} />}
+    {stage && <WheelStage pairId={pair.id!} people={names} manualWeights={manualWeights} prize={prizeName} settings={wheel.settings} request={request} onRun={updateRun} onClose={() => setStage(false)} />}
   </section>
 }
 
@@ -253,15 +291,15 @@ type Phase = 'ready' | 'spinning' | 'between' | 'done'
  * name under the arrow wins and leaves the wheel; ELIMINATION: it drops out until the winners are left. A winner not in
  * class is marked absent and a replacement is drawn.
  */
-function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }: {
-  pairId: Id; people: Person[]; prize: string; settings: DrawSettings; request: Request; onRun: (run: Run) => void; onClose: () => void
+function WheelStage({ pairId, people, manualWeights, prize, settings, request, onRun, onClose }: {
+  pairId: Id; people: Person[]; manualWeights: Record<Id, number>; prize: string; settings: DrawSettings; request: Request; onRun: (run: Run) => void; onClose: () => void
 }) {
   const names = useMemo(() => new Map(people.map(p => [p.userId, p.displayName])), [people])
   const [order] = useState<Id[]>(() => shuffle(people.map(p => p.userId)))
   const [wheelIds, setWheelIds] = useState<Id[]>(order)
   const colorIndex = useMemo(() => new Map(order.map((id, i) => [id, i])), [order])
   const colorFor = (id: Id) => colorOf(colorIndex.get(id) ?? 0, order.length)
-  const weights = useMemo(() => new Map(people.map(p => [p.userId, Math.max(1, p.weight || 1)])), [people])
+  const weights = useMemo(() => new Map(people.map(p => [p.userId, p.weight || 1])), [people])
   const weightOf = useCallback((id: Id) => weights.get(id) ?? 1, [weights])
   const [run, setRun] = useState<Run | null>(null)
   const [rotation, setRotation] = useState(0)
@@ -319,7 +357,7 @@ function WheelStage({ pairId, people, prize, settings, request, onRun, onClose }
     setPhase('spinning'); setLast(null)
     let r = runRef.current
     if (!r) {
-      const created = await request(() => post<{ run: Run }>(`/admin/pairs/${pairId}/wheel/runs`, { userIds: wheelIds, prize }))
+      const created = await request(() => post<{ run: Run }>(`/admin/pairs/${pairId}/wheel/runs`, { userIds: wheelIds, prize, weights: manualWeights }))
       if (!created) { setPhase('ready'); return }
       r = created.run; remember(r)
     }

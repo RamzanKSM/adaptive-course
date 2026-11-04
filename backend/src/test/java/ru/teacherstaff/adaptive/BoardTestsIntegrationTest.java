@@ -814,27 +814,25 @@ class BoardTestsIntegrationTest {
     String token = createStudent("st-a", "Стас", "B-ST"), other = createStudent("st-b", "Света", "B-ST");
     long a = studentId("st-a"), b = studentId("st-b");
     simpleBank(a, "BT_ST"); simpleBank(b, "BT_ST2");
-    // The teacher makes the classroom PC a station: the cookie only for /api/station, for a year.
-    var created = mvc.perform(post("/api/admin/board/stations").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Доска 1\"}")).andExpect(status().isOk()).andReturn().getResponse();
-    var stationCookie = created.getCookie("adaptive_station");
-    assertEquals("/api/station", stationCookie.getPath()); assertTrue(stationCookie.isHttpOnly()); assertEquals(365 * 86400, stationCookie.getMaxAge());
-    String station = stationCookie.getValue(); long stationId = json.readTree(created.getContentAsString()).path("id").asLong();
-    assertEquals("Доска 1", json.readTree(created.getContentAsString()).path("name").asText());
-    String second = stationToken(admin, null);
-    assertEquals("Компьютер у доски", read(admin, get("/api/admin/board/stations")).path("stations").get(1).path("name").asText(), "the default name");
-    expect(admin, post("/api/admin/board/stations").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + "x".repeat(61) + "\"}"), status().isBadRequest(), "INVALID_STATION_NAME");
-    expect(token, post("/api/admin/board/stations").contentType(MediaType.APPLICATION_JSON).content("{}"), status().isBadRequest(), "FORBIDDEN");
-    // Without the station cookie /api/station is 401, a user's session does not count.
+    // The teacher makes a tab of the classroom PC a station: the token comes in the answer, no cookie stays in the browser.
+    var created = mvc.perform(post("/api/admin/board/stations").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse();
+    assertEquals(0, created.getCookies().length, "nothing outlives the tab");
+    var body = json.readTree(created.getContentAsString());
+    String station = body.path("token").asText(); long stationId = body.path("id").asLong();
+    assertEquals("Компьютер у доски", body.path("name").asText());
+    String second = stationToken(admin);
+    expect(token, post("/api/admin/board/stations"), status().isBadRequest(), "FORBIDDEN");
+    // Without the station token /api/station is 401, a user's session does not count.
     mvc.perform(get("/api/station/current")).andExpect(status().isUnauthorized());
     mvc.perform(get("/api/station/current").cookie(cookie(admin))).andExpect(status().isUnauthorized());
-    mvc.perform(get("/api/station/current").cookie(stationCookie("not-a-station"))).andExpect(status().isUnauthorized());
+    mvc.perform(get("/api/station/current").header("X-Board-Station", "not-a-station")).andExpect(status().isUnauthorized());
 
     long id = call(admin, a).path("id").asLong();
     // The student's own account cannot start it while the setting is off.
     assertFalse(read(token, get("/api/board/current")).path("call").path("canStart").asBoolean());
     expect(token, post("/api/board/tests/{id}/start", id), status().isBadRequest(), "BOARD_START_AT_STATION");
     var waiting = station(station, get("/api/station/current"));
-    assertEquals(stationId, waiting.path("station").path("id").asLong()); assertEquals("Доска 1", waiting.path("station").path("name").asText()); assertTrue(waiting.path("test").isNull());
+    assertEquals(stationId, waiting.path("station").path("id").asLong()); assertEquals("Компьютер у доски", waiting.path("station").path("name").asText()); assertTrue(waiting.path("test").isNull());
     var listed = callOf(waiting, id);
     assertEquals(id, listed.path("id").asLong()); assertEquals("Стас", listed.path("displayName").asText()); assertEquals("B-ST", listed.path("group").asText());
     assertEquals("JAVA", listed.path("language").asText()); assertEquals(420, listed.path("durationSeconds").asInt()); assertTrue(listed.path("canStart").asBoolean());
@@ -847,7 +845,7 @@ class BoardTestsIntegrationTest {
     assertEquals(test.path("items"), station(station, post("/api/station/tests/{id}/start", id)).path("items"), "starting again returns the same test");
     assertEquals(id, station(station, get("/api/station/current")).path("test").path("id").asLong());
     var adminView = adminTest(admin, id);
-    assertEquals(stationId, adminView.path("stationId").asLong()); assertEquals("Доска 1", adminView.path("stationName").asText());
+    assertEquals(stationId, adminView.path("stationId").asLong()); assertEquals("Компьютер у доски", adminView.path("stationName").asText());
     // The student's own browser sees it elsewhere and cannot touch it, not even with the station's device token; his start returns that view.
     assertTrue(read(token, get("/api/board/current").header("X-Board-Device", "own-pc")).path("test").path("elsewhere").asBoolean());
     assertTrue(read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "own-pc")).path("elsewhere").asBoolean());
@@ -892,13 +890,31 @@ class BoardTestsIntegrationTest {
     // Revoked by the teacher; this browser leaves station mode itself.
     assertEquals(2, read(admin, get("/api/admin/board/stations")).path("stations").size());
     assertTrue(read(admin, delete("/api/admin/board/stations/{id}", db.queryForObject("select max(id) from board_stations", Long.class))).path("revoked").asBoolean());
-    mvc.perform(get("/api/station/current").cookie(stationCookie(second))).andExpect(status().isUnauthorized());
-    var left = mvc.perform(delete("/api/station").cookie(stationCookie(station))).andExpect(status().isNoContent()).andReturn().getResponse();
-    assertEquals(0, left.getCookie("adaptive_station").getMaxAge());
-    mvc.perform(get("/api/station/current").cookie(stationCookie(station))).andExpect(status().isUnauthorized());
+    mvc.perform(get("/api/station/current").header("X-Board-Station", second)).andExpect(status().isUnauthorized());
+    mvc.perform(delete("/api/station").header("X-Board-Station", station)).andExpect(status().isNoContent());
+    mvc.perform(get("/api/station/current").header("X-Board-Station", station)).andExpect(status().isUnauthorized());
     assertEquals(0, read(admin, get("/api/admin/board/stations")).path("stations").size());
     expect(admin, delete("/api/admin/board/stations/{id}", 987654), status().isNotFound(), "BOARD_STATION_NOT_FOUND");
-    assertEquals("Доска 1", adminTest(admin, id).path("stationName").asText(), "a finished test keeps its station");
+    assertEquals(0, db.queryForObject("select count(*) from board_stations", Integer.class), "a station leaves no row");
+    assertEquals("Компьютер у доски", adminTest(admin, id).path("stationName").asText(), "a finished test keeps the mark");
+    assertTrue(adminTest(admin, id).path("stationId").isNull());
+  }
+
+  @Test void aStationLivesWhileItsTabKeepsAsking() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String station = stationToken(admin);
+    assertEquals(1, read(admin, get("/api/admin/board/stations")).path("stations").size());
+    // The tab is closed: it drops off the list in minutes, and the row goes after an hour.
+    now = now.plus(Duration.ofMinutes(4));
+    assertEquals(0, read(admin, get("/api/admin/board/stations")).path("stations").size());
+    assertEquals(1, db.queryForObject("select count(*) from board_stations", Integer.class));
+    // A short loss of the network: the same tab goes on and is back on the list.
+    station(station, get("/api/station/current"));
+    assertEquals(1, read(admin, get("/api/admin/board/stations")).path("stations").size());
+    now = now.plus(Duration.ofMinutes(61));
+    mvc.perform(get("/api/station/current").header("X-Board-Station", station)).andExpect(status().isUnauthorized());
+    assertEquals(0, read(admin, get("/api/admin/board/stations")).path("stations").size());
+    assertEquals(0, db.queryForObject("select count(*) from board_stations", Integer.class), "nothing to delete by hand");
   }
 
   @Test void theTeacherEditsACallUntilItStartsAndAnEditDuringTheStartIsNotLost() throws Exception {
@@ -1229,18 +1245,16 @@ class BoardTestsIntegrationTest {
   }
   private long studentId(String login) { return db.queryForObject("select id from users where login=?", Long.class, login); }
   private jakarta.servlet.http.Cookie cookie(String value) { return new jakarta.servlet.http.Cookie("adaptive_session", value); }
-  private jakarta.servlet.http.Cookie stationCookie(String value) { return new jakarta.servlet.http.Cookie("adaptive_station", value); }
-  private String stationToken(String admin, String name) throws Exception {
-    return mvc.perform(post("/api/admin/board/stations").cookie(cookie(admin)).contentType(MediaType.APPLICATION_JSON).content(name == null ? "{}" : json.writeValueAsString(Map.of("name", name))))
-        .andExpect(status().isOk()).andReturn().getResponse().getCookie("adaptive_station").getValue();
+  private String stationToken(String admin) throws Exception {
+    return read(admin, post("/api/admin/board/stations")).path("token").asText();
   }
   private JsonNode station(String token, MockHttpServletRequestBuilder request) throws Exception {
-    var response = mvc.perform(request.cookie(stationCookie(token))).andReturn().getResponse();
+    var response = mvc.perform(request.header("X-Board-Station", token)).andReturn().getResponse();
     assertEquals(200, response.getStatus(), response.getContentAsString());
     return json.readTree(response.getContentAsString());
   }
   private void stationExpect(String token, MockHttpServletRequestBuilder request, ResultMatcher status, String error) throws Exception {
-    var body = json.readTree(mvc.perform(request.cookie(stationCookie(token))).andExpect(status).andReturn().getResponse().getContentAsString());
+    var body = json.readTree(mvc.perform(request.header("X-Board-Station", token)).andExpect(status).andReturn().getResponse().getContentAsString());
     assertEquals(error, body.path("error").asText(), body.toString());
   }
   private static JsonNode callOf(JsonNode station, long id) { for (var c : station.path("calls")) if (c.path("id").asLong() == id) return c; throw new AssertionError("no call " + id + " in " + station); }

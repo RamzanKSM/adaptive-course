@@ -12,8 +12,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
- * «Работа на паре»: the teacher enters a class period's window and group after it and sees how every member of the group
- * worked in it — attendance, the points of the tasks first passed inside the window, the pace against a reference (the
+ * «Работа на паре»: the teacher enters a class period's window and its group (several for a combined class) after it and
+ * sees how every member worked in it — attendance, the points of the tasks first passed inside the window, the pace against a reference (the
  * median of regular students: the previous Moscow week, or the pair itself while there is no history) and the activity
  * (active 5-minute slots, submissions, questions to the assistant). Teacher-only, students see nothing of it; grades
  * come from the test at the board (BoardTests).
@@ -36,12 +36,12 @@ class PairWork {
 
   record Window(Instant start, Instant end) {}
   record Median(Double value, String source, LocalDate week) {}
-  /** One student's saved result: attendance, points, tasks by difficulty and the hard flag. */
-  record Row(long userId, String login, String name, boolean attended, int points, Map<String, Integer> tasks, boolean hard) {}
+  /** One student's saved result: the group, attendance, points, tasks by difficulty and the hard flag. */
+  record Row(long userId, String login, String name, String group, boolean attended, int points, Map<String, Integer> tasks, boolean hard) {}
   /** Activity inside the window, computed on the fly: active minutes, submissions, failed ones, the student's chat messages. */
   record Activity(int activeMinutes, int submissions, int failed, int chatQuestions) { static final Activity NONE = new Activity(0, 0, 0, 0); }
-  /** A pair without its rows; id and createdAt are null in a preview. */
-  record Head(Long id, String group, Language language, Window window, Median median, String createdAt) {}
+  /** A pair without its rows; group is the label of its groups; id and createdAt are null in a preview. */
+  record Head(Long id, String group, List<String> groups, Language language, Window window, Median median, String createdAt) {}
 
   // ---------------------------------------------------------------- rules
 
@@ -59,9 +59,9 @@ class PairWork {
 
   // ---------------------------------------------------------------- computation
 
-  /** Members of a group: students taking the session. */
-  private List<Long> members(String group) {
-    return db.queryForList("select id from users where role='STUDENT' and group_name=? and session_participant=1 order by id", Long.class, group);
+  /** Members of the groups: students taking the session. */
+  private List<Long> members(List<String> groups) {
+    return db.queryForList("select id from users where role='STUDENT' and group_name in " + in(groups.size()) + " and session_participant=1 order by id", Long.class, groups.toArray());
   }
 
   /** Points, attendance and the hard flag of the given students in a window and the median: five queries for the whole group. */
@@ -71,8 +71,8 @@ class PairWork {
     String in = in(users.size()), language = lang.name();
     long from = w.start().getEpochSecond(), to = w.end().getEpochSecond();
     Map<Long, String[]> people = new LinkedHashMap<>();
-    db.query("select id,login,display_name from users where id in " + in + " order by id",
-        (RowCallbackHandler) rs -> people.put(rs.getLong(1), new String[]{rs.getString(2), rs.getString(3)}), users.toArray());
+    db.query("select id,login,display_name,group_name from users where id in " + in + " order by id",
+        (RowCallbackHandler) rs -> people.put(rs.getLong(1), new String[]{rs.getString(2), rs.getString(3), rs.getString(4)}), users.toArray());
 
     // Tasks whose first passed, non-revoked submission (over all time) is inside the window and which are still credited.
     Map<Long, int[]> points = new HashMap<>(); Map<Long, Map<String, Integer>> tasks = new HashMap<>(); Set<Long> hardTask = new HashSet<>();
@@ -102,14 +102,14 @@ class PairWork {
     for (var e : people.entrySet()) {
       long user = e.getKey(); boolean came = attended.contains(user);
       int p = came ? points.getOrDefault(user, new int[1])[0] : 0;
-      rows.add(new Row(user, e.getValue()[0], e.getValue()[1], came, p, came ? tasks.getOrDefault(user, emptyTasks()) : emptyTasks(),
+      rows.add(new Row(user, e.getValue()[0], e.getValue()[1], e.getValue()[2], came, p, came ? tasks.getOrDefault(user, emptyTasks()) : emptyTasks(),
           hardMode.contains(user) || came && hardTask.contains(user)));
     }
     var median = median(lang, w, rows, pairId);
     return new Computed(rows, median);
   }
   private record Computed(List<Row> rows, Median median) {}
-  /** Rows of the given students in a window, nothing saved: the wheel of fortune ranks any students of the group by them. */
+  /** Rows of the given students in a window, nothing saved: the wheel of fortune ranks any students of the pair's groups by them. */
   List<Row> rowsOf(Language lang, Window w, Collection<Long> users) { return compute(lang, w, users, null).rows(); }
   /** A saved pair without its rows. */
   Head saved(long id) { return head(id); }
@@ -160,7 +160,7 @@ class PairWork {
   /** GET /api/admin/pairs/course: the course most members study (their session course), else the one with most lessons. */
   Map<String, Object> course(String group) {
     String name = existingGroup(group);
-    var users = members(name);
+    var users = members(List.of(name));
     if (users.isEmpty()) users = db.queryForList("select id from users where role='STUDENT' and group_name=?", Long.class, name);
     Map<Long, Map<Language, long[]>> lessons = new HashMap<>(); Map<Language, Long> lessonTotals = new EnumMap<>(Language.class);
     db.query("select user_id,language,count(*),max(" + epoch("started_at") + ") from lessons where user_id in " + in(users.size()) + " group by user_id,language",
@@ -189,28 +189,29 @@ class PairWork {
   /** POST /api/admin/pairs/preview: computed, nothing saved. */
   Map<String, Object> preview(Map<String, Object> body) {
     var request = request(body);
-    var computed = compute(request.language(), request.window(), members(request.group()), null);
-    return view(new Head(null, request.group(), request.language(), request.window(), computed.median(), null), computed.rows(), true);
+    var computed = compute(request.language(), request.window(), members(request.groups()), null);
+    return view(new Head(null, label(request.groups()), request.groups(), request.language(), request.window(), computed.median(), null), computed.rows(), true);
   }
 
   /** POST /api/admin/pairs: computed again and saved. */
   Map<String, Object> save(Map<String, Object> body, long adminId) {
     var request = request(body);
-    var computed = compute(request.language(), request.window(), members(request.group()), null);
+    var computed = compute(request.language(), request.window(), members(request.groups()), null);
     var median = computed.median();
     long id = db.queryForObject("insert into pairs(group_name,language,starts_at,ends_at,median,median_source,median_week,created_by,created_at) values(?,?,?,?,?,?,?,?,?) returning id", Long.class,
-        request.group(), request.language().name(), iso(request.window().start()), iso(request.window().end()), median.value(), median.source(),
+        label(request.groups()), request.language().name(), iso(request.window().start()), iso(request.window().end()), median.value(), median.source(),
         median.week() == null ? null : median.week().toString(), adminId, iso(now()));
+    for (String group : request.groups()) db.update("insert into pair_groups(pair_id,group_name) values(?,?)", id, group);
     for (var row : computed.rows())
-      db.update("insert into pair_results(pair_id,user_id,attended,points,tasks_json,hard) values(?,?,?,?,?,?)",
-          id, row.userId(), row.attended() ? 1 : 0, row.points(), write(row.tasks()), row.hard() ? 1 : 0);
+      db.update("insert into pair_results(pair_id,user_id,group_name,attended,points,tasks_json,hard) values(?,?,?,?,?,?,?)",
+          id, row.userId(), row.group(), row.attended() ? 1 : 0, row.points(), write(row.tasks()), row.hard() ? 1 : 0);
     return pair(id);
   }
 
-  /** GET /api/admin/pairs: newest first, without rows. */
+  /** GET /api/admin/pairs: newest first, without rows; a combined pair is listed under each of its groups. */
   Map<String, Object> list(String group, String language) {
     var params = new ArrayList<Object>(); var where = new StringBuilder(" where 1=1");
-    if (group != null && !group.isBlank()) { where.append(" and group_name=?"); params.add(group.strip()); }
+    if (group != null && !group.isBlank()) { where.append(" and id in (select pair_id from pair_groups where group_name=?)"); params.add(group.strip()); }
     if (language != null && !language.isBlank()) { where.append(" and language=?"); params.add(Language.parse(language).name()); }
     var heads = db.query("select " + HEAD + " from pairs" + where + " order by starts_at desc,id desc", (rs, i) -> head(rs), params.toArray());
     return obj("pairs", heads.stream().map(head -> view(head, List.of(), false)).toList());
@@ -219,7 +220,7 @@ class PairWork {
   /** GET /api/admin/pairs/{id}. */
   Map<String, Object> pair(long id) { return view(head(id), rows(id), true); }
 
-  /** POST /api/admin/pairs/{id}/recalculate: the same students again — points, attendance, hard and the median. */
+  /** POST /api/admin/pairs/{id}/recalculate: the same students again — points, attendance, hard and the median; their saved group stays. */
   Map<String, Object> recalculate(long id) {
     var head = head(id);
     var users = rows(id).stream().map(Row::userId).toList();
@@ -236,29 +237,33 @@ class PairWork {
   Map<String, Object> delete(long id) {
     head(id);
     db.update("delete from pair_results where pair_id=?", id);
+    db.update("delete from pair_groups where pair_id=?", id);
     db.update("delete from pairs where id=?", id);
     return obj("deleted", true);
   }
 
   /**
-   * GET /api/admin/pairs/journal: the group's pairs of the course, oldest first, and a line per student with a cell per
-   * pair (attended, points, percent, active minutes; null — not in that pair) and the number of pairs attended.
+   * GET /api/admin/pairs/journal: the group's pairs of the course, combined ones too, oldest first, and a line per student
+   * of the group with a cell per pair (attended, points, percent, active minutes; null — not in that pair) and the number
+   * of pairs attended. Students of the other groups of a combined pair are left out: they are in their own group's journal.
    */
   Map<String, Object> journal(String group, String language) {
     String name = group == null ? "" : group.strip();
-    if (name.isEmpty() || count("select count(*) from users where role='STUDENT' and group_name=?", name) == 0 && count("select count(*) from pairs where group_name=?", name) == 0)
+    if (name.isEmpty() || count("select count(*) from users where role='STUDENT' and group_name=?", name) == 0 && count("select count(*) from pair_groups where group_name=?", name) == 0)
       throw groupNotFound();
     Language lang = language == null || language.isBlank() ? Language.valueOf((String) course(name).get("language")) : Language.parse(language);
-    var heads = db.query("select " + HEAD + " from pairs where group_name=? and language=? order by starts_at,id", (rs, i) -> head(rs), name, lang.name());
+    var heads = db.query("select " + HEAD + " from pairs where id in (select pair_id from pair_groups where group_name=?) and language=? order by starts_at,id", (rs, i) -> head(rs), name, lang.name());
     Map<Long, Integer> column = new HashMap<>();
     for (var h : heads) column.put(h.id(), column.size());
     Map<Long, String[]> people = new LinkedHashMap<>(); Map<Long, Map<String, Object>[]> cells = new HashMap<>(); Map<Long, List<Long>> usersOf = new HashMap<>();
     db.query("select id,login,display_name from users where id in (select id from users where role='STUDENT' and group_name=? and session_participant=1 "
-        + "union select g.user_id from pair_results g join pairs p on p.id=g.pair_id where p.group_name=? and p.language=?)",
+        + "union select g.user_id from pair_results g join pairs p on p.id=g.pair_id where g.group_name=? and p.language=?)",
         (RowCallbackHandler) rs -> people.put(rs.getLong(1), new String[]{rs.getString(2), rs.getString(3)}), name, name, lang.name());
-    db.query("select g.pair_id,g.user_id,g.attended,g.points from pair_results g join pairs p on p.id=g.pair_id where p.group_name=? and p.language=?",
+    db.query("select g.pair_id,g.user_id,g.attended,g.points from pair_results g join pairs p on p.id=g.pair_id join pair_groups x on x.pair_id=p.id where x.group_name=? and p.language=?",
         (RowCallbackHandler) rs -> {
-          long pair = rs.getLong(1), user = rs.getLong(2); var head = heads.get(column.get(pair)); boolean attended = rs.getInt(3) == 1; int points = rs.getInt(4);
+          long pair = rs.getLong(1), user = rs.getLong(2);
+          if (!people.containsKey(user)) return;
+          var head = heads.get(column.get(pair)); boolean attended = rs.getInt(3) == 1; int points = rs.getInt(4);
           usersOf.computeIfAbsent(pair, k -> new ArrayList<>()).add(user);
           @SuppressWarnings("unchecked") Map<String, Object>[] row = cells.computeIfAbsent(user, k -> new Map[heads.size()]);
           row[column.get(pair)] = obj("attended", attended, "points", points, "percent", percent(attended, points, head.median().value()), "activeMinutes", 0);
@@ -271,7 +276,7 @@ class PairWork {
       long attended = Arrays.stream(row).filter(c -> c != null && Boolean.TRUE.equals(c.get("attended"))).count();
       students.add(obj("userId", e.getKey(), "login", e.getValue()[0], "displayName", e.getValue()[1], "cells", Arrays.asList(row), "pairs", attended));
     }
-    var pairs = heads.stream().map(h -> obj("id", h.id(), "startsAt", iso(h.window().start()), "endsAt", iso(h.window().end()))).toList();
+    var pairs = heads.stream().map(h -> obj("id", h.id(), "groups", h.groups(), "startsAt", iso(h.window().start()), "endsAt", iso(h.window().end()))).toList();
     return obj("group", name, "language", lang.name(), "pairs", pairs, "students", students);
   }
 
@@ -279,14 +284,14 @@ class PairWork {
 
   private Map<String, Object> view(Head head, List<Row> rows, boolean withRows) {
     Double m = head.median().value();
-    var v = obj("id", head.id(), "group", head.group(), "language", head.language().name(), "startsAt", iso(head.window().start()), "endsAt", iso(head.window().end()),
+    var v = obj("id", head.id(), "group", head.group(), "groups", head.groups(), "language", head.language().name(), "startsAt", iso(head.window().start()), "endsAt", iso(head.window().end()),
         "median", m, "medianSource", head.median().source(), "medianWeek", head.median().week() == null ? null : head.median().week().toString(), "createdAt", head.createdAt());
     if (!withRows) return v;
     var activity = activity(head.language(), head.window(), rows.stream().map(Row::userId).toList());
     var collator = collator();
     v.put("rows", rows.stream().sorted(Comparator.comparing((Row r) -> r.name() == null ? "" : r.name(), collator).thenComparing(Row::login)).map(r -> {
       var a = activity.getOrDefault(r.userId(), Activity.NONE);
-      return obj("userId", r.userId(), "login", r.login(), "displayName", r.name(), "attended", r.attended(), "points", r.points(), "tasks", r.tasks(), "hard", r.hard(),
+      return obj("userId", r.userId(), "login", r.login(), "displayName", r.name(), "group", r.group(), "attended", r.attended(), "points", r.points(), "tasks", r.tasks(), "hard", r.hard(),
           "percent", percent(r.attended(), r.points(), m), "activeMinutes", a.activeMinutes(), "submissions", a.submissions(), "failed", a.failed(), "chatQuestions", a.chatQuestions());
     }).toList());
     return v;
@@ -294,10 +299,11 @@ class PairWork {
   /** Points in percent of the median; null when absent or there is no norm. */
   private static Long percent(boolean attended, int points, Double median) { return attended && median != null && median > 0 ? Math.round(points * 100 / median) : null; }
 
-  private static final String HEAD = "id,group_name,language,starts_at,ends_at,median,median_source,median_week,created_at";
-  private static Head head(java.sql.ResultSet rs) throws java.sql.SQLException {
+  private static final String HEAD = "id,group_name,language,starts_at,ends_at,median,median_source,median_week,created_at,"
+      + "(select json_group_array(group_name) from (select group_name from pair_groups x where x.pair_id=pairs.id order by group_name))";
+  private Head head(java.sql.ResultSet rs) throws java.sql.SQLException {
     double median = rs.getDouble(6); Double value = rs.wasNull() ? null : median; String week = rs.getString(8);
-    return new Head(rs.getLong(1), rs.getString(2), Language.of(rs.getString(3)), new Window(Instant.parse(rs.getString(4)), Instant.parse(rs.getString(5))),
+    return new Head(rs.getLong(1), rs.getString(2), readGroups(rs.getString(10)), Language.of(rs.getString(3)), new Window(Instant.parse(rs.getString(4)), Instant.parse(rs.getString(5))),
         new Median(value, rs.getString(7), week == null ? null : LocalDate.parse(week)), rs.getString(9));
   }
   private Head head(long id) {
@@ -306,23 +312,32 @@ class PairWork {
     return heads.getFirst();
   }
   private List<Row> rows(long id) {
-    return db.query("select g.user_id,u.login,u.display_name,g.attended,g.points,g.tasks_json,g.hard from pair_results g join users u on u.id=g.user_id where g.pair_id=? order by g.user_id",
-        (rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getInt(4) == 1, rs.getInt(5), read(rs.getString(6)), rs.getInt(7) == 1), id);
+    return db.query("select g.user_id,u.login,u.display_name,g.group_name,g.attended,g.points,g.tasks_json,g.hard from pair_results g join users u on u.id=g.user_id where g.pair_id=? order by g.user_id",
+        (rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5) == 1, rs.getInt(6), read(rs.getString(7)), rs.getInt(8) == 1), id);
   }
 
   // ---------------------------------------------------------------- validation
 
-  private record Request(String group, Language language, Window window) {}
+  private record Request(List<String> groups, Language language, Window window) {}
   private Request request(Map<String, Object> body) {
-    if (body == null) throw new ApiError("INVALID_PAIR", "Нужны group, language, startsAt, endsAt");
-    String group = existingGroup(body.get("group") instanceof String s ? s : null);
+    if (body == null) throw new ApiError("INVALID_PAIR", "Нужны groups, language, startsAt, endsAt");
+    var groups = groups(body);
     if (body.get("language") != null && !(body.get("language") instanceof String)) throw new ApiError("UNKNOWN_LANGUAGE", "Неизвестный язык курса");
     Language lang = Language.parse((String) body.get("language"));
     Instant start = instant(body.get("startsAt")), end = instant(body.get("endsAt"));
     if (!end.isAfter(start)) throw new ApiError("INVALID_WINDOW", "Конец пары должен быть позже начала");
     if (Duration.between(start, end).compareTo(MAX_WINDOW) > 0) throw new ApiError("INVALID_WINDOW", "Пара не может быть длиннее 6 часов");
-    return new Request(group, lang, new Window(start, end));
+    return new Request(groups, lang, new Window(start, end));
   }
+  /** The groups of a pair, each once and sorted: `groups`, or the single `group`. */
+  private List<String> groups(Map<String, Object> body) {
+    if (!(body.get("groups") instanceof List<?> list)) return List.of(existingGroup(body.get("group") instanceof String s ? s : null));
+    if (list.isEmpty()) throw new ApiError("INVALID_PAIR", "Выбери хотя бы одну группу");
+    var groups = new TreeSet<String>();
+    for (Object group : list) groups.add(existingGroup(group instanceof String s ? s : null));
+    return List.copyOf(groups);
+  }
+  private static String label(List<String> groups) { return String.join(", ", groups); }
   private static Instant instant(Object value) {
     if (!(value instanceof String text) || text.isBlank()) throw new ApiError("INVALID_WINDOW", "Нужны startsAt и endsAt — дата и время ISO-8601 со смещением");
     try { return OffsetDateTime.parse(text.strip()).toInstant().truncatedTo(ChronoUnit.SECONDS); }
@@ -346,6 +361,7 @@ class PairWork {
   private int count(String sql, Object... params) { return db.queryForObject(sql, Integer.class, params); }
   private static Map<String, Integer> emptyTasks() { var t = new LinkedHashMap<String, Integer>(); for (String k : List.of("1", "2", "3", "hard")) t.put(k, 0); return t; }
   private String write(Map<String, Integer> tasks) { try { return json.writeValueAsString(tasks); } catch (Exception e) { throw new IllegalStateException(e); } }
+  private List<String> readGroups(String text) { try { return json.readValue(text, new TypeReference<List<String>>() {}); } catch (Exception e) { throw new IllegalStateException(e); } }
   private Map<String, Integer> read(String text) { try { return json.readValue(text, new TypeReference<LinkedHashMap<String, Integer>>() {}); } catch (Exception e) { throw new IllegalStateException(e); } }
   private static Collator collator() { return Collator.getInstance(Locale.forLanguageTag("ru")); }
   private static List<Map.Entry<Long, String[]>> sorted(Map<Long, String[]> people) {

@@ -1,9 +1,7 @@
 package ru.teacherstaff.adaptive;
 
-import jakarta.servlet.http.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import java.security.SecureRandom;
@@ -11,74 +9,70 @@ import java.time.*;
 import java.util.*;
 
 /**
- * «Компьютер у доски»: a browser of the classroom PC the teacher turned into a board station. It holds the cookie
- * adaptive_station (Path=/api/station, a random token; the table keeps its SHA-256) and sees only the active calls and
- * the test running at it (BoardTests.station*): the student walks up, starts his test there without signing in, and the
- * station goes back to waiting after the finish. While nobody is called it projects the relay the teacher put on the
- * board (CodeRelay.onBoard). A revoked station is no station. Rules: backend/README.md, «К доске».
+ * «Компьютер у доски»: a tab of the classroom PC's browser the teacher turned into a board station, for as long as the tab
+ * is open. The tab keeps a random token in sessionStorage and sends it in X-Board-Station (the table keeps its SHA-256);
+ * it sees only the active calls and the test running at it (BoardTests.station*): the student walks up, starts his test
+ * there without signing in, and the station goes back to waiting after the finish. While nobody is called it projects the
+ * relay the teacher put on the board (CodeRelay.onBoard). A closed tab takes the token with it: the station drops off the
+ * teacher's list after ONLINE and its row is deleted after LIFETIME without requests. Rules: backend/README.md, «К доске».
  */
 @Component
 class BoardStations {
   private static final Logger log = LoggerFactory.getLogger(BoardStations.class);
-  static final String COOKIE = "adaptive_station", PATH = "/api/station", DEFAULT_NAME = "Компьютер у доски";
-  static final int NAME_MAX = 60;
-  static final Duration COOKIE_AGE = Duration.ofDays(365), SEEN_EVERY = Duration.ofMinutes(1);
+  static final String HEADER = "X-Board-Station", PATH = "/api/station", NAME = "Компьютер у доски";
+  static final Duration SEEN_EVERY = Duration.ofMinutes(1), ONLINE = Duration.ofMinutes(3), LIFETIME = Duration.ofHours(1);
 
-  private final JdbcTemplate db; private final Clock clock; private final boolean secureCookie;
+  private final JdbcTemplate db; private final Clock clock;
   private final SecureRandom random = new SecureRandom();
-  BoardStations(JdbcTemplate db, Clock clock, @Value("${app.cookie-secure}") boolean secureCookie) { this.db = db; this.clock = clock; this.secureCookie = secureCookie; }
+  BoardStations(JdbcTemplate db, Clock clock) { this.db = db; this.clock = clock; }
 
   /** The paths a station authenticates for: /api/station and below. */
   static boolean path(String uri) { return uri.equals(PATH) || uri.startsWith(PATH + "/"); }
 
-  /** The station of a cookie token, {id, name}, or null (no token, unknown, revoked); notes that it was seen, at most once a minute. */
+  /** The station of a token, {id, name}, or null (no token, unknown, silent for LIFETIME); notes that it was seen, at most once a minute. */
   Map<String, Object> authenticate(String token) {
     if (token == null || token.isBlank()) return null;
-    var rows = db.queryForList("select id,name,last_seen_at from board_stations where token_hash=? and revoked_at is null", Hashing.sha256(token));
+    Instant now = clock.instant();
+    var rows = db.queryForList("select id,name,last_seen_at from board_stations where token_hash=? and last_seen_at>=?", Hashing.sha256(token), iso(now.minus(LIFETIME)));
     if (rows.isEmpty()) return null;
-    var row = rows.getFirst(); Instant now = clock.instant();
-    if (row.get("last_seen_at") == null || Instant.parse((String) row.get("last_seen_at")).isBefore(now.minus(SEEN_EVERY)))
+    var row = rows.getFirst();
+    if (Instant.parse((String) row.get("last_seen_at")).isBefore(now.minus(SEEN_EVERY))) {
       db.update("update board_stations set last_seen_at=? where id=?", iso(now), row.get("id"));
+      deleteSilent(now);
+    }
     return obj("id", ((Number) row.get("id")).longValue(), "name", row.get("name"));
   }
 
-  /** POST /api/admin/board/stations: a new station; the cookie goes to this browser with the response. */
-  Map<String, Object> create(long admin, Map<String, Object> body, jakarta.servlet.http.HttpServletResponse response) {
-    Object value = body == null ? null : body.get("name");
-    if (value != null && !(value instanceof String)) throw new ApiError("INVALID_STATION_NAME", "Название — строка до " + NAME_MAX + " символов");
-    String name = value == null || ((String) value).isBlank() ? DEFAULT_NAME : ((String) value).strip();
-    if (name.length() > NAME_MAX) throw new ApiError("INVALID_STATION_NAME", "Название — строка до " + NAME_MAX + " символов");
+  /** POST /api/admin/board/stations: a new station; the token goes to this tab with the response and is never shown again. */
+  Map<String, Object> create(long admin) {
+    Instant at = clock.instant(); deleteSilent(at);
     byte[] bytes = new byte[32]; random.nextBytes(bytes);
-    String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes), now = iso(clock.instant());
-    long id = db.queryForObject("insert into board_stations(name,token_hash,created_by,created_at) values(?,?,?,?) returning id", Long.class, name, Hashing.sha256(token), admin, now);
-    response.addCookie(cookie(token, COOKIE_AGE));
-    log.info("Board station {} «{}» created by admin {}", id, name, admin);
-    return obj("id", id, "name", name, "createdAt", now);
+    String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes), now = iso(at);
+    long id = db.queryForObject("insert into board_stations(name,token_hash,created_by,created_at,last_seen_at) values(?,?,?,?,?) returning id", Long.class, NAME, Hashing.sha256(token), admin, now, now);
+    log.info("Board station {} created by admin {}", id, admin);
+    return obj("id", id, "name", NAME, "createdAt", now, "token", token);
   }
 
-  /** GET /api/admin/board/stations: the stations not revoked. */
+  /** GET /api/admin/board/stations: the stations online now. */
   Map<String, Object> list() {
-    return obj("stations", db.query("select id,name,created_at,last_seen_at from board_stations where revoked_at is null order by id",
-        (rs, i) -> obj("id", rs.getLong(1), "name", rs.getString(2), "createdAt", rs.getString(3), "lastSeenAt", rs.getString(4))));
+    Instant now = clock.instant(); deleteSilent(now);
+    return obj("stations", db.query("select id,name,created_at,last_seen_at from board_stations where last_seen_at>=? order by id",
+        (rs, i) -> obj("id", rs.getLong(1), "name", rs.getString(2), "createdAt", rs.getString(3), "lastSeenAt", rs.getString(4)), iso(now.minus(ONLINE))));
   }
 
-  /** DELETE /api/admin/board/stations/{id}: the station stops being one (its browser gets 401 on /api/station). */
+  /** DELETE /api/admin/board/stations/{id}: the station stops being one (its tab gets 401 on /api/station). */
   Map<String, Object> revoke(long id) {
-    if (db.update("update board_stations set revoked_at=? where id=? and revoked_at is null", iso(clock.instant()), id) == 0
-        && db.queryForObject("select count(*) from board_stations where id=?", Integer.class, id) == 0) throw new NotFoundError("BOARD_STATION_NOT_FOUND", "Компьютер у доски не найден");
+    if (db.update("delete from board_stations where id=?", id) == 0) throw new NotFoundError("BOARD_STATION_NOT_FOUND", "Компьютер у доски не найден");
     return obj("revoked", true);
   }
 
-  /** DELETE /api/station: this browser leaves station mode — its station is revoked and the cookie cleared. */
-  void leave(long id, jakarta.servlet.http.HttpServletResponse response) {
-    db.update("update board_stations set revoked_at=? where id=? and revoked_at is null", iso(clock.instant()), id);
-    response.addCookie(cookie("", Duration.ZERO));
+  /** DELETE /api/station: this tab leaves station mode. */
+  void leave(long id) {
+    db.update("delete from board_stations where id=?", id);
     log.info("Board station {} left station mode", id);
   }
 
-  private Cookie cookie(String token, Duration age) {
-    Cookie c = new Cookie(COOKIE, token); c.setHttpOnly(true); c.setPath(PATH); c.setMaxAge((int) age.toSeconds()); c.setSecure(secureCookie); return c;
-  }
+  private void deleteSilent(Instant now) { db.update("delete from board_stations where last_seen_at<?", iso(now.minus(LIFETIME))); }
   private static String iso(Instant at) { return PairWork.iso(at); }
   private static Map<String, Object> obj(Object... entries) { var m = new LinkedHashMap<String, Object>(); for (int i = 0; i < entries.length; i += 2) m.put((String) entries[i], entries[i + 1]); return m; }
 }

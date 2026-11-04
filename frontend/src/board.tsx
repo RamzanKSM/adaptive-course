@@ -1,6 +1,6 @@
 import { CSSProperties, DragEvent, FormEvent, KeyboardEvent, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { api, ApiError, patch, post, remove } from './api'
+import { api, ApiError, patch, post, remove, setStationToken, stationToken } from './api'
 import { ConsolePanel } from './console'
 import { EDITOR_EXTENSIONS, FALLBACK_CODE, Markdown } from './editor'
 import { Icon, initials, useToast } from './fx'
@@ -1048,27 +1048,29 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   </section>
 }
 
-const STATION_NAME = 'Компьютер у доски'
+const STATIONS_POLL_MS = 30_000
 
 /**
- * «Компьютер у доски»: turns this browser into the board station (it then shows only the calls and the running test, the
- * teacher is signed out here), lists the stations to switch them off, and the setting «Студент может начать тест из своего аккаунта».
+ * «Компьютер у доски»: turns this tab into the board station until it is closed (it then shows only the calls and the
+ * running test, the teacher is signed out here), lists the stations online to switch them off, and the setting «Студент может начать тест из своего аккаунта».
  */
 function BoardStations({ request, onBecomeStation }: { request: Request; onBecomeStation: () => void }) {
   const [stations, setStations] = useState<BoardStation[] | null>(null)
   const [settings, setSettings] = useState<BoardSettings | null>(null)
-  /** This browser holds a station cookie (the cookie goes only to /api/station, so the station endpoint tells). */
+  /** This tab holds a station's token. */
   const [here, setHere] = useState<StationCurrent['station'] | null>(null)
   const [confirm, setConfirm] = useState(false)
-  const [name, setName] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const toast = useToast()
   useEffect(() => {
     let alive = true
     request(() => api<{ stations: BoardStation[] }>('/admin/board/stations')).then(v => { if (alive && v) setStations(v.stations) })
-    api<StationCurrent>('/station/current').then(v => { if (alive) setHere(v.station) }, () => { if (alive) setHere(null) })
-    return () => { alive = false }
+    if (stationToken()) api<StationCurrent>('/station/current').then(v => { if (alive) setHere(v.station) }, () => { if (alive) setHere(null) })
+    else setHere(null)
+    // A closed station drops off the list by itself.
+    const timer = setInterval(() => { api<{ stations: BoardStation[] }>('/admin/board/stations').then(v => { if (alive) setStations(v.stations) }, () => {}) }, STATIONS_POLL_MS)
+    return () => { alive = false; clearInterval(timer) }
   }, [request, reload])
   useEffect(() => {
     let alive = true
@@ -1078,9 +1080,9 @@ function BoardStations({ request, onBecomeStation }: { request: Request; onBecom
 
   async function become() {
     setBusy('create')
-    const created = await request(() => post<BoardStation>('/admin/board/stations', { name: name.trim() || STATION_NAME }))
+    const created = await request(() => post<BoardStation>('/admin/board/stations'))
     setBusy(null)
-    if (created) onBecomeStation()
+    if (created?.token) { setStationToken(created.token); onBecomeStation() }
   }
   async function revoke(station: BoardStation) {
     setBusy(`revoke:${station.id}`)
@@ -1092,7 +1094,7 @@ function BoardStations({ request, onBecomeStation }: { request: Request; onBecom
     setBusy('leave')
     const done = await request(() => remove<void>('/station').then(() => true))
     setBusy(null)
-    if (done) { setHere(null); setReload(n => n + 1); toast({ tone: 'info', icon: 'x', title: 'Этот компьютер больше не у доски', text: 'Вызовы и тесты здесь больше не показываются' }) }
+    if (done) { setStationToken(null); setHere(null); setReload(n => n + 1); toast({ tone: 'info', icon: 'x', title: 'Этот компьютер больше не у доски', text: 'Вызовы и тесты здесь больше не показываются' }) }
   }
   async function toggleStart() {
     if (!settings) return
@@ -1104,15 +1106,14 @@ function BoardStations({ request, onBecomeStation }: { request: Request; onBecom
 
   return <div className="card board-stations">
     <h2 className="card-title"><span className="chip-icon"><Icon name="flag" size={16} /></span> Компьютер у доски</h2>
-    <p className="muted small">Браузер компьютера у доски показывает только вызовы и идущий тест: студент подходит, нажимает «Начать тест» рядом со своим именем — без логина и пароля, его уроки на своём компьютере остаются открытыми.</p>
+    <p className="muted small">Браузер компьютера у доски показывает только вызовы и идущий тест: студент подходит, нажимает «Начать тест» рядом со своим именем — без логина и пароля, его уроки на своём компьютере остаются открытыми. Станция работает, пока открыта её вкладка: закрыл — и компьютер больше не у доски.</p>
     {here ? <div className="board-station-here">
-      <span><Icon name="check" size={16} /> Этот браузер — <b>{here.name}</b>. Выйди из аккаунта, чтобы снова показать вызовы.</span>
+      <span><Icon name="check" size={16} /> Эта вкладка — <b>{here.name}</b>. Выйди из аккаунта, чтобы снова показать вызовы.</span>
       <button type="button" className="ghost small-button danger" disabled={busy === 'leave'} onClick={leave}>{busy === 'leave' ? <span className="spinner" aria-hidden="true" /> : <Icon name="x" size={15} />}Отключить этот компьютер</button>
     </div>
       : confirm ? <div className="danger-zone open board-station-confirm">
         <b>Сделать этот компьютер компьютером у доски?</b>
-        <p className="muted small">Этот браузер будет показывать только вызовы и тесты. Вы выйдете из аккаунта преподавателя на этом компьютере.</p>
-        <label>Название<input value={name} maxLength={60} placeholder={STATION_NAME} onChange={e => setName(e.target.value)} /></label>
+        <p className="muted small">Эта вкладка будет показывать только вызовы и тесты, пока её не закроешь. Вы выйдете из аккаунта преподавателя на этом компьютере.</p>
         <div className="password-row">
           <button type="button" className="primary" disabled={busy === 'create'} onClick={become}>{busy === 'create' ? <><span className="spinner" aria-hidden="true" /> Настраиваем…</> : 'Сделать и выйти'}</button>
           <button type="button" className="ghost" onClick={() => setConfirm(false)}>Отмена</button>
@@ -1120,12 +1121,12 @@ function BoardStations({ request, onBecomeStation }: { request: Request; onBecom
       </div>
         : <button type="button" className="secondary small-button" onClick={() => setConfirm(true)}><Icon name="flag" size={15} />Сделать этот компьютер компьютером у доски</button>}
     {stations && stations.length > 0 && <ul className="board-station-list">{stations.map(st => <li key={st.id}>
-      <span className="board-member-meta"><b>{st.name}{here?.id === st.id && <span className="suggest-tag">этот браузер</span>}</b>
-        <small>подключён {dayOnly(st.createdAt)}{st.lastSeenAt ? ` · на связи ${dayTime(st.lastSeenAt)}` : ' · ещё не был на связи'}</small></span>
+      <span className="board-member-meta"><b>{st.name}{here?.id === st.id && <span className="suggest-tag">эта вкладка</span>}</b>
+        <small>подключён {dayTime(st.createdAt)}{st.lastSeenAt && ` · на связи ${dayTime(st.lastSeenAt)}`}</small></span>
       <button type="button" className="ghost small-button danger" disabled={busy === `revoke:${st.id}`} onClick={() => revoke(st)}>
         {busy === `revoke:${st.id}` ? <span className="spinner" aria-hidden="true" /> : <Icon name="x" size={15} />}Отключить</button>
     </li>)}</ul>}
-    {stations && !stations.length && <p className="muted small">Компьютеров у доски пока нет.</p>}
+    {stations && !stations.length && <p className="muted small">Сейчас компьютеров у доски нет.</p>}
     <div className="board-station-setting">
       <div><b>Студент может начать тест из своего аккаунта</b>
         <small className="muted">{settings?.studentStart ? 'Вызванный студент видит «Начать тест» и в своём аккаунте — например, если он сам вошёл на компьютере у доски.' : 'Выключено: тест начинается только на компьютере у доски, в своём аккаунте студент видит «подойди к компьютеру у доски».'}</small></div>
@@ -1427,7 +1428,7 @@ function BoardTestDetail({ id, anchor, request, busy, onAct, onEdit, onClose, re
             <p className="eyebrow">{isAttestation(test) ? 'Аттестация' : 'Ответ у доски'}</p>
             <h2 className="title">{test.displayName} <BoardStatusTag status={test.status} /></h2>
             <p className="muted small">Вызван {dayTime(test.calledAt)}{test.login && ` · ${test.login}`}{test.language && ` · ${courseTitle(test.language)}`}
-              {duration !== null && ` · тест занял ${clock(duration * 1000)}`}{test.stationName && ` · на компьютере у доски «${test.stationName}»`}</p>
+              {duration !== null && ` · тест занял ${clock(duration * 1000)}`}{test.stationName && ' · на компьютере у доски'}</p>
             <KindsNote test={test} />
           </div>
           <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
