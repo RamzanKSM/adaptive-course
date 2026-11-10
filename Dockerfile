@@ -17,7 +17,7 @@ RUN mvn -q -DskipTests package
 # A JDK, not a JRE: task checks parse Java solutions with the JDK compiler tree API (javax.tools / com.sun.source).
 FROM eclipse-temurin:21-jdk-noble
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates nodejs npm util-linux \
+  && apt-get install -y --no-install-recommends bubblewrap ca-certificates nodejs npm util-linux \
   && npm install --global @openai/codex@0.159.3 \
   && useradd --system --uid 10001 --create-home app \
   && rm -rf /var/lib/apt/lists/*
