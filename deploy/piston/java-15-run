@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+
+mv "$1" "$1.java"
+filename="$1.java"
+shift
+exec java -Dfile.encoding=UTF-8 "$filename" "$@"
