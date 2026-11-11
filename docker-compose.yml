@@ -57,7 +57,8 @@ services:
     cpus: 2.0
     volumes:
       - piston-packages:/piston/packages
-      - ./deploy/piston/java-15-run:/piston/packages/java/15.0.2/run:ro
+      # Piston's entrypoint changes package ownership on startup.
+      - ./deploy/piston/java-15-run:/piston/packages/java/15.0.2/run:rw
 
 volumes:
   adaptive-data:
