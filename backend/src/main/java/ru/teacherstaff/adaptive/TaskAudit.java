@@ -10,6 +10,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -25,113 +26,142 @@ import java.util.concurrent.TimeUnit;
  */
 @Component
 class TaskAudit implements ApplicationRunner, DisposableBean {
-  private static final Logger log = LoggerFactory.getLogger(TaskAudit.class);
-  private static final ObjectMapper JSON = new ObjectMapper();
-  static final int REPAIR_ATTEMPTS = 2;
-  private final JdbcTemplate db;
-  private final LearningContentGenerator generator;
-  private final TaskVerifier verifier;
-  private final PistonCodeRunner runner;
-  private final LlmSettings limits;
-  private final boolean enabled;
-  // A platform thread, not a virtual one: see BackgroundThreads.
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(BackgroundThreads.named("task-audit"));
+    static final int REPAIR_ATTEMPTS = 2;
+    private static final Logger log = LoggerFactory.getLogger(TaskAudit.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private final JdbcTemplate db;
+    private final LearningContentGenerator generator;
+    private final TaskVerifier verifier;
+    private final PistonCodeRunner runner;
+    private final LlmSettings limits;
+    private final boolean enabled;
+    // A platform thread, not a virtual one: see BackgroundThreads.
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(BackgroundThreads.named("task-audit"));
 
-  TaskAudit(JdbcTemplate db, LearningContentGenerator generator, TaskVerifier verifier, PistonCodeRunner runner, LlmSettings limits,
-            @Value("${app.task-audit.enabled:true}") boolean enabled) {
-    this.db = db; this.generator = generator; this.verifier = verifier; this.runner = runner; this.limits = limits; this.enabled = enabled;
-  }
-
-  @Override public void run(ApplicationArguments args) {
-    retireBeyondTopic();
-    if (!enabled) return;
-    // Retries every 15 minutes: the LLM or Piston may be unavailable at startup.
-    scheduler.scheduleWithFixedDelay(this::auditPending, 30, 15 * 60, TimeUnit.SECONDS);
-  }
-
-  @Override public void destroy() { scheduler.shutdownNow(); }
-
-  /** Retires active regular tasks that need what their topic's students have not been taught; returns how many. */
-  int retireBeyondTopic() {
-    int retired = 0;
-    for (var row : db.queryForList("select id,title,skill_code,language,starter_code,test_source,goal_json from tasks where active=1 and mode='NORMAL'")) {
-      Language language = Language.of(row.get("language"));
-      JsonNode goal = goal((String) row.get("goal_json"));
-      var late = CourseConstructs.beyondTopic(db, language, (String) row.get("skill_code"), goal, (String) row.get("test_source"), (String) row.get("starter_code"));
-      if (late.isEmpty()) continue;
-      db.update("update tasks set active=0 where id=?", row.get("id"));
-      log.warn("Task {} '{}' (skill={}) retired: it needs what the course teaches later ({}); a new task will be generated when needed",
-          row.get("id"), row.get("title"), row.get("skill_code"), CourseConstructs.describe(language, late));
-      retired++;
+    TaskAudit(JdbcTemplate db, LearningContentGenerator generator, TaskVerifier verifier, PistonCodeRunner runner, LlmSettings limits,
+              @Value("${app.task-audit.enabled:true}") boolean enabled) {
+        this.db = db;
+        this.generator = generator;
+        this.verifier = verifier;
+        this.runner = runner;
+        this.limits = limits;
+        this.enabled = enabled;
     }
-    return retired;
-  }
 
-  private JsonNode goal(String json) {
-    if (json == null || json.isBlank()) return null;
-    try { return JSON.readTree(json); } catch (Exception e) { return null; }
-  }
-
-  /** Returns how many tasks were repaired; stops early when the LLM or Piston is unavailable. */
-  int auditPending() {
-    var pending = db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.test_source,t.language,t.difficulty,t.mode,ts.skill_code from tasks t join task_target_skills ts on ts.task_id=t.id "
-        + "where t.active=1 and t.source='LLM' and (coalesce(t.quality_version,0)<? or (json_extract(t.goal_json,'$.kind') in ('FUNCTION_BEHAVIOR','IO_BEHAVIOR') "
-        + "and not exists(select 1 from task_cases c where c.task_id=t.id))) group by t.id order by t.id", LearningContentGenerator.TASK_QUALITY_VERSION);
-    if (pending.isEmpty()) return 0;
-    if (!generator.available()) { log.info("{} task(s) await re-verification; LLM is unavailable, will retry", pending.size()); return 0; }
-    int repaired = 0;
-    for (var row : pending) {
-      Language language = Language.of(row.get("language"));
-      if (!runner.status(language).available()) { log.info("Task re-verification paused: {} runtime is unavailable", language); break; }
-      if (!limits.taskGenerationAllowed()) { log.info("Task re-verification paused: course-wide task generation limit reached"); break; }
-      long id = ((Number) row.get("id")).longValue();
-      try {
-        if (repair(id, row, language)) repaired++;
-      } catch (LlmUnavailableException e) {
-        log.warn("Task re-verification paused at task {}: {}", id, e.getMessage());
-        break;
-      } catch (Exception e) {
-        log.error("Task {} re-verification failed unexpectedly", id, e);
-      }
+    @Override
+    public void run(ApplicationArguments args) {
+        retireBeyondTopic();
+        if (!enabled) return;
+        // Retries every 15 minutes: the LLM or Piston may be unavailable at startup.
+        scheduler.scheduleWithFixedDelay(this::auditPending, 30, 15 * 60, TimeUnit.SECONDS);
     }
-    return repaired;
-  }
 
-  private boolean repair(long id, java.util.Map<String, Object> row, Language language) {
-    String skill = (String) row.get("skill_code");
-    int difficulty = row.get("difficulty") instanceof Number n ? n.intValue() : 1;
-    var explanation = db.queryForList("select content from explanations where skill_code=?", String.class, skill);
-    ContentBrief brief = CourseBriefs.brief(db, null, skill, difficulty, explanation.isEmpty() ? null : explanation.getFirst(), "HARD".equals(row.get("mode")));
-    ExistingTask existing = new ExistingTask(id, (String) row.get("title"), (String) row.get("statement"), (String) row.get("starter_code"), (String) row.get("test_source"));
-    log.info("Re-verifying task {} '{}' (skill={}, language={})", id, existing.title(), skill, language);
-    for (int attempt = 1; attempt <= REPAIR_ATTEMPTS; attempt++) {
-      try {
-        GeneratedTask candidate = generator.repairTask(brief, existing);
-        if (candidate == null) throw new InvalidGeneratedContentException("empty response");
-        if (!"HARD".equals(row.get("mode"))) {
-          var late = CourseConstructs.beyondTopic(db, language, skill, candidate.goal(), candidate.testSource(), candidate.starterCode(), candidate.referenceSolutionSource());
-          if (!late.isEmpty()) throw new InvalidGeneratedContentException("task needs what the student has not been taught yet: " + CourseConstructs.describe(language, late));
+    @Override
+    public void destroy() {
+        scheduler.shutdownNow();
+    }
+
+    /**
+     * Retires active regular tasks that need what their topic's students have not been taught; returns how many.
+     */
+    int retireBeyondTopic() {
+        int retired = 0;
+        for (var row : db.queryForList("select id,title,skill_code,language,starter_code,test_source,goal_json from tasks where active=1 and mode='NORMAL'")) {
+            Language language = Language.of(row.get("language"));
+            JsonNode goal = goal((String) row.get("goal_json"));
+            var late = CourseConstructs.beyondTopic(db, language, (String) row.get("skill_code"), goal, (String) row.get("test_source"), (String) row.get("starter_code"));
+            if (late.isEmpty()) continue;
+            db.update("update tasks set active=0 where id=?", row.get("id"));
+            log.warn("Task {} '{}' (skill={}) retired: it needs what the course teaches later ({}); a new task will be generated when needed",
+                     row.get("id"), row.get("title"), row.get("skill_code"), CourseConstructs.describe(language, late));
+            retired++;
         }
-        if (!ApiController.validHarness(language, candidate.testSource())) throw new InvalidGeneratedContentException("test harness does not follow the " + language.title + " contract");
-        TaskVerifier.Verified verified = verifier.verify(language, candidate);
-        db.update("update tasks set test_source=?, goal_json=?, quality_version=? where id=?", verified.testSource(), verified.goalJson(), LearningContentGenerator.TASK_QUALITY_VERSION, id);
-        // Function and input/output tasks move to the platform's recorded test cases.
-        db.update("delete from task_cases where task_id=?", id);
-        for (var c : verified.cases()) db.update("insert into task_cases(task_id,ordinal,input,expected,is_public) values(?,?,?,?,?)", id, c.ordinal(), c.input(), c.expected(), c.isPublic() ? 1 : 0);
-        markOutcome(skill, "ACCEPTED");
-        log.info("Task {} '{}' now has verified checks; earlier submissions and credit are unchanged", id, existing.title());
-        return true;
-      } catch (InvalidGeneratedContentException e) {
-        markOutcome(skill, "REJECTED");
-        log.warn("Repair of task {} rejected (attempt {}/{}): {}", id, attempt, REPAIR_ATTEMPTS, e.getMessage());
-      }
+        return retired;
     }
-    db.update("update tasks set active=0 where id=?", id);
-    log.warn("Task {} '{}' retired: its checks could not be made reliable; a new task will be generated when needed", id, existing.title());
-    return false;
-  }
 
-  private void markOutcome(String skill, String outcome) {
-    db.update("update llm_calls set outcome=? where id=(select max(id) from llm_calls where purpose='TASK_REPAIR' and skill_code=? and status='OK' and outcome is null)", outcome, skill);
-  }
+    private JsonNode goal(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return JSON.readTree(json);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns how many tasks were repaired; stops early when the LLM or Piston is unavailable.
+     */
+    int auditPending() {
+        var pending = db.queryForList("select t.id,t.title,t.statement,t.starter_code,t.test_source,t.language,t.difficulty,t.mode,ts.skill_code from tasks t join task_target_skills ts on ts.task_id=t.id "
+                                              + "where t.active=1 and t.source='LLM' and (coalesce(t.quality_version,0)<? or (json_extract(t.goal_json,'$.kind') in ('FUNCTION_BEHAVIOR','IO_BEHAVIOR') "
+                                              + "and not exists(select 1 from task_cases c where c.task_id=t.id))) group by t.id order by t.id", LearningContentGenerator.TASK_QUALITY_VERSION);
+        if (pending.isEmpty()) return 0;
+        if (!generator.available()) {
+            log.info("{} task(s) await re-verification; LLM is unavailable, will retry", pending.size());
+            return 0;
+        }
+        int repaired = 0;
+        for (var row : pending) {
+            Language language = Language.of(row.get("language"));
+            if (!runner.status(language).available()) {
+                log.info("Task re-verification paused: {} runtime is unavailable", language);
+                break;
+            }
+            if (!limits.taskGenerationAllowed()) {
+                log.info("Task re-verification paused: course-wide task generation limit reached");
+                break;
+            }
+            long id = ((Number) row.get("id")).longValue();
+            try {
+                if (repair(id, row, language)) repaired++;
+            } catch (LlmUnavailableException e) {
+                log.warn("Task re-verification paused at task {}: {}", id, e.getMessage());
+                break;
+            } catch (Exception e) {
+                log.error("Task {} re-verification failed unexpectedly", id, e);
+            }
+        }
+        return repaired;
+    }
+
+    private boolean repair(long id, java.util.Map<String, Object> row, Language language) {
+        String skill = (String) row.get("skill_code");
+        int difficulty = row.get("difficulty") instanceof Number n ? n.intValue() : 1;
+        var explanation = db.queryForList("select content from explanations where skill_code=?", String.class, skill);
+        ContentBrief brief = CourseBriefs.brief(db, null, skill, difficulty, explanation.isEmpty() ? null : explanation.getFirst(), "HARD".equals(row.get("mode")));
+        ExistingTask existing = new ExistingTask(id, (String) row.get("title"), (String) row.get("statement"), (String) row.get("starter_code"), (String) row.get("test_source"));
+        log.info("Re-verifying task {} '{}' (skill={}, language={})", id, existing.title(), skill, language);
+        for (int attempt = 1; attempt <= REPAIR_ATTEMPTS; attempt++) {
+            try {
+                GeneratedTask candidate = generator.repairTask(brief, existing);
+                if (candidate == null) throw new InvalidGeneratedContentException("empty response");
+                if (!"HARD".equals(row.get("mode"))) {
+                    var late = CourseConstructs.beyondTopic(db, language, skill, candidate.goal(), candidate.testSource(), candidate.starterCode(), candidate.referenceSolutionSource());
+                    if (!late.isEmpty())
+                        throw new InvalidGeneratedContentException("task needs what the student has not been taught yet: " + CourseConstructs.describe(language, late));
+                }
+                if (!ApiController.validHarness(language, candidate.testSource()))
+                    throw new InvalidGeneratedContentException("test harness does not follow the " + language.title + " contract");
+                TaskVerifier.Verified verified = verifier.verify(language, candidate);
+                db.update("update tasks set test_source=?, goal_json=?, quality_version=? where id=?", verified.testSource(), verified.goalJson(), LearningContentGenerator.TASK_QUALITY_VERSION, id);
+                // Function and input/output tasks move to the platform's recorded test cases.
+                db.update("delete from task_cases where task_id=?", id);
+                for (var c : verified.cases())
+                    db.update("insert into task_cases(task_id,ordinal,input,expected,is_public) values(?,?,?,?,?)", id, c.ordinal(), c.input(), c.expected(), c.isPublic() ? 1 : 0);
+                markOutcome(skill, "ACCEPTED");
+                log.info("Task {} '{}' now has verified checks; earlier submissions and credit are unchanged", id, existing.title());
+                return true;
+            } catch (InvalidGeneratedContentException e) {
+                markOutcome(skill, "REJECTED");
+                log.warn("Repair of task {} rejected (attempt {}/{}): {}", id, attempt, REPAIR_ATTEMPTS, e.getMessage());
+            }
+        }
+        db.update("update tasks set active=0 where id=?", id);
+        log.warn("Task {} '{}' retired: its checks could not be made reliable; a new task will be generated when needed", id, existing.title());
+        return false;
+    }
+
+    private void markOutcome(String skill, String outcome) {
+        db.update("update llm_calls set outcome=? where id=(select max(id) from llm_calls where purpose='TASK_REPAIR' and skill_code=? and status='OK' and outcome is null)", outcome, skill);
+    }
 }

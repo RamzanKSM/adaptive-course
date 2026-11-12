@@ -9,33 +9,49 @@ package ru.teacherstaff.adaptive;
  * mastered. Unfinished progress carries across lessons.
  */
 final class IterationRule {
-  private IterationRule() {}
+    private IterationRule() {
+    }
 
-  /** Practice of one topic: completed iterations, credited tasks towards the next one, lesson number of the first iteration. */
-  record Topic(int completed, int successes, Integer firstLesson) {
-    static final Topic NEW = new Topic(0, 0, null);
-    boolean mastered() { return completed >= ApiController.ITERATION_TASKS.length; }
-  }
+    /**
+     * Credits one task when the iteration is due, carrying unfinished progress across lessons.
+     */
+    static Topic credit(Topic topic, int lessonNumber, boolean iterationInLesson) {
+        if (topic.mastered() || iterationInLesson || !due(topic, lessonNumber)) return topic;
+        int successes = topic.successes() + 1;
+        if (successes < ApiController.iterationTasks(topic.completed()))
+            return new Topic(topic.completed(), successes, topic.firstLesson());
+        return new Topic(topic.completed() + 1, 0, topic.firstLesson() == null ? lessonNumber : topic.firstLesson());
+    }
 
-  /** Credits one task when the iteration is due, carrying unfinished progress across lessons. */
-  static Topic credit(Topic topic, int lessonNumber, boolean iterationInLesson) {
-    if (topic.mastered() || iterationInLesson || !due(topic, lessonNumber)) return topic;
-    int successes = topic.successes() + 1;
-    if (successes < ApiController.iterationTasks(topic.completed())) return new Topic(topic.completed(), successes, topic.firstLesson());
-    return new Topic(topic.completed() + 1, 0, topic.firstLesson() == null ? lessonNumber : topic.firstLesson());
-  }
+    /**
+     * Whether this lesson may complete the topic's next iteration (a schedule without the first lesson is never due).
+     */
+    static boolean due(Topic topic, int lessonNumber) {
+        Integer first = topic.firstLesson();
+        return topic.completed() == 0 || (topic.completed() == 1 && first != null && lessonNumber >= first + 1) || (topic.completed() == 2 && first != null && lessonNumber >= first + 3);
+    }
 
-  /** Whether this lesson may complete the topic's next iteration (a schedule without the first lesson is never due). */
-  static boolean due(Topic topic, int lessonNumber) {
-    Integer first = topic.firstLesson();
-    return topic.completed() == 0 || (topic.completed() == 1 && first != null && lessonNumber >= first + 1) || (topic.completed() == 2 && first != null && lessonNumber >= first + 3);
-  }
+    /**
+     * Share of the topic done, 0..1, as the student's topic bar (game.ts skillPercent, unrounded): 1 when mastered.
+     */
+    static double share(int completed, int successes) {
+        if (completed >= ApiController.ITERATION_TASKS.length) return 1;
+        int done = 0, all = 0;
+        for (int i = 0; i < ApiController.ITERATION_TASKS.length; i++) {
+            all += ApiController.ITERATION_TASKS[i];
+            if (i < completed) done += ApiController.ITERATION_TASKS[i];
+        }
+        return (done + Math.min(successes, ApiController.iterationTasks(completed))) / (double) all;
+    }
 
-  /** Share of the topic done, 0..1, as the student's topic bar (game.ts skillPercent, unrounded): 1 when mastered. */
-  static double share(int completed, int successes) {
-    if (completed >= ApiController.ITERATION_TASKS.length) return 1;
-    int done = 0, all = 0;
-    for (int i = 0; i < ApiController.ITERATION_TASKS.length; i++) { all += ApiController.ITERATION_TASKS[i]; if (i < completed) done += ApiController.ITERATION_TASKS[i]; }
-    return (done + Math.min(successes, ApiController.iterationTasks(completed))) / (double) all;
-  }
+    /**
+     * Practice of one topic: completed iterations, credited tasks towards the next one, lesson number of the first iteration.
+     */
+    record Topic(int completed, int successes, Integer firstLesson) {
+        static final Topic NEW = new Topic(0, 0, null);
+
+        boolean mastered() {
+            return completed >= ApiController.ITERATION_TASKS.length;
+        }
+    }
 }

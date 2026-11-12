@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Component;
+
 import java.security.SecureRandom;
 import java.text.Collator;
 import java.time.Clock;
@@ -29,257 +30,410 @@ import java.util.random.RandomGenerator;
  */
 @Component
 class FortuneWheel {
-  static final int MAX_PRIZE = 200;
+    static final int MAX_PRIZE = 200;
 
-  private final JdbcTemplate db; private final PairWork pairs; private final DrawSettings settings; private final Clock clock; private final ObjectMapper json;
-  private final RandomGenerator random = new SecureRandom();
-  FortuneWheel(JdbcTemplate db, PairWork pairs, DrawSettings settings, Clock clock, ObjectMapper json) {
-    this.db = db; this.pairs = pairs; this.settings = settings; this.clock = clock; this.json = json;
-  }
+    private final JdbcTemplate db;
+    private final PairWork pairs;
+    private final DrawSettings settings;
+    private final Clock clock;
+    private final ObjectMapper json;
+    private final RandomGenerator random = new SecureRandom();
 
-  /** The size of the top: the given percent of the pool, rounded up. */
-  static int topCount(int pool, double percent) { return (int) Math.ceil(pool * percent / 100 - 1e-9); }
-
-  /** The lowest points that still make the top, ties included, and at least minPoints; null when nobody makes it (an empty pool or top). */
-  static Integer threshold(List<Integer> points, double percent, int minPoints) {
-    int k = topCount(points.size(), percent);
-    if (k == 0) return null;
-    int border = points.stream().sorted(Comparator.reverseOrder()).toList().get(k - 1);
-    return Math.max(border, minPoints);
-  }
-
-  /** A student's weight: the pair's points plus the bonus of the grade, at least 1; 1 for everybody with equal chances. */
-  static int weight(int points, Integer grade, DrawSettings.Values s) {
-    if (s.chances().equals("EQUAL")) return 1;
-    int bonus = grade == null ? 0 : grade >= 5 ? s.bonus5() : grade == 4 ? s.bonus4() : grade == 3 ? s.bonus3() : 0;
-    return Math.max(1, points + bonus);
-  }
-
-  /** One of the ids at random in proportion to its weight, or to the inverse of it (who drops out in ELIMINATION). */
-  static long pick(List<Long> ids, Map<Long, Double> weights, boolean inverse, RandomGenerator random) {
-    double total = 0;
-    for (long id : ids) total += share(weights.getOrDefault(id, 1.0), inverse);
-    double x = random.nextDouble() * total;
-    for (long id : ids) { x -= share(weights.getOrDefault(id, 1.0), inverse); if (x < 0) return id; }
-    return ids.getLast();
-  }
-  private static double share(double weight, boolean inverse) { return inverse ? 1.0 / weight : weight; }
-
-  /** The weights of the given students in a pair under the current settings: points of the window plus the bonus of the grade. */
-  private Map<Long, Double> weights(PairWork.Head head, Collection<Long> users, DrawSettings.Values s) {
-    Map<Long, Double> result = new HashMap<>();
-    if (users.isEmpty()) return result;
-    var ids = new ArrayList<>(users);
-    var grades = board(ids, head.window());
-    for (var r : pairs.rowsOf(head.language(), head.window(), ids)) result.put(r.userId(), (double) weight(r.points(), grades.get(r.userId()), s));
-    return result;
-  }
-
-  /** GET /api/admin/pairs/{id}/wheel: who is on the wheel and why, the rest of the group to add by hand, the runs, the settings. */
-  Map<String, Object> wheel(long pairId) {
-    var head = pairs.saved(pairId); var s = settings.current();
-    var users = db.queryForList("select id from users where role='STUDENT' and group_name in (" + String.join(",", Collections.nCopies(head.groups().size(), "?")) + ") order by id", Long.class, head.groups().toArray());
-    var rows = pairs.rowsOf(head.language(), head.window(), users);
-    var board = board(users, head.window());
-    var pool = rows.stream().filter(r -> r.attended() && !board.containsKey(r.userId())).toList();
-    Integer threshold = threshold(pool.stream().map(PairWork.Row::points).toList(), s.topPercent(), s.minPoints());
-
-    var candidates = new ArrayList<Map<String, Object>>(); var called = new ArrayList<Map<String, Object>>(); var others = new ArrayList<Map<String, Object>>();
-    for (var r : rows.stream().sorted(byName()).toList()) {
-      boolean wasCalled = board.containsKey(r.userId()); Integer grade = board.get(r.userId());
-      var person = person(r, grade, s);
-      if (head.groups().size() > 1) person.put("memberOf", r.group()); // a combined pair: the panel shows whose student it is
-      if (grade != null && grade >= s.boardMinGrade()) { person.put("reason", "BOARD"); candidates.add(person); }
-      else if (!wasCalled && r.attended() && threshold != null && r.points() >= threshold) { person.put("reason", "TOP"); candidates.add(person); }
-      else (wasCalled ? called : others).add(person);
+    FortuneWheel(JdbcTemplate db, PairWork pairs, DrawSettings settings, Clock clock, ObjectMapper json) {
+        this.db = db;
+        this.pairs = pairs;
+        this.settings = settings;
+        this.clock = clock;
+        this.json = json;
     }
-    // The top by points first, then the grades at the board, each by name: the order of the list; the wheel shuffles its own.
-    candidates.sort(Comparator.comparing((Map<String, Object> c) -> "BOARD".equals(c.get("reason"))));
-    return obj("pairId", pairId, "group", head.group(), "language", head.language().name(),
-        "startsAt", PairWork.iso(head.window().start()), "endsAt", PairWork.iso(head.window().end()),
-        "topPercent", s.topPercent(), "minPoints", s.minPoints(), "boardMinGrade", s.boardMinGrade(),
-        "pool", pool.size(), "topCount", topCount(pool.size(), s.topPercent()), "threshold", threshold,
-        "candidates", candidates, "called", called, "others", others, "runs", runs(pairId), "prize", s.defaultPrize(), "settings", settings.view());
-  }
 
-  /** GET /api/admin/pairs/{id}/wheel/outsiders: the students outside the pair's groups to add by hand, by group and name; weights as for anybody, by this pair's window and course. */
-  Map<String, Object> outsiders(long pairId) {
-    var head = pairs.saved(pairId); var s = settings.current();
-    Map<Long, String> groups = new HashMap<>();
-    db.query("select id,group_name from users where role='STUDENT' and (group_name is null or group_name not in (" + String.join(",", Collections.nCopies(head.groups().size(), "?")) + "))",
-        (RowCallbackHandler) rs -> groups.put(rs.getLong(1), rs.getString(2)), head.groups().toArray());
-    if (groups.isEmpty()) return obj("students", List.of());
-    var users = new ArrayList<>(groups.keySet());
-    var grades = board(users, head.window());
-    var students = new ArrayList<Map<String, Object>>();
-    for (var r : pairs.rowsOf(head.language(), head.window(), users).stream().sorted(byName()).toList()) {
-      var person = person(r, grades.get(r.userId()), s); person.put("group", groups.get(r.userId())); students.add(person);
+    /**
+     * The size of the top: the given percent of the pool, rounded up.
+     */
+    static int topCount(int pool, double percent) {
+        return (int) Math.ceil(pool * percent / 100 - 1e-9);
     }
-    students.sort(Comparator.comparing((Map<String, Object> p) -> p.get("group") == null ? "" : (String) p.get("group"), Collator.getInstance(Locale.forLanguageTag("ru"))));
-    return obj("students", students);
-  }
 
-  private static Comparator<PairWork.Row> byName() {
-    return Comparator.comparing((PairWork.Row r) -> r.name() == null ? "" : r.name(), Collator.getInstance(Locale.forLanguageTag("ru"))).thenComparing(PairWork.Row::login);
-  }
-  private static Map<String, Object> person(PairWork.Row r, Integer grade, DrawSettings.Values s) {
-    return obj("userId", r.userId(), "login", r.login(), "displayName", r.name(), "attended", r.attended(), "points", r.points(), "grade", grade == null ? null : String.valueOf(grade),
-        "weight", weight(r.points(), grade, s));
-  }
-
-  // ---------------------------------------------------------------- runs
-
-  private record Step(long userId, String kind, boolean absent) {}
-  private record Run(long id, long pairId, String mode, int winners, String prize, List<Long> names, Map<Long, Double> manual, String createdAt, List<Step> steps) {
-    List<Step> wins() { return steps.stream().filter(s -> s.kind().equals("WIN")).toList(); }
-    long activeWins() { return wins().stream().filter(s -> !s.absent()).count(); }
-    /** After a winner was marked absent every name that has not won is on the wheel again, and a step picks a winner. */
-    boolean replacing() { return wins().stream().anyMatch(Step::absent); }
-    /** The names on the wheel now, in wheel order. */
-    List<Long> wheel() {
-      var gone = new HashSet<Long>();
-      for (var s : steps) if (s.kind().equals("WIN") || s.kind().equals("OUT") && mode.equals("ELIMINATION") && !replacing()) gone.add(s.userId());
-      return names.stream().filter(n -> !gone.contains(n)).toList();
+    /**
+     * The lowest points that still make the top, ties included, and at least minPoints; null when nobody makes it (an empty pool or top).
+     */
+    static Integer threshold(List<Integer> points, double percent, int minPoints) {
+        int k = topCount(points.size(), percent);
+        if (k == 0) return null;
+        int border = points.stream().sorted(Comparator.reverseOrder()).toList().get(k - 1);
+        return Math.max(border, minPoints);
     }
-    boolean finished() { return activeWins() >= winners || wheel().isEmpty(); }
-  }
 
-  /** POST /api/admin/pairs/{id}/wheel/runs {userIds, prize, weights}: a new run over the names in wheel order, with the mode and the winners of the settings and the weights set by hand. */
-  Map<String, Object> start(long pairId, Map<String, Object> body, long adminId) {
-    var head = pairs.saved(pairId); var s = settings.current();
-    if (body == null || !(body.get("userIds") instanceof List<?> list) || list.isEmpty()) throw new ApiError("INVALID_WHEEL", "На колесе нет ни одного имени");
-    var ids = new ArrayList<Long>();
-    for (Object v : list) {
-      if (!(v instanceof Number n) || n.doubleValue() != n.longValue()) throw new ApiError("INVALID_WHEEL", "userIds — номера студентов");
-      if (ids.contains(n.longValue())) throw new ApiError("INVALID_WHEEL", "Имя на колесе повторяется");
-      ids.add(n.longValue());
+    /**
+     * A student's weight: the pair's points plus the bonus of the grade, at least 1; 1 for everybody with equal chances.
+     */
+    static int weight(int points, Integer grade, DrawSettings.Values s) {
+        if (s.chances().equals("EQUAL")) return 1;
+        int bonus = grade == null ? 0 : grade >= 5 ? s.bonus5() : grade == 4 ? s.bonus4() : grade == 3 ? s.bonus3() : 0;
+        return Math.max(1, points + bonus);
     }
-    if (body.get("prize") != null && !(body.get("prize") instanceof String)) throw new ApiError("INVALID_WHEEL", "prize — название приза");
-    String prize = body.get("prize") == null ? "" : ((String) body.get("prize")).strip().replaceAll("\\s+", " ");
-    if (prize.length() > MAX_PRIZE) throw new ApiError("INVALID_WHEEL", "Название приза — не длиннее " + MAX_PRIZE + " символов");
-    var manual = manualWeights(body.get("weights"), ids);
-    int known = db.queryForObject("select count(*) from users where role='STUDENT' and id in (" + String.join(",", Collections.nCopies(ids.size(), "?")) + ")",
-        Integer.class, concat(null, ids));
-    if (known != ids.size()) throw new ApiError("INVALID_WHEEL", "На колесе только студенты");
-    long id = db.queryForObject("insert into draw_runs(pair_id,mode,winners,prize,names_json,weights_json,created_by,created_at) values(?,?,?,?,?,?,?,?) returning id", Long.class,
-        pairId, s.mode(), s.winners(), prize.isEmpty() ? s.defaultPrize() : prize, write(ids), manual.isEmpty() ? null : write(manual), adminId, now());
-    return obj("run", view(run(pairId, id)));
-  }
 
-  /** The weights set by hand: {userId: any number above 0}, only for names of the run. Zero is refused: a name without a segment, and an endless chance to drop out. */
-  private static Map<Long, Double> manualWeights(Object value, List<Long> ids) {
-    var result = new HashMap<Long, Double>();
-    if (value == null) return result;
-    if (!(value instanceof Map<?, ?> map)) throw new ApiError("INVALID_WHEEL", "weights — веса студентов");
-    for (var e : map.entrySet()) {
-      long user;
-      try { user = Long.parseLong(String.valueOf(e.getKey())); } catch (NumberFormatException x) { throw new ApiError("INVALID_WHEEL", "weights — по номерам студентов"); }
-      if (!ids.contains(user)) throw new ApiError("INVALID_WHEEL", "Вес задан тому, кого нет на колесе");
-      if (!(e.getValue() instanceof Number n) || !(n.doubleValue() > 0) || Double.isInfinite(n.doubleValue())) throw new ApiError("INVALID_WHEEL", "Вес — число больше нуля");
-      result.put(user, n.doubleValue());
+    /**
+     * One of the ids at random in proportion to its weight, or to the inverse of it (who drops out in ELIMINATION).
+     */
+    static long pick(List<Long> ids, Map<Long, Double> weights, boolean inverse, RandomGenerator random) {
+        double total = 0;
+        for (long id : ids) total += share(weights.getOrDefault(id, 1.0), inverse);
+        double x = random.nextDouble() * total;
+        for (long id : ids) {
+            x -= share(weights.getOrDefault(id, 1.0), inverse);
+            if (x < 0) return id;
+        }
+        return ids.getLast();
     }
-    return result;
-  }
 
-  /**
-   * POST /api/admin/pairs/{id}/wheel/runs/{runId}/step: the next step. ARROW (or a replacement): a winner from the wheel in
-   * proportion to the weights. ELIMINATION: a name drops out in proportion to the inverse weights; when as many names are
-   * left as winners are still wanted, they win.
-   */
-  Map<String, Object> step(long pairId, long runId) {
-    var run = run(pairId, runId);
-    if (run.finished()) throw new ApiError("DRAW_FINISHED", "Жребий уже брошен: победители выявлены");
-    var wheel = run.wheel(); long need = run.winners() - run.activeWins();
-    var weights = weights(pairs.saved(pairId), wheel, settings.current()); weights.putAll(run.manual());
-    Map<String, Object> pick = null; var won = new ArrayList<Long>();
-    if (run.mode().equals("ARROW") || run.replacing()) {
-      long user = pick(wheel, weights, false, random); insert(runId, user, "WIN"); won.add(user);
-      pick = obj("userId", user, "kind", "WIN");
-    } else {
-      var left = new ArrayList<>(wheel);
-      if (left.size() > need) {
-        long user = pick(left, weights, true, random); left.remove(Long.valueOf(user)); insert(runId, user, "OUT");
-        pick = obj("userId", user, "kind", "OUT");
-      }
-      if (left.size() <= need) for (long user : left) { insert(runId, user, "WIN"); won.add(user); }
+    private static double share(double weight, boolean inverse) {
+        return inverse ? 1.0 / weight : weight;
     }
-    return obj("pick", pick, "won", won, "run", view(run(pairId, runId)));
-  }
 
-  /** POST /api/admin/pairs/{id}/wheel/runs/{runId}/absent {userId}: a winner is not in class; the next step draws a replacement. */
-  Map<String, Object> absent(long pairId, long runId, Map<String, Object> body) {
-    run(pairId, runId);
-    if (body == null || !(body.get("userId") instanceof Number n)) throw new ApiError("INVALID_WHEEL", "userId — номер победителя");
-    if (db.update("update draw_steps set absent=1 where run_id=? and user_id=? and kind='WIN' and absent=0", runId, n.longValue()) == 0)
-      throw new ApiError("INVALID_WHEEL", "Этот студент не победитель этого жребия");
-    return obj("run", view(run(pairId, runId)));
-  }
+    private static Comparator<PairWork.Row> byName() {
+        return Comparator.comparing((PairWork.Row r) -> r.name() == null ? "" : r.name(), Collator.getInstance(Locale.forLanguageTag("ru"))).thenComparing(PairWork.Row::login);
+    }
 
-  /** DELETE /api/admin/pairs/{id}/wheel/runs/{runId}: the run and its steps. */
-  Map<String, Object> delete(long pairId, long runId) {
-    run(pairId, runId);
-    db.update("delete from draw_steps where run_id=?", runId);
-    db.update("delete from draw_runs where id=?", runId);
-    return obj("deleted", true, "runs", runs(pairId));
-  }
+    private static Map<String, Object> person(PairWork.Row r, Integer grade, DrawSettings.Values s) {
+        return obj("userId", r.userId(), "login", r.login(), "displayName", r.name(), "attended", r.attended(), "points", r.points(), "grade", grade == null ? null : String.valueOf(grade),
+                   "weight", weight(r.points(), grade, s));
+    }
 
-  /** GET and PUT /api/admin/draw/settings. */
-  Map<String, Object> settings() { return settings.view(); }
-  Map<String, Object> saveSettings(Map<String, Object> body) { return settings.save(body); }
+    /**
+     * The weights set by hand: {userId: any number above 0}, only for names of the run. Zero is refused: a name without a segment, and an endless chance to drop out.
+     */
+    private static Map<Long, Double> manualWeights(Object value, List<Long> ids) {
+        var result = new HashMap<Long, Double>();
+        if (value == null) return result;
+        if (!(value instanceof Map<?, ?> map)) throw new ApiError("INVALID_WHEEL", "weights — веса студентов");
+        for (var e : map.entrySet()) {
+            long user;
+            try {
+                user = Long.parseLong(String.valueOf(e.getKey()));
+            } catch (NumberFormatException x) {
+                throw new ApiError("INVALID_WHEEL", "weights — по номерам студентов");
+            }
+            if (!ids.contains(user)) throw new ApiError("INVALID_WHEEL", "Вес задан тому, кого нет на колесе");
+            if (!(e.getValue() instanceof Number n) || !(n.doubleValue() > 0) || Double.isInfinite(n.doubleValue()))
+                throw new ApiError("INVALID_WHEEL", "Вес — число больше нуля");
+            result.put(user, n.doubleValue());
+        }
+        return result;
+    }
 
-  private void insert(long runId, long user, String kind) { db.update("insert into draw_steps(run_id,user_id,kind,created_at) values(?,?,?,?)", runId, user, kind, now()); }
+    private static Object[] concat(Object first, List<Long> middle, Object... rest) {
+        var all = new ArrayList<Object>();
+        if (first != null) all.add(first);
+        all.addAll(middle);
+        all.addAll(Arrays.asList(rest));
+        return all.toArray();
+    }
 
-  private Run run(long pairId, long runId) {
-    var runs = loadRuns("r.pair_id=? and r.id=?", pairId, runId);
-    if (runs.isEmpty()) throw new NotFoundError("DRAW_NOT_FOUND", "Жребий не найден");
-    return runs.getFirst();
-  }
-  private List<Run> loadRuns(String where, Object... params) {
-    var runs = db.query("select r.id,r.pair_id,r.mode,r.winners,r.prize,r.names_json,r.weights_json,r.created_at from draw_runs r where " + where + " order by r.id",
-        (rs, i) -> new Run(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getInt(4), rs.getString(5), read(rs.getString(6)), readWeights(rs.getString(7)), rs.getString(8), new ArrayList<>()), params);
-    if (runs.isEmpty()) return runs;
-    Map<Long, Run> byId = new HashMap<>(); for (var r : runs) byId.put(r.id(), r);
-    db.query("select run_id,user_id,kind,absent from draw_steps where run_id in (" + String.join(",", Collections.nCopies(runs.size(), "?")) + ") order by id",
-        (RowCallbackHandler) rs -> byId.get(rs.getLong(1)).steps().add(new Step(rs.getLong(2), rs.getString(3), rs.getInt(4) == 1)), byId.keySet().toArray());
-    return runs;
-  }
-  private List<Map<String, Object>> runs(long pairId) { return loadRuns("r.pair_id=?", pairId).stream().map(this::view).toList(); }
+    private static Map<String, Object> obj(Object... entries) {
+        var m = new LinkedHashMap<String, Object>();
+        for (int i = 0; i < entries.length; i += 2) m.put((String) entries[i], entries[i + 1]);
+        return m;
+    }
 
-  /** A run as the panel and the stage need it: the wheel now, the drop-outs in order, the winners with names. */
-  private Map<String, Object> view(Run r) {
-    var ids = r.wins().stream().map(Step::userId).toList();
-    Map<Long, String[]> people = new HashMap<>();
-    if (!ids.isEmpty()) db.query("select id,login,display_name from users where id in (" + String.join(",", Collections.nCopies(ids.size(), "?")) + ")",
-        (RowCallbackHandler) rs -> people.put(rs.getLong(1), new String[]{rs.getString(2), rs.getString(3)}), ids.toArray());
-    var wins = r.wins().stream().map(s -> obj("userId", s.userId(), "login", people.get(s.userId())[0], "displayName", people.get(s.userId())[1], "absent", s.absent())).toList();
-    return obj("id", r.id(), "mode", r.mode(), "winners", r.winners(), "prize", r.prize() == null ? DrawSettings.DEFAULTS.defaultPrize() : r.prize(),
-        "names", r.names(), "wheel", r.wheel(), "outs", r.steps().stream().filter(s -> s.kind().equals("OUT")).map(Step::userId).toList(),
-        "wins", wins, "replacing", r.replacing(), "finished", r.finished(), "manualWeights", !r.manual().isEmpty(), "createdAt", r.createdAt());
-  }
+    // ---------------------------------------------------------------- runs
 
-  // ---------------------------------------------------------------- board
+    /**
+     * The weights of the given students in a pair under the current settings: points of the window plus the bonus of the grade.
+     */
+    private Map<Long, Double> weights(PairWork.Head head, Collection<Long> users, DrawSettings.Values s) {
+        Map<Long, Double> result = new HashMap<>();
+        if (users.isEmpty()) return result;
+        var ids = new ArrayList<>(users);
+        var grades = board(ids, head.window());
+        for (var r : pairs.rowsOf(head.language(), head.window(), ids))
+            result.put(r.userId(), (double) weight(r.points(), grades.get(r.userId()), s));
+        return result;
+    }
 
-  /** The window's board tests and attestations of the given students: the best final grade of each called student (null — not graded yet). */
-  private Map<Long, Integer> board(List<Long> users, PairWork.Window w) {
-    Map<Long, Integer> result = new HashMap<>();
-    if (users.isEmpty()) return result;
-    db.query("select user_id,final_grade from board_tests where status not in ('CANCELLED','EXPIRED') and user_id in (" + String.join(",", Collections.nCopies(users.size(), "?")) + ")"
-        + " and cast(strftime('%s',called_at) as integer) between ? and ?",
-        (RowCallbackHandler) rs -> {
-          long user = rs.getLong(1); String grade = rs.getString(2);
-          Integer g = grade == null ? null : Integer.valueOf(grade), old = result.get(user);
-          if (g == null) result.putIfAbsent(user, null); // called, but not graded yet
-          else result.put(user, old == null ? g : Math.max(old, g));
-        }, concat(null, users, w.start().getEpochSecond(), w.end().getEpochSecond()));
-    return result;
-  }
+    /**
+     * GET /api/admin/pairs/{id}/wheel: who is on the wheel and why, the rest of the group to add by hand, the runs, the settings.
+     */
+    Map<String, Object> wheel(long pairId) {
+        var head = pairs.saved(pairId);
+        var s = settings.current();
+        var users = db.queryForList("select id from users where role='STUDENT' and group_name in (" + String.join(",", Collections.nCopies(head.groups().size(), "?")) + ") order by id", Long.class, head.groups().toArray());
+        var rows = pairs.rowsOf(head.language(), head.window(), users);
+        var board = board(users, head.window());
+        var pool = rows.stream().filter(r -> r.attended() && !board.containsKey(r.userId())).toList();
+        Integer threshold = threshold(pool.stream().map(PairWork.Row::points).toList(), s.topPercent(), s.minPoints());
 
-  private String now() { return PairWork.iso(clock.instant()); }
-  private static Object[] concat(Object first, List<Long> middle, Object... rest) {
-    var all = new ArrayList<Object>(); if (first != null) all.add(first); all.addAll(middle); all.addAll(Arrays.asList(rest)); return all.toArray();
-  }
-  private String write(Object value) { try { return json.writeValueAsString(value); } catch (Exception e) { throw new IllegalStateException(e); } }
-  private List<Long> read(String text) { try { return json.readValue(text, new TypeReference<List<Long>>() {}); } catch (Exception e) { throw new IllegalStateException(e); } }
-  private Map<Long, Double> readWeights(String text) { if (text == null) return Map.of(); try { return json.readValue(text, new TypeReference<Map<Long, Double>>() {}); } catch (Exception e) { throw new IllegalStateException(e); } }
-  private static Map<String, Object> obj(Object... entries) { var m = new LinkedHashMap<String, Object>(); for (int i = 0; i < entries.length; i += 2) m.put((String) entries[i], entries[i + 1]); return m; }
+        var candidates = new ArrayList<Map<String, Object>>();
+        var called = new ArrayList<Map<String, Object>>();
+        var others = new ArrayList<Map<String, Object>>();
+        for (var r : rows.stream().sorted(byName()).toList()) {
+            boolean wasCalled = board.containsKey(r.userId());
+            Integer grade = board.get(r.userId());
+            var person = person(r, grade, s);
+            if (head.groups().size() > 1)
+                person.put("memberOf", r.group()); // a combined pair: the panel shows whose student it is
+            if (grade != null && grade >= s.boardMinGrade()) {
+                person.put("reason", "BOARD");
+                candidates.add(person);
+            } else if (!wasCalled && r.attended() && threshold != null && r.points() >= threshold) {
+                person.put("reason", "TOP");
+                candidates.add(person);
+            } else (wasCalled ? called : others).add(person);
+        }
+        // The top by points first, then the grades at the board, each by name: the order of the list; the wheel shuffles its own.
+        candidates.sort(Comparator.comparing((Map<String, Object> c) -> "BOARD".equals(c.get("reason"))));
+        return obj("pairId", pairId, "group", head.group(), "language", head.language().name(),
+                   "startsAt", PairWork.iso(head.window().start()), "endsAt", PairWork.iso(head.window().end()),
+                   "topPercent", s.topPercent(), "minPoints", s.minPoints(), "boardMinGrade", s.boardMinGrade(),
+                   "pool", pool.size(), "topCount", topCount(pool.size(), s.topPercent()), "threshold", threshold,
+                   "candidates", candidates, "called", called, "others", others, "runs", runs(pairId), "prize", s.defaultPrize(), "settings", settings.view());
+    }
+
+    /**
+     * GET /api/admin/pairs/{id}/wheel/outsiders: the students outside the pair's groups to add by hand, by group and name; weights as for anybody, by this pair's window and course.
+     */
+    Map<String, Object> outsiders(long pairId) {
+        var head = pairs.saved(pairId);
+        var s = settings.current();
+        Map<Long, String> groups = new HashMap<>();
+        db.query("select id,group_name from users where role='STUDENT' and (group_name is null or group_name not in (" + String.join(",", Collections.nCopies(head.groups().size(), "?")) + "))",
+                 (RowCallbackHandler) rs -> groups.put(rs.getLong(1), rs.getString(2)), head.groups().toArray());
+        if (groups.isEmpty()) return obj("students", List.of());
+        var users = new ArrayList<>(groups.keySet());
+        var grades = board(users, head.window());
+        var students = new ArrayList<Map<String, Object>>();
+        for (var r : pairs.rowsOf(head.language(), head.window(), users).stream().sorted(byName()).toList()) {
+            var person = person(r, grades.get(r.userId()), s);
+            person.put("group", groups.get(r.userId()));
+            students.add(person);
+        }
+        students.sort(Comparator.comparing((Map<String, Object> p) -> p.get("group") == null ? "" : (String) p.get("group"), Collator.getInstance(Locale.forLanguageTag("ru"))));
+        return obj("students", students);
+    }
+
+    /**
+     * POST /api/admin/pairs/{id}/wheel/runs {userIds, prize, weights}: a new run over the names in wheel order, with the mode and the winners of the settings and the weights set by hand.
+     */
+    Map<String, Object> start(long pairId, Map<String, Object> body, long adminId) {
+        var head = pairs.saved(pairId);
+        var s = settings.current();
+        if (body == null || !(body.get("userIds") instanceof List<?> list) || list.isEmpty())
+            throw new ApiError("INVALID_WHEEL", "На колесе нет ни одного имени");
+        var ids = new ArrayList<Long>();
+        for (Object v : list) {
+            if (!(v instanceof Number n) || n.doubleValue() != n.longValue())
+                throw new ApiError("INVALID_WHEEL", "userIds — номера студентов");
+            if (ids.contains(n.longValue())) throw new ApiError("INVALID_WHEEL", "Имя на колесе повторяется");
+            ids.add(n.longValue());
+        }
+        if (body.get("prize") != null && !(body.get("prize") instanceof String))
+            throw new ApiError("INVALID_WHEEL", "prize — название приза");
+        String prize = body.get("prize") == null ? "" : ((String) body.get("prize")).strip().replaceAll("\\s+", " ");
+        if (prize.length() > MAX_PRIZE)
+            throw new ApiError("INVALID_WHEEL", "Название приза — не длиннее " + MAX_PRIZE + " символов");
+        var manual = manualWeights(body.get("weights"), ids);
+        int known = db.queryForObject("select count(*) from users where role='STUDENT' and id in (" + String.join(",", Collections.nCopies(ids.size(), "?")) + ")",
+                                      Integer.class, concat(null, ids));
+        if (known != ids.size()) throw new ApiError("INVALID_WHEEL", "На колесе только студенты");
+        long id = db.queryForObject("insert into draw_runs(pair_id,mode,winners,prize,names_json,weights_json,created_by,created_at) values(?,?,?,?,?,?,?,?) returning id", Long.class,
+                                    pairId, s.mode(), s.winners(), prize.isEmpty() ? s.defaultPrize() : prize, write(ids), manual.isEmpty() ? null : write(manual), adminId, now());
+        return obj("run", view(run(pairId, id)));
+    }
+
+    /**
+     * POST /api/admin/pairs/{id}/wheel/runs/{runId}/step: the next step. ARROW (or a replacement): a winner from the wheel in
+     * proportion to the weights. ELIMINATION: a name drops out in proportion to the inverse weights; when as many names are
+     * left as winners are still wanted, they win.
+     */
+    Map<String, Object> step(long pairId, long runId) {
+        var run = run(pairId, runId);
+        if (run.finished()) throw new ApiError("DRAW_FINISHED", "Жребий уже брошен: победители выявлены");
+        var wheel = run.wheel();
+        long need = run.winners() - run.activeWins();
+        var weights = weights(pairs.saved(pairId), wheel, settings.current());
+        weights.putAll(run.manual());
+        Map<String, Object> pick = null;
+        var won = new ArrayList<Long>();
+        if (run.mode().equals("ARROW") || run.replacing()) {
+            long user = pick(wheel, weights, false, random);
+            insert(runId, user, "WIN");
+            won.add(user);
+            pick = obj("userId", user, "kind", "WIN");
+        } else {
+            var left = new ArrayList<>(wheel);
+            if (left.size() > need) {
+                long user = pick(left, weights, true, random);
+                left.remove(Long.valueOf(user));
+                insert(runId, user, "OUT");
+                pick = obj("userId", user, "kind", "OUT");
+            }
+            if (left.size() <= need) for (long user : left) {
+                insert(runId, user, "WIN");
+                won.add(user);
+            }
+        }
+        return obj("pick", pick, "won", won, "run", view(run(pairId, runId)));
+    }
+
+    /**
+     * POST /api/admin/pairs/{id}/wheel/runs/{runId}/absent {userId}: a winner is not in class; the next step draws a replacement.
+     */
+    Map<String, Object> absent(long pairId, long runId, Map<String, Object> body) {
+        run(pairId, runId);
+        if (body == null || !(body.get("userId") instanceof Number n))
+            throw new ApiError("INVALID_WHEEL", "userId — номер победителя");
+        if (db.update("update draw_steps set absent=1 where run_id=? and user_id=? and kind='WIN' and absent=0", runId, n.longValue()) == 0)
+            throw new ApiError("INVALID_WHEEL", "Этот студент не победитель этого жребия");
+        return obj("run", view(run(pairId, runId)));
+    }
+
+    /**
+     * DELETE /api/admin/pairs/{id}/wheel/runs/{runId}: the run and its steps.
+     */
+    Map<String, Object> delete(long pairId, long runId) {
+        run(pairId, runId);
+        db.update("delete from draw_steps where run_id=?", runId);
+        db.update("delete from draw_runs where id=?", runId);
+        return obj("deleted", true, "runs", runs(pairId));
+    }
+
+    /**
+     * GET and PUT /api/admin/draw/settings.
+     */
+    Map<String, Object> settings() {
+        return settings.view();
+    }
+
+    Map<String, Object> saveSettings(Map<String, Object> body) {
+        return settings.save(body);
+    }
+
+    private void insert(long runId, long user, String kind) {
+        db.update("insert into draw_steps(run_id,user_id,kind,created_at) values(?,?,?,?)", runId, user, kind, now());
+    }
+
+    private Run run(long pairId, long runId) {
+        var runs = loadRuns("r.pair_id=? and r.id=?", pairId, runId);
+        if (runs.isEmpty()) throw new NotFoundError("DRAW_NOT_FOUND", "Жребий не найден");
+        return runs.getFirst();
+    }
+
+    private List<Run> loadRuns(String where, Object... params) {
+        var runs = db.query("select r.id,r.pair_id,r.mode,r.winners,r.prize,r.names_json,r.weights_json,r.created_at from draw_runs r where " + where + " order by r.id",
+                            (rs, i) -> new Run(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getInt(4), rs.getString(5), read(rs.getString(6)), readWeights(rs.getString(7)), rs.getString(8), new ArrayList<>()), params);
+        if (runs.isEmpty()) return runs;
+        Map<Long, Run> byId = new HashMap<>();
+        for (var r : runs) byId.put(r.id(), r);
+        db.query("select run_id,user_id,kind,absent from draw_steps where run_id in (" + String.join(",", Collections.nCopies(runs.size(), "?")) + ") order by id",
+                 (RowCallbackHandler) rs -> byId.get(rs.getLong(1)).steps().add(new Step(rs.getLong(2), rs.getString(3), rs.getInt(4) == 1)), byId.keySet().toArray());
+        return runs;
+    }
+
+    private List<Map<String, Object>> runs(long pairId) {
+        return loadRuns("r.pair_id=?", pairId).stream().map(this::view).toList();
+    }
+
+    /**
+     * A run as the panel and the stage need it: the wheel now, the drop-outs in order, the winners with names.
+     */
+    private Map<String, Object> view(Run r) {
+        var ids = r.wins().stream().map(Step::userId).toList();
+        Map<Long, String[]> people = new HashMap<>();
+        if (!ids.isEmpty())
+            db.query("select id,login,display_name from users where id in (" + String.join(",", Collections.nCopies(ids.size(), "?")) + ")",
+                     (RowCallbackHandler) rs -> people.put(rs.getLong(1), new String[]{rs.getString(2), rs.getString(3)}), ids.toArray());
+        var wins = r.wins().stream().map(s -> obj("userId", s.userId(), "login", people.get(s.userId())[0], "displayName", people.get(s.userId())[1], "absent", s.absent())).toList();
+        return obj("id", r.id(), "mode", r.mode(), "winners", r.winners(), "prize", r.prize() == null ? DrawSettings.DEFAULTS.defaultPrize() : r.prize(),
+                   "names", r.names(), "wheel", r.wheel(), "outs", r.steps().stream().filter(s -> s.kind().equals("OUT")).map(Step::userId).toList(),
+                   "wins", wins, "replacing", r.replacing(), "finished", r.finished(), "manualWeights", !r.manual().isEmpty(), "createdAt", r.createdAt());
+    }
+
+    // ---------------------------------------------------------------- board
+
+    /**
+     * The window's board tests and attestations of the given students: the best final grade of each called student (null — not graded yet).
+     */
+    private Map<Long, Integer> board(List<Long> users, PairWork.Window w) {
+        Map<Long, Integer> result = new HashMap<>();
+        if (users.isEmpty()) return result;
+        db.query("select user_id,final_grade from board_tests where status not in ('CANCELLED','EXPIRED') and user_id in (" + String.join(",", Collections.nCopies(users.size(), "?")) + ")"
+                         + " and cast(strftime('%s',called_at) as integer) between ? and ?",
+                 (RowCallbackHandler) rs -> {
+                     long user = rs.getLong(1);
+                     String grade = rs.getString(2);
+                     Integer g = grade == null ? null : Integer.valueOf(grade), old = result.get(user);
+                     if (g == null) result.putIfAbsent(user, null); // called, but not graded yet
+                     else result.put(user, old == null ? g : Math.max(old, g));
+                 }, concat(null, users, w.start().getEpochSecond(), w.end().getEpochSecond()));
+        return result;
+    }
+
+    private String now() {
+        return PairWork.iso(clock.instant());
+    }
+
+    private String write(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private List<Long> read(String text) {
+        try {
+            return json.readValue(text, new TypeReference<List<Long>>() {
+            });
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private Map<Long, Double> readWeights(String text) {
+        if (text == null) return Map.of();
+        try {
+            return json.readValue(text, new TypeReference<Map<Long, Double>>() {
+            });
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record Step(long userId, String kind, boolean absent) {
+    }
+
+    private record Run(
+            long id, long pairId, String mode, int winners, String prize, List<Long> names, Map<Long, Double> manual,
+            String createdAt, List<Step> steps
+    ) {
+        List<Step> wins() {
+            return steps.stream().filter(s -> s.kind().equals("WIN")).toList();
+        }
+
+        long activeWins() {
+            return wins().stream().filter(s -> !s.absent()).count();
+        }
+
+        /**
+         * After a winner was marked absent every name that has not won is on the wheel again, and a step picks a winner.
+         */
+        boolean replacing() {
+            return wins().stream().anyMatch(Step::absent);
+        }
+
+        /**
+         * The names on the wheel now, in wheel order.
+         */
+        List<Long> wheel() {
+            var gone = new HashSet<Long>();
+            for (var s : steps)
+                if (s.kind().equals("WIN") || s.kind().equals("OUT") && mode.equals("ELIMINATION") && !replacing())
+                    gone.add(s.userId());
+            return names.stream().filter(n -> !gone.contains(n)).toList();
+        }
+
+        boolean finished() {
+            return activeWins() >= winners || wheel().isEmpty();
+        }
+    }
 }

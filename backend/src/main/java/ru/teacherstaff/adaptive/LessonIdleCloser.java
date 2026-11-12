@@ -7,29 +7,42 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+
 import java.time.Instant;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Once a minute finishes lessons left without activity for app.lesson.idle-minutes (see ApiController.finishIdleLessons). */
+/**
+ * Once a minute finishes lessons left without activity for app.lesson.idle-minutes (see ApiController.finishIdleLessons).
+ */
 @Component
 class LessonIdleCloser implements ApplicationRunner, DisposableBean {
-  private static final Logger log = LoggerFactory.getLogger(LessonIdleCloser.class);
-  private final ApiController api;
-  private final boolean enabled;
-  // A platform thread, not a virtual one: see BackgroundThreads.
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(BackgroundThreads.named("lesson-idle"));
+    private static final Logger log = LoggerFactory.getLogger(LessonIdleCloser.class);
+    private final ApiController api;
+    private final boolean enabled;
+    // A platform thread, not a virtual one: see BackgroundThreads.
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(BackgroundThreads.named("lesson-idle"));
 
-  LessonIdleCloser(ApiController api, @Value("${app.lesson.idle-close.enabled:true}") boolean enabled) { this.api = api; this.enabled = enabled; }
+    LessonIdleCloser(ApiController api, @Value("${app.lesson.idle-close.enabled:true}") boolean enabled) {
+        this.api = api;
+        this.enabled = enabled;
+    }
 
-  @Override public void run(ApplicationArguments args) {
-    if (!enabled) return;
-    scheduler.scheduleWithFixedDelay(() -> {
-      try { api.finishIdleLessons(Instant.now()); }
-      catch (Exception e) { log.error("Idle lesson check failed", e); }
-    }, 60, 60, TimeUnit.SECONDS);
-  }
+    @Override
+    public void run(ApplicationArguments args) {
+        if (!enabled) return;
+        scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                api.finishIdleLessons(Instant.now());
+            } catch (Exception e) {
+                log.error("Idle lesson check failed", e);
+            }
+        }, 60, 60, TimeUnit.SECONDS);
+    }
 
-  @Override public void destroy() { scheduler.shutdownNow(); }
+    @Override
+    public void destroy() {
+        scheduler.shutdownNow();
+    }
 }

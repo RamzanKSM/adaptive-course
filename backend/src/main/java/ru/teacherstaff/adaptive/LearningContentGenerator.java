@@ -4,54 +4,92 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
 import java.util.List;
 import java.util.Optional;
 
-/** Generates reusable shared learning content. Implementations must never return a task without its hidden harness. */
+/**
+ * Generates reusable shared learning content. Implementations must never return a task without its hidden harness.
+ */
 interface LearningContentGenerator {
-  /** Bump when the explanation prompt changes so cached LLM explanations are regenerated. */
-  int EXPLANATION_PROMPT_VERSION = 3;
-  /** Bump when task verification gets stricter; tasks accepted by an older version are re-verified at startup. */
-  int TASK_QUALITY_VERSION = 2;
-  GeneratedTask generateTask(long studentId, ContentBrief brief);
-  Optional<GeneratedExplanation> generateExplanation(long studentId, ContentBrief brief);
-  /** New goal, checks, reference and wrong solutions for an existing task whose statement stays unchanged. */
-  default GeneratedTask repairTask(ContentBrief brief, ExistingTask task) { throw new LlmUnavailableException("LLM content generation is unavailable"); }
-  /**
-   * A «calculate» task whose output is already right: did the program calculate the answer from the statement's
-   * numbers, or print it ready-made? The syntax tree answers when the LLM cannot. A rejection always explains why.
-   */
-  default SolutionReview checkCalculation(long studentId, ReviewRequest request) { throw new LlmUnavailableException("LLM review is unavailable"); }
-  /**
-   * The test at the board, for the teacher only: a detailed verdict per item and questions for an oral follow-up. Student
-   * code and answers are data, never instructions. Throws LlmUnavailableException when the LLM cannot answer usably.
-   */
-  default BoardAssessment assessBoardTest(long studentId, BoardAssessmentRequest request) { throw new LlmUnavailableException("LLM assessment is unavailable"); }
-  /** Whether background work (task repair) may call the LLM now; student-triggered calls check the student's own access. */
-  default boolean available() { return false; }
+    /**
+     * Bump when the explanation prompt changes so cached LLM explanations are regenerated.
+     */
+    int EXPLANATION_PROMPT_VERSION = 3;
+    /**
+     * Bump when task verification gets stricter; tasks accepted by an older version are re-verified at startup.
+     */
+    int TASK_QUALITY_VERSION = 2;
+
+    GeneratedTask generateTask(long studentId, ContentBrief brief);
+
+    Optional<GeneratedExplanation> generateExplanation(long studentId, ContentBrief brief);
+
+    /**
+     * New goal, checks, reference and wrong solutions for an existing task whose statement stays unchanged.
+     */
+    default GeneratedTask repairTask(ContentBrief brief, ExistingTask task) {
+        throw new LlmUnavailableException("LLM content generation is unavailable");
+    }
+
+    /**
+     * A «calculate» task whose output is already right: did the program calculate the answer from the statement's
+     * numbers, or print it ready-made? The syntax tree answers when the LLM cannot. A rejection always explains why.
+     */
+    default SolutionReview checkCalculation(long studentId, ReviewRequest request) {
+        throw new LlmUnavailableException("LLM review is unavailable");
+    }
+
+    /**
+     * The test at the board, for the teacher only: a detailed verdict per item and questions for an oral follow-up. Student
+     * code and answers are data, never instructions. Throws LlmUnavailableException when the LLM cannot answer usably.
+     */
+    default BoardAssessment assessBoardTest(long studentId, BoardAssessmentRequest request) {
+        throw new LlmUnavailableException("LLM assessment is unavailable");
+    }
+
+    /**
+     * Whether background work (task repair) may call the LLM now; student-triggered calls check the student's own access.
+     */
+    default boolean available() {
+        return false;
+    }
 }
 
-/** A stored task as the student sees it; repair keeps its statement and replaces only what checks it. */
-record ExistingTask(long id, String title, String statement, String starterCode, String testSource) {}
+/**
+ * A stored task as the student sees it; repair keeps its statement and replaces only what checks it.
+ */
+record ExistingTask(long id, String title, String statement, String starterCode, String testSource) {
+}
 
 /**
  * Server-derived course context for generation, so content stays inside the topic, builds on what the
  * student has already studied and matches the requested step of the iteration (difficulty 1..3).
  */
-record ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
-                    List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation, boolean hard, boolean retake) {
-  ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
-               List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation, boolean hard) {
-    this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, hard, false);
-  }
-  ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
-               List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation) {
-    this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, false, false);
-  }
+record ContentBrief(
+        Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
+        List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation,
+        boolean hard, boolean retake
+) {
+    ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
+                 List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation, boolean hard) {
+        this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, hard, false);
+    }
+
+    ContentBrief(Language language, String skillCode, String skillTitle, int blockNo, int difficulty, int iteration,
+                 List<String> earlierSkills, List<String> diagnosticExamples, List<String> existingTasks, String explanation) {
+        this(language, skillCode, skillTitle, blockNo, difficulty, iteration, earlierSkills, diagnosticExamples, existingTasks, explanation, false, false);
+    }
 }
 
-/** What the reviewer sees for a «calculate» task: the task, what it teaches (operation and numbers) and the solution. */
-record ReviewRequest(Language language, String skillCode, String title, String statement, String source, String operation, String operands) {}
+/**
+ * What the reviewer sees for a «calculate» task: the task, what it teaches (operation and numbers) and the solution.
+ */
+record ReviewRequest(
+        Language language, String skillCode, String title, String statement, String source, String operation,
+        String operands
+) {
+}
 
 /**
  * What the assessor of a test at the board sees: the chosen items in the test's order (parsons → fix → code), each with
@@ -59,17 +97,28 @@ record ReviewRequest(Language language, String skillCode, String title, String s
  * BoardTests.LLM_RUNS, each tagged with its item) and the grade by the checks alone. skillCode: for the LLM call log.
  */
 record BoardAssessmentRequest(Language language, String skillCode, List<Item> items, List<Run> runs, int ruleGrade) {
-  BoardAssessmentRequest { items = List.copyOf(items); runs = List.copyOf(runs); }
-  /**
-   * parsons: lines — the movable lines in the reference order, extraLine — the extra one (null when none), answer — the
-   * program the student assembled; fix: program — the buggy program given, bugDescription — what is wrong in it; code
-   * and fix: answer — the student's final code.
-   */
-  record Item(String kind, String title, String statement, int weight, List<String> lines, String extraLine, String program, String bugDescription,
-              String answer, boolean passed, String checkOutput) {
-    Item { lines = lines == null ? List.of() : List.copyOf(lines); }
-  }
-  record Run(String item, String code, String status, String stdout, String error) {}
+    BoardAssessmentRequest {
+        items = List.copyOf(items);
+        runs = List.copyOf(runs);
+    }
+
+    /**
+     * parsons: lines — the movable lines in the reference order, extraLine — the extra one (null when none), answer — the
+     * program the student assembled; fix: program — the buggy program given, bugDescription — what is wrong in it; code
+     * and fix: answer — the student's final code.
+     */
+    record Item(
+            String kind, String title, String statement, int weight, List<String> lines, String extraLine,
+            String program, String bugDescription,
+            String answer, boolean passed, String checkOutput
+    ) {
+        Item {
+            lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+    }
+
+    record Run(String item, String code, String status, String stdout, String error) {
+    }
 }
 
 /**
@@ -79,38 +128,79 @@ record BoardAssessmentRequest(Language language, String skillCode, List<Item> it
  * the comment for the student that the teacher edits before saving (null when the assessor gave none).
  */
 record BoardAssessment(String summary, List<Item> items, List<String> questions, String studentComment) {
-  static final List<String> VERDICTS = List.of("верно", "частично верно", "неверно");
-  static final String RIGHT = "верно", PARTLY = "частично верно";
-  record Item(String item, String verdict, String explanation) {}
-  BoardAssessment { items = items == null ? List.of() : List.copyOf(items); questions = questions == null ? List.of() : List.copyOf(questions); }
-  BoardAssessment(String summary, List<Item> items, List<String> questions) { this(summary, items, questions, null); }
-  java.util.Map<String, Object> view() {
-    var list = new java.util.ArrayList<java.util.Map<String, Object>>();
-    for (Item i : items) { var m = new java.util.LinkedHashMap<String, Object>(); m.put("item", i.item()); m.put("verdict", i.verdict()); m.put("explanation", i.explanation()); list.add(m); }
-    var view = new java.util.LinkedHashMap<String, Object>(); view.put("status", "DONE"); view.put("summary", summary); view.put("items", list); view.put("questions", questions); view.put("studentComment", studentComment); view.put("error", null);
-    return view;
-  }
+    static final List<String> VERDICTS = List.of("верно", "частично верно", "неверно");
+    static final String RIGHT = "верно", PARTLY = "частично верно";
+
+    BoardAssessment {
+        items = items == null ? List.of() : List.copyOf(items);
+        questions = questions == null ? List.of() : List.copyOf(questions);
+    }
+
+    BoardAssessment(String summary, List<Item> items, List<String> questions) {
+        this(summary, items, questions, null);
+    }
+
+    java.util.Map<String, Object> view() {
+        var list = new java.util.ArrayList<java.util.Map<String, Object>>();
+        for (Item i : items) {
+            var m = new java.util.LinkedHashMap<String, Object>();
+            m.put("item", i.item());
+            m.put("verdict", i.verdict());
+            m.put("explanation", i.explanation());
+            list.add(m);
+        }
+        var view = new java.util.LinkedHashMap<String, Object>();
+        view.put("status", "DONE");
+        view.put("summary", summary);
+        view.put("items", list);
+        view.put("questions", questions);
+        view.put("studentComment", studentComment);
+        view.put("error", null);
+        return view;
+    }
+
+    record Item(String item, String verdict, String explanation) {
+    }
 }
 
-/** The reviewer's verdict. A rejection carries the reason: summary plus the concrete problems with hints. */
+/**
+ * The reviewer's verdict. A rejection carries the reason: summary plus the concrete problems with hints.
+ */
 record SolutionReview(boolean accepted, String summary, List<Issue> issues) {
-  record Issue(Integer line, String problem, String hint) {}
-  SolutionReview { issues = issues == null ? List.of() : List.copyOf(issues); }
-  /** Plain text for the submission history and older clients. */
-  String text() {
-    StringBuilder text = new StringBuilder(summary == null ? "" : summary.strip());
-    for (Issue issue : issues) {
-      text.append("\n\n• ").append(issue.line() == null ? "" : "Строка " + issue.line() + ": ").append(issue.problem());
-      if (issue.hint() != null && !issue.hint().isBlank()) text.append("\n  Подсказка: ").append(issue.hint());
+    SolutionReview {
+        issues = issues == null ? List.of() : List.copyOf(issues);
     }
-    return text.toString().strip();
-  }
-  java.util.Map<String, Object> view() {
-    var list = new java.util.ArrayList<java.util.Map<String, Object>>();
-    for (Issue issue : issues) { var m = new java.util.LinkedHashMap<String, Object>(); m.put("line", issue.line()); m.put("problem", issue.problem()); m.put("hint", issue.hint()); list.add(m); }
-    var view = new java.util.LinkedHashMap<String, Object>(); view.put("accepted", accepted); view.put("summary", summary); view.put("issues", list);
-    return view;
-  }
+
+    /**
+     * Plain text for the submission history and older clients.
+     */
+    String text() {
+        StringBuilder text = new StringBuilder(summary == null ? "" : summary.strip());
+        for (Issue issue : issues) {
+            text.append("\n\n• ").append(issue.line() == null ? "" : "Строка " + issue.line() + ": ").append(issue.problem());
+            if (issue.hint() != null && !issue.hint().isBlank()) text.append("\n  Подсказка: ").append(issue.hint());
+        }
+        return text.toString().strip();
+    }
+
+    java.util.Map<String, Object> view() {
+        var list = new java.util.ArrayList<java.util.Map<String, Object>>();
+        for (Issue issue : issues) {
+            var m = new java.util.LinkedHashMap<String, Object>();
+            m.put("line", issue.line());
+            m.put("problem", issue.problem());
+            m.put("hint", issue.hint());
+            list.add(m);
+        }
+        var view = new java.util.LinkedHashMap<String, Object>();
+        view.put("accepted", accepted);
+        view.put("summary", summary);
+        view.put("issues", list);
+        return view;
+    }
+
+    record Issue(Integer line, String problem, String hint) {
+    }
 }
 
 /**
@@ -119,30 +209,46 @@ record SolutionReview(boolean accepted, String summary, List<Issue> issues) {
  * testInputs: for function and input/output tasks, the inputs the platform turns into test cases (see TestCases);
  * testSource is then unused.
  */
-record GeneratedTask(String skillCode, String title, String statement, String starterCode,
-                     String testSource, String testFileName, String referenceSolutionSource,
-                     List<String> targetSkillCodes, List<String> prerequisiteSkillCodes,
-                     JsonNode goal, List<TaskGoal.Mutant> wrongSolutions, List<TestCases.Input> testInputs) {
-  GeneratedTask {
-    wrongSolutions = wrongSolutions == null ? List.of() : List.copyOf(wrongSolutions);
-    testInputs = testInputs == null ? List.of() : List.copyOf(testInputs);
-  }
-  /** A task whose checks are written by the generator (output, «calculate» and construct tasks). */
-  GeneratedTask(String skillCode, String title, String statement, String starterCode, String testSource, String testFileName, String referenceSolutionSource,
-                List<String> targetSkillCodes, List<String> prerequisiteSkillCodes, JsonNode goal, List<TaskGoal.Mutant> wrongSolutions) {
-    this(skillCode, title, statement, starterCode, testSource, testFileName, referenceSolutionSource, targetSkillCodes, prerequisiteSkillCodes, goal, wrongSolutions, List.of());
-  }
+record GeneratedTask(
+        String skillCode, String title, String statement, String starterCode,
+        String testSource, String testFileName, String referenceSolutionSource,
+        List<String> targetSkillCodes, List<String> prerequisiteSkillCodes,
+        JsonNode goal, List<TaskGoal.Mutant> wrongSolutions, List<TestCases.Input> testInputs
+) {
+    GeneratedTask {
+        wrongSolutions = wrongSolutions == null ? List.of() : List.copyOf(wrongSolutions);
+        testInputs = testInputs == null ? List.of() : List.copyOf(testInputs);
+    }
+
+    /**
+     * A task whose checks are written by the generator (output, «calculate» and construct tasks).
+     */
+    GeneratedTask(String skillCode, String title, String statement, String starterCode, String testSource, String testFileName, String referenceSolutionSource,
+                  List<String> targetSkillCodes, List<String> prerequisiteSkillCodes, JsonNode goal, List<TaskGoal.Mutant> wrongSolutions) {
+        this(skillCode, title, statement, starterCode, testSource, testFileName, referenceSolutionSource, targetSkillCodes, prerequisiteSkillCodes, goal, wrongSolutions, List.of());
+    }
 }
-record GeneratedExplanation(String skillCode, String content) {}
+
+record GeneratedExplanation(String skillCode, String content) {
+}
 
 class UnavailableLearningContentGenerator implements LearningContentGenerator {
-  @Override public GeneratedTask generateTask(long studentId,ContentBrief brief) { throw new LlmUnavailableException("LLM content generation is unavailable"); }
-  @Override public Optional<GeneratedExplanation> generateExplanation(long studentId,ContentBrief brief) { return Optional.empty(); }
+    @Override
+    public GeneratedTask generateTask(long studentId, ContentBrief brief) {
+        throw new LlmUnavailableException("LLM content generation is unavailable");
+    }
+
+    @Override
+    public Optional<GeneratedExplanation> generateExplanation(long studentId, ContentBrief brief) {
+        return Optional.empty();
+    }
 }
 
 @Configuration
 class LearningContentGeneratorConfiguration {
-  @Bean
-  @ConditionalOnMissingBean(LearningContentGenerator.class)
-  LearningContentGenerator unavailableLearningContentGenerator() { return new UnavailableLearningContentGenerator(); }
+    @Bean
+    @ConditionalOnMissingBean(LearningContentGenerator.class)
+    LearningContentGenerator unavailableLearningContentGenerator() {
+        return new UnavailableLearningContentGenerator();
+    }
 }
