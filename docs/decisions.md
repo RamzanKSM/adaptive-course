@@ -192,7 +192,7 @@ Students found the attestation too hard because they had never met such tasks. T
   1…level, where the level is the highest pool level within the topics he has passed without a gap. 10-minute timer,
   the assistant and the hint closed until it runs out, then open; result «в срок / после времени / без решения».
   No grade, no effect on progress; solved — counted like a re-take (solved count, XP, pair points). Own pool
-  (`ATTESTATION_PRACTICE`, keys `practice:`), levels as the real attestation (Java 9/12/14, Python 10/11/14), 4 stories
+  (`ATTESTATION_PRACTICE`, keys `practice:`), initially Java 9/12/14 and Python 10/11/14 (the real attestation pool later gained higher levels), 4 stories
   each. Implemented on `topic_retakes` (`kind='ATTESTATION'`) so the iteration rule skips it like a re-take.
 - First part of the integrative pool: Java topics 6–20, Python 6–22 (96 tasks); the rest block by block ahead of students.
 

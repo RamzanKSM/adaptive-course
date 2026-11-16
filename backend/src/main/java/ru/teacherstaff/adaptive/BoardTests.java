@@ -73,7 +73,7 @@ class BoardTests implements DisposableBean {
      * lessons and the assistant closed meanwhile (requireNoAttestation). Its time: ATTESTATION_MINUTES unless the teacher says.
      */
     static final String FORMAT_TEST = "TEST", FORMAT_ATTESTATION = "ATTESTATION";
-    static final int ATTESTATION_MINUTES = 10;
+    static final int ATTESTATION_MINUTES = 15;
     /**
      * The lowest grade of a student ahead of the minimum whose items from the minimum all count fully (see floor).
      */

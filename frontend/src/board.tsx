@@ -38,8 +38,8 @@ export const minutesText = (n: number) => Number.isInteger(n) ? `${n} ${plural(n
 
 /** An attestation (one «Напиши код» over the plan, at the student's own computer) rather than the test at the board. */
 export const isAttestation = (t: { format?: BoardFormat | null } | null | undefined) => t?.format === 'ATTESTATION'
-const ATTESTATION_MINUTES = 10
-/** The attestation's time in minutes, fractions kept; without a duration — the default 10. */
+const ATTESTATION_MINUTES = 15
+/** The attestation's time in minutes, fractions kept; without a duration — the default 15. */
 export const attestationMinutes = (durationSeconds?: number | null) => durationSeconds ? Math.round(durationSeconds / 60 * 100) / 100 : ATTESTATION_MINUTES
 
 export const ms = (value: string | null | undefined) => value ? parseDate(value).getTime() : NaN
@@ -779,7 +779,7 @@ function CallEditor({ test, onSave, onClose }: { test: BoardTestSummary; onSave:
   </div>
 }
 
-/** «Собери программу · Исправь ошибку · 7 мин» for a call or test, «Аттестация · 10 мин»; nothing for tests without kinds. */
+/** «Собери программу · Исправь ошибку · 7 мин» for a call or test, «Аттестация · 15 мин»; nothing for tests without kinds. */
 function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationSeconds' | 'source' | 'format'> }) {
   if (isAttestation(test)) return <small className="board-kinds-note board-attest-note">Аттестация · {decimal(attestationMinutes(test.durationSeconds))} мин</small>
   if (!test.kinds?.length) return null

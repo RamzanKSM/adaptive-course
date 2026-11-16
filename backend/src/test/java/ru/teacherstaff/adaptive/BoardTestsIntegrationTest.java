@@ -998,13 +998,13 @@ class BoardTestsIntegrationTest {
     String near = skill("BT_AT_NEAR", 99), far = skill("BT_AT_FAR", 99); // the end of the course: every construct topic is before them
     String reference = "public class Solution {\n    public static void main(String[] args) {\n        for (int i = 0; i < 3; i++) {\n            if (i > 0) System.out.println(i);\n        }\n    }\n}\n";
     long far1 = attestationTask(far, "attest:at-far-1", reference), far2 = attestationTask(far, "attest:at-far-2", reference), near1 = attestationTask(near, "attest:at-near-1", reference);
-    // The call: ten minutes by default, kinds ignored; the student may start it at his own computer.
+    // The call: fifteen minutes by default, kinds ignored; the student may start it at his own computer.
     var called = callAttestation(admin, a, null);
-    assertEquals("ATTESTATION", called.path("format").asText()); assertEquals(List.of("code"), texts(called.path("kinds"))); assertEquals(600, called.path("durationSeconds").asInt());
+    assertEquals("ATTESTATION", called.path("format").asText()); assertEquals(List.of("code"), texts(called.path("kinds"))); assertEquals(900, called.path("durationSeconds").asInt());
     var call = read(tokenA, get("/api/board/current")).path("call");
     assertTrue(call.path("canStart").asBoolean()); assertEquals("ATTESTATION", call.path("format").asText());
     var testA = read(tokenA, post("/api/board/tests/{id}/start", called.path("id").asLong()));
-    assertEquals(START.plusSeconds(600).toString(), testA.path("endsAt").asText()); assertEquals("ATTESTATION", testA.path("format").asText());
+    assertEquals(START.plusSeconds(900).toString(), testA.path("endsAt").asText()); assertEquals("ATTESTATION", testA.path("format").asText());
     assertEquals(List.of("code"), testA.path("items").findValuesAsText("kind"));
     assertFalse(testA.toString().contains("reference"), "the student never sees the reference");
     long idA = testA.path("id").asLong();
@@ -1056,7 +1056,7 @@ class BoardTestsIntegrationTest {
     var memberA = member(overview, "at-a");
     assertEquals(0, memberA.path("tests").asInt()); assertTrue(memberA.path("lastTestAt").isNull());
     assertEquals(again, memberA.path("attestation").path("testId").asLong(), "the latest attestation"); assertEquals("STARTED", memberA.path("attestation").path("status").asText());
-    assertEquals(3, overview.path("attestation").path("tasks").asInt()); assertEquals(3, overview.path("attestation").path("total").asInt()); assertEquals(10, overview.path("attestation").path("minutes").asInt());
+    assertEquals(3, overview.path("attestation").path("tasks").asInt()); assertEquals(3, overview.path("attestation").path("total").asInt()); assertEquals(15, overview.path("attestation").path("minutes").asInt());
     db.update("update tasks set active=0 where mode='ATTESTATION'");
   }
 
