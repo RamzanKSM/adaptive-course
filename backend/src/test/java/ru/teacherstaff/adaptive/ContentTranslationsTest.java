@@ -12,6 +12,21 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ContentTranslationsTest {
+    @Test void cachedTitleReturnsBeforeSlowModel() {
+        var db = mock(JdbcTemplate.class);
+        var tutor = mock(CodexAppServerTutor.class);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        when(db.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+        when(tutor.translateText(anyList(), eq("fr"))).thenAnswer(call -> {
+            release.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            return List.of("Titre");
+        });
+        LocaleContextHolder.setLocale(Locale.FRENCH);
+        try {
+            assertTimeoutPreemptively(java.time.Duration.ofSeconds(1),
+                    () -> assertEquals("Заголовок", new ContentTranslations(db, tutor).cachedText("Заголовок", "task-title")));
+        } finally { release.countDown(); }
+    }
     @AfterEach void clearLocale() { LocaleContextHolder.resetLocaleContext(); }
 
     @Test void localeAndMissingTranslationFallBackToSource() {

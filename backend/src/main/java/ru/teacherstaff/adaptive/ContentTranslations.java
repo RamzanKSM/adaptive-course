@@ -16,6 +16,10 @@ final class ContentTranslations {
     private static final java.util.concurrent.atomic.AtomicLong FALLBACKS = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.Set<String> WARMING = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final java.util.Map<String, Long> LAST_WARM = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Set<String> WARMING_ITEMS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final java.util.concurrent.ThreadPoolExecutor ITEM_WARMER = new java.util.concurrent.ThreadPoolExecutor(
+            1, 1, 0, java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<>(128),
+            BackgroundThreads.named("translation-item-warm"), new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
 
     private static boolean acquire() {
         if (!QUEUED.tryAcquire()) return false;
@@ -71,6 +75,45 @@ final class ContentTranslations {
     }
     String taskStatement(String source, Object taskId) {
         if (source == null || taskId == null || "ru".equals(locale(LocaleContextHolder.getLocale()))) return source;
+        var literals = taskLiterals(taskId);
+        if (!safeToTranslate(source, literals, taskId)) return source;
+        return text(source, "task-statement", literals);
+    }
+
+    String cachedText(String source, String kind) {
+        return cachedText(source, kind, java.util.List.of(), () -> text(source, kind, java.util.List.of()));
+    }
+
+    String cachedTaskStatement(String source, Object taskId) {
+        if (source == null || taskId == null || "ru".equals(locale(LocaleContextHolder.getLocale()))) return source;
+        var literals = taskLiterals(taskId);
+        if (!safeToTranslate(source, literals, taskId)) return source;
+        return cachedText(source, "task-statement", literals, () -> taskStatement(source, taskId));
+    }
+
+    private String cachedText(String source, String kind, java.util.List<String> literals, Runnable warm) {
+        if (source == null || source.isEmpty()) return source;
+        String language = locale(LocaleContextHolder.getLocale());
+        if ("ru".equals(language)) return source;
+        var canonical = literals.stream().filter(java.util.Objects::nonNull).distinct().sorted().toList();
+        String hash = Hashing.sha256(source + "\u0000" + String.join("\u0000", canonical));
+        var rows = db.queryForList("select translated_text from content_translations where source_hash=? and locale=? and kind=?", String.class, hash, language, kind);
+        if (!rows.isEmpty()) return rows.getFirst();
+        String key = language + ":" + kind + ":" + hash;
+        if (tutor instanceof CodexAppServerTutor && WARMING_ITEMS.add(key)) {
+            try {
+                ITEM_WARMER.execute(() -> {
+                    try {
+                        LocaleContextHolder.setLocale(Locale.forLanguageTag(language));
+                        warm.run();
+                    } finally { LocaleContextHolder.resetLocaleContext(); WARMING_ITEMS.remove(key); }
+                });
+            } catch (java.util.concurrent.RejectedExecutionException ignored) { WARMING_ITEMS.remove(key); }
+        }
+        return source;
+    }
+
+    private java.util.List<String> taskLiterals(Object taskId) {
         var literals = new java.util.ArrayList<String>();
         var goals = db.queryForList("select goal_json from tasks where id=?", String.class, taskId);
         if (!goals.isEmpty() && goals.getFirst() != null) {
@@ -82,12 +125,16 @@ final class ContentTranslations {
         for (String expected : db.queryForList("select expected from task_cases where task_id=?", String.class, taskId)) {
             if (expected != null && !expected.isBlank()) addExpected(literals, expected);
         }
+        return literals;
+    }
+
+    private boolean safeToTranslate(String source, java.util.List<String> literals, Object taskId) {
         boolean fencedExample = java.util.regex.Pattern.compile("(?s)```[^`]*```").matcher(source).find();
         if (!fencedExample && literals.stream().noneMatch(value -> value != null && !value.isBlank())) {
             log.warn("Task statement translation skipped: no structured expected output or fenced example task={} totalFallbacks={}", taskId, FALLBACKS.incrementAndGet());
-            return source;
+            return false;
         }
-        return text(source, "task-statement", literals);
+        return true;
     }
 
     private static void addExpected(java.util.List<String> literals, String value) {

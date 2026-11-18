@@ -825,7 +825,7 @@ class BoardTests implements DisposableBean {
                 code = placed.isEmpty() ? null : BoardItems.assemble((String) item.get("before"), placed.stream().map(texts::get).toList(), (String) item.get("after"));
                 if (item.get("extraLineId") != null) extraUsed = placed.contains(item.get("extraLineId"));
             } else code = answer instanceof String text && !text.isBlank() ? text : null;
-            report.add(obj("kind", kind, "title", translations.text((String) item.get("title"), "task-title", List.of()), "statement", translations.taskStatement((String) item.get("statement"), item.get("taskId")), "language", item.get("language"), "answer", code,
+            report.add(obj("kind", kind, "title", translations.cachedText((String) item.get("title"), "task-title"), "statement", translations.cachedTaskStatement((String) item.get("statement"), item.get("taskId")), "language", item.get("language"), "answer", code,
                            "verdict", score >= 1 ? BoardAssessment.RIGHT : score > 0 ? BoardAssessment.PARTLY : "неверно", "passed", Boolean.TRUE.equals(result.get("passed")),
                            "check", result.get("output"), "extraUsed", extraUsed));
         }
