@@ -7,7 +7,7 @@ import mapStrings from './ui-ru-maps.json'
 import frenchStrings from './ui-fr.json'
 import arabicStrings from './ui-ar-SD.json'
 const sourceStrings = [...new Set([...baseStrings, ...extraStrings, ...toastStrings, ...errorStrings, ...achievementStrings, ...mapStrings])]
-import type { Locale } from './locale'
+import { currentLocale, type Locale } from './locale'
 
 const catalog = new Set(sourceStrings)
 let translations: Record<string, string> = {}
@@ -15,7 +15,13 @@ let generation = 0
 let controller: AbortController | undefined
 export function clearUiText(): void { controller?.abort(); generation++; translations = {} }
 /** Only strings compiled into the UI catalog can be translated. */
-export function uiText(source: string): string { return catalog.has(source) ? translations[source] ?? source : source }
+export function uiText(source: string): string {
+  if (!catalog.has(source)) return source
+  const locale = currentLocale()
+  if (locale === 'ru') return source
+  const builtIn = locale === 'fr' ? frenchStrings : arabicStrings
+  return builtIn[source as keyof typeof builtIn] ?? translations[source] ?? source
+}
 
 /** Load only missing static strings. Failed batches keep their original Russian text. */
 export async function loadUiText(locale: Locale, onUpdate: () => void): Promise<void> {
@@ -24,10 +30,10 @@ export async function loadUiText(locale: Locale, onUpdate: () => void): Promise<
   const signal = controller.signal
   const current = ++generation
   if (locale === 'ru') { translations = {}; onUpdate(); return }
-  const key = `rmzn.ui-text.${locale}.v2`
+  const key = `rmzn.ui-text.${locale}.v3`
   const builtIn = locale === 'fr' ? frenchStrings : arabicStrings
   let cache: Record<string, string> = Object.fromEntries(Object.entries(builtIn).filter(([k, v]) => catalog.has(k) && typeof v === 'string' && v.length > 0 && v !== k))
-  try { const value: unknown = JSON.parse(localStorage.getItem(key) ?? '{}'); if (value && typeof value === 'object' && !Array.isArray(value)) cache = { ...cache, ...Object.fromEntries(Object.entries(value).filter(([k, v]) => catalog.has(k) && typeof v === 'string' && v.length > 0 && v !== k)) } } catch { /* storage unavailable */ }
+  try { const value: unknown = JSON.parse(localStorage.getItem(key) ?? '{}'); if (value && typeof value === 'object' && !Array.isArray(value)) cache = { ...Object.fromEntries(Object.entries(value).filter(([k, v]) => catalog.has(k) && typeof v === 'string' && v.length > 0 && v !== k)), ...cache } } catch { /* storage unavailable */ }
   translations = { ...cache }; onUpdate()
   const missing = sourceStrings.filter(s => !cache[s])
   const batches: string[][] = []

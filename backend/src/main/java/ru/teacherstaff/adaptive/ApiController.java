@@ -2157,7 +2157,7 @@ public class ApiController {
      */
     private List<Map<String, Object>> progress(long u, Language lang) {
         var rows = db.queryForList("select s.code as skillCode,s.title,s.block_no as blockNo,coalesce(x.completed_iterations,0) as completedIterations,coalesce(x.iteration_successes,0) as iterationSuccesses,coalesce(x.mastered,0) as mastered,d.correct as diagnosticCorrect,d.total as diagnosticTotal,coalesce(d.confirmed,0) as confirmedByDiagnostic from skills s left join student_skills x on x.skill_code=s.code and x.user_id=? left join diagnostic_skill_results d on d.skill_code=s.code and d.user_id=? where s.language=? order by s.sort_order", u, u, lang.name());
-        var titles = translations.texts(rows.stream().map(row -> (String) row.get("title")).toList(), "skill-title");
+        var titles = translations.cachedTexts(rows.stream().map(row -> (String) row.get("title")).toList(), "skill-title");
         for (int i = 0; i < rows.size(); i++) rows.get(i).put("title", titles.get(i));
         return rows;
     }

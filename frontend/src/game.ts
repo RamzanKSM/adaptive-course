@@ -1,4 +1,5 @@
 import type { CourseLanguage, Progress, SkillProgress } from './types'
+import { currentLocale } from './locale'
 
 // SQLite CURRENT_TIMESTAMP values are UTC without a zone ("2026-10-01 05:00:00"); Safari cannot parse them as-is.
 export const parseDate = (value: string) => new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value) ? `${value.replace(' ', 'T')}Z` : value)
@@ -62,7 +63,7 @@ export function streak(activity: string[] = []) {
   const activeToday = days.has(dayKey(today))
   let count = 0
   for (let offset = activeToday ? 0 : 1; days.has(dayKey(shift(offset))); offset++) count++
-  const week = Array.from({ length: 7 }, (_, i) => { const d = shift(6 - i); return { label: d.toLocaleDateString('ru-RU', { weekday: 'short' }).slice(0, 2), active: days.has(dayKey(d)), today: i === 6 } })
+  const week = Array.from({ length: 7 }, (_, i) => { const d = shift(6 - i); return { label: d.toLocaleDateString(currentLocale(), { weekday: 'short' }).replace(/\.$/, '').slice(0, 2), active: days.has(dayKey(d)), today: i === 6 } })
   return { count, activeToday, week }
 }
 
