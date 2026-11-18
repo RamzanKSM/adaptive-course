@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 class UiTranslationsController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UiTranslationsController.class);
     private static final java.util.concurrent.atomic.AtomicLong FALLBACKS = new java.util.concurrent.atomic.AtomicLong();
-    private static final Pattern PROTECTED = Pattern.compile("(?s)```.*?```|`[^`]+`|(?m)^[ \t]*(?:(?:public|private|class|def|return|if|elif|else|for|while|import|from|print|System\\.out\\.println?|#|//)\\b|#|//)[^\\r\\n]*|(?m)^[ \t]*[\\x20-\\x7e]+$|\\{[^{}\\n]+}|%[a-zA-Z]|</?[^>]+>|\"[\\x20-\\x7e]*\"|\u0027[\\x20-\\x7e]*\u0027|\\b[A-Za-z_][A-Za-z_0-9.]*\\b|\\d+(?:[.,:]\\d+)*");
+    private static final Pattern PROTECTED = Pattern.compile("(?s)```.*?```|`[^`]+`|(?m)^[ \t]*(?:(?:public|private|class|def|return|if|elif|else|for|while|import|from|print|System\\.out\\.println?|//)\\b|//)[^\\r\\n]*|(?m)^[ \t]*[\\x20-\\x7e]+$|\\{[^{}\\n]+}|%[a-zA-Z]|</?[^>]+>|\"[\\x20-\\x7e]*\"|\u0027[\\x20-\\x7e]*\u0027|\\b[A-Za-z_][A-Za-z_0-9.]*\\b|\\d+(?:[.,:]\\d+)*");
     private final JdbcTemplate db;
     private final LlmTutor tutor;
     private final Set<String> allowed;

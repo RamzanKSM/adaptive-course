@@ -59,6 +59,17 @@ class ContentTranslationsTest {
         assertNull(UiTranslationsController.restore(value, value.text().replace("⟦PH0⟧", "")));
     }
 
+    @Test void translatesHeadingsAndRejectsWrongScriptOutsideCode() {
+        var protectedText = UiTranslationsController.protect("### Главная идея\n\n`Привет`");
+        assertEquals("### Главная идея\n\n⟦PH0⟧", protectedText.text());
+        assertFalse(CodexAppServerTutor.translationScriptMatches("### Главная идея", "fr"));
+        assertFalse(CodexAppServerTutor.translationScriptMatches("### الفكرة", "fr"));
+        assertTrue(CodexAppServerTutor.translationScriptMatches("### الفكرة", "ar-SD"));
+        String french = "### Idée principale\n\n⟦PH0⟧";
+        assertTrue(CodexAppServerTutor.translationScriptMatches(french, "fr"));
+        assertEquals("### Idée principale\n\n`Привет`", UiTranslationsController.restore(protectedText, french));
+    }
+
     @Test void protectsUnfencedCodeLinesWithNonAsciiComments() {
         String source = "Напиши код:\nprint(2)  # ответ\nSystem.out.println(2); // ответ";
         var value = UiTranslationsController.protect(source);

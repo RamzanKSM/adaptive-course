@@ -31,7 +31,7 @@ export const KIND: Record<BoardItemKind, { title: string; phrase: string; minute
   code: { title: 'Напиши код', phrase: 'напиши код', minutes: 3, weight: 3 },
 }
 export function kindLabel(kind: BoardItemKind, phrase = false): string {
-  const ru = phrase ? KIND[kind].phrase : kindLabel(kind)
+  const ru = phrase ? KIND[kind].phrase : KIND[kind].title
   const fr = { parsons: 'Assembler le programme', fix: 'Corriger l’erreur', code: 'Écrire le code' }[kind]
   const ar = { parsons: 'رتب البرنامج', fix: 'صحح الخطأ', code: 'اكتب الكود' }[kind]
   return tr(currentLocale(), ru, phrase ? fr.toLowerCase() : fr, ar)

@@ -30,7 +30,7 @@ export async function loadUiText(locale: Locale, onUpdate: () => void): Promise<
   const signal = controller.signal
   const current = ++generation
   if (locale === 'ru') { translations = {}; onUpdate(); return }
-  const key = `rmzn.ui-text.${locale}.v3`
+  const key = `rmzn.ui-text.${locale}.v4`
   const builtIn = locale === 'fr' ? frenchStrings : arabicStrings
   let cache: Record<string, string> = Object.fromEntries(Object.entries(builtIn).filter(([k, v]) => catalog.has(k) && typeof v === 'string' && v.length > 0 && v !== k))
   try { const value: unknown = JSON.parse(localStorage.getItem(key) ?? '{}'); if (value && typeof value === 'object' && !Array.isArray(value)) cache = { ...Object.fromEntries(Object.entries(value).filter(([k, v]) => catalog.has(k) && typeof v === 'string' && v.length > 0 && v !== k)), ...cache } } catch { /* storage unavailable */ }
