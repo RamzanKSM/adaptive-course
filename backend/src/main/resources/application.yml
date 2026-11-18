@@ -1,6 +1,9 @@
 server:
   port: ${PORT:8080}
 spring:
+  web:
+    locale: ru
+    locale-resolver: accept-header
   datasource:
     url: jdbc:sqlite:${APP_DATABASE_PATH:./data/adaptive-tutor.db}
     driver-class-name: org.sqlite.JDBC

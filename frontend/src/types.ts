@@ -64,7 +64,7 @@ export interface Submission extends Attempt { sourceCode: string; createdAt: str
 /** integrative — a complex task of a 3rd iteration; practice — a task of «Тренировочная аттестация». */
 export interface LessonDetail { lesson: Lesson; chat: ChatMessage[]; tasks: { id: Id; title: string; statement: string; hard?: Flag; replaced?: Flag; retakeSkill?: string | null; integrative?: Flag; practice?: Flag; submissions: Submission[] }[] }
 export interface LlmUsageTotals { calls: number; errors: number; timeouts: number; avgMs: number; p95Ms: number; inputTokens: number; cachedTokens: number; outputTokens: number; reasoningTokens: number; totalTokens: number; callsWithTokens: number; students: number; tasksAccepted: number; tasksRejected: number }
-export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR' | 'REVIEW'
+export type LlmPurpose = 'CHAT' | 'TASK' | 'EXPLANATION' | 'TASK_REPAIR' | 'REVIEW' | 'TRANSLATION'
 export interface LlmUsage {
   days: number; totals: LlmUsageTotals; llm: LlmStatus
   byDay: { day: string; calls: number; errors: number; tokens: number }[]

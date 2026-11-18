@@ -1,3 +1,6 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
+
 /** code — the backend's «error» field (e.g. PRACTICE_RUNNING), when the answer has one. */
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) { super(message) }
@@ -14,7 +17,7 @@ const REASONS: Record<string, string> = {
   APP_SERVER_UNAVAILABLE: 'Учебный помощник временно недоступен.',
   LESSON_FINISHED: 'Урок уже завершён. Начни новый урок.',
 }
-export const humanize = (reason?: string | null) => reason ? REASONS[reason] ?? reason : ''
+export const humanize = (reason?: string | null) => reason ? (REASONS[reason] ? uiText(REASONS[reason]) : reason) : ''
 
 let unauthorizedHandler: (() => void) | null = null
 export const onUnauthorized = (handler: (() => void) | null) => { unauthorizedHandler = handler }
@@ -30,7 +33,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const response = await fetch(`/api${path}`, {
     ...options,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(path.startsWith('/station') ? { 'X-Board-Station': stationToken() ?? '' } : {}), ...(options.headers ?? {}) }
+    headers: { 'Content-Type': 'application/json', 'Accept-Language': currentLocale(), ...(path.startsWith('/station') ? { 'X-Board-Station': stationToken() ?? '' } : {}), ...(options.headers ?? {}) }
   })
   if (!response.ok) throw await failure(response, path)
   if (response.status === 204) return undefined as T
@@ -43,17 +46,17 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
  */
 async function failure(response: Response, path: string): Promise<ApiError> {
   const body = await response.json().catch(() => null) as { message?: string; error?: string } | null
-  if (response.status === 401 && path.startsWith('/station')) { setStationToken(null); return new ApiError('Компьютер у доски отключён', 401) }
+  if (response.status === 401 && path.startsWith('/station')) { setStationToken(null); return new ApiError(tr(currentLocale(), 'Компьютер у доски отключён', 'L’ordinateur du tableau est déconnecté', 'كمبيوتر السبورة اتفصل'), 401) }
   if (response.status === 401 && !path.startsWith('/auth/login')) {
     unauthorizedHandler?.()
-    return new ApiError('Сессия истекла. Войдите снова.', 401)
+    return new ApiError(tr(currentLocale(), 'Сессия истекла. Войдите снова.', 'La session a expiré. Reconnectez-vous.', 'الجلسة انتهت. سجل دخولك تاني.'), 401)
   }
-  return new ApiError(humanize(body?.message) ||`Ошибка сервера (${response.status})`, response.status, body?.error)
+  return new ApiError(humanize(body?.message) ||tr(currentLocale(), `Ошибка сервера (${response.status})`, `Erreur du serveur (${response.status})`, `خطأ في الخادم (${response.status})`), response.status, body?.error)
 }
 
 /** Fetches a file (same session cookie and error handling as api) and saves it through a temporary download link. */
 export async function download(path: string, fallbackName: string): Promise<string> {
-  const response = await fetch(`/api${path}`, { credentials: 'include' })
+  const response = await fetch(`/api${path}`, { credentials: 'include', headers: { 'Accept-Language': currentLocale() } })
   if (!response.ok) throw await failure(response, path)
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const name = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1] ?? /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? fallbackName

@@ -41,6 +41,7 @@ public class ApiController {
      */
     private static final String NEEDS_PRACTICE = "coalesce(x.mastered,0)=0 and not exists(select 1 from diagnostic_skill_results d where d.user_id=x2.uid and d.skill_code=s.code and d.confirmed=1)";
     private final JdbcTemplate db;
+    private final ContentTranslations translations;
     private final PistonCodeRunner codeRunner;
     private final LlmTutor tutor;
     private final LearningContentGenerator contentGenerator;
@@ -85,6 +86,7 @@ public class ApiController {
 
     ApiController(JdbcTemplate db, PistonCodeRunner codeRunner, LlmTutor tutor, LearningContentGenerator contentGenerator, TaskVerifier verifier, DiagnosticProfile diagnostics, TransactionTemplate tx, LlmSettings llmSettings, ProgressAnalytics analytics, PairWork pairWork, BoardTests boardTests, BoardStations boardStations, FortuneWheel wheel, TopicRetakes retakes, AttestationPractice practices, IntegrativeTasks integratives, CodeRelay relays) {
         this.db = db;
+        this.translations = new ContentTranslations(db, tutor);
         this.codeRunner = codeRunner;
         this.tutor = tutor;
         this.contentGenerator = contentGenerator;
@@ -289,7 +291,23 @@ public class ApiController {
         Language lang = Language.parse(language);
         boolean done = diagnosticDone(id, lang);
         var qs = db.queryForList("select id,ordinal,skill_code,prompt,options_json from diagnostic_questions where language=? order by ordinal", lang.name());
-        return Map.of("completed", done, "questions", done ? List.of() : qs.stream().map(q -> Map.of("id", q.get("id"), "ordinal", q.get("ordinal"), "skillCode", q.get("skill_code"), "prompt", q.get("prompt"), "options", json(q.get("options_json")), "unknownOption", Map.of("label", "Не знаю"))).toList());
+        if (done) return Map.of("completed", true, "questions", List.of());
+        var texts = new ArrayList<String>();
+        for (var q : qs) {
+            texts.add((String) q.get("prompt"));
+            for (Object option : (List<?>) json(q.get("options_json"))) texts.add((String) option);
+        }
+        texts.add("Не знаю");
+        var translated = translations.cachedTexts(texts, "diagnostic");
+        int at = 0;
+        var questions = new ArrayList<Map<String, Object>>();
+        for (var q : qs) {
+            String prompt = translated.get(at++);
+            var options = new ArrayList<String>();
+            for (Object ignored : (List<?>) json(q.get("options_json"))) options.add(translated.get(at++));
+            questions.add(Map.of("id", q.get("id"), "ordinal", q.get("ordinal"), "skillCode", q.get("skill_code"), "prompt", prompt, "options", options, "unknownOption", Map.of("label", translated.getLast())));
+        }
+        return Map.of("completed", false, "questions", questions);
     }
 
     @PostMapping("/diagnostic")
@@ -608,7 +626,7 @@ public class ApiController {
         // The 3rd iteration of a topic outside block 0 is an integrative task (IntegrativeTasks); without one in the pool — as before.
         var integrative = integratives.next(userId, lessonId, skillCode);
         if (integrative != null)
-            return assign(lesson, ((Number) integrative.get("id")).longValue()) ? obj("lesson", lesson, "skill", skill, "explanation", explanation, "task", taskView(userId, integrative)) : lessonFinished(lesson);
+            return assign(lesson, ((Number) integrative.get("id")).longValue()) ? obj("lesson", lesson, "skill", translatedSkill(skill), "explanation", translatedExplanation(explanation), "task", taskView(userId, integrative)) : lessonFinished(lesson);
         int difficulty = targetDifficulty(userId, lessonId, skillCode);
         var tasks = availableTasks(userId, lesson, skillCode, difficulty);
         Long generatedTaskId = null;
@@ -623,8 +641,8 @@ public class ApiController {
             if (generated.attempted()) tasks = availableTasks(userId, lesson, skillCode, difficulty);
             if (!stillActive(lessonId)) return lessonFinished(lesson, userId, generatedTaskId);
             if (tasks.isEmpty()) return "RUNNER_UNAVAILABLE".equals(reason)
-                    ? obj("lesson", lesson, "skill", skill, "explanation", explanation, "task", null, "reason", reason, "llm", llm(userId, lang), "runner", runner(lang))
-                    : obj("lesson", lesson, "skill", skill, "explanation", explanation, "task", null, "reason", reason == null ? "NO_TASK_AVAILABLE" : reason, "llm", llm(userId, lang));
+                    ? obj("lesson", lesson, "skill", translatedSkill(skill), "explanation", translatedExplanation(explanation), "task", null, "reason", reason, "llm", llm(userId, lang), "runner", runner(lang))
+                    : obj("lesson", lesson, "skill", translatedSkill(skill), "explanation", translatedExplanation(explanation), "task", null, "reason", reason == null ? "NO_TASK_AVAILABLE" : reason, "llm", llm(userId, lang));
         }
         // Switched to hard mode while the task was prepared: a freshly generated task waits in the queue for regular mode.
         if (hardModeActive(userId, lang)) {
@@ -636,7 +654,7 @@ public class ApiController {
             return lessonFinished(lesson, userId, generatedTaskId);
         if (storySolved(task))
             log.info("Assigned task {} (another variant of the solved story {}) to lesson {} of student {}: no task of an unsolved story is left", task.get("id"), ((String) task.get("story")).split(":")[1], lessonId, userId);
-        return obj("lesson", lesson, "skill", skill, "explanation", explanation, "task", taskView(userId, task));
+        return obj("lesson", lesson, "skill", translatedSkill(skill), "explanation", translatedExplanation(explanation), "task", taskView(userId, task));
     }
 
     /**
@@ -816,7 +834,7 @@ public class ApiController {
     private Map<String, Object> learningResponse(long userId, Map<String, Object> lesson, Map<String, Object> task) {
         String skillCode = (String) task.get("skill_code");
         Object explanation = "HARD".equals(task.get("mode")) || AttestationBank.PRACTICE.mode().equals(task.get("mode")) ? cachedExplanation(skillCode) : explanation(userId, skillCode);
-        return obj("lesson", lesson, "skill", Map.of("code", skillCode, "title", task.get("skill_title"), "blockNo", task.get("block_no")), "explanation", explanation, "task", taskView(userId, task));
+        return obj("lesson", lesson, "skill", Map.of("code", skillCode, "title", translations.text((String) task.get("skill_title"), "skill-title", List.of()), "blockNo", task.get("block_no")), "explanation", translatedExplanation(explanation), "task", taskView(userId, task));
     }
 
     /**
@@ -828,7 +846,7 @@ public class ApiController {
 
     private Map<String, Object> taskView(long userId, Map<String, Object> task) {
         boolean redo = redo(userId, task.get("id"));
-        return Map.of("id", task.get("id"), "title", task.get("title"), "statement", task.get("statement"), "starterCode", task.get("starter_code"), "redo", redo, "hard", "HARD".equals(task.get("mode")), "integrative", AttestationBank.INTEGRATIVE.mode().equals(task.get("mode")));
+        return Map.of("id", task.get("id"), "title", translations.text((String) task.get("title"), "task-title", List.of()), "statement", translations.taskStatement((String) task.get("statement"), task.get("id")), "starterCode", task.get("starter_code"), "redo", redo, "hard", "HARD".equals(task.get("mode")), "integrative", AttestationBank.INTEGRATIVE.mode().equals(task.get("mode")));
     }
 
     /**
@@ -905,6 +923,17 @@ public class ApiController {
     /**
      * A hard task never waits for the LLM: the topic's explanation if there is one, otherwise none.
      */
+    private Map<String, Object> translatedSkill(Map<String, Object> skill) {
+        var result = new LinkedHashMap<>(skill);
+        if (result.get("title") instanceof String title) result.put("title", translations.text(title, "skill-title", List.of()));
+        return result;
+    }
+
+    private Object translatedExplanation(Object explanation) {
+        if (!(explanation instanceof Map<?, ?> map) || !(map.get("content") instanceof String content)) return explanation;
+        return Map.of("content", translations.text(content, "explanation", List.of()), "source", map.get("source"));
+    }
+
     private Object cachedExplanation(String skillCode) {
         var rows = db.queryForList("select content,source from explanations where skill_code=?", skillCode);
         return rows.isEmpty() ? null : Map.of("content", rows.getFirst().get("content"), "source", rows.getFirst().get("source"));
@@ -1016,7 +1045,7 @@ public class ApiController {
             throw bad("TASK_UPDATED", "Задача обновлена. Откройте следующую задачу.");
         String source = (String) body.get("sourceCode");
         if (!codeRunner.status(lang).available())
-            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", "Проверка " + lang.title + " сейчас недоступна", "runner", runner(lang)));
+            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", translations.text("Проверка " + lang.title + " сейчас недоступна", "system-error", List.of()), "runner", runner(lang)));
         var console = consoleAsync(lang, source);
         var taskRow = taskRows.getFirst();
         TaskGoal goal = TaskGoal.fromJson(JSON, (String) taskRow.get("goal_json"));
@@ -1051,7 +1080,7 @@ public class ApiController {
         // The sandbox itself failed (Piston/isolate crash, service down): not the student's mistake, so no attempt is recorded.
         if (result.outcome() == PistonCodeRunner.Outcome.UNAVAILABLE) {
             log.warn("Attempt on task {} ({}) not checked: the sandbox failed: {}", task, lang, result.output());
-            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", "Проверка не удалась из-за сбоя песочницы — это не ошибка в решении. Отправь решение ещё раз: попытка не засчитана.", "runner", runner(lang)));
+            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", translations.text("Проверка не удалась из-за сбоя песочницы — это не ошибка в решении. Отправь решение ещё раз: попытка не засчитана.", "system-error", List.of()), "runner", runner(lang)));
         }
         log.info("Attempt on task {} ({}): passed={} grader={} in {} ms", task, lang, result.passed(), grader, testsNs / 1_000_000);
         final var finalResult = result;
@@ -1098,11 +1127,11 @@ public class ApiController {
         if (source.length() > SOURCE_LIMIT) throw bad("SOURCE_TOO_LONG", "Код длиннее " + SOURCE_LIMIT + " символов");
         touch(u, lang);
         if (!codeRunner.status(lang).available())
-            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", "Запуск " + lang.title + " сейчас недоступен", "runner", runner(lang)));
+            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", translations.text("Запуск " + lang.title + " сейчас недоступен", "system-error", List.of()), "runner", runner(lang)));
         long retryAfter = runLimiter.retryAfterSeconds(u);
         if (retryAfter > 0) {
             log.info("Console run rejected by rate limit");
-            return ResponseEntity.status(429).header("Retry-After", String.valueOf(retryAfter)).body(Map.of("error", "RUN_RATE_LIMITED", "message", "Слишком много запусков подряд. Подожди " + retryAfter + " с."));
+            return ResponseEntity.status(429).header("Retry-After", String.valueOf(retryAfter)).body(Map.of("error", "RUN_RATE_LIMITED", "message", translations.text("Слишком много запусков подряд. Подожди " + retryAfter + " с.", "system-error", List.of())));
         }
         String stdin = body.get("stdin") instanceof String in ? in : "";
         if (stdin.length() > 10_000) throw bad("STDIN_TOO_LONG", "Входные данные длиннее 10 000 символов");
@@ -1217,11 +1246,11 @@ public class ApiController {
         }
         var chatState = chatStatus(u, lang);
         if ("DISABLED_IN_HARD_MODE".equals(chatState.reason()))
-            return ResponseEntity.status(503).body(Map.of("error", "LLM_UNAVAILABLE", "message", "В hard mode помощник отключён — разбирайся сам", "llm", chatState.asMap()));
+            return ResponseEntity.status(503).body(Map.of("error", "LLM_UNAVAILABLE", "message", translations.text("В hard mode помощник отключён — разбирайся сам", "system-error", List.of()), "llm", chatState.asMap()));
         var quota = llmSettings.chatQuota(u);
         if (!quota.allowed()) {
             log.info("Chat message of student {} rejected by rate limit (hour {}/{}, day {}/{})", u, quota.hourUsed(), quota.hourLimit(), quota.dayUsed(), quota.dayLimit());
-            return ResponseEntity.status(429).header("Retry-After", String.valueOf(quota.retryAfterSeconds())).body(Map.of("error", "LLM_RATE_LIMITED", "message", rateLimitMessage(quota), "quota", quota.view()));
+            return ResponseEntity.status(429).header("Retry-After", String.valueOf(quota.retryAfterSeconds())).body(Map.of("error", "LLM_RATE_LIMITED", "message", translations.text(rateLimitMessage(quota), "system-error", List.of()), "quota", quota.view()));
         }
         db.update("insert into chat_messages(lesson_id,role,content) values(?,?,?)", l.get("id"), "STUDENT", question);
         try {
@@ -1565,10 +1594,10 @@ public class ApiController {
         if (lang.isEmpty()) throw new NotFoundError("BOARD_TEST_NOT_FOUND", "Тест не найден");
         Language language = Language.of(lang.getFirst());
         if (!codeRunner.status(language).available())
-            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", "Запуск " + language.title + " сейчас недоступен", "runner", runner(language)));
+            return ResponseEntity.status(503).body(Map.of("error", "RUNNER_UNAVAILABLE", "message", translations.text("Запуск " + language.title + " сейчас недоступен", "system-error", List.of()), "runner", runner(language)));
         long retryAfter = runLimiter.retryAfterSeconds(u);
         if (retryAfter > 0)
-            return ResponseEntity.status(429).header("Retry-After", String.valueOf(retryAfter)).body(Map.of("error", "RUN_RATE_LIMITED", "message", "Слишком много запусков подряд. Подожди " + retryAfter + " с."));
+            return ResponseEntity.status(429).header("Retry-After", String.valueOf(retryAfter)).body(Map.of("error", "RUN_RATE_LIMITED", "message", translations.text("Слишком много запусков подряд. Подожди " + retryAfter + " с.", "system-error", List.of())));
         return ResponseEntity.ok(boardTests.run(u, id, b.get("item"), source, device, b.get("revision")));
     }
 
@@ -1942,9 +1971,9 @@ public class ApiController {
         totals.put("p95Ms", durations.isEmpty() ? 0 : durations.get(Math.min(durations.size() - 1, (int) Math.ceil(durations.size() * 0.95) - 1)));
         var byDay = db.queryForList("select date(c.created_at) as day,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens" + where + " group by date(c.created_at) order by day", since);
         var byPurpose = db.queryForList("select c.purpose,max(c.reasoning_effort) as effort,(select x.model from llm_calls x where x.purpose=c.purpose and x.created_at>=datetime('now',?) order by x.id desc limit 1) as model,count(*) as calls,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(round(avg(case when c.status='OK' then c.duration_ms end)),0) as avgMs,coalesce(sum(c.total_tokens),0) as tokens" + where + " group by c.purpose order by calls desc", since, since);
-        var byLanguage = db.queryForList("select c.language,count(*) as calls,coalesce(sum(c.total_tokens),0) as tokens" + where + " group by c.language order by calls desc", since);
-        var byStudent = db.queryForList("select c.user_id as userId,coalesce(u.display_name,'—') as displayName,u.login,u.group_name as groupName,count(*) as calls,coalesce(sum(c.purpose='CHAT'),0) as chatTurns,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens,max(c.created_at) as lastAt from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) group by c.user_id order by calls desc limit 100", since);
-        var errors = db.queryForList("select c.created_at as createdAt,c.purpose,c.language,c.status,c.error,c.duration_ms as durationMs,u.display_name as displayName from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.status<>'OK' order by c.created_at desc,c.id desc limit 20", since);
+        var byLanguage = db.queryForList("select c.language,count(*) as calls,coalesce(sum(c.total_tokens),0) as tokens" + where + " and c.purpose<>'TRANSLATION' group by c.language order by calls desc", since);
+        var byStudent = db.queryForList("select c.user_id as userId,coalesce(u.display_name,'—') as displayName,u.login,u.group_name as groupName,count(*) as calls,coalesce(sum(c.purpose='CHAT'),0) as chatTurns,coalesce(sum(c.status<>'OK'),0) as errors,coalesce(sum(c.total_tokens),0) as tokens,max(c.created_at) as lastAt from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.purpose<>'TRANSLATION' group by c.user_id order by calls desc limit 100", since);
+        var errors = db.queryForList("select c.created_at as createdAt,c.purpose,case when c.purpose='TRANSLATION' then null else c.language end as language,c.status,c.error,c.duration_ms as durationMs,u.display_name as displayName from llm_calls c left join users u on u.id=c.user_id where c.created_at>=datetime('now',?) and c.status<>'OK' order by c.created_at desc,c.id desc limit 20", since);
         return obj("days", period, "totals", totals, "byDay", byDay, "byPurpose", byPurpose, "byLanguage", byLanguage, "byStudent", byStudent, "recentErrors", errors, "llm", llm(uid(r)));
     }
 
@@ -2127,7 +2156,10 @@ public class ApiController {
      * Practice progress and, separately, the diagnostic result per topic. A confirmed topic is not shown as practiced.
      */
     private List<Map<String, Object>> progress(long u, Language lang) {
-        return db.queryForList("select s.code as skillCode,s.title,s.block_no as blockNo,coalesce(x.completed_iterations,0) as completedIterations,coalesce(x.iteration_successes,0) as iterationSuccesses,coalesce(x.mastered,0) as mastered,d.correct as diagnosticCorrect,d.total as diagnosticTotal,coalesce(d.confirmed,0) as confirmedByDiagnostic from skills s left join student_skills x on x.skill_code=s.code and x.user_id=? left join diagnostic_skill_results d on d.skill_code=s.code and d.user_id=? where s.language=? order by s.sort_order", u, u, lang.name());
+        var rows = db.queryForList("select s.code as skillCode,s.title,s.block_no as blockNo,coalesce(x.completed_iterations,0) as completedIterations,coalesce(x.iteration_successes,0) as iterationSuccesses,coalesce(x.mastered,0) as mastered,d.correct as diagnosticCorrect,d.total as diagnosticTotal,coalesce(d.confirmed,0) as confirmedByDiagnostic from skills s left join student_skills x on x.skill_code=s.code and x.user_id=? left join diagnostic_skill_results d on d.skill_code=s.code and d.user_id=? where s.language=? order by s.sort_order", u, u, lang.name());
+        var titles = translations.texts(rows.stream().map(row -> (String) row.get("title")).toList(), "skill-title");
+        for (int i = 0; i < rows.size(); i++) rows.get(i).put("title", titles.get(i));
+        return rows;
     }
 
     /**
@@ -2330,10 +2362,20 @@ class InvalidGeneratedContentException extends RuntimeException {
 @RestControllerAdvice
 class Errors {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Errors.class);
+    private final ContentTranslations translations;
+    private final Set<String> fixedMessages;
+
+    Errors(JdbcTemplate db, LlmTutor tutor, com.fasterxml.jackson.databind.ObjectMapper json) throws java.io.IOException {
+        translations = new ContentTranslations(db, tutor);
+        try (var in = new org.springframework.core.io.ClassPathResource("server-error-messages.json").getInputStream()) {
+            fixedMessages = Set.copyOf(json.readValue(in, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}));
+        }
+    }
 
     @ExceptionHandler(ApiError.class)
     ResponseEntity<?> api(ApiError e) {
         log.info("Rejected request: {} ({})", e.code, e.getMessage());
-        return ResponseEntity.status(e instanceof NotFoundError ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST).body(Map.of("error", e.code, "message", e.getMessage()));
+        String message = fixedMessages.contains(e.getMessage()) ? translations.text(e.getMessage(), "system-error", List.of()) : e.getMessage();
+        return ResponseEntity.status(e instanceof NotFoundError ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST).body(Map.of("error", e.code, "message", message));
     }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { tr, useLocale } from './locale'
 
 /** Filter value: '' — everyone, NO_GROUP — students without a group, otherwise a group name. */
 export const NO_GROUP = '\u0000no-group'
@@ -26,16 +27,17 @@ export function useGroupFilter(storageKey: string, known: string[] | null) {
 }
 
 /** «Все · 12», «ИВТ-1 · 5», «Без группы · 3». Hidden while nobody has a group: there is nothing to filter yet. */
-export function GroupFilter({ total, groups, ungrouped, value, onChange, label = 'Группа', allLabel = 'Все' }: {
+export function GroupFilter({ total, groups, ungrouped, value, onChange, label, allLabel }: {
   total: number; groups: { name: string; count: number }[]; ungrouped: number; value: GroupFilterValue; onChange: (value: GroupFilterValue) => void; label?: string; allLabel?: string
 }) {
+  const { locale } = useLocale()
   if (!groups.length) return null
   const chip = (key: GroupFilterValue, title: string, count: number) =>
     <button key={key || 'all'} type="button" className={value === key ? 'active' : ''} aria-pressed={value === key} onClick={() => onChange(key)}>{title}<span>{count}</span></button>
-  return <div className="topic-filters group-filters" role="group" aria-label={label}>
-    {chip('', allLabel, total)}
+  return <div className="topic-filters group-filters" role="group" aria-label={label ?? tr(locale, "Группа", "Groupe", "المجموعة")}>
+    {chip('', allLabel ?? tr(locale, 'Все', 'Tous', 'الكل'), total)}
     {groups.map(g => chip(g.name, g.name, g.count))}
-    {ungrouped > 0 && chip(NO_GROUP, 'Без группы', ungrouped)}
+    {ungrouped > 0 && chip(NO_GROUP, tr(locale, 'Без группы', 'Sans groupe', 'بدون مجموعة'), ungrouped)}
   </div>
 }
 

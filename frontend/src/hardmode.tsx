@@ -1,3 +1,4 @@
+import { uiText } from './uiText'
 import { useEffect, useRef } from 'react'
 import { Icon } from './fx'
 import { XP } from './game'
@@ -32,7 +33,7 @@ export function HeaderTapes() {
  *  Locked until the current course has been passed once; a locked switch still reacts to clicks (explains why). */
 export function HardModeSwitch({ on, locked, busy, onToggle }: { on: boolean; locked: boolean; busy: boolean; onToggle: () => void }) {
   return <button type="button" className={`hard-switch ${on ? 'on' : ''} ${locked ? 'locked' : ''}`} role="switch" aria-checked={on} disabled={busy} onClick={onToggle}
-    title={locked ? 'Hard mode откроется после первого прохода курса' : on ? 'Hard mode включён — выключить' : 'Включить hard mode'}>
+    title={locked ? uiText("Hard mode откроется после первого прохода курса") : on ? uiText("Hard mode включён — выключить") : uiText("Включить hard mode")}>
     <Icon name={locked ? 'lock' : 'flame'} size={16} /><span>{on ? 'HARD MODE' : 'Hard'}</span>
   </button>
 }
@@ -49,18 +50,18 @@ export function HardModeDialog({ onConfirm, onCancel }: { onConfirm: () => void;
   return <div className="hard-dialog-backdrop" onClick={onCancel}>
     <div className="hard-dialog" role="dialog" aria-modal="true" aria-labelledby="hard-dialog-title" onClick={e => e.stopPropagation()}>
       <span className="hard-dialog-icon"><Icon name="flame" size={30} /></span>
-      <p className="eyebrow">Только для тех, кто шарит</p>
-      <h2 id="hard-dialog-title" className="display small">Будет жарко</h2>
+      <p className="eyebrow">{uiText("Только для тех, кто шарит")}</p>
+      <h2 id="hard-dialog-title" className="display small">{uiText("Будет жарко")}</h2>
       <ul>
-        <li>Это режим для тех, кто уже прошёл весь курс хотя бы раз.</li>
-        <li>Вместо обычных задач — алгоритмические: придётся думать, а не вспоминать синтаксис.</li>
-        <li>Решение прогоняют на разных входных данных — подогнать под пример не выйдет.</li>
-        <li>За каждую решённую задачу <b>+{XP.hardTask} XP</b> вместо {XP.task} и отдельные достижения.</li>
+        <li>{uiText("Это режим для тех, кто уже прошёл весь курс хотя бы раз.")}</li>
+        <li>{uiText("Вместо обычных задач — алгоритмические: придётся думать, а не вспоминать синтаксис.")}</li>
+        <li>{uiText("Решение прогоняют на разных входных данных — подогнать под пример не выйдет.")}</li>
+        <li>{uiText("За каждую решённую задачу")} <b>+{XP.hardTask} XP</b> {uiText("вместо")} {XP.task} {uiText("и отдельные достижения.")}</li>
       </ul>
-      <p className="muted small">Текущая задача останется, следующие будут hard. Выключить можно в любой момент.</p>
+      <p className="muted small">{uiText("Текущая задача останется, следующие будут hard. Выключить можно в любой момент.")}</p>
       <div className="hard-dialog-actions">
-        <button className="ghost" onClick={onCancel}>Не сейчас</button>
-        <button ref={confirmRef} className="danger big" onClick={onConfirm}><Icon name="flame" size={16} /> Включить hard mode</button>
+        <button className="ghost" onClick={onCancel}>{uiText("Не сейчас")}</button>
+        <button ref={confirmRef} className="danger big" onClick={onConfirm}><Icon name="flame" size={16} /> {uiText("Включить hard mode")}</button>
       </div>
     </div>
   </div>

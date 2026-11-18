@@ -89,6 +89,7 @@ class BoardTests implements DisposableBean {
     private final PistonCodeRunner runner;
     private final TaskVerifier verifier;
     private final LearningContentGenerator generator;
+    private final ContentTranslations translations;
     private final ProgressAnalytics analytics;
     private final PairWork pairs;
     /**
@@ -110,6 +111,7 @@ class BoardTests implements DisposableBean {
         this.runner = runner;
         this.verifier = verifier;
         this.generator = generator;
+        this.translations = new ContentTranslations(db, generator instanceof LlmTutor tutor ? tutor : null);
         this.analytics = analytics;
         this.pairs = pairs;
     }
@@ -823,7 +825,7 @@ class BoardTests implements DisposableBean {
                 code = placed.isEmpty() ? null : BoardItems.assemble((String) item.get("before"), placed.stream().map(texts::get).toList(), (String) item.get("after"));
                 if (item.get("extraLineId") != null) extraUsed = placed.contains(item.get("extraLineId"));
             } else code = answer instanceof String text && !text.isBlank() ? text : null;
-            report.add(obj("kind", kind, "title", item.get("title"), "statement", item.get("statement"), "language", item.get("language"), "answer", code,
+            report.add(obj("kind", kind, "title", translations.text((String) item.get("title"), "task-title", List.of()), "statement", translations.taskStatement((String) item.get("statement"), item.get("taskId")), "language", item.get("language"), "answer", code,
                            "verdict", score >= 1 ? BoardAssessment.RIGHT : score > 0 ? BoardAssessment.PARTLY : "неверно", "passed", Boolean.TRUE.equals(result.get("passed")),
                            "check", result.get("output"), "extraUsed", extraUsed));
         }
@@ -851,7 +853,7 @@ class BoardTests implements DisposableBean {
         var shown = new LinkedHashMap<String, Object>();
         for (var item : items(t)) {
             String kind = (String) item.get("kind");
-            var view = obj("kind", kind, "title", item.get("title"), "statement", item.get("statement"), "language", item.get("language"));
+            var view = obj("kind", kind, "title", translations.text((String) item.get("title"), "task-title", List.of()), "statement", translations.taskStatement((String) item.get("statement"), item.get("taskId")), "language", item.get("language"));
             switch (kind) {
                 case "parsons" -> {
                     view.put("before", item.get("before"));

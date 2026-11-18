@@ -1631,3 +1631,14 @@ html :is(code, pre, kbd, samp, .code-editor, .cm-editor, .console-out, .parsons-
 .retake-chip.practice { background: var(--warn-soft); color: var(--warn-ink); }
 /* The board's presence dot (.presence, «К доске») also matched the chat's status line and squeezed it to 10px. */
 .chat-head .presence { width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; }
+
+/* Interface language is independent of the programming course. */
+.ui-locale select { max-width: 12rem; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); font: inherit; }
+.login-panel { position: relative; }
+.login-panel > .ui-locale { position: absolute; inset-block-start: 20px; inset-inline-end: 24px; }
+@media (max-width: 700px) {
+  .login-panel { display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 18px; }
+  .login-panel > .ui-locale { position: static; align-self: flex-end; }
+}
+[dir="rtl"] pre, [dir="rtl"] .cm-editor, [dir="rtl"] .code-card { direction: ltr; text-align: left; }
+[dir="rtl"] :is(.markdown code, .console-out, .console-error) { direction: ltr; unicode-bidi: isolate; }

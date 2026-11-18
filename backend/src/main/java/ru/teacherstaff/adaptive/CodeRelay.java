@@ -37,14 +37,16 @@ class CodeRelay {
     private final Clock clock;
     private final ObjectMapper json;
     private final PistonCodeRunner runner;
+    private final ContentTranslations translations;
     private final Map<String, Task> tasks = new LinkedHashMap<>();
     private final Random random = new SecureRandom();
     private final ExecutorService background = Executors.newSingleThreadExecutor(BackgroundThreads.named("relay-run"));
-    CodeRelay(JdbcTemplate db, Clock clock, ObjectMapper json, PistonCodeRunner runner) {
+    CodeRelay(JdbcTemplate db, Clock clock, ObjectMapper json, PistonCodeRunner runner, LlmTutor tutor) {
         this.db = db;
         this.clock = clock;
         this.json = json;
         this.runner = runner;
+        this.translations = new ContentTranslations(db, tutor);
         try (var in = CodeRelay.class.getResourceAsStream("/relay-tasks/tasks.json")) {
             for (JsonNode t : json.readTree(in).get("tasks")) {
                 var steps = new ArrayList<Step>();
@@ -486,11 +488,11 @@ class CodeRelay {
                 queue.add(obj("userId", m.userId(), "name", m.name(), "present", m.present(now)));
         var writer = r.writer() == null ? null : members.stream().filter(m -> m.userId() == r.writer()).findFirst().map(m -> obj("userId", m.userId(), "name", m.name())).orElse(null);
         var last = db.queryForList("select t.outcome, t.step, t.ended_at, coalesce(u.display_name,u.login) as name from relay_turns t join users u on u.id=t.user_id where t.relay_id=? and t.outcome is not null order by t.turn_no desc limit 1", r.id());
-        return obj("id", r.id(), "group", r.group(), "language", r.language().name(), "status", r.status(), "task", r.task().view(),
+        return obj("id", r.id(), "group", r.group(), "language", r.language().name(), "status", r.status(), "task", obj("key", r.task().key(), "language", r.task().language().name(), "title", translations.text(r.task().title(), "relay-title", List.of()), "statement", translations.text(r.task().statement(), "relay-statement", List.of(r.task().expectedOutput())), "steps", r.task().steps().size()),
                    "code", r.code(), "version", r.version(), "step", r.step(), "steps", steps.size(),
-                   "stepPrompt", r.step() < steps.size() ? steps.get(r.step()).prompt() : null,
-                   "nextPrompt", r.step() + 1 < steps.size() ? steps.get(r.step() + 1).prompt() : null,
-                   "donePrompts", steps.subList(0, Math.min(r.step(), steps.size())).stream().map(Step::prompt).toList(),
+                   "stepPrompt", r.step() < steps.size() ? translations.text(steps.get(r.step()).prompt(), "relay-prompt", List.of(r.task().expectedOutput())) : null,
+                   "nextPrompt", r.step() + 1 < steps.size() ? translations.text(steps.get(r.step() + 1).prompt(), "relay-prompt", List.of(r.task().expectedOutput())) : null,
+                   "donePrompts", steps.subList(0, Math.min(r.step(), steps.size())).stream().map(step -> translations.text(step.prompt(), "relay-prompt", List.of(r.task().expectedOutput()))).toList(),
                    "turn", r.turnNo(), "turnSeconds", r.turnSeconds(), "writer", writer,
                    "turnEndsAt", r.turnEnds() == null ? null : r.turnEnds().toString(), "pausedLeftMs", r.pausedLeftMs(),
                    "queue", queue, "members", members.size(),

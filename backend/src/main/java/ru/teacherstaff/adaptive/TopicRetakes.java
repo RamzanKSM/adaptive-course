@@ -39,10 +39,12 @@ class TopicRetakes {
     private static final Logger log = LoggerFactory.getLogger(TopicRetakes.class);
     private final JdbcTemplate db;
     private final Clock clock;
+    private final ContentTranslations translations;
 
-    TopicRetakes(JdbcTemplate db, Clock clock) {
+    TopicRetakes(JdbcTemplate db, Clock clock, LlmTutor tutor) {
         this.db = db;
         this.clock = clock;
+        this.translations = new ContentTranslations(db, tutor);
     }
 
     static boolean fresh(List<Map<String, Object>> candidates, int difficulty) {
@@ -144,7 +146,7 @@ class TopicRetakes {
      */
     Map<String, Object> view(long id) {
         var r = db.queryForMap("select r.id,r.skill_code,s.title,r.finished_at from topic_retakes r join skills s on s.code=r.skill_code where r.id=?", id);
-        return obj("id", r.get("id"), "skillCode", r.get("skill_code"), "skillTitle", r.get("title"), "total", TASKS,
+        return obj("id", r.get("id"), "skillCode", r.get("skill_code"), "skillTitle", translations.text((String) r.get("title"), "skill-title", List.of()), "total", TASKS,
                    "given", count("select count(*) from lesson_tasks where retake_id=?", id), "passed", passed(id), "finished", r.get("finished_at") != null);
     }
 

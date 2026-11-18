@@ -1,3 +1,5 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
 import { Tile } from './analytics'
@@ -40,7 +42,7 @@ const median = (values: number[]) => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 const mean = (values: number[]) => values.length ? values.reduce((a, b) => a + b, 0) / values.length : NaN
-const students = (n: number) => `${n} ${plural(n, 'студент', 'студента', 'студентов')}`
+const students = (n: number) => tr(currentLocale(), `${n} ${plural(n, 'студент', 'студента', 'студентов')}`, `${n} ${n === 1 ? 'étudiant' : 'étudiants'}`, `${n} طالب`)
 const lastOf = (values: number[]) => values.length ? values[values.length - 1] : 0
 
 function valueFormat({ metric, scale }: View) {
@@ -54,8 +56,8 @@ function tickFormat({ metric, scale }: View) {
   if (metric === 'skills') return (v: number) => `${decimal(v)}${scale === 'growth' ? '' : '%'}`
   return metric === 'xp' ? (v: number) => compact.format(v) : (v: number) => decimal(v)
 }
-const xFormat = (view: View) => view.axis === 'start' ? (x: number) => `${x} дн.` : shortDay
-const xTipFormat = (view: View) => view.axis === 'start' ? (x: number) => x === 0 ? 'День первого урока' : `${x} ${plural(x, 'день', 'дня', 'дней')} от первого урока` : shortDay
+const xFormat = (view: View) => view.axis === 'start' ? (x: number) => tr(currentLocale(), `${x} дн.`, `${x} j`, `${x} يوم`) : shortDay
+const xTipFormat = (view: View) => view.axis === 'start' ? (x: number) => x === 0 ? tr(currentLocale(), 'День первого урока', 'Jour du premier cours', 'يوم أول درس') : tr(currentLocale(), `${x} ${plural(x, 'день', 'дня', 'дней')} от первого урока`, `${x} jours depuis le premier cours`, `${x} يوم من أول درس`) : shortDay
 
 const valuesOf = (s: ProgressStudent, metric: Metric, diagnostic: boolean) =>
   metric === 'skills' ? (diagnostic ? s.series.skillsWithDiagnostic : s.series.skills) : s.series[metric]
@@ -93,7 +95,7 @@ function medianLine(lines: ChartPoint[][], format: (v: number) => string): Chart
   for (const line of lines) for (const p of line) { const list = byX.get(p.x); if (list) list.push(p.y); else byX.set(p.x, [p.y]) }
   const enough = Math.max(1, Math.ceil(lines.filter(l => l.length).length / 2))
   return [...byX].filter(([, ys]) => ys.length >= enough).sort((a, b) => a[0] - b[0])
-    .map(([x, ys]) => ({ x, y: round1(median(ys)), note: `среднее ${format(round1(mean(ys)))} · ${students(ys.length)}` }))
+    .map(([x, ys]) => ({ x, y: round1(median(ys)), note: tr(currentLocale(), `среднее ${format(round1(mean(ys)))} · ${students(ys.length)}`, `moyenne ${format(round1(mean(ys)))} · ${students(ys.length)}`, `المتوسط ${format(round1(mean(ys)))} · ${students(ys.length)}`) }))
 }
 /** Members by group (ungrouped ones as «Без группы»); a group keeps its colour slot from the course's full group list. */
 function cohorts(members: ProgressStudent[], allGroups: string[]): Cohort[] {
@@ -160,7 +162,7 @@ export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: 
     }
     const next = student?.sessionCourse ?? COURSES.map(c => c[0]).find(c => !tried.includes(c))
     if (next && !tried.includes(next)) { setPending({ id: pending.id, tried }); setLanguage(next) }
-    else { setPending(null); toast({ tone: 'info', icon: 'user', title: 'Прогресса пока нет', text: 'Студент ещё не прошёл диагностику ни в одном курсе.' }) }
+    else { setPending(null); toast({ tone: 'info', icon: 'user', title: uiText("Прогресса пока нет"), text: uiText("Студент ещё не прошёл диагностику ни в одном курсе.") }) }
   }, [pending, report, loading, language]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ctx = useMemo<Context | null>(() => report && { report, dayNums: report.days.map(dayNumber), startIdx: Math.max(0, report.days.indexOf(report.from)) }, [report])
@@ -180,49 +182,49 @@ export function ProgressAnalytics({ request, onOpenStudent, focus }: { request: 
   return <section className="analytics progress-admin">
     <div className="analytics-head enter">
       <div>
-        <p className="eyebrow">Преподаватель</p>
-        <h1 className="display small">Прогресс</h1>
-        {report && <p className="muted small">{COURSES.find(c => c[0] === report.language)?.[1]} · {rangeLabel}{report.session.date ? ` · ${sessionText(report.session.date, report.today)}` : ' · дата сессии не задана'}</p>}
+        <p className="eyebrow">{uiText("Преподаватель")}</p>
+        <h1 className="display small">{uiText("Прогресс")}</h1>
+        {report && <p className="muted small">{COURSES.find(c => c[0] === report.language)?.[1]} · {rangeLabel}{report.session.date ? ` · ${sessionText(report.session.date, report.today)}` : uiText(" · дата сессии не задана")}</p>}
       </div>
-      <Segment label="Курс" value={language} options={COURSES} onChange={value => { setLanguage(value); setSelectedId(null) }} />
+      <Segment label={uiText("Курс")} value={language} options={COURSES} onChange={value => { setLanguage(value); setSelectedId(null) }} />
     </div>
 
     <div className="card progress-controls enter">
       <div className="control-row">
-        <span className="control-label">Период</span>
-        <div className="period" role="group" aria-label="Период">
-          {PRESETS.map(days => <button key={days} type="button" className={range.kind === 'days' && range.days === days ? 'active' : ''} aria-pressed={range.kind === 'days' && range.days === days} onClick={() => setRange({ kind: 'days', days })}>{days} дн.</button>)}
-          <button type="button" className={range.kind === 'all' ? 'active' : ''} aria-pressed={range.kind === 'all'} onClick={() => setRange({ kind: 'all' })}>Весь курс</button>
+        <span className="control-label">{uiText("Период")}</span>
+        <div className="period" role="group" aria-label={uiText("Период")}>
+          {PRESETS.map(days => <button key={days} type="button" className={range.kind === 'days' && range.days === days ? 'active' : ''} aria-pressed={range.kind === 'days' && range.days === days} onClick={() => setRange({ kind: 'days', days })}>{days} {uiText("дн.")}</button>)}
+          <button type="button" className={range.kind === 'all' ? 'active' : ''} aria-pressed={range.kind === 'all'} onClick={() => setRange({ kind: 'all' })}>{uiText("Весь курс")}</button>
         </div>
-        <div className="date-range" role="group" aria-label="Свой период">
-          <input type="date" aria-label="С" value={query.from} max={query.to || today} aria-invalid={!validRange}
+        <div className="date-range" role="group" aria-label={uiText("Свой период")}>
+          <input type="date" aria-label={uiText("С")} value={query.from} max={query.to || today} aria-invalid={!validRange}
             onChange={e => setRange({ kind: 'custom', from: e.target.value, to: query.to })} />
           <span aria-hidden="true">—</span>
-          <input type="date" aria-label="По" value={query.to} min={query.from} max={today} aria-invalid={!validRange}
+          <input type="date" aria-label={uiText("По")} value={query.to} min={query.from} max={today} aria-invalid={!validRange}
             onChange={e => setRange({ kind: 'custom', from: query.from, to: e.target.value })} />
         </div>
       </div>
       <SessionEditor request={request} onSaved={() => setReload(n => n + 1)} />
       <div className="control-row">
-        <span className="control-label">Навыки</span>
-        <Segment label="Навыки" value={view.diagnostic ? 'with' : 'practice'} options={[['with', 'С диагностикой'], ['practice', 'Только практика']]}
+        <span className="control-label">{uiText("Навыки")}</span>
+        <Segment label={uiText("Навыки")} value={view.diagnostic ? 'with' : 'practice'} options={[['with', tr(currentLocale(), 'С диагностикой', 'Avec diagnostic', 'مع التشخيص')], ['practice', tr(currentLocale(), 'Только практика', 'Pratique seule', 'التدريب فقط')]]}
           onChange={value => setView(v => ({ ...v, diagnostic: value === 'with' }))} />
-        <Toggle checked={showOthers} onChange={setShowOthers} hint="Отключённые от сессии (преподаватель, добровольцы, тестовые) и студенты другого курса. В статистике они не считаются никогда.">Показать не участвующих</Toggle>
+        <Toggle checked={showOthers} onChange={setShowOthers} hint={uiText("Отключённые от сессии (преподаватель, добровольцы, тестовые) и студенты другого курса. В статистике они не считаются никогда.")}>{uiText("Показать не участвующих")}</Toggle>
       </div>
     </div>
 
     {report && scope && <div className="group-bar enter">
-      <GroupFilter allLabel="Все группы" total={scope.total} groups={scope.counts.groups} ungrouped={scope.counts.ungrouped} value={group} onChange={value => { setGroup(value); setSelectedId(null) }} />
+      <GroupFilter allLabel={uiText("Все группы")} total={scope.total} groups={scope.counts.groups} ungrouped={scope.counts.ungrouped} value={group} onChange={value => { setGroup(value); setSelectedId(null) }} />
     </div>}
 
     {!report || !scope || !ctx ? <div className="sk sk-card" /> : <div className={`progress-body ${loading ? 'is-refreshing' : ''}`}>
       <Tiles scope={scope} ctx={ctx} diagnostic={view.diagnostic} rangeLabel={rangeLabel} />
       {!scope.members.length && !scope.shown.length
-        ? <div className="card empty-task"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">{comparison ? 'На этом курсе пока нет участников сессии.' : 'В этой группе нет участников этого курса.'}</p></div>
+        ? <div className="card empty-task"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">{comparison ? uiText("На этом курсе пока нет участников сессии.") : uiText("В этой группе нет участников этого курса.")}</p></div>
         : <>
           {comparison
             ? <ComparisonChart cohorts={scope.cohorts} ctx={ctx} view={view} onView={setView} />
-            : <GroupChart key={`${group}|${report.language}`} title={group === NO_GROUP ? 'Без группы' : group} students={scope.shown} ctx={ctx} view={view} onView={setView} />}
+            : <GroupChart key={`${group}|${report.language}`} title={group === NO_GROUP ? uiText("Без группы") : group} students={scope.shown} ctx={ctx} view={view} onView={setView} />}
           {comparison && scope.cohorts.length > 0 && <>
             <CohortTable cohorts={scope.cohorts} ctx={ctx} diagnostic={view.diagnostic} rangeLabel={rangeLabel} />
             <BlockHeat cohorts={scope.cohorts} report={report} diagnostic={view.diagnostic} />
@@ -261,15 +263,15 @@ function SessionEditor({ request, onSaved }: { request: Request; onSaved: () => 
     setBusy(false)
     if (!value) return
     setSaved(value.date); setDraft(value.date ?? ''); onSaved()
-    toast({ tone: 'info', icon: 'flag', title: value.date ? 'Дата сессии сохранена' : 'Дата сессии убрана', text: value.date ? sessionText(value.date) : 'Статус и план к сессии не считаются, пока дата не задана' })
+    toast({ tone: 'info', icon: 'flag', title: value.date ? tr(currentLocale(), "Дата сессии сохранена", "Date de session enregistrée", "تم حفظ تاريخ الامتحان") : tr(currentLocale(), "Дата сессии убрана", "Date de session supprimée", "تمت إزالة تاريخ الامتحان"), text: value.date ? sessionText(value.date) : tr(currentLocale(), "Статус и план к сессии не считаются, пока дата не задана", "Le statut et le plan ne sont pas calculés tant que la date manque", "الحالة والخطة ما بتتحسب بدون تحديد التاريخ") })
   }
   const submit = (e: FormEvent) => { e.preventDefault(); if (draft) save(draft) }
   return <form className="control-row session-editor" onSubmit={submit}>
-    <span className="control-label">Сессия</span>
-    <input type="date" aria-label="Дата сессии" value={draft} min={todayUtc()} disabled={saved === undefined || busy} onChange={e => setDraft(e.target.value)} />
-    <button className="primary" disabled={busy || !draft || draft === saved}>{busy ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : 'Сохранить'}</button>
-    {saved && <button type="button" className="ghost" disabled={busy} onClick={() => save(null)}>Убрать дату</button>}
-    <span className="muted small">{saved === undefined ? 'Загружаем…' : saved ? sessionText(saved) : 'Дата не задана: статус и план к сессии не считаются'}</span>
+    <span className="control-label">{uiText("Сессия")}</span>
+    <input type="date" aria-label={uiText("Дата сессии")} value={draft} min={todayUtc()} disabled={saved === undefined || busy} onChange={e => setDraft(e.target.value)} />
+    <button className="primary" disabled={busy || !draft || draft === saved}>{busy ? <><span className="spinner" aria-hidden="true" /> {uiText("Сохраняем…")}</> : uiText("Сохранить")}</button>
+    {saved && <button type="button" className="ghost" disabled={busy} onClick={() => save(null)}>{uiText("Убрать дату")}</button>}
+    <span className="muted small">{saved === undefined ? uiText("Загружаем…") : saved ? sessionText(saved) : uiText("Дата не задана: статус и план к сессии не считаются")}</span>
   </form>
 }
 
@@ -280,32 +282,32 @@ function Tiles({ scope, ctx, diagnostic, rangeLabel }: { scope: { members: Progr
   const flagged = members.filter(s => s.flags.length > 0)
   const count = (flag: ProgressFlag) => members.filter(s => s.flags.includes(flag)).length
   const breakdown = ([['BEHIND', 'не успевают'], ['BORDERLINE', 'на грани'], ['STUCK', 'застряли'], ['GONE', 'пропали'], ['NOT_STARTED', 'не начали']] as [ProgressFlag, string][])
-    .map(([flag, title]) => [count(flag), title] as const).filter(([n]) => n > 0).map(([n, title]) => `${title} ${n}`).join(' · ')
+    .map(([flag, title]) => [count(flag), flag === 'BEHIND' ? tr(currentLocale(), title, 'en retard', 'متأخرين') : flag === 'BORDERLINE' ? tr(currentLocale(), title, 'à la limite', 'قريبين من التأخر') : flagText(flag, title)] as const).filter(([n]) => n > 0).map(([n, title]) => `${title} ${n}`).join(' · ')
   const skillsMedian = median(skills), skillsMean = mean(skills)
   return <div className="stat-grid">
-    <Tile icon="user" label="Участников" value={integer.format(members.length)}
-      note={scope.outside ? `ещё ${scope.outside} вне статистики` : scope.cohorts.length > 1 ? `в ${scope.cohorts.length} ${plural(scope.cohorts.length, 'группе', 'группах', 'группах')}` : 'все участвуют в сессии'}
-      title="Участник — студент, который участвует в сессии и учится в основном на этом курсе" />
-    <Tile icon="flame" label="Активны за период" value={integer.format(active)} note={`${members.length ? Math.round((active / members.length) * 100) : 0}% участников · ${rangeLabel}`} />
-    <Tile icon="chart" label="Навыки, медиана" value={members.length ? `${decimal(round1(skillsMedian))}%` : '—'}
-      note={members.length ? `среднее ${decimal(round1(skillsMean))}% · ${diagnostic ? 'с диагностикой' : 'только практика'}` : 'нет участников'}
-      title={members.length ? `Медиана ${decimal(round1(skillsMedian))}%, среднее ${decimal(round1(skillsMean))}%` : undefined} />
-    <Tile icon="flag" label="Требуют внимания" value={integer.format(flagged.length)} note={breakdown || 'флагов нет'} tone={flagged.length ? 'warn' : undefined} />
+    <Tile icon="user" label={uiText("Участников")} value={integer.format(members.length)}
+      note={scope.outside ? tr(currentLocale(), `ещё ${scope.outside} вне статистики`, `${scope.outside} autres hors statistiques`, `${scope.outside} خارج الإحصاءات`) : scope.cohorts.length > 1 ? tr(currentLocale(), `в ${scope.cohorts.length} ${plural(scope.cohorts.length, 'группе', 'группах', 'группах')}`, `dans ${scope.cohorts.length} groupes`, `في ${scope.cohorts.length} مجموعة`) : uiText("все участвуют в сессии")}
+      title={uiText("Участник — студент, который участвует в сессии и учится в основном на этом курсе")} />
+    <Tile icon="flame" label={uiText("Активны за период")} value={integer.format(active)} note={tr(currentLocale(), `${members.length ? Math.round((active / members.length) * 100) : 0}% участников · ${rangeLabel}`, `${members.length ? Math.round((active / members.length) * 100) : 0}% des participants · ${rangeLabel}`, `${members.length ? Math.round((active / members.length) * 100) : 0}% من المشاركين · ${rangeLabel}`)} />
+    <Tile icon="chart" label={uiText("Навыки, медиана")} value={members.length ? `${decimal(round1(skillsMedian))}%` : '—'}
+      note={members.length ? tr(currentLocale(), `среднее ${decimal(round1(skillsMean))}% · ${diagnostic ? uiText("с диагностикой") : uiText("только практика")}`, `moyenne ${decimal(round1(skillsMean))}% · ${diagnostic ? uiText("с диагностикой") : uiText("только практика")}`, `المتوسط ${decimal(round1(skillsMean))}% · ${diagnostic ? uiText("с диагностикой") : uiText("только практика")}`) : uiText("нет участников")}
+      title={members.length ? tr(currentLocale(), `Медиана ${decimal(round1(skillsMedian))}%, среднее ${decimal(round1(skillsMean))}%`, `Médiane ${decimal(round1(skillsMedian))}%, moyenne ${decimal(round1(skillsMean))}%`, `الوسيط ${decimal(round1(skillsMedian))}%، المتوسط ${decimal(round1(skillsMean))}%`) : undefined} />
+    <Tile icon="flag" label={uiText("Требуют внимания")} value={integer.format(flagged.length)} note={breakdown || uiText("флагов нет")} tone={flagged.length ? 'warn' : undefined} />
   </div>
 }
 
 function ViewControls({ view, onView }: { view: View; onView: (view: View) => void }) {
   return <div className="view-controls">
-    <Segment label="Показатель" value={view.metric} options={METRICS} onChange={metric => onView({ ...view, metric })} />
-    <Segment label="Шкала" value={view.scale} options={[['level', 'Уровень'], ['growth', 'Прирост']]} onChange={scale => onView({ ...view, scale })} />
-    <Segment label="Ось времени" value={view.axis} options={[['dates', 'По датам'], ['start', 'От начала обучения']]} onChange={axis => onView({ ...view, axis })} />
+    <Segment label={uiText("Показатель")} value={view.metric} options={metricOptions()} onChange={metric => onView({ ...view, metric })} />
+    <Segment label={uiText("Шкала")} value={view.scale} options={[['level', tr(currentLocale(), 'Уровень', 'Niveau', 'المستوى')], ['growth', tr(currentLocale(), 'Прирост', 'Progression', 'الزيادة')]]} onChange={scale => onView({ ...view, scale })} />
+    <Segment label={uiText("Ось времени")} value={view.axis} options={[['dates', tr(currentLocale(), 'По датам', 'Par date', 'حسب التاريخ')], ['start', tr(currentLocale(), 'От начала обучения', 'Depuis le début', 'من بداية التعلم')]]} onChange={axis => onView({ ...view, axis })} />
   </div>
 }
 
 function chartNote(view: View) {
-  const what = view.metric === 'skills' ? `Навыки, % ${view.diagnostic ? 'с диагностикой' : 'только практика'}` : view.metric === 'solved' ? 'Решено задач' : 'Опыт, XP'
-  const how = view.scale === 'growth' ? (view.axis === 'start' ? 'прирост от первого урока' : 'прирост с начала периода') : 'уровень на конец дня'
-  return `${what} · ${how}${view.axis === 'start' ? ' · по оси — дни от первого урока каждого студента; медиана — пока данные есть хотя бы у половины' : ''}`
+  const what = view.metric === 'skills' ? tr(currentLocale(), `Навыки, % ${view.diagnostic ? 'с диагностикой' : 'только практика'}`, `Compétences, % ${view.diagnostic ? 'avec diagnostic' : 'pratique seule'}`, `المهارات، % ${view.diagnostic ? 'مع التشخيص' : 'التدريب فقط'}`) : view.metric === 'solved' ? tr(currentLocale(), 'Решено задач', 'Exercices résolus', 'التمارين المحلولة') : tr(currentLocale(), 'Опыт, XP', 'Expérience, XP', 'الخبرة، XP')
+  const how = view.scale === 'growth' ? (view.axis === 'start' ? tr(currentLocale(), 'прирост от первого урока', 'progression depuis le premier cours', 'الزيادة من أول درس') : tr(currentLocale(), 'прирост с начала периода', 'progression depuis le début de la période', 'الزيادة من بداية الفترة')) : tr(currentLocale(), 'уровень на конец дня', 'niveau en fin de journée', 'المستوى في نهاية اليوم')
+  return `${what} · ${how}${view.axis === 'start' ? tr(currentLocale(), ' · по оси — дни от первого урока каждого студента; медиана — пока данные есть хотя бы у половины', ' · axe : jours depuis le premier cours de chaque étudiant ; médiane tant que la moitié au moins dispose de données', ' · المحور: الأيام من أول درس لكل طالب؛ الوسيط ما دامت بيانات نصفهم على الأقل متوفرة') : ''}`
 }
 
 /** One thin line per member and a bold median; the list beside it highlights (hover) and pins (click) lines. */
@@ -322,7 +324,7 @@ function GroupChart({ title, students: shown, ctx, view, onView }: { title: stri
       const slot = pins.get(s.id)
       return { id: String(s.id), label: s.displayName, points, color: slot === undefined ? undefined : SERIES_COLORS[slot], width: slot === undefined ? 1.25 : 2.25, faint: !s.member, dash: s.member ? undefined : 'dashed' as const, sticky: slot !== undefined }
     }),
-    { id: 'median', label: 'медиана', points: medianPoints, color: 'var(--ink)', width: 3.25, sticky: true },
+    { id: 'median', label: tr(currentLocale(), 'медиана', 'médiane', 'الوسيط'), points: medianPoints, color: 'var(--ink)', width: 3.25, sticky: true },
   ], [lines, medianPoints, pins])
   function togglePin(id: Id) {
     setPins(current => {
@@ -339,22 +341,22 @@ function GroupChart({ title, students: shown, ctx, view, onView }: { title: stri
   const highlighted = listHover !== null ? String(listHover) : null
   return <div className="card chart-card">
     <div className="chart-head">
-      <h2 className="card-title">Рост группы {title}</h2>
+      <h2 className="card-title">{uiText("Рост группы")} {title}</h2>
       <ViewControls view={view} onView={onView} />
     </div>
     <p className="muted small chart-note">{chartNote(view)}</p>
     <div className="group-chart">
       <div className="group-chart-plot">
-        <LineChart series={series} label={`Рост группы ${title}: линия на каждого участника и медиана`} formatX={xFormat(view)} formatXTip={xTipFormat(view)} xAnchor={view.axis === 'start' ? 'start' : 'end'}
+        <LineChart series={series} label={tr(currentLocale(), `Рост группы ${title}: линия на каждого участника и медиана`, `Progression du groupe ${title} : une ligne par participant et médiane`, `تقدم المجموعة ${title}: خط لكل مشارك والوسيط`)} formatX={xFormat(view)} formatXTip={xTipFormat(view)} xAnchor={view.axis === 'start' ? 'start' : 'end'}
           formatY={format} formatTick={tick} integer={view.metric !== 'skills'} highlight={highlighted} onHover={setChartHover} height={300}
-          empty={view.axis === 'start' ? 'Никто из участников ещё не начал уроки' : undefined} />
+          empty={view.axis === 'start' ? uiText("Никто из участников ещё не начал уроки") : undefined} />
         <div className="legend chart-legend">
-          <span><LineKey />студент</span><span><LineKey color="var(--ink)" bold />медиана участников</span>
-          {lines.some(l => !l.s.member) && <span><LineKey dash="dashed" />не участвует</span>}
-          {pins.size > 0 && <button type="button" className="link" onClick={() => setPins(new Map())}>Снять выделение</button>}
+          <span><LineKey />{uiText("студент")}</span><span><LineKey color="var(--ink)" bold />{uiText("медиана участников")}</span>
+          {lines.some(l => !l.s.member) && <span><LineKey dash="dashed" />{uiText("не участвует")}</span>}
+          {pins.size > 0 && <button type="button" className="link" onClick={() => setPins(new Map())}>{uiText("Снять выделение")}</button>}
         </div>
       </div>
-      <ul className="member-list" aria-label="Студенты на графике: наведи, чтобы подсветить линию, нажми, чтобы закрепить">
+      <ul className="member-list" aria-label={uiText("Студенты на графике: наведи, чтобы подсветить линию, нажми, чтобы закрепить")}>
         {sorted.map(({ s, points }) => {
           const slot = pins.get(s.id)
           const on = chartHover === String(s.id) || listHover === s.id
@@ -375,30 +377,30 @@ function GroupChart({ title, students: shown, ctx, view, onView }: { title: stri
 function ComparisonChart({ cohorts: list, ctx, view, onView }: { cohorts: Cohort[]; ctx: Context; view: View; onView: (view: View) => void }) {
   const format = useMemo(() => valueFormat(view), [view])
   const series = useMemo<ChartSeries[]>(() => list.map(c => ({
-    id: c.key, label: c.members.length < SMALL_GROUP ? `${c.name} (мало данных)` : c.name,
+    id: c.key, label: c.members.length < SMALL_GROUP ? tr(currentLocale(), `${c.name} (мало данных)`, `${c.name} (peu de données)`, `${c.name} (بيانات قليلة)`) : c.name,
     points: medianLine(c.members.map(s => studentLine(s, ctx, view)), format),
     color: cohortColor(c.slot), width: 2.5, dash: c.members.length < SMALL_GROUP ? 'dashed' as const : undefined,
   })), [list, ctx, view, format])
   return <div className="card chart-card">
     <div className="chart-head">
-      <h2 className="card-title">Сравнение групп · медианы</h2>
+      <h2 className="card-title">{uiText("Сравнение групп · медианы")}</h2>
       <ViewControls view={view} onView={onView} />
     </div>
-    <p className="muted small chart-note">{chartNote(view)}. Линия группы — медиана её участников, среднее — в подсказке.</p>
-    <LineChart series={series} label="Медианы групп" tooltipAll formatX={xFormat(view)} formatXTip={xTipFormat(view)} formatY={format} formatTick={tickFormat(view)} xAnchor={view.axis === 'start' ? 'start' : 'end'}
+    <p className="muted small chart-note">{chartNote(view)}{uiText(". Линия группы — медиана её участников, среднее — в подсказке.")}</p>
+    <LineChart series={series} label={uiText("Медианы групп")} tooltipAll formatX={xFormat(view)} formatXTip={xTipFormat(view)} formatY={format} formatTick={tickFormat(view)} xAnchor={view.axis === 'start' ? 'start' : 'end'}
       integer={view.metric !== 'skills'} height={300} />
     <div className="legend chart-legend">{list.map(c => <span key={c.key}><LineKey color={cohortColor(c.slot)} dash={c.members.length < SMALL_GROUP ? 'dashed' : undefined} bold />
-      {c.name}<small className="muted">{c.members.length}{c.members.length < SMALL_GROUP ? ' · мало данных' : ''}</small></span>)}</div>
+      {c.name}<small className="muted">{c.members.length}{c.members.length < SMALL_GROUP ? uiText(" · мало данных") : ''}</small></span>)}</div>
   </div>
 }
 
 /** Groups side by side, always per member — never totals, which only reflect group size. */
 function CohortTable({ cohorts: list, ctx, diagnostic, rangeLabel }: { cohorts: Cohort[]; ctx: Context; diagnostic: boolean; rangeLabel: string }) {
   return <div className="card">
-    <h2 className="card-title">Группы</h2>
+    <h2 className="card-title">{uiText("Группы")}</h2>
     <div className="table-scroll"><table className="data-table cohort-table">
-      <thead><tr><th>Группа</th><th>Участники</th><th title={`Хотя бы один активный день за период: ${rangeLabel}`}>Активны</th><th title="Медиана навыков на конец периода; среднее — в подсказке">Навыки</th>
-        <th title="Медиана прироста навыков за период, в процентных пунктах; среднее — в подсказке">Рост</th><th title="Задач решено за период в среднем на участника">Решено / чел.</th><th title="Опыт в среднем на участника">XP / чел.</th></tr></thead>
+      <thead><tr><th>{uiText("Группа")}</th><th>{uiText("Участники")}</th><th title={tr(currentLocale(), `Хотя бы один активный день за период: ${rangeLabel}`, `Au moins un jour actif pendant la période : ${rangeLabel}`, `يوم نشاط واحد على الأقل خلال الفترة: ${rangeLabel}`)}>{uiText("Активны")}</th><th title={uiText("Медиана навыков на конец периода; среднее — в подсказке")}>{uiText("Навыки")}</th>
+        <th title={uiText("Медиана прироста навыков за период, в процентных пунктах; среднее — в подсказке")}>{uiText("Рост")}</th><th title={uiText("Задач решено за период в среднем на участника")}>{uiText("Решено / чел.")}</th><th title={uiText("Опыт в среднем на участника")}>{uiText("XP / чел.")}</th></tr></thead>
       <tbody>{list.map(c => {
         const n = c.members.length
         const skills = c.members.map(s => skillsAt(s, ctx, diagnostic))
@@ -407,17 +409,17 @@ function CohortTable({ cohorts: list, ctx, diagnostic, rangeLabel }: { cohorts: 
         const solved = c.members.reduce((sum, s) => sum + s.period.solved, 0) / n
         const xp = mean(c.members.map(s => lastOf(s.series.xp)))
         return <tr key={c.key} className={n < SMALL_GROUP ? 'noisy' : ''}>
-          <td><span className="cohort-name"><LineKey color={cohortColor(c.slot)} bold />{c.name}</span>{n < SMALL_GROUP && <span className="noisy-tag" title={`Меньше ${SMALL_GROUP} участников: цифры сильно зависят от одного-двух человек`}>мало данных</span>}</td>
+          <td><span className="cohort-name"><LineKey color={cohortColor(c.slot)} bold />{c.name}</span>{n < SMALL_GROUP && <span className="noisy-tag" title={tr(currentLocale(), `Меньше ${SMALL_GROUP} участников: цифры сильно зависят от одного-двух человек`, `Moins de ${SMALL_GROUP} participants : les chiffres dépendent fortement d’une ou deux personnes`, `أقل من ${SMALL_GROUP} مشاركين: الأرقام بتتأثر بشدة بشخص أو شخصين`)}>{uiText("мало данных")}</span>}</td>
           <td>{n}</td>
           <td>{active} <small className="muted">· {Math.round((active / n) * 100)}%</small></td>
-          <td title={`Медиана ${decimal(round1(median(level)))}%, среднее ${decimal(round1(mean(level)))}%`}>{decimal(round1(median(level)))}%</td>
-          <td title={`Медиана ${decimal(round1(median(growth)))} п.п., среднее ${decimal(round1(mean(growth)))} п.п.`}>{signed(round1(median(growth)))} п.п.</td>
+          <td title={tr(currentLocale(), `Медиана ${decimal(round1(median(level)))}%, среднее ${decimal(round1(mean(level)))}%`, `Médiane ${decimal(round1(median(level)))}%, moyenne ${decimal(round1(mean(level)))}%`, `الوسيط ${decimal(round1(median(level)))}%، المتوسط ${decimal(round1(mean(level)))}%`)}>{decimal(round1(median(level)))}%</td>
+          <td title={tr(currentLocale(), `Медиана ${decimal(round1(median(growth)))} п.п., среднее ${decimal(round1(mean(growth)))} п.п.`, `Médiane ${decimal(round1(median(growth)))} points, moyenne ${decimal(round1(mean(growth)))} points`, `الوسيط ${decimal(round1(median(growth)))} نقطة، المتوسط ${decimal(round1(mean(growth)))} نقطة`)}>{signed(round1(median(growth)))} {uiText("п.п.")}</td>
           <td>{decimal(round1(solved))}</td>
           <td>{integer.format(Math.round(xp))}</td>
         </tr>
       })}</tbody>
     </table></div>
-    <p className="muted small table-note">Навыки — {diagnostic ? 'с диагностикой' : 'только практика'}, на конец периода. Рост — разница навыков за период ({rangeLabel}).</p>
+    <p className="muted small table-note">{uiText("Навыки —")} {diagnostic ? uiText("с диагностикой") : uiText("только практика")}{uiText(", на конец периода. Рост — разница навыков за период (")}{rangeLabel}).</p>
   </div>
 }
 const signed = (v: number) => `${v > 0 ? '+' : ''}${decimal(v)}`
@@ -433,16 +435,16 @@ function BlockHeat({ cohorts: list, report, diagnostic }: { cohorts: Cohort[]; r
   const cell = (c: Cohort, indexes: number[]) => mean(c.members.map(s => mean(indexes.map(i => share(s, i)))))
   if (!blocks.length) return null
   return <div className="card">
-    <h2 className="card-title">Навыки по блокам</h2>
-    <p className="muted small chart-note">Средняя доля освоения тем блока у участников группы{diagnostic ? '; тема, подтверждённая диагностикой, считается освоенной' : ''}.</p>
+    <h2 className="card-title">{uiText("Навыки по блокам")}</h2>
+    <p className="muted small chart-note">{uiText("Средняя доля освоения тем блока у участников группы")}{diagnostic ? uiText("; тема, подтверждённая диагностикой, считается освоенной") : ''}.</p>
     <div className="table-scroll"><table className="heat-table">
-      <thead><tr><th scope="col">Блок</th>{list.map(c => <th key={c.key} scope="col">{c.name}{c.members.length < SMALL_GROUP && <small className="noisy-tag">мало данных</small>}</th>)}</tr></thead>
+      <thead><tr><th scope="col">{uiText("Блок")}</th>{list.map(c => <th key={c.key} scope="col">{c.name}{c.members.length < SMALL_GROUP && <small className="noisy-tag">{uiText("мало данных")}</small>}</th>)}</tr></thead>
       <tbody>{blocks.map(b => <tr key={b.block}>
-        <th scope="row" title={b.titles.join('\n')}>Блок {b.block}<small className="muted">{b.titles.length} {plural(b.titles.length, 'тема', 'темы', 'тем')}</small></th>
+        <th scope="row" title={b.titles.join('\n')}>{uiText("Блок")} {b.block}<small className="muted">{b.titles.length} {plural(b.titles.length, 'тема', 'темы', 'тем')}</small></th>
         {list.map(c => {
           const value = cell(c, b.indexes)
           return <td key={c.key} className={`heat ${value > 0.55 ? 'strong' : ''}`} style={{ background: `rgb(var(--brand-rgb) / ${(0.04 + value * 0.86).toFixed(3)})` }}
-            title={`${c.name} · Блок ${b.block}: ${Math.round(value * 100)}% (${students(c.members.length)})`}>{Math.round(value * 100)}%</td>
+            title={tr(currentLocale(), `${c.name} · Блок ${b.block}: ${Math.round(value * 100)}% (${students(c.members.length)})`, `${c.name} · Bloc ${b.block} : ${Math.round(value * 100)}% (${students(c.members.length)})`, `${c.name} · القسم ${b.block}: ${Math.round(value * 100)}% (${students(c.members.length)})`)}>{Math.round(value * 100)}%</td>
         })}
       </tr>)}</tbody>
     </table></div>
@@ -465,6 +467,16 @@ const COLUMNS: { key: SortKey; title: string; hint?: string; asc?: boolean; text
   { key: 'xp', title: 'XP', hint: 'Опыт на конец периода' },
   { key: 'flags', title: 'Флаги', text: true },
 ]
+const columnText = (key: SortKey, original: string, hint = false) => {
+  const names: Record<SortKey, [string, string]> = { name: ['Étudiant', 'الطالب'], group: ['Groupe', 'المجموعة'], closed: ['Acquis', 'المكتمل'], pace: ['Rythme', 'المعدل'], plan: ['Plan', 'الخطة'], lag: ['Retard', 'التأخر'], status: ['Statut', 'الحالة'], forecast: ['Prévision', 'التوقع'], last: ['Activité', 'النشاط'], active: ['Jours', 'الأيام'], solved: ['Résolus', 'المحلول'], xp: ['Expérience en fin de période', 'الخبرة بنهاية الفترة'], flags: ['Alertes', 'التنبيهات'] }
+  const hints: Partial<Record<SortKey, [string, string]>> = { closed: ['Notions acquises par la pratique ou le diagnostic', 'الموضوعات المكتملة بالتدريب أو التشخيص'], pace: ['Notions par semaine sur les trois dernières semaines', 'الموضوعات أسبوعياً خلال آخر ثلاثة أسابيع'], plan: ['Notions prévues à ce jour entre le début du cours et la session', 'الموضوعات المخططة لليوم من بداية الكورس حتى الامتحان'], lag: ['Plan à ce jour moins notions acquises', 'خطة اليوم ناقص الموضوعات المكتملة'], forecast: ['Date prévue de fin au rythme actuel', 'تاريخ إكمال الكورس بالمعدل الحالي'], last: ['Dernière activité dans ce cours', 'آخر نشاط في الكورس'], active: ['Jours actifs pendant la période', 'أيام النشاط في الفترة'], solved: ['Exercices résolus pendant la période', 'التمارين المحلولة في الفترة'] }
+  const pair = hint ? hints[key] : names[key]; return pair ? tr(currentLocale(), original, ...pair) : original
+}
+const flagText = (flag: ProgressFlag, original: string, hint = false) => {
+  const text: Partial<Record<ProgressFlag, [string, string, string, string]>> = { STUCK: ['Bloqué', 'متعثر', 'Au moins cinq tentatives infructueuses consécutives', 'خمس محاولات فاشلة متتالية أو أكثر'], NOT_STARTED: ['Pas commencé', 'لم يبدأ', 'Aucun cours commencé', 'لم يبدأ أي درس'], GONE: ['Inactif', 'غائب', 'Aucune activité depuis au moins sept jours', 'ما في نشاط لسبعة أيام أو أكثر'] }
+  const pair = text[flag]; return pair ? tr(currentLocale(), original, pair[hint ? 2 : 0], pair[hint ? 3 : 1]) : original
+}
+const metricOptions = (): [Metric, string][] => METRICS.map(([key, title]) => [key, tr(currentLocale(), title, key === 'skills' ? 'Compétences' : key === 'solved' ? 'Exercices' : 'Expérience', key === 'skills' ? 'المهارات' : key === 'solved' ? 'التمارين' : 'الخبرة')])
 const chipFlags = (s: ProgressStudent) => FLAG_CHIPS.filter(([flag]) => s.flags.includes(flag))
 function sortValue(s: ProgressStudent, key: SortKey): number | string | null {
   const f = s.forecast
@@ -489,9 +501,9 @@ function ago(value: string | null, today: string) {
   if (!value) return '—'
   const day = parseDate(value).toISOString().slice(0, 10)
   const days = dayNumber(today) - dayNumber(day)
-  return days <= 0 ? 'сегодня' : days === 1 ? 'вчера' : days < 7 ? `${days} дн. назад` : shortDay(dayNumber(day))
+  return days <= 0 ? tr(currentLocale(), 'сегодня', 'aujourd’hui', 'اليوم') : days === 1 ? tr(currentLocale(), 'вчера', 'hier', 'أمس') : days < 7 ? tr(currentLocale(), `${days} дн. назад`, `il y a ${days} j`, `قبل ${days} يوم`) : shortDay(dayNumber(day))
 }
-const outsiderLabel = (s: ProgressStudent) => !s.participant ? 'не участвует' : 'другой курс'
+const outsiderLabel = (s: ProgressStudent) => !s.participant ? tr(currentLocale(), "не участвует", "ne participe pas", "غير مشارك") : tr(currentLocale(), "другой курс", "autre cours", "كورس تاني")
 
 function StudentTable({ rows, report, selectedId, onSelect, rangeLabel }: { rows: ProgressStudent[]; report: ProgressReport; selectedId: Id | null; onSelect: (id: Id) => void; rangeLabel: string }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 })
@@ -508,12 +520,12 @@ function StudentTable({ rows, report, selectedId, onSelect, rangeLabel }: { rows
   const sessionDate = report.session.date
   return <div className="card">
     <div className="chart-head">
-      <h2 className="card-title">Студенты <span className="muted small">{rows.filter(s => s.member).length} участников{rows.some(s => !s.member) ? ` · ${rows.filter(s => !s.member).length} вне статистики` : ''}</span></h2>
-      <span className="muted small">Период: {rangeLabel}. Нажми на строку — откроется график студента.</span>
+      <h2 className="card-title">{uiText("Студенты")} <span className="muted small">{rows.filter(s => s.member).length} {uiText("участников")}{rows.some(s => !s.member) ? tr(currentLocale(), ` · ${rows.filter(s => !s.member).length} вне статистики`, ` · ${rows.filter(s => !s.member).length} hors statistiques`, ` · ${rows.filter(s => !s.member).length} خارج الإحصاءات`) : ''}</span></h2>
+      <span className="muted small">{uiText("Период:")} {rangeLabel}{uiText(". Нажми на строку — откроется график студента.")}</span>
     </div>
-    {!rows.length ? <p className="muted">Студентов нет.</p> : <div className="table-scroll"><table className="data-table student-table">
-      <thead><tr>{COLUMNS.map(c => <th key={c.key} className={c.text ? 'text' : ''} aria-sort={sort.key === c.key ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined} title={c.hint}>
-        <button type="button" className="sort" onClick={() => order(c.key)}>{c.title}<span aria-hidden="true">{sort.key === c.key ? (sort.dir === 1 ? '↑' : '↓') : ''}</span></button>
+    {!rows.length ? <p className="muted">{uiText("Студентов нет.")}</p> : <div className="table-scroll"><table className="data-table student-table">
+      <thead><tr>{COLUMNS.map(c => <th key={c.key} className={c.text ? 'text' : ''} aria-sort={sort.key === c.key ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined} title={c.hint ? columnText(c.key, c.hint, true) : undefined}>
+        <button type="button" className="sort" onClick={() => order(c.key)}>{columnText(c.key, c.title)}<span aria-hidden="true">{sort.key === c.key ? (sort.dir === 1 ? '↑' : '↓') : ''}</span></button>
       </th>)}</tr></thead>
       <tbody>{sorted.map(s => {
         const f = s.forecast
@@ -527,17 +539,17 @@ function StudentTable({ rows, report, selectedId, onSelect, rangeLabel }: { rows
           <td>{f?.planToday != null ? f.planToday : '—'}</td>
           <td className={f?.lag != null && f.lag > 0 ? `lag-cell ${f.status === 'BEHIND' ? 'bad' : 'warn'}` : 'lag-cell'} title={f?.lag != null ? lagText(f.lag) : undefined}>{f?.lag != null ? signedLag(f.lag) : '—'}</td>
           <td className="text">{f ? <StatusChip status={f.status} /> : <span className="muted">—</span>}</td>
-          <td className={late ? 'late' : ''} title={late ? 'Позже сессии' : f && !f.forecastDate && f.remaining > 0 ? 'За последние 3 недели новых тем не было — при таком темпе курс не будет закрыт' : undefined}>
-            {f?.forecastDate ? shortDay(dayNumber(f.forecastDate)) : f && f.remaining === 0 ? 'закрыт' : '—'}</td>
+          <td className={late ? 'late' : ''} title={late ? uiText("Позже сессии") : f && !f.forecastDate && f.remaining > 0 ? uiText("За последние 3 недели новых тем не было — при таком темпе курс не будет закрыт") : undefined}>
+            {f?.forecastDate ? shortDay(dayNumber(f.forecastDate)) : f && f.remaining === 0 ? uiText("закрыт") : '—'}</td>
           <td title={s.lastActivityAt ? parseDate(s.lastActivityAt).toLocaleString('ru-RU') : undefined}>{ago(s.lastActivityAt, report.today)}</td>
           <td>{s.period.activeDays}</td>
-          <td title={`с первой попытки ${s.period.firstTry} · отправок ${s.period.submissions}`}>{s.period.solved}</td>
+          <td title={tr(currentLocale(), `с первой попытки ${s.period.firstTry} · отправок ${s.period.submissions}`, `du premier coup ${s.period.firstTry} · envois ${s.period.submissions}`, `من أول محاولة ${s.period.firstTry} · الإرسالات ${s.period.submissions}`)}>{s.period.solved}</td>
           <td>{integer.format(lastOf(s.series.xp))}</td>
-          <td className="text"><span className="flag-chips">{chipFlags(s).map(([flag, title, hint]) => <span key={flag} className={`flag-chip ${flag.toLowerCase()}`} title={hint}>{title}</span>)}</span></td>
+          <td className="text"><span className="flag-chips">{chipFlags(s).map(([flag, title, hint]) => <span key={flag} className={`flag-chip ${flag.toLowerCase()}`} title={flagText(flag, hint, true)}>{flagText(flag, title)}</span>)}</span></td>
         </tr>
       })}</tbody>
     </table></div>}
-    {!sessionDate && <p className="muted small table-note">Дата сессии не задана — статус, план и отставание от него не считаются.</p>}
+    {!sessionDate && <p className="muted small table-note">{uiText("Дата сессии не задана — статус, план и отставание от него не считаются.")}</p>}
   </div>
 }
 
@@ -552,7 +564,7 @@ function StudentPanel({ student, ctx, diagnostic, onClose, onOpenStudent }: { st
   const format = valueFormat(view)
   const groupmates = report.students.filter(s => s.member && (s.group || null) === (student.group || null))
   const series: ChartSeries[] = []
-  if (groupmates.length > 1) series.push({ id: 'median', label: `медиана ${student.group ?? 'без группы'}`, points: medianLine(groupmates.map(s => studentLine(s, ctx, view)), format), color: 'var(--ink-2)', width: 1.75, dash: 'dashed', sticky: true })
+  if (groupmates.length > 1) series.push({ id: 'median', label: tr(currentLocale(), `медиана ${student.group ?? 'без группы'}`, `médiane ${student.group ?? 'sans groupe'}`, `الوسيط ${student.group ?? 'بدون مجموعة'}`), points: medianLine(groupmates.map(s => studentLine(s, ctx, view)), format), color: 'var(--ink-2)', width: 1.75, dash: 'dashed', sticky: true })
   series.push({ id: 'student', label: student.displayName, points: studentLine(student, ctx, view), color: 'var(--brand)', width: 2.75, sticky: true, dot: true })
   const f = student.forecast
   return <section ref={panel} className="card student-panel enter" aria-labelledby="student-panel-title">
@@ -561,32 +573,32 @@ function StudentPanel({ student, ctx, diagnostic, onClose, onOpenStudent }: { st
       <div><h2 className="title" id="student-panel-title" ref={heading} tabIndex={-1}>{student.displayName}</h2>
         <p className="muted small">{student.login}{student.group && <span className="group-tag">{student.group}</span>}{!student.member && <span className="outsider-tag">{outsiderLabel(student)}</span>}</p></div>
       <div className="panel-actions">
-        {onOpenStudent && <button type="button" className="ghost small-button" onClick={() => onOpenStudent(student.id)}><Icon name="user" size={15} /> Карточка студента</button>}
-        <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
+        {onOpenStudent && <button type="button" className="ghost small-button" onClick={() => onOpenStudent(student.id)}><Icon name="user" size={15} /> {uiText("Карточка студента")}</button>}
+        <button type="button" className="icon-button" aria-label={uiText("Закрыть")} title={uiText("Закрыть")} onClick={onClose}><Icon name="x" /></button>
       </div>
     </div>
     <div className="panel-facts">
-      <span className="mini-stats-cell"><b>{student.lessons}</b><small>{plural(student.lessons, 'урок', 'урока', 'уроков')}{student.firstLessonDay ? ` · с ${shortDay(dayNumber(student.firstLessonDay))}` : ''}</small></span>
-      {f && <span className="mini-stats-cell" title={`практикой ${f.closedByPractice}, диагностикой ${f.closedByDiagnostic}`}><b>{f.closed}/{f.total}</b><small>пройдено тем · диагностикой {f.closedByDiagnostic}</small></span>}
-      {f && f.planToday !== null && <span className="mini-stats-cell" title="План к сегодня: равномерно от первого урока группы до сессии"><b>{f.planToday}</b><small>по плану к сегодня{f.lag !== null ? ` · ${lagText(f.lag)}` : ''}</small></span>}
-      {f && <span className="mini-stats-cell"><b>{decimal(f.pace)}</b><small>тем в неделю</small></span>}
-      <span className="mini-stats-cell" title={`с первой попытки ${student.period.firstTry} · отправок ${student.period.submissions}`}><b>{student.period.solved}</b><small>решено за период · дней {student.period.activeDays}</small></span>
+      <span className="mini-stats-cell"><b>{student.lessons}</b><small>{tr(currentLocale(), plural(student.lessons, 'урок', 'урока', 'уроков'), 'cours', 'درس')}{student.firstLessonDay ? tr(currentLocale(), ` · с ${shortDay(dayNumber(student.firstLessonDay))}`, ` · depuis le ${shortDay(dayNumber(student.firstLessonDay))}`, ` · من ${shortDay(dayNumber(student.firstLessonDay))}`) : ''}</small></span>
+      {f && <span className="mini-stats-cell" title={tr(currentLocale(), `практикой ${f.closedByPractice}, диагностикой ${f.closedByDiagnostic}`, `par la pratique ${f.closedByPractice}, par diagnostic ${f.closedByDiagnostic}`, `بالتدريب ${f.closedByPractice}، بالتشخيص ${f.closedByDiagnostic}`)}><b>{f.closed}/{f.total}</b><small>{uiText("пройдено тем · диагностикой")} {f.closedByDiagnostic}</small></span>}
+      {f && f.planToday !== null && <span className="mini-stats-cell" title={uiText("План к сегодня: равномерно от первого урока группы до сессии")}><b>{f.planToday}</b><small>{uiText("по плану к сегодня")}{f.lag !== null ? ` · ${lagText(f.lag)}` : ''}</small></span>}
+      {f && <span className="mini-stats-cell"><b>{decimal(f.pace)}</b><small>{uiText("тем в неделю")}</small></span>}
+      <span className="mini-stats-cell" title={tr(currentLocale(), `с первой попытки ${student.period.firstTry} · отправок ${student.period.submissions}`, `du premier coup ${student.period.firstTry} · envois ${student.period.submissions}`, `من أول محاولة ${student.period.firstTry} · الإرسالات ${student.period.submissions}`)}><b>{student.period.solved}</b><small>{uiText("решено за период · дней")} {student.period.activeDays}</small></span>
     </div>
     {(f || chipFlags(student).length > 0) && <p className="panel-status">
       {f && <StatusChip status={f.status} />}
-      {f && (f.forecastDate ? <span>Прогноз: курс закрыт {shortDay(dayNumber(f.forecastDate))}</span> : f.remaining > 0 ? <span className="muted">При нулевом темпе курс не будет закрыт</span> : null)}
-      {chipFlags(student).map(([flag, title, hint]) => <span key={flag} className={`flag-chip ${flag.toLowerCase()}`} title={hint}>{title}</span>)}
+      {f && (f.forecastDate ? <span>{uiText("Прогноз: курс закрыт")} {shortDay(dayNumber(f.forecastDate))}</span> : f.remaining > 0 ? <span className="muted">{uiText("При нулевом темпе курс не будет закрыт")}</span> : null)}
+      {chipFlags(student).map(([flag, title, hint]) => <span key={flag} className={`flag-chip ${flag.toLowerCase()}`} title={flagText(flag, hint, true)}>{flagText(flag, title)}</span>)}
     </p>}
     <div className="panel-charts">
       <div>
-        <div className="chart-head"><h3 className="card-title">Рост</h3><Segment label="Показатель" value={metric} options={METRICS} onChange={setMetric} /></div>
-        <LineChart series={series} label={`Рост: ${student.displayName}`} tooltipAll formatX={shortDay} formatY={format} formatTick={tickFormat(view)} integer={metric !== 'skills'} height={220} />
-        <div className="legend chart-legend"><span><LineKey color="var(--brand)" bold />{student.displayName}</span>{groupmates.length > 1 && <span><LineKey color="var(--ink-2)" dash="dashed" />медиана группы</span>}</div>
+        <div className="chart-head"><h3 className="card-title">{uiText("Рост")}</h3><Segment label={uiText("Показатель")} value={metric} options={metricOptions()} onChange={setMetric} /></div>
+        <LineChart series={series} label={tr(currentLocale(), `Рост: ${student.displayName}`, `Progression : ${student.displayName}`, `التقدم: ${student.displayName}`)} tooltipAll formatX={shortDay} formatY={format} formatTick={tickFormat(view)} integer={metric !== 'skills'} height={220} />
+        <div className="legend chart-legend"><span><LineKey color="var(--brand)" bold />{student.displayName}</span>{groupmates.length > 1 && <span><LineKey color="var(--ink-2)" dash="dashed" />{uiText("медиана группы")}</span>}</div>
       </div>
       {f && (report.session.date || f.pace > 0) && f.remaining > 0 && <div>
-        <div className="chart-head"><h3 className="card-title">К сессии</h3>{report.session.date && <span className="muted small">{sessionText(report.session.date, report.today)}</span>}</div>
-        <SessionChart plan={{ today: report.today, sessionDate: report.session.date, total: f.total, closed: f.closed, pace: f.pace, planStart: f.planStart, history: { days: report.days, values: student.series.closed } }} height={220} label={`Прогноз до сессии: ${student.displayName}`} />
-        <p className="muted small">{topics(f.remaining)} осталось · темп {decimal(f.pace)} в неделю{f.planToday !== null ? ` · по плану к сегодня ${topics(f.planToday)}${f.lag !== null ? `, ${lagText(f.lag)}` : ''}` : ''}</p>
+        <div className="chart-head"><h3 className="card-title">{uiText("К сессии")}</h3>{report.session.date && <span className="muted small">{sessionText(report.session.date, report.today)}</span>}</div>
+        <SessionChart plan={{ today: report.today, sessionDate: report.session.date, total: f.total, closed: f.closed, pace: f.pace, planStart: f.planStart, history: { days: report.days, values: student.series.closed } }} height={220} label={tr(currentLocale(), `Прогноз до сессии: ${student.displayName}`, `Prévision jusqu’à la session : ${student.displayName}`, `التوقع حتى الامتحان: ${student.displayName}`)} />
+        <p className="muted small">{topics(f.remaining)} {uiText("осталось · темп")} {decimal(f.pace)} {uiText("в неделю")}{f.planToday !== null ? tr(currentLocale(), ` · по плану к сегодня ${topics(f.planToday)}${f.lag !== null ? `, ${lagText(f.lag)}` : ''}`, ` · prévu aujourd’hui ${topics(f.planToday)}${f.lag !== null ? `, ${lagText(f.lag)}` : ''}`, ` · حسب الخطة لليوم ${topics(f.planToday)}${f.lag !== null ? `، ${lagText(f.lag)}` : ''}`) : ''}</p>
       </div>}
     </div>
   </section>

@@ -1,6 +1,8 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, post } from './api'
-import { attestationMinutes, BoardTestScreen, canonical, clock, isAttestation, KIND, minutesOf, minutesText, ms, STATION_BOARD_API, useNow } from './board'
+import { attestationMinutes, BoardTestScreen, canonical, clock, isAttestation, KIND, kindLabel, minutesOf, minutesText, ms, STATION_BOARD_API, useNow } from './board'
 import { Icon, initials } from './fx'
 import { RelayProjector } from './relay'
 import { plural } from './session'
@@ -71,45 +73,45 @@ function StationWaiting({ current, failed, onStarted, onTeacherLogin }: { curren
     <header className="station-bar">
       <div className="brand"><span className="logo" aria-hidden="true">R</span><b>Rmzn Tutor</b></div>
       <span className="station-name">{current?.station.name ?? ''}</span>
-      <button type="button" className="ghost small-button" onClick={onTeacherLogin}><Icon name="user" size={15} /> Войти как преподаватель</button>
+      <button type="button" className="ghost small-button" onClick={onTeacherLogin}><Icon name="user" size={15} /> {uiText("Войти как преподаватель")}</button>
     </header>
     <section className="station-body">
-      <p className="eyebrow">Ответ у доски</p>
-      <h1 className="display">Компьютер у доски</h1>
+      <p className="eyebrow">{uiText("Ответ у доски")}</p>
+      <h1 className="display">{uiText("Компьютер у доски")}</h1>
       {error && <p className="board-error" role="alert">{error}</p>}
-      {failed && <p className="board-error" role="alert">Нет связи с сервером — пробуем снова…</p>}
-      {!current ? <p className="loading-note"><span className="spinner" aria-hidden="true" /> Загружаем вызовы…</p>
+      {failed && <p className="board-error" role="alert">{uiText("Нет связи с сервером — пробуем снова…")}</p>}
+      {!current ? <p className="loading-note"><span className="spinner" aria-hidden="true" /> {uiText("Загружаем вызовы…")}</p>
         : !calls.length ? <div className="station-empty">
           <span className="board-call-icon"><Icon name="clock" size={30} /></span>
-          <h2 className="title">Ждём вызова преподавателя</h2>
-          <p>Когда преподаватель вызовет тебя к доске, здесь появится твоё имя и кнопка «Начать тест».</p>
+          <h2 className="title">{uiText("Ждём вызова преподавателя")}</h2>
+          <p>{uiText("Когда преподаватель вызовет тебя к доске, здесь появится твоё имя и кнопка «Начать тест».")}</p>
         </div>
-          : <ul className="station-calls" aria-label="Вызваны к доске">{calls.map(call => {
+          : <ul className="station-calls" aria-label={uiText("Вызваны к доске")}>{calls.map(call => {
             const kinds = canonical(call.kinds), left = ms(call.expiresAt) - now, attest = isAttestation(call)
             return <li key={call.id} className="station-call">
               <span className="avatar" aria-hidden="true">{initials(call.displayName)}</span>
               <span className="station-call-meta">
                 <b>{call.displayName}</b>
                 <small>{[call.group, COURSE[call.language] ?? call.language].filter(Boolean).join(' · ')}</small>
-                <small>{attest ? <><span className="attest-tag">аттестация</span> {KIND.code.title} · {minutesText(attestationMinutes(call.durationSeconds))}</>
-                  : <>{kinds.map(k => KIND[k].title).join(' · ')} · {minutesText(minutesOf(kinds, call.durationSeconds))}</>}</small>
+                <small>{attest ? <><span className="attest-tag">{uiText("аттестация")}</span> {KIND.code.title} · {minutesText(attestationMinutes(call.durationSeconds))}</>
+                  : <>{kinds.map(k => kindLabel(k)).join(' · ')} · {minutesText(minutesOf(kinds, call.durationSeconds))}</>}</small>
               </span>
-              <span className={`board-countdown ${left < 60_000 ? 'low' : ''}`} title="Вызов действует ещё">
-                <Icon name="clock" size={18} /><b className="tabular">{clock(left)}</b><small>{left > 0 ? 'вызов действует' : 'вызов истёк'}</small>
+              <span className={`board-countdown ${left < 60_000 ? 'low' : ''}`} title={uiText("Вызов действует ещё")}>
+                <Icon name="clock" size={18} /><b className="tabular">{clock(left)}</b><small>{left > 0 ? uiText("вызов действует") : uiText("вызов истёк")}</small>
               </span>
-              <button type="button" className="primary big" disabled={busy || left <= 0 || call.canStart === false} onClick={() => setConfirm(call)}>{attest ? 'Начать аттестацию' : 'Начать тест'} <Icon name="arrow" /></button>
+              <button type="button" className="primary big" disabled={busy || left <= 0 || call.canStart === false} onClick={() => setConfirm(call)}>{attest ? uiText("Начать аттестацию") : uiText("Начать тест")} <Icon name="arrow" /></button>
             </li>
           })}</ul>}
     </section>
     {confirm && <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="station-confirm-title">
       <div className="board-call">
         <span className="board-call-icon"><Icon name="flag" size={30} /></span>
-        <h2 id="station-confirm-title" className="display small">{confirm.displayName}, начинаем?</h2>
-        <p>{isAttestation(confirm) ? `Аттестация: одна задача на ${minutesText(attestationMinutes(confirm.durationSeconds))}.`
-          : `Тест на ${minutesText(minutesOf(canonical(confirm.kinds), confirm.durationSeconds))}: ${canonical(confirm.kinds).map(k => KIND[k].phrase).join(', ')}.`} Таймер запустится сразу.</p>
+        <h2 id="station-confirm-title" className="display small">{confirm.displayName}{uiText(", начинаем?")}</h2>
+        <p>{isAttestation(confirm) ? tr(currentLocale(), `Аттестация: одна задача на ${minutesText(attestationMinutes(confirm.durationSeconds))}.`, `Évaluation : un exercice pendant ${minutesText(attestationMinutes(confirm.durationSeconds))}.`, `الامتحان: تمرين واحد لمدة ${minutesText(attestationMinutes(confirm.durationSeconds))}.`)
+          : tr(currentLocale(), `Тест на ${minutesText(minutesOf(canonical(confirm.kinds), confirm.durationSeconds))}: ${canonical(confirm.kinds).map(k => kindLabel(k, true)).join(', ')}.`, `Test de ${minutesText(minutesOf(canonical(confirm.kinds), confirm.durationSeconds))} : ${canonical(confirm.kinds).map(k => kindLabel(k, true)).join(', ')}.`, `اختبار لمدة ${minutesText(minutesOf(canonical(confirm.kinds), confirm.durationSeconds))}: ${canonical(confirm.kinds).map(k => kindLabel(k, true)).join('، ')}.`)} {uiText("Таймер запустится сразу.")}</p>
         <div className="board-confirm-actions">
-          <button type="button" className="ghost big" disabled={busy} onClick={() => setConfirm(null)}>Это не я</button>
-          <button type="button" className="primary big" disabled={busy} onClick={() => start(confirm)} autoFocus>{busy ? <><span className="spinner" aria-hidden="true" /> Начинаем…</> : <>{isAttestation(confirm) ? 'Начать аттестацию' : 'Начать тест'} <Icon name="arrow" /></>}</button>
+          <button type="button" className="ghost big" disabled={busy} onClick={() => setConfirm(null)}>{uiText("Это не я")}</button>
+          <button type="button" className="primary big" disabled={busy} onClick={() => start(confirm)} autoFocus>{busy ? <><span className="spinner" aria-hidden="true" /> {uiText("Начинаем…")}</> : <>{isAttestation(confirm) ? uiText("Начать аттестацию") : uiText("Начать тест")} <Icon name="arrow" /></>}</button>
         </div>
       </div>
     </div>}
@@ -124,10 +126,10 @@ function StationDone({ attestation, onBack }: { attestation: boolean; onBack: ()
   return <main className="board-screen board-done">
     <div className="board-done-card">
       <span className="board-done-icon"><Icon name="check" size={44} /></span>
-      <h1 className="display">{attestation ? 'Работа сдана' : 'Тест сдан'}</h1>
-      <p>{attestation ? 'Преподаватель посмотрит и поставит оценку.' : 'Преподаватель посмотрит ответы и скажет оценку.'}</p>
-      <p className="board-done-count">К списку вызовов через <b className="tabular">{left}</b> {plural(left, 'секунду', 'секунды', 'секунд')}</p>
-      <button type="button" className="ghost big" onClick={onBack}><Icon name="back" size={18} /> К списку вызовов</button>
+      <h1 className="display">{attestation ? uiText("Работа сдана") : uiText("Тест сдан")}</h1>
+      <p>{attestation ? uiText("Преподаватель посмотрит и поставит оценку.") : uiText("Преподаватель посмотрит ответы и скажет оценку.")}</p>
+      <p className="board-done-count">{uiText("К списку вызовов через")} <b className="tabular">{left}</b> {plural(left, 'секунду', 'секунды', 'секунд')}</p>
+      <button type="button" className="ghost big" onClick={onBack}><Icon name="back" size={18} /> {uiText("К списку вызовов")}</button>
     </div>
   </main>
 }

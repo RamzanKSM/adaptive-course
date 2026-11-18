@@ -1,3 +1,5 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
 import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react'
 import { api, post, remove } from './api'
 import { Icon, useToast } from './fx'
@@ -11,7 +13,7 @@ type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 
 const COURSES: [CourseLanguage, string][] = [['JAVA', 'Java'], ['PYTHON', 'Python']]
 const courseTitle = (language: CourseLanguage) => COURSES.find(c => c[0] === language)?.[1] ?? language
-const TEACHER_ONLY = 'только для преподавателя — студенты этого не видят'
+const teacherOnly = () => tr(currentLocale(), 'только для преподавателя — студенты этого не видят', 'réservé à l’enseignant — invisible pour les étudiants', 'للأستاذ فقط — الطلاب ما بيشوفوه')
 const points = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
 
 // ───────── Moscow time: UTC+3 all year (no daylight saving since 2014) ─────────
@@ -43,11 +45,11 @@ function previousMonday(day: string) {
   return dayString(n - ((new Date(n * 86_400_000).getUTCDay() + 6) % 7) - 7)
 }
 function medianSource(pair: Pair) {
-  if (pair.median === null || pair.medianSource === 'NONE') return 'нет медианы'
-  if (pair.medianSource === 'PAIR') return 'медиана этой пары'
-  if (!pair.medianWeek) return 'медиана прошлых недель'
-  const since = `с ${shortDay(dayNumber(pair.medianWeek))}`
-  return pair.medianWeek === previousMonday(moscow(pair.startsAt).date) ? `медиана прошлой недели (${since})` : `медиана недели ${since} — последней с достаточными данными`
+  if (pair.median === null || pair.medianSource === 'NONE') return tr(currentLocale(), "нет медианы", "pas de médiane", "ما في وسيط")
+  if (pair.medianSource === 'PAIR') return tr(currentLocale(), "медиана этой пары", "médiane de cette séance", "وسيط الحصة دي")
+  if (!pair.medianWeek) return tr(currentLocale(), "медиана прошлых недель", "médiane des semaines précédentes", "وسيط الأسابيع الفاتت")
+  const since = tr(currentLocale(), `с ${shortDay(dayNumber(pair.medianWeek))}`, `depuis le ${shortDay(dayNumber(pair.medianWeek))}`, `من ${shortDay(dayNumber(pair.medianWeek))}`)
+  return pair.medianWeek === previousMonday(moscow(pair.startsAt).date) ? tr(currentLocale(), `медиана прошлой недели (${since})`, `médiane de la semaine précédente (${since})`, `وسيط الأسبوع الفات (${since})`) : tr(currentLocale(), `медиана недели ${since} — последней с достаточными данными`, `médiane de la dernière semaine avec suffisamment de données (${since})`, `وسيط آخر أسبوع فيه بيانات كفاية (${since})`)
 }
 
 function Segment<T extends string>({ label, value, options, onChange, disabled }: { label: string; value: T | null; options: [T, string][]; onChange: (value: T) => void; disabled?: boolean }) {
@@ -120,9 +122,9 @@ export function PairWork({ request, groups }: { request: Request; groups: string
   }
   const mixedCourses = !!form && new Set(form.groups.map(g => courseOf[g]).filter(Boolean)).size > 1
 
-  const formError = !form ? '' : !form.date || !form.start || !form.end ? 'Укажи дату, начало и конец пары'
-    : minutes(form.end) <= minutes(form.start) ? 'Конец пары должен быть позже начала'
-      : minutes(form.end) - minutes(form.start) > 360 ? 'Пара не может быть длиннее 6 часов' : !form.groups.length ? 'Выбери группу' : ''
+  const formError = !form ? '' : !form.date || !form.start || !form.end ? tr(currentLocale(), "Укажи дату, начало и конец пары", "Indique la date, le début et la fin de la séance", "حدد تاريخ الحصة وبدايتها ونهايتها")
+    : minutes(form.end) <= minutes(form.start) ? tr(currentLocale(), "Конец пары должен быть позже начала", "La fin doit suivre le début", "نهاية الحصة لازم تكون بعد بدايتها")
+      : minutes(form.end) - minutes(form.start) > 360 ? tr(currentLocale(), "Пара не может быть длиннее 6 часов", "La séance ne peut pas dépasser 6 heures", "الحصة ما ممكن تزيد عن ٦ ساعات") : !form.groups.length ? tr(currentLocale(), "Выбери группу", "Choisis un groupe", "اختار مجموعة") : ''
   const body = form && { groups: form.groups, language: form.language, startsAt: instant(form.date, form.start), endsAt: instant(form.date, form.end) }
 
   async function calculate(e: FormEvent) {
@@ -139,7 +141,7 @@ export function PairWork({ request, groups }: { request: Request; groups: string
     const saved = await request(() => post<Pair>('/admin/pairs', body))
     setBusy(null)
     if (!saved) return
-    toast({ tone: 'info', icon: 'check', title: 'Пара сохранена', text: `${saved.group} · ${windowText(saved)}` })
+    toast({ tone: 'info', icon: 'check', title: uiText("Пара сохранена"), text: `${saved.group} · ${windowText(saved)}` })
     setPreview(null); setForm(null); setOpen(saved)
     const home = saved.groups.includes(group) ? group : saved.groups[0]
     setGroup(home); setCourse({ group: home, language: saved.language }); setReload(n => n + 1)
@@ -156,7 +158,7 @@ export function PairWork({ request, groups }: { request: Request; groups: string
     setBusy(null)
     if (!value) return
     setOpen(value); setReload(n => n + 1)
-    toast({ tone: 'info', icon: 'refresh', title: 'Пара пересчитана', text: `${value.group} · ${windowText(value)}` })
+    toast({ tone: 'info', icon: 'refresh', title: uiText("Пара пересчитана"), text: `${value.group} · ${windowText(value)}` })
   }
   async function deletePair(pair: Pair) {
     setBusy('delete')
@@ -164,62 +166,62 @@ export function PairWork({ request, groups }: { request: Request; groups: string
     setBusy(null)
     if (!value) return
     setOpen(null); setReload(n => n + 1)
-    toast({ tone: 'info', icon: 'x', title: 'Пара удалена', text: `${pair.group} · ${windowText(pair)}` })
+    toast({ tone: 'info', icon: 'x', title: uiText("Пара удалена"), text: `${pair.group} · ${windowText(pair)}` })
   }
 
   if (groups && !groups.length) return <section className="analytics pairs-admin">
-    <p className="eyebrow">Преподаватель</p><h1 className="display small">Работа на паре</h1>
-    <div className="card empty-task"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">Пара считается для группы. Сначала укажи группы студентам во вкладке «Студенты».</p></div>
+    <p className="eyebrow">{uiText("Преподаватель")}</p><h1 className="display small">{uiText("Работа на паре")}</h1>
+    <div className="card empty-task"><span className="empty-icon"><Icon name="user" size={26} /></span><p className="muted">{uiText("Пара считается для группы. Сначала укажи группы студентам во вкладке «Студенты».")}</p></div>
   </section>
 
   return <section className="analytics pairs-admin">
     <div className="analytics-head enter">
       <div>
-        <p className="eyebrow">Преподаватель</p>
-        <h1 className="display small">Работа на паре</h1>
-        <p className="muted small">Как группа работала за время пары: посещение, задачи, темп относительно группы, активность. Видишь только ты.</p>
+        <p className="eyebrow">{uiText("Преподаватель")}</p>
+        <h1 className="display small">{uiText("Работа на паре")}</h1>
+        <p className="muted small">{uiText("Как группа работала за время пары: посещение, задачи, темп относительно группы, активность. Видишь только ты.")}</p>
       </div>
-      <Segment label="Курс" value={language} options={COURSES} onChange={chooseCourse} disabled={!language} />
+      <Segment label={uiText("Курс")} value={language} options={COURSES} onChange={chooseCourse} disabled={!language} />
     </div>
 
     <div className="card progress-controls enter">
       <div className="control-row">
-        <span className="control-label">Группа</span>
-        {!groups ? <span className="muted small">Загружаем…</span>
-          : <div className="topic-filters group-filters" role="group" aria-label="Группа">{groups.map(g =>
+        <span className="control-label">{uiText("Группа")}</span>
+        {!groups ? <span className="muted small">{uiText("Загружаем…")}</span>
+          : <div className="topic-filters group-filters" role="group" aria-label={uiText("Группа")}>{groups.map(g =>
             <button key={g} type="button" className={g === group ? 'active' : ''} aria-pressed={g === group} onClick={() => chooseGroup(g)}>{g}</button>)}</div>}
       </div>
       <div className="control-row">
-        <button type="button" className="primary" disabled={!group || !!form} onClick={startForm}><Icon name="chart" size={16} /> Посчитать пару</button>
+        <button type="button" className="primary" disabled={!group || !!form} onClick={startForm}><Icon name="chart" size={16} /> {uiText("Посчитать пару")}</button>
       </div>
     </div>
 
     {form && <form className="card pair-form enter" onSubmit={calculate}>
-      <div className="chart-head"><h2 className="card-title">Новая пара</h2>
-        <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={() => { setForm(null); setPreview(null) }}><Icon name="x" /></button></div>
+      <div className="chart-head"><h2 className="card-title">{uiText("Новая пара")}</h2>
+        <button type="button" className="icon-button" aria-label={uiText("Закрыть")} title={uiText("Закрыть")} onClick={() => { setForm(null); setPreview(null) }}><Icon name="x" /></button></div>
       <div className="pair-form-grid">
-        <label>Дата<input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required /></label>
-        <label>Начало, МСК<input type="time" step={300} value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} required /></label>
-        <label>Конец, МСК<input type="time" step={300} value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} required /></label>
-        <div className="pair-form-course"><span>Курс</span><Segment label="Курс пары" value={form.language} options={COURSES} onChange={value => setForm({ ...form, language: value })} /></div>
+        <label>{uiText("Дата")}<input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required /></label>
+        <label>{uiText("Начало, МСК")}<input type="time" step={300} value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} required /></label>
+        <label>{uiText("Конец, МСК")}<input type="time" step={300} value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} required /></label>
+        <div className="pair-form-course"><span>{uiText("Курс")}</span><Segment label={uiText("Курс пары")} value={form.language} options={COURSES} onChange={value => setForm({ ...form, language: value })} /></div>
       </div>
       <div className="pair-form-groups">
-        <span>Группы <small className="muted">— объединённая пара: отметь несколько</small></span>
-        <div className="topic-filters group-filters" role="group" aria-label="Группы пары">{(groups ?? []).map(g =>
+        <span>{uiText("Группы")} <small className="muted">{uiText("— объединённая пара: отметь несколько")}</small></span>
+        <div className="topic-filters group-filters" role="group" aria-label={uiText("Группы пары")}>{(groups ?? []).map(g =>
           <button key={g} type="button" className={form.groups.includes(g) ? 'active' : ''} aria-pressed={form.groups.includes(g)} onClick={() => toggleFormGroup(g)}>{g}</button>)}</div>
       </div>
-      {mixedCourses && <p className="form-error">Группы учат разные курсы: {form.groups.map(g => `${g} — ${courseOf[g] ? courseTitle(courseOf[g]) : '?'}`).join(', ')}. Считается только выбранный курс: кто учит другой, будет «не был».</p>}
+      {mixedCourses && <p className="form-error">{uiText("Группы учат разные курсы:")} {form.groups.map(g => `${g} — ${courseOf[g] ? courseTitle(courseOf[g]) : '?'}`).join(', ')}{uiText(". Считается только выбранный курс: кто учит другой, будет «не был».")}</p>}
       <div className="pair-form-actions">
-        <button className="primary" disabled={!!formError || busy === 'preview'}>{busy === 'preview' ? <><span className="spinner" aria-hidden="true" /> Считаем…</> : 'Рассчитать'}</button>
-        <span className={formError ? 'form-error' : 'muted small'}>{formError || 'Время — московское. Ничего не сохраняется, пока не нажмёшь «Сохранить».'}</span>
+        <button className="primary" disabled={!!formError || busy === 'preview'}>{busy === 'preview' ? <><span className="spinner" aria-hidden="true" /> {uiText("Считаем…")}</> : uiText("Рассчитать")}</button>
+        <span className={formError ? 'form-error' : 'muted small'}>{formError || uiText("Время — московское. Ничего не сохраняется, пока не нажмёшь «Сохранить».")}</span>
       </div>
     </form>}
 
     <div ref={pairRef} className="pair-anchor">
       {preview && <PairCard pair={preview}
         actions={<>
-          <button type="button" className="primary" disabled={busy === 'save'} onClick={save}>{busy === 'save' ? <><span className="spinner" aria-hidden="true" /> Сохраняем…</> : 'Сохранить'}</button>
-          <button type="button" className="ghost" onClick={() => setPreview(null)}>Отмена</button>
+          <button type="button" className="primary" disabled={busy === 'save'} onClick={save}>{busy === 'save' ? <><span className="spinner" aria-hidden="true" /> {uiText("Сохраняем…")}</> : uiText("Сохранить")}</button>
+          <button type="button" className="ghost" onClick={() => setPreview(null)}>{uiText("Отмена")}</button>
         </>} />}
       {!preview && open && <PairCard key={open.id} pair={open} onClose={() => setOpen(null)}
         actions={<SavedActions pair={open} busy={busy} onWheel={() => setWheel(true)} onRecalculate={() => recalculate(open)} onDelete={() => deletePair(open)} />} />}
@@ -228,15 +230,15 @@ export function PairWork({ request, groups }: { request: Request; groups: string
 
     <div className="list-stack">
       <div className="card">
-        <h2 className="card-title">Пары группы{group && <span className="muted small">{group}{language ? ` · ${courseTitle(language)}` : ''}</span>}</h2>
-        {!list ? <p className="muted">Загружаем…</p> : !list.length ? <p className="muted">Сохранённых пар пока нет. Нажми «Посчитать пару» после занятия.</p>
+        <h2 className="card-title">{uiText("Пары группы")}{group && <span className="muted small">{group}{language ? ` · ${courseTitle(language)}` : ''}</span>}</h2>
+        {!list ? <p className="muted">{uiText("Загружаем…")}</p> : !list.length ? <p className="muted">{uiText("Сохранённых пар пока нет. Нажми «Посчитать пару» после занятия.")}</p>
           : <div className="table-scroll"><table className="data-table pair-list">
-            <thead><tr><th className="text">Дата</th><th className="text">Время, МСК</th><th title={`Медиана баллов — ${TEACHER_ONLY}`}>Медиана</th></tr></thead>
+            <thead><tr><th className="text">{uiText("Дата")}</th><th className="text">{uiText("Время, МСК")}</th><th title={tr(currentLocale(), `Медиана баллов — ${teacherOnly()}`, `Médiane des points — ${teacherOnly()}`, `وسيط النقاط — ${teacherOnly()}`)}>{uiText("Медиана")}</th></tr></thead>
             <tbody>{list.map(p => {
               const from = moscow(p.startsAt), to = moscow(p.endsAt)
               return <tr key={p.id} className={open?.id === p.id ? 'selected' : ''} onClick={() => p.id !== null && openPair(p.id)}>
                 <td className="text"><button type="button" className="row-link" onClick={e => { e.stopPropagation(); if (p.id !== null) openPair(p.id) }}>{shortDay(dayNumber(from.date))}</button></td>
-                <td className="text">{from.time}–{to.time}{p.groups.length > 1 && <small className="muted"> · вместе с {p.groups.filter(g => g !== group).join(', ')}</small>}</td>
+                <td className="text">{from.time}–{to.time}{p.groups.length > 1 && <small className="muted"> {uiText("· вместе с")} {p.groups.filter(g => g !== group).join(', ')}</small>}</td>
                 <td>{p.median !== null ? points.format(p.median) : '—'}</td>
               </tr>
             })}</tbody>
@@ -250,18 +252,18 @@ export function PairWork({ request, groups }: { request: Request; groups: string
 function SavedActions({ pair, busy, onWheel, onRecalculate, onDelete }: { pair: Pair; busy: string | null; onWheel: () => void; onRecalculate: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false)
   if (confirming) return <div className="danger-zone open pair-delete">
-    <b>Удалить пару {windowText(pair)}?</b>
-    <p className="muted small">Сохранённые результаты этой пары будут удалены. Решения студентов останутся — пару можно посчитать заново.</p>
+    <b>{uiText("Удалить пару")} {windowText(pair)}?</b>
+    <p className="muted small">{uiText("Сохранённые результаты этой пары будут удалены. Решения студентов останутся — пару можно посчитать заново.")}</p>
     <div className="password-row">
-      <button type="button" className="danger-solid" disabled={busy === 'delete'} onClick={onDelete}>{busy === 'delete' ? <><span className="spinner" aria-hidden="true" /> Удаляем…</> : 'Удалить'}</button>
-      <button type="button" className="ghost" onClick={() => setConfirming(false)}>Отмена</button>
+      <button type="button" className="danger-solid" disabled={busy === 'delete'} onClick={onDelete}>{busy === 'delete' ? <><span className="spinner" aria-hidden="true" /> {uiText("Удаляем…")}</> : uiText("Удалить")}</button>
+      <button type="button" className="ghost" onClick={() => setConfirming(false)}>{uiText("Отмена")}</button>
     </div>
   </div>
   return <>
-    <button type="button" className="primary" disabled={!!busy} onClick={onWheel} title="Шоколадка: колесо из пятёрок у доски и топ‑20% по задачам за пару"><Icon name="sparkle" size={16} />Жребий</button>
-    <button type="button" className="ghost" disabled={!!busy} onClick={onRecalculate} title="Заново посчитать задачи, посещение, активность и медиану (например, после отзыва зачёта)">
-      {busy === 'recalculate' ? <span className="spinner" aria-hidden="true" /> : <Icon name="refresh" size={16} />}Пересчитать</button>
-    <button type="button" className="ghost danger" disabled={!!busy} onClick={() => setConfirming(true)}><Icon name="x" size={16} />Удалить</button>
+    <button type="button" className="primary" disabled={!!busy} onClick={onWheel} title={uiText("Шоколадка: колесо из пятёрок у доски и топ‑20% по задачам за пару")}><Icon name="sparkle" size={16} />{uiText("Жребий")}</button>
+    <button type="button" className="ghost" disabled={!!busy} onClick={onRecalculate} title={uiText("Заново посчитать задачи, посещение, активность и медиану (например, после отзыва зачёта)")}>
+      {busy === 'recalculate' ? <span className="spinner" aria-hidden="true" /> : <Icon name="refresh" size={16} />}{uiText("Пересчитать")}</button>
+    <button type="button" className="ghost danger" disabled={!!busy} onClick={() => setConfirming(true)}><Icon name="x" size={16} />{uiText("Удалить")}</button>
   </>
 }
 
@@ -272,39 +274,39 @@ function PairCard({ pair, onClose, actions }: { pair: Pair; onClose?: () => void
   const rows = pair.rows ?? []
   const attended = rows.filter(r => r.attended).length
   const solved = rows.reduce((sum, r) => sum + r.tasks['1'] + r.tasks['2'] + r.tasks['3'] + r.tasks.hard, 0)
-  return <section className="card pair-card enter" aria-label={`Пара ${windowText(pair)}`}>
+  return <section className="card pair-card enter" aria-label={tr(currentLocale(), `Пара ${windowText(pair)}`, `Séance ${windowText(pair)}`, `الحصة ${windowText(pair)}`)}>
     <div className="chart-head">
       <div>
-        <p className="eyebrow">{saved ? 'Сохранённая пара' : 'Предварительный расчёт · не сохранено'}</p>
-        <h2 className="title">{windowText(pair)} <span className="muted small">МСК</span></h2>
+        <p className="eyebrow">{saved ? uiText("Сохранённая пара") : uiText("Предварительный расчёт · не сохранено")}</p>
+        <h2 className="title">{windowText(pair)} <span className="muted small">{uiText("МСК")}</span></h2>
         <p className="muted small">{pair.group} · {courseTitle(pair.language)}</p>
       </div>
-      {onClose && <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>}
+      {onClose && <button type="button" className="icon-button" aria-label={uiText("Закрыть")} title={uiText("Закрыть")} onClick={onClose}><Icon name="x" /></button>}
     </div>
     <div className="panel-facts">
-      <span className="mini-stats-cell"><b className="tabular">{attended} из {rows.length}</b><small>были на паре</small></span>
-      <span className="mini-stats-cell"><b className="tabular">{solved}</b><small>{plural(solved, 'задача решена', 'задачи решены', 'задач решено')} за пару</small></span>
-      <span className="mini-stats-cell" title="Темп относительно группы: баллы студента делятся на эту медиану">
-        <b className="tabular">{pair.median !== null ? `${points.format(pair.median)} ${plural(Math.round(pair.median), 'балл', 'балла', 'баллов')}` : '—'}</b>
+      <span className="mini-stats-cell"><b className="tabular">{attended} {uiText("из")} {rows.length}</b><small>{uiText("были на паре")}</small></span>
+      <span className="mini-stats-cell"><b className="tabular">{solved}</b><small>{tr(currentLocale(), plural(solved, 'задача решена', 'задачи решены', 'задач решено'), 'exercices résolus', 'تمارين محلولة')} {uiText("за пару")}</small></span>
+      <span className="mini-stats-cell" title={uiText("Темп относительно группы: баллы студента делятся на эту медиану")}>
+        <b className="tabular">{pair.median !== null ? tr(currentLocale(), `${points.format(pair.median)} ${plural(Math.round(pair.median), 'балл', 'балла', 'баллов')}`, `${points.format(pair.median)} points`, `${points.format(pair.median)} نقطة`) : '—'}</b>
         <small>{medianSource(pair)}</small>
       </span>
     </div>
-    <p className="teacher-note"><Icon name="lock" size={14} />Только для преподавателя — студенты этого не видят.</p>
-    {!rows.length ? <p className="muted">{combined ? 'В этих группах' : 'В группе'} нет участников сессии.</p>
+    <p className="teacher-note"><Icon name="lock" size={14} />{uiText("Только для преподавателя — студенты этого не видят.")}</p>
+    {!rows.length ? <p className="muted">{combined ? uiText("В этих группах") : uiText("В группе")} {uiText("нет участников сессии.")}</p>
       : <div className="table-scroll"><table className="data-table pair-table">
         <thead>
-          <tr><th className="text" rowSpan={2}>Студент</th>{combined && <th className="text" rowSpan={2}>Группа</th>}<th rowSpan={2}>Был</th><th colSpan={4} className="group-head" title="Задачи, впервые решённые за время пары, по сложности">Задачи</th>
-            <th rowSpan={2} title="Сумма сложностей; задача hard mode — ×10">Баллы</th><th rowSpan={2} title="Баллы от медианы — темп относительно группы">% медианы</th>
-            <th rowSpan={2} title="5 минут за каждый пятиминутный отрезок пары, в котором была отправка или вопрос помощнику">Активно, мин</th>
-            <th rowSpan={2} title="Отправки на проверку за пару: всего / из них не принято">Отправки</th>
-            <th rowSpan={2} title="Сообщения студента учебному помощнику за пару">Вопросы</th></tr>
-          <tr><th>1</th><th>2</th><th>3</th><th title="Задачи hard mode">hard</th></tr>
+          <tr><th className="text" rowSpan={2}>{uiText("Студент")}</th>{combined && <th className="text" rowSpan={2}>{uiText("Группа")}</th>}<th rowSpan={2}>{uiText("Был")}</th><th colSpan={4} className="group-head" title={uiText("Задачи, впервые решённые за время пары, по сложности")}>{uiText("Задачи")}</th>
+            <th rowSpan={2} title={uiText("Сумма сложностей; задача hard mode — ×10")}>{uiText("Баллы")}</th><th rowSpan={2} title={uiText("Баллы от медианы — темп относительно группы")}>{uiText("% медианы")}</th>
+            <th rowSpan={2} title={uiText("5 минут за каждый пятиминутный отрезок пары, в котором была отправка или вопрос помощнику")}>{uiText("Активно, мин")}</th>
+            <th rowSpan={2} title={uiText("Отправки на проверку за пару: всего / из них не принято")}>{uiText("Отправки")}</th>
+            <th rowSpan={2} title={uiText("Сообщения студента учебному помощнику за пару")}>{uiText("Вопросы")}</th></tr>
+          <tr><th>1</th><th>2</th><th>3</th><th title={uiText("Задачи hard mode")}>hard</th></tr>
         </thead>
         <tbody>{rows.map(row => <tr key={row.userId} className={row.attended ? '' : 'absent'}>
           <td className="text"><b>{row.displayName}</b> <small className="muted">{row.login}</small>
-            {row.hard && <span className="pill hard" title="Hard mode: в медиану не входит"><Icon name="flame" size={11} /> HARD</span>}</td>
+            {row.hard && <span className="pill hard" title={uiText("Hard mode: в медиану не входит")}><Icon name="flame" size={11} /> HARD</span>}</td>
           {combined && <td className="text">{row.group ?? '—'}</td>}
-          <td>{row.attended ? <span className="attended"><Icon name="check" size={15} /><span className="sr-only">был</span></span> : <span className="muted">не был</span>}</td>
+          <td>{row.attended ? <span className="attended"><Icon name="check" size={15} /><span className="sr-only">{uiText("был")}</span></span> : <span className="muted">{uiText("не был")}</span>}</td>
           <td>{row.tasks['1'] || '·'}</td><td>{row.tasks['2'] || '·'}</td><td>{row.tasks['3'] || '·'}</td><td>{row.tasks.hard || '·'}</td>
           <td><b>{row.points}</b></td>
           <td>{row.percent !== null ? `${row.percent}%` : '—'}</td>
@@ -319,27 +321,27 @@ function PairCard({ pair, onClose, actions }: { pair: Pair; onClose?: () => void
 
 function JournalCell({ cell }: { cell: PairCell | null }) {
   if (!cell) return <span className="muted">—</span>
-  if (!cell.attended) return <span className="muted" title="Не был на паре">н</span>
-  return <span className="work-cell" title={`${cell.points} ${plural(cell.points, 'балл', 'балла', 'баллов')}${cell.percent !== null ? ` · ${cell.percent}% медианы` : ''} · активно ${cell.activeMinutes} мин`}>
-    <b>{cell.points}</b><small>{cell.activeMinutes} мин</small></span>
+  if (!cell.attended) return <span className="muted" title={uiText("Не был на паре")}>{uiText("н")}</span>
+  return <span className="work-cell" title={tr(currentLocale(), `${cell.points} ${plural(cell.points, 'балл', 'балла', 'баллов')}${cell.percent !== null ? ` · ${cell.percent}% медианы` : ''} · активно ${cell.activeMinutes} мин`, `${cell.points} points${cell.percent !== null ? ` · ${cell.percent}% de la médiane` : ''} · actif ${cell.activeMinutes} min`, `${cell.points} نقطة${cell.percent !== null ? ` · ${cell.percent}% من الوسيط` : ''} · نشط ${cell.activeMinutes} دقيقة`)}>
+    <b>{cell.points}</b><small>{cell.activeMinutes} {uiText("мин")}</small></span>
 }
 
 function Journal({ journal, openId, onOpen }: { journal: PairJournal | null; openId: Id | null; onOpen: (id: Id) => void }) {
   return <div className="card">
-    <h2 className="card-title">Журнал{journal && <span className="muted small">{journal.group} · {courseTitle(journal.language)}</span>}</h2>
-    {!journal ? <p className="muted">Загружаем…</p> : !journal.pairs.length ? <p className="muted">Журнал появится после первой сохранённой пары.</p>
+    <h2 className="card-title">{uiText("Журнал")}{journal && <span className="muted small">{journal.group} · {courseTitle(journal.language)}</span>}</h2>
+    {!journal ? <p className="muted">{uiText("Загружаем…")}</p> : !journal.pairs.length ? <p className="muted">{uiText("Журнал появится после первой сохранённой пары.")}</p>
       : <div className="table-scroll"><table className="data-table journal-table">
-        <thead><tr><th className="text">Студент</th>
+        <thead><tr><th className="text">{uiText("Студент")}</th>
           {journal.pairs.map(p => { const from = moscow(p.startsAt); return <th key={p.id} className={openId === p.id ? 'selected' : ''}>
-            <button type="button" className="journal-pair" onClick={() => onOpen(p.id)} title={`Открыть пару ${windowText(p)}${p.groups.length > 1 ? ` · вместе с ${p.groups.filter(g => g !== journal.group).join(', ')}` : ''}`}>
+            <button type="button" className="journal-pair" onClick={() => onOpen(p.id)} title={tr(currentLocale(), `Открыть пару ${windowText(p)}${p.groups.length > 1 ? ` · вместе с ${p.groups.filter(g => g !== journal.group).join(', ')}` : ''}`, `Ouvrir la séance ${windowText(p)}${p.groups.length > 1 ? ` · avec ${p.groups.filter(g => g !== journal.group).join(', ')}` : ''}`, `افتح الحصة ${windowText(p)}${p.groups.length > 1 ? ` · مع ${p.groups.filter(g => g !== journal.group).join('، ')}` : ''}`)}>
               <span>{shortDay(dayNumber(from.date))}</span><small>{from.time}</small></button></th> })}
-          <th title="Сколько пар студент был на занятии">Был</th></tr></thead>
+          <th title={uiText("Сколько пар студент был на занятии")}>{uiText("Был")}</th></tr></thead>
         <tbody>{journal.students.map(s => <tr key={s.userId}>
           <td className="text"><b>{s.displayName}</b> <small className="muted">{s.login}</small></td>
           {journal.pairs.map((p, i) => <td key={p.id} className={openId === p.id ? 'selected' : ''}><JournalCell cell={s.cells?.[i] ?? null} /></td>)}
           <td><b>{s.pairs}</b><small className="muted"> / {journal.pairs.length}</small></td>
         </tr>)}</tbody>
       </table></div>}
-    {journal && journal.pairs.length > 0 && <p className="muted small table-note">В клетке — баллы за пару и активные минуты; «н» — не был. Нажми на дату, чтобы открыть пару.</p>}
+    {journal && journal.pairs.length > 0 && <p className="muted small table-note">{uiText("В клетке — баллы за пару и активные минуты; «н» — не был. Нажми на дату, чтобы открыть пару.")}</p>}
   </div>
 }

@@ -43,11 +43,13 @@ class AttestationPractice {
     private final JdbcTemplate db;
     private final Clock clock;
     private final TopicRetakes retakes;
+    private final ContentTranslations translations;
 
-    AttestationPractice(JdbcTemplate db, Clock clock, TopicRetakes retakes) {
+    AttestationPractice(JdbcTemplate db, Clock clock, TopicRetakes retakes, LlmTutor tutor) {
         this.db = db;
         this.clock = clock;
         this.retakes = retakes;
+        this.translations = new ContentTranslations(db, tutor);
     }
 
     private static Long seconds(Map<String, Object> r) {
@@ -86,7 +88,7 @@ class AttestationPractice {
         int passed = prefix(user, lang, course);
         var levels = levels(lang, course);
         Integer level = levels.floor(passed);
-        return obj("available", level != null, "levelTopics", level, "levelTitle", level == null ? null : course.get(level - 1)[1], "minutes", MINUTES,
+        return obj("available", level != null, "levelTopics", level, "levelTitle", level == null ? null : translations.text(course.get(level - 1)[1], "skill-title", List.of()), "minutes", MINUTES,
                    "needTopics", level != null || levels.isEmpty() ? null : levels.first() - passed, "history", history(user, lang));
     }
 
@@ -213,7 +215,7 @@ class AttestationPractice {
         Instant started = Instant.parse((String) r.get("started_at")), deadline = Instant.parse((String) r.get("deadline_at"));
         boolean finished = r.get("finished_at") != null, passed = r.get("solved_at") != null;
         long left = finished || passed ? 0 : Math.max(0, Duration.between(clock.instant(), deadline).getSeconds());
-        return obj("id", r.get("id"), "levelTopics", positions(course(Language.of(r.get("language")))).get(r.get("skill_code")), "levelTitle", r.get("title"),
+        return obj("id", r.get("id"), "levelTopics", positions(course(Language.of(r.get("language")))).get(r.get("skill_code")), "levelTitle", translations.text((String) r.get("title"), "skill-title", List.of()),
                    "minutes", Duration.between(started, deadline).toMinutes(), "startedAt", r.get("started_at"), "deadlineAt", r.get("deadline_at"), "secondsLeft", left,
                    "finished", finished, "passed", passed, "result", r.get("result"), "seconds", seconds(r));
     }
@@ -225,8 +227,8 @@ class AttestationPractice {
         var position = positions(course(lang));
         return db.queryForList("select r.id,r.skill_code,k.title,r.started_at,r.result,r.solved_at,(select t.title from lesson_tasks lt join tasks t on t.id=lt.task_id where lt.retake_id=r.id limit 1) as task_title "
                                        + "from topic_retakes r join skills k on k.code=r.skill_code where r.user_id=? and r.kind=? and k.language=? order by r.id desc", user, KIND, lang.name())
-                .stream().map(r -> obj("id", r.get("id"), "startedAt", r.get("started_at"), "levelTopics", position.get(r.get("skill_code")), "levelTitle", r.get("title"),
-                                       "taskTitle", r.get("task_title"), "result", r.get("result"), "seconds", seconds(r))).toList();
+                .stream().map(r -> obj("id", r.get("id"), "startedAt", r.get("started_at"), "levelTopics", position.get(r.get("skill_code")), "levelTitle", translations.text((String) r.get("title"), "skill-title", List.of()),
+                                       "taskTitle", translations.text((String) r.get("task_title"), "task-title", List.of()), "result", r.get("result"), "seconds", seconds(r))).toList();
     }
 
     /**

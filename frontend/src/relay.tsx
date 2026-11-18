@@ -1,3 +1,5 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
 import CodeMirror from '@uiw/react-codemirror'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { api, post } from './api'
@@ -24,7 +26,7 @@ const COURSE: Record<CourseLanguage, string> = { JAVA: 'Java', PYTHON: 'Python' 
 const GROUP_KEY = 'relay.group'
 
 const ms = (iso: string | null | undefined) => iso ? Date.parse(iso) : NaN
-const stepWord = (n: number) => plural(n, 'шаг', 'шага', 'шагов')
+const stepWord = (n: number) => tr(currentLocale(), plural(n, 'шаг', 'шага', 'шагов'), n === 1 ? 'étape' : 'étapes', 'مرحلة')
 
 /** Polls a loader every period while enabled; drops answers that came back after a newer request. */
 function usePoll<T>(load: () => Promise<T>, period: number, enabled: boolean, onValue: (value: T) => void, onError?: (error: unknown) => void) {
@@ -67,9 +69,9 @@ function useFlash(view: RelayView | null) {
     if (at === seen.current || !view?.lastTurn) return
     seen.current = at
     const { outcome, name, step } = view.lastTurn
-    const text = outcome === 'DONE' ? `${name}: шаг ${step + 1} ✓` : outcome === 'TEACHER_DONE' ? `Шаг ${step + 1} засчитан преподавателем`
-      : outcome === 'PASS' ? `${name} пасует — серия сброшена` : outcome === 'TIMEOUT' ? `Время вышло — серия сброшена`
-        : outcome === 'TEACHER_SKIP' ? `Ход ${name} пропущен` : null
+    const text = outcome === 'DONE' ? tr(currentLocale(), `${name}: шаг ${step + 1} ✓`, `${name} : étape ${step + 1} ✓`, `${name}: المرحلة ${step + 1} ✓`) : outcome === 'TEACHER_DONE' ? tr(currentLocale(), `Шаг ${step + 1} засчитан преподавателем`, `Étape ${step + 1} validée par l’enseignant`, `الأستاذ أجاز المرحلة ${step + 1}`)
+      : outcome === 'PASS' ? tr(currentLocale(), `${name} пасует — серия сброшена`, `${name} passe son tour — série remise à zéro`, `${name} مرر الدور — السلسلة اتصفرت`) : outcome === 'TIMEOUT' ? tr(currentLocale(), `Время вышло — серия сброшена`, `Temps écoulé — série remise à zéro`, `الزمن انتهى — السلسلة اتصفرت`)
+        : outcome === 'TEACHER_SKIP' ? tr(currentLocale(), `Ход ${name} пропущен`, `Tour de ${name} passé`, `دور ${name} اتخطى`) : null
     if (!text) return
     setFlash({ text, tone: outcome === 'DONE' || outcome === 'TEACHER_DONE' ? 'good' : outcome === 'TEACHER_SKIP' ? 'plain' : 'bad' })
     const timer = setTimeout(() => setFlash(null), FLASH_MS)
@@ -95,23 +97,23 @@ function Timer({ left, total, paused }: { left: number | null; total: number; pa
   if (left === null) return <span className="relay-timer idle"><Icon name="clock" size={22} /><b>—</b></span>
   const seconds = Math.ceil(left / 1000), share = Math.max(0, Math.min(1, left / (total * 1000)))
   return <span className={`relay-timer ${paused ? 'paused' : seconds <= 5 ? 'low' : ''}`} style={{ '--share': share } as CSSProperties}>
-    <Icon name="clock" size={22} /><b className="tabular">{seconds}</b><small>{paused ? 'пауза' : 'сек'}</small>
+    <Icon name="clock" size={22} /><b className="tabular">{seconds}</b><small>{paused ? uiText("пауза") : uiText("сек")}</small>
   </span>
 }
 
 function Banner({ view }: { view: RelayView }) {
-  if (view.status === 'LOBBY') return <p className="relay-banner"><span className="spinner" aria-hidden="true" /> Ждём начала: присоединились {view.members} {plural(view.members, 'человек', 'человека', 'человек')}</p>
-  if (view.status === 'PAUSED') return <p className="relay-banner warn">Пауза — преподаватель скоро продолжит</p>
-  if (view.status === 'SOLVED') return <p className="relay-banner good"><Icon name="check" size={20} /> Задача решена! Пропусков: {view.skips}</p>
-  if (view.status === 'RUNNING' && !view.writer) return <p className="relay-banner"><span className="spinner" aria-hidden="true" /> Ждём участников — никого нет на месте</p>
+  if (view.status === 'LOBBY') return <p className="relay-banner"><span className="spinner" aria-hidden="true" /> {uiText("Ждём начала: присоединились")} {view.members} {tr(currentLocale(), plural(view.members, 'человек', 'человека', 'человек'), view.members === 1 ? 'personne' : 'personnes', 'شخص')}</p>
+  if (view.status === 'PAUSED') return <p className="relay-banner warn">{uiText("Пауза — преподаватель скоро продолжит")}</p>
+  if (view.status === 'SOLVED') return <p className="relay-banner good"><Icon name="check" size={20} /> {uiText("Задача решена! Пропусков:")} {view.skips}</p>
+  if (view.status === 'RUNNING' && !view.writer) return <p className="relay-banner"><span className="spinner" aria-hidden="true" /> {uiText("Ждём участников — никого нет на месте")}</p>
   return null
 }
 
 function RunResult({ run, language }: { run: RelayRun; language: CourseLanguage }) {
   const status = run.status
-  if (status === 'PENDING') return <p className="relay-run-note"><span className="spinner" aria-hidden="true" /> Запускаем программу…</p>
+  if (status === 'PENDING') return <p className="relay-run-note"><span className="spinner" aria-hidden="true" /> {uiText("Запускаем программу…")}</p>
   return <div className="relay-run">
-    {run.matches !== undefined && <p className={`relay-run-note ${run.matches ? 'good' : 'bad'}`}>{run.matches ? 'Вывод совпал с ожидаемым ✓' : 'Вывод не совпал с ожидаемым'}</p>}
+    {run.matches !== undefined && <p className={`relay-run-note ${run.matches ? 'good' : 'bad'}`}>{run.matches ? uiText("Вывод совпал с ожидаемым ✓") : uiText("Вывод не совпал с ожидаемым")}</p>}
     <ConsolePanel run={{ status, stdout: run.stdout ?? '', error: run.error, truncated: run.truncated ?? false }} origin="run" language={language} />
   </div>
 }
@@ -128,46 +130,46 @@ function RelayBoard({ view, code, editable, onCode, footer, flash }: {
   return <div className={`relay-board ${editable ? 'writing' : ''}`}>
     <header className="relay-head">
       <div className="relay-title">
-        <p className="eyebrow">Эстафета · {view.group} · {COURSE[view.language]}</p>
+        <p className="eyebrow">{uiText("Эстафета ·")} {view.group} · {COURSE[view.language]}</p>
         <h1 className="display small">{view.task.title}</h1>
       </div>
       <div className="relay-stats">
-        <span className="relay-stat"><small>Шаг</small><b className="tabular">{Math.min(view.step + 1, view.steps)}<em>/{view.steps}</em></b></span>
-        <span className={`relay-stat streak ${view.streak > 0 ? 'hot' : ''}`}><small>Серия</small><b className="tabular"><Icon name="flame" size={18} />{view.streak}</b></span>
-        <span className="relay-stat"><small>Рекорд группы</small><b className="tabular"><Icon name="crown" size={18} />{view.record}</b></span>
+        <span className="relay-stat"><small>{uiText("Шаг")}</small><b className="tabular">{Math.min(view.step + 1, view.steps)}<em>/{view.steps}</em></b></span>
+        <span className={`relay-stat streak ${view.streak > 0 ? 'hot' : ''}`}><small>{uiText("Серия")}</small><b className="tabular"><Icon name="flame" size={18} />{view.streak}</b></span>
+        <span className="relay-stat"><small>{uiText("Рекорд группы")}</small><b className="tabular"><Icon name="crown" size={18} />{view.record}</b></span>
         <Timer left={left} total={view.turnSeconds} paused={view.status === 'PAUSED'} />
       </div>
     </header>
     <Banner view={view} />
     <div className="relay-main">
-      <section className="relay-steps" aria-label="Задача и шаги">
+      <section className="relay-steps" aria-label={uiText("Задача и шаги")}>
         <div className="relay-statement"><Markdown>{view.task.statement}</Markdown></div>
         <ol className="relay-step-list">
           {view.donePrompts.map((p, i) => <li key={i} className="done"><Icon name="check" size={15} /><Markdown inline>{p}</Markdown></li>)}
           {view.stepPrompt && <li className="current">
             <span className="relay-step-no">{view.step + 1}</span>
-            <span><Markdown inline>{view.stepPrompt}</Markdown>{view.writer && <small className="relay-step-who">пишет {view.writer.name}</small>}</span>
+            <span><Markdown inline>{view.stepPrompt}</Markdown>{view.writer && <small className="relay-step-who">{uiText("пишет")} {view.writer.name}</small>}</span>
           </li>}
-          {view.nextPrompt && <li className="next"><span className="relay-step-no">{view.step + 2}</span><span><Markdown inline>{view.nextPrompt}</Markdown><small className="relay-step-who">дальше</small></span></li>}
-          {view.step + 2 < view.steps && <li className="more">…ещё {view.steps - view.step - 2} {stepWord(view.steps - view.step - 2)}</li>}
+          {view.nextPrompt && <li className="next"><span className="relay-step-no">{view.step + 2}</span><span><Markdown inline>{view.nextPrompt}</Markdown><small className="relay-step-who">{uiText("дальше")}</small></span></li>}
+          {view.step + 2 < view.steps && <li className="more">{uiText("…ещё")} {view.steps - view.step - 2} {stepWord(view.steps - view.step - 2)}</li>}
         </ol>
       </section>
-      <section className="relay-code" aria-label="Общий код">
+      <section className="relay-code" aria-label={uiText("Общий код")}>
         <div className="relay-writer">
-          {view.writer ? <><span className="avatar" aria-hidden="true">{initials(view.writer.name)}</span><b>{editable ? 'Пишешь ты' : `Пишет ${view.writer.name}`}</b></> : <b className="muted">Сейчас никто не пишет</b>}
+          {view.writer ? <><span className="avatar" aria-hidden="true">{initials(view.writer.name)}</span><b>{editable ? uiText("Пишешь ты") : tr(currentLocale(), `Пишет ${view.writer.name}`, `${view.writer.name} écrit`, `${view.writer.name} بكتب`)}</b></> : <b className="muted">{uiText("Сейчас никто не пишет")}</b>}
           {flash && <span className={`relay-flash ${flash.tone}`} role="status">{flash.text}</span>}
         </div>
         <CodeMirror className={`code-editor relay-editor ${editable ? 'editable' : ''}`} value={code} extensions={EDITOR_EXTENSIONS[view.language]} editable={editable} readOnly={!editable}
-          onChange={value => onCode?.(value)} autoFocus={editable} aria-label="Общий код группы" />
+          onChange={value => onCode?.(value)} autoFocus={editable} aria-label={uiText("Общий код группы")} />
         {view.run && <RunResult run={view.run} language={view.language} />}
       </section>
     </div>
     <footer className="relay-foot">
-      {view.status !== 'SOLVED' && <div className="relay-queue" aria-label="Очередь">
-        <small>Дальше</small>
+      {view.status !== 'SOLVED' && <div className="relay-queue" aria-label={uiText("Очередь")}>
+        <small>{uiText("Дальше")}</small>
         {upcoming.length ? upcoming.map((p, i) => <span key={p.userId} className={`relay-chip ${i === 0 ? 'first' : ''}`}><span className="avatar" aria-hidden="true">{initials(p.name)}</span>{p.name}</span>)
           : <span className="muted">—</span>}
-        {view.queue.length > upcoming.length && <small className="muted">и ещё {view.queue.length - upcoming.length}</small>}
+        {view.queue.length > upcoming.length && <small className="muted">{uiText("и ещё")} {view.queue.length - upcoming.length}</small>}
       </div>}
       {footer}
     </footer>
@@ -202,7 +204,7 @@ function RelayStudent({ initial, onHide, onGone }: { initial: RelayView; onHide:
   const send = useCallback(async (code: string, turn: number) => {
     poll.invalidate()
     try { accept(await api<RelayView>(`/relay/${view.id}/code`, { method: 'PUT', body: JSON.stringify({ turn, code }) })); setError('') }
-    catch (e) { if (myTurn.current === turn) setError(e instanceof Error ? e.message : 'Не удалось сохранить') }
+    catch (e) { if (myTurn.current === turn) setError(e instanceof Error ? e.message : tr(currentLocale(), "Не удалось сохранить", "Impossible d’enregistrer", "تعذر الحفظ")) }
   }, [accept, poll, view.id])
   const flush = useCallback(() => {
     const p = pending.current
@@ -224,21 +226,21 @@ function RelayStudent({ initial, onHide, onGone }: { initial: RelayView; onHide:
     const turn = myTurn.current
     if (pending.current) { clearTimeout(pending.current.timer); pending.current = null }
     poll.invalidate()
-    try { accept(await post<RelayView>(`/relay/${view.id}/pass`, { turn })) } catch (e) { setError(e instanceof Error ? e.message : 'Не получилось') }
+    try { accept(await post<RelayView>(`/relay/${view.id}/pass`, { turn })) } catch (e) { setError(e instanceof Error ? e.message : tr(currentLocale(), "Не получилось", "Échec de l’opération", "ما نجحت العملية")) }
   }
 
   const ahead = view.me?.turnsAhead ?? -1
-  const note = writing ? <p className="relay-you now"><Icon name="bolt" size={20} /> Твой ход: сделай шаг {view.step + 1}</p>
-    : ahead === 0 ? <p className="relay-you soon"><Icon name="flag" size={20} /> Готовься — ты следующий</p>
-      : ahead > 0 ? <p className="relay-you">Твой ход через {ahead + 1} {plural(ahead + 1, 'ход', 'хода', 'ходов')}</p>
+  const note = writing ? <p className="relay-you now"><Icon name="bolt" size={20} /> {uiText("Твой ход: сделай шаг")} {view.step + 1}</p>
+    : ahead === 0 ? <p className="relay-you soon"><Icon name="flag" size={20} /> {uiText("Готовься — ты следующий")}</p>
+      : ahead > 0 ? <p className="relay-you">{uiText("Твой ход через")} {ahead + 1} {tr(currentLocale(), plural(ahead + 1, 'ход', 'хода', 'ходов'), 'tours', 'دور')}</p>
         : null
-  return <div className="relay-layer" role="dialog" aria-modal="true" aria-label="Эстафета">
+  return <div className="relay-layer" role="dialog" aria-modal="true" aria-label={uiText("Эстафета")}>
     <RelayBoard view={view} code={writing && local !== null ? local : view.code} editable={writing && !locked} onCode={typed} flash={flash}
       footer={<div className="relay-actions">
         {note}
         {error && <p className="board-error" role="alert">{error}</p>}
-        {writing && <button type="button" className="ghost big" onClick={pass} disabled={locked}>Пас</button>}
-        <button type="button" className="ghost" onClick={onHide}><Icon name="back" size={16} /> К уроку</button>
+        {writing && <button type="button" className="ghost big" onClick={pass} disabled={locked}>{uiText("Пас")}</button>}
+        <button type="button" className="ghost" onClick={onHide}><Icon name="back" size={16} /> {uiText("К уроку")}</button>
       </div>} />
   </div>
 }
@@ -260,6 +262,15 @@ const ACTIONS: { action: string; label: string; when: (v: RelayView) => boolean;
 ]
 const OUTCOME: Record<RelayOutcome, string> = { DONE: 'шаг сделан', PASS: 'пас', TIMEOUT: 'время вышло', TEACHER_DONE: 'засчитан', TEACHER_SKIP: 'пропущен', STOPPED: 'остановлен' }
 
+const relayActionLabel = (action: string, fallback: string) => {
+  const labels: Record<string, [string, string]> = { start: ['Démarrer', 'ابدأ'], pause: ['Pause', 'إيقاف مؤقت'], resume: ['Reprendre', 'واصل'], extend: ['+10 s', '+١٠ ث'], credit: ['Valider l’étape', 'اعتمد المرحلة'], skip: ['Passer le tour', 'تخطى الدور'], restore: ['Restaurer le code du début du tour', 'استرجع كود بداية الدور'], run: ['Exécuter le code', 'شغّل الكود'], board: ['Afficher au tableau', 'اعرض في السبورة'], unboard: ['Retirer du tableau', 'شيل من السبورة'], finish: ['Terminer', 'إنهاء'] }
+  const pair = labels[action]; return pair ? tr(currentLocale(), fallback, pair[0], pair[1]) : fallback
+}
+const relayOutcome = (outcome: RelayOutcome) => {
+  const labels: Record<RelayOutcome, [string, string]> = { DONE: ['étape terminée', 'المرحلة اكتملت'], PASS: ['passe', 'تمرير'], TIMEOUT: ['temps écoulé', 'الزمن انتهى'], TEACHER_DONE: ['validé', 'تم الاعتماد'], TEACHER_SKIP: ['passé', 'اتخطى'], STOPPED: ['arrêté', 'اتوقف'] }
+  return tr(currentLocale(), OUTCOME[outcome], ...labels[outcome])
+}
+
 function readGroup() { try { return localStorage.getItem(GROUP_KEY) ?? '' } catch { return '' } }
 function saveGroup(group: string) { try { localStorage.setItem(GROUP_KEY, group) } catch { /* not kept */ } }
 
@@ -275,7 +286,7 @@ function RelayConsole({ onClose }: { onClose: () => void }) {
   const view = data?.relay ?? null
   const flash = useFlash(view)
   const poll = usePoll(() => api<RelayAdmin>(`/admin/relay?group=${encodeURIComponent(group)}`), POLL_MS, true,
-    d => { setData(d); if (!group && d.groups.length) setGroup(d.groups[0]) }, e => setError(e instanceof Error ? e.message : 'Нет связи'))
+    d => { setData(d); if (!group && d.groups.length) setGroup(d.groups[0]) }, e => setError(e instanceof Error ? e.message : tr(currentLocale(), "Нет связи", "Connexion perdue", "الاتصال انقطع")))
   useEffect(() => { if (group) saveGroup(group) }, [group])
   useEffect(() => { if (!show) return; const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setShow(false) }; window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc) }, [show])
 
@@ -283,62 +294,62 @@ function RelayConsole({ onClose }: { onClose: () => void }) {
     if (!view || (confirmText && !window.confirm(confirmText))) return
     setBusy(action); setError(''); poll.invalidate()
     try { const next = await post<RelayView>(`/admin/relay/${view.id}/${action}`); setData(d => d && { ...d, relay: next.status === 'FINISHED' ? null : next }) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Не получилось') }
+    catch (e) { setError(e instanceof Error ? e.message : tr(currentLocale(), "Не получилось", "Échec de l’opération", "ما نجحت العملية")) }
     finally { setBusy(null) }
   }
   async function create() {
     setBusy('create'); setError(''); poll.invalidate()
     try { const relay = await post<RelayView>('/admin/relay', { group, taskKey, turnSeconds: Number(seconds) }); setData(d => d && { ...d, relay }) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Не получилось') }
+    catch (e) { setError(e instanceof Error ? e.message : tr(currentLocale(), "Не получилось", "Échec de l’opération", "ما نجحت العملية")) }
     finally { setBusy(null) }
   }
 
-  if (show && view) return <div className="relay-layer projector" role="dialog" aria-modal="true" aria-label="Эстафета на проекторе">
-    <RelayBoard view={view} code={view.code} editable={false} flash={flash} footer={<button type="button" className="ghost small-button relay-show-close" onClick={() => setShow(false)}>Esc — назад</button>} />
+  if (show && view) return <div className="relay-layer projector" role="dialog" aria-modal="true" aria-label={uiText("Эстафета на проекторе")}>
+    <RelayBoard view={view} code={view.code} editable={false} flash={flash} footer={<button type="button" className="ghost small-button relay-show-close" onClick={() => setShow(false)}>{uiText("Esc — назад")}</button>} />
   </div>
 
   const tasks = data?.tasks ?? []
-  return <div className="relay-layer teacher" role="dialog" aria-modal="true" aria-label="Эстафета: пульт">
+  return <div className="relay-layer teacher" role="dialog" aria-modal="true" aria-label={uiText("Эстафета: пульт")}>
     <div className="relay-console-bar">
-      <b><Icon name="flag" size={18} /> Эстафета</b>
-      <label>Группа <select value={group} onChange={e => setGroup(e.target.value)}>{(data?.groups ?? []).map(g => <option key={g} value={g}>{g}</option>)}</select></label>
-      {view && <button type="button" className="secondary" onClick={() => setShow(true)}><Icon name="globe" size={16} /> Показ</button>}
-      <button type="button" className="ghost" onClick={onClose}><Icon name="x" size={16} /> Закрыть</button>
+      <b><Icon name="flag" size={18} /> {uiText("Эстафета")}</b>
+      <label>{uiText("Группа")} <select value={group} onChange={e => setGroup(e.target.value)}>{(data?.groups ?? []).map(g => <option key={g} value={g}>{g}</option>)}</select></label>
+      {view && <button type="button" className="secondary" onClick={() => setShow(true)}><Icon name="globe" size={16} /> {uiText("Показ")}</button>}
+      <button type="button" className="ghost" onClick={onClose}><Icon name="x" size={16} /> {uiText("Закрыть")}</button>
     </div>
     {error && <p className="board-error" role="alert">{error}</p>}
-    {!data ? <p className="loading-note"><span className="spinner" aria-hidden="true" /> Загружаем…</p>
+    {!data ? <p className="loading-note"><span className="spinner" aria-hidden="true" /> {uiText("Загружаем…")}</p>
       : !view ? <section className="card relay-new">
-        <h2 className="title">Новая эстафета для группы {group || '—'}</h2>
-        <p className="muted">Студенты группы увидят приглашение у себя в уроке и присоединятся. Очередь перемешается, когда ты нажмёшь «Начать».</p>
-        <div className="relay-task-list" role="radiogroup" aria-label="Задача">
+        <h2 className="title">{uiText("Новая эстафета для группы")} {group || '—'}</h2>
+        <p className="muted">{uiText("Студенты группы увидят приглашение у себя в уроке и присоединятся. Очередь перемешается, когда ты нажмёшь «Начать».")}</p>
+        <div className="relay-task-list" role="radiogroup" aria-label={uiText("Задача")}>
           {tasks.map(t => <label key={t.key} className={`relay-task ${taskKey === t.key ? 'chosen' : ''}`}>
             <input type="radio" name="relay-task" checked={taskKey === t.key} onChange={() => setTaskKey(t.key)} />
             <span><b>{COURSE[t.language]} · {t.title}</b><small>{t.steps} {stepWord(t.steps)}</small><Markdown>{t.statement}</Markdown></span>
           </label>)}
         </div>
-        <label className="relay-seconds">Секунд на ход <input type="number" min={5} max={120} value={seconds} onChange={e => setSeconds(e.target.value)} /></label>
-        <button type="button" className="primary big" disabled={!group || !taskKey || busy !== null} onClick={create}>{busy === 'create' ? 'Открываем…' : 'Открыть эстафету'}</button>
+        <label className="relay-seconds">{uiText("Секунд на ход")} <input type="number" min={5} max={120} value={seconds} onChange={e => setSeconds(e.target.value)} /></label>
+        <button type="button" className="primary big" disabled={!group || !taskKey || busy !== null} onClick={create}>{busy === 'create' ? uiText("Открываем…") : uiText("Открыть эстафету")}</button>
       </section>
         : <div className="relay-console">
           <RelayBoard view={view} code={view.code} editable={false} flash={flash} />
           <aside className="relay-panel card">
             <div className="relay-buttons">
               {ACTIONS.filter(a => a.when(view)).map(a => <button key={a.action} type="button" className={a.primary ? 'primary' : 'ghost'} disabled={busy !== null || (a.action === 'run' && view.run?.status === 'PENDING')}
-                onClick={() => act(a.action, a.confirm)}>{busy === a.action ? '…' : a.label}</button>)}
+                onClick={() => act(a.action, a.confirm ? tr(currentLocale(), a.confirm, 'Terminer le relais ?', 'تنهي التتابع؟') : undefined)}>{busy === a.action ? '…' : relayActionLabel(a.action, a.label)}</button>)}
             </div>
-            {view.hint && <div className="relay-hint"><small>Эталон шага {view.step + 1} (видишь только ты)</small><pre>{view.hint}</pre></div>}
-            <h3 className="card-title">Участники · {view.people?.length ?? 0}</h3>
+            {view.hint && <div className="relay-hint"><small>{uiText("Эталон шага")} {view.step + 1} {uiText("(видишь только ты)")}</small><pre>{view.hint}</pre></div>}
+            <h3 className="card-title">{uiText("Участники ·")} {view.people?.length ?? 0}</h3>
             <ul className="relay-people">
               {(view.people ?? []).map(p => <li key={p.userId}>
-                <span className={`relay-dot ${p.present ? 'on' : ''}`} title={p.present ? 'на месте' : 'не на месте'} />
+                <span className={`relay-dot ${p.present ? 'on' : ''}`} title={p.present ? uiText("на месте") : uiText("не на месте")} />
                 <span className="relay-person">{p.name}</span>
-                <span className="tabular" title="шагов сделано">✓ {p.done}</span>
-                <span className="tabular muted" title="пропусков">⨯ {p.skipped}</span>
+                <span className="tabular" title={uiText("шагов сделано")}>✓ {p.done}</span>
+                <span className="tabular muted" title={uiText("пропусков")}>⨯ {p.skipped}</span>
               </li>)}
             </ul>
             {!!view.log?.length && <>
-              <h3 className="card-title">Ходы</h3>
-              <ol className="relay-log">{view.log.map(t => <li key={t.turn}><span className="tabular">{t.turn}.</span> {t.name} · шаг {t.step + 1} · {t.outcome ? OUTCOME[t.outcome] : 'пишет'}</li>)}</ol>
+              <h3 className="card-title">{uiText("Ходы")}</h3>
+              <ol className="relay-log">{view.log.map(t => <li key={t.turn}><span className="tabular">{t.turn}.</span> {t.name} {uiText("· шаг")} {t.step + 1} · {t.outcome ? relayOutcome(t.outcome) : uiText("пишет")}</li>)}</ol>
             </>}
           </aside>
         </div>}
@@ -351,7 +362,7 @@ function RelayConsole({ onClose }: { onClose: () => void }) {
 export function RelayProjector({ view, onTeacherLogin }: { view: RelayView; onTeacherLogin: () => void }) {
   const flash = useFlash(view)
   return <main className="relay-layer projector station"><RelayBoard view={view} code={view.code} editable={false} flash={flash}
-    footer={<button type="button" className="ghost small-button" onClick={onTeacherLogin}><Icon name="user" size={15} /> Войти как преподаватель</button>} /></main>
+    footer={<button type="button" className="ghost small-button" onClick={onTeacherLogin}><Icon name="user" size={15} /> {uiText("Войти как преподаватель")}</button>} /></main>
 }
 
 // ---------------------------------------------------------------- the layer over the app
@@ -386,13 +397,13 @@ export function RelayLayer() {
 
   if (!me) return null
   if (me.role === 'ADMIN') return open ? <RelayConsole onClose={() => setOpen(false)} />
-    : <button type="button" className="relay-fab" onClick={() => setOpen(true)}><Icon name="flag" size={16} /> Эстафета</button>
+    : <button type="button" className="relay-fab" onClick={() => setOpen(true)}><Icon name="flag" size={16} /> {uiText("Эстафета")}</button>
   if (!relay) return null
   if (open && member) return <RelayStudent initial={relay} onHide={() => setOpen(false)} onGone={() => { setOpen(false); setMe(m => m && { ...m, relay: null }) }} />
   return <div className="relay-invite" role="status">
     <Icon name="flag" size={20} />
-    <span><b>Эстафета для группы {relay.group}</b><small>{relay.task.title} · {relay.status === 'LOBBY' ? 'скоро начнём' : 'уже идёт'}</small></span>
-    {member ? <button type="button" className="primary" onClick={() => setOpen(true)}>Вернуться</button>
-      : <button type="button" className="primary" disabled={busy} onClick={join}>{busy ? '…' : 'Присоединиться'}</button>}
+    <span><b>{uiText("Эстафета для группы")} {relay.group}</b><small>{relay.task.title} · {relay.status === 'LOBBY' ? uiText("скоро начнём") : uiText("уже идёт")}</small></span>
+    {member ? <button type="button" className="primary" onClick={() => setOpen(true)}>{uiText("Вернуться")}</button>
+      : <button type="button" className="primary" disabled={busy} onClick={join}>{busy ? '…' : uiText("Присоединиться")}</button>}
   </div>
 }

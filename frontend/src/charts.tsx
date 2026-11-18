@@ -1,3 +1,5 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
 import { KeyboardEvent, PointerEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 /** A point of a line; `note` is extra text for the tooltip (e.g. the mean next to a median). */
@@ -166,9 +168,9 @@ export function LineChart({ series, label, formatX, formatXTip, formatY, formatT
   const tipLeft = hover ? sx(hover.x) : 0
 
   return <div ref={box} className={`line-chart ${className ?? ''}`} style={{ height }} tabIndex={hasData ? 0 : -1} role="group"
-    aria-label={`${label}. Стрелки влево и вправо — по дням, вверх и вниз — между линиями.`}
+    aria-label={tr(currentLocale(), `${label}. Стрелки влево и вправо — по дням, вверх и вниз — между линиями.`, `${label}. Les flèches gauche et droite parcourent les jours, haut et bas les courbes.`, `${label}. السهمان يمين ويسار للأيام، وفوق وتحت للتنقل بين الخطوط.`)}
     onKeyDown={onKey} onFocus={() => setHover(h => h ?? { x: clampX(Math.round(x1)), id: highlight ?? null })} onBlur={() => setHover(null)}>
-    {!hasData ? <div className="lc-empty">{empty ?? 'Нет данных за этот период'}</div> : width > 0 && <>
+    {!hasData ? <div className="lc-empty">{empty ?? uiText("Нет данных за этот период")}</div> : width > 0 && <>
       <svg width={width} height={height} aria-hidden="true" onPointerMove={locate} onPointerDown={locate} onPointerLeave={() => setHover(null)}>
         {ticks.map(t => <g key={t}>
           <line className={t === 0 ? 'lc-base' : 'lc-grid'} x1={left} x2={left + plotW} y1={sy(t)} y2={sy(t)} />

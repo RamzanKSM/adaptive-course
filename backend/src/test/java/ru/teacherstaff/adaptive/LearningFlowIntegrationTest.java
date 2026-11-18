@@ -27,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class LearningFlowIntegrationTest {
+  @Autowired org.springframework.web.servlet.LocaleResolver localeResolver;
   @Autowired MockMvc mvc; @Autowired JdbcTemplate db; @Autowired ObjectMapper json; @Autowired TaskAudit taskAudit; @Autowired LlmSettings llmSettings; @Autowired HardTaskBank hardTaskBank; @Autowired ApiController api;
   @MockBean PistonCodeRunner runner;
   @MockBean LlmTutor tutor;
@@ -39,6 +40,13 @@ class LearningFlowIntegrationTest {
     p.add("app.task-audit.enabled", () -> "false"); // background re-verification would race the tests; it is called directly where tested
   }
   @BeforeEach void prepare() { db.update("update users set password_hash=? where login='admin'",new BCryptPasswordEncoder().encode("admin-pass")); when(runner.configured()).thenReturn(true); when(runner.status(any(Language.class))).thenReturn(new PistonCodeRunner.RuntimeStatus(true,"READY","17.0.1")); when(runner.run(any(Language.class),anyString(),anyString())).thenAnswer(call->((String)call.getArgument(1)).contains("WRONG")?new PistonCodeRunner.Run(false,"Неверный вывод программы."):new PistonCodeRunner.Run(true,"Решение прошло скрытые проверки")); when(tutor.status(anyLong())).thenReturn(new LlmStatus(false,false,false,"DISABLED", "gpt-6-luna"));  when(runner.runRaw(any(Language.class),anyString(),anyString())).thenReturn(recordedAnswers(6)); }
+
+  @Test void requestLocaleDefaultsToRussianAndHonorsHeader() {
+    var request = new org.springframework.mock.web.MockHttpServletRequest();
+    assertEquals("ru", localeResolver.resolveLocale(request).getLanguage());
+    request.addHeader("Accept-Language", "ar-SD");
+    assertEquals("ar-SD", ContentTranslations.locale(localeResolver.resolveLocale(request)));
+  }
 
   @Test void diagnosticConfirmsTopicsSoPracticeSkipsThemWithoutFakeProgress() throws Exception {
     String cookie=createStudentAndLogin("block-student"); long student=studentId("block-student");
@@ -607,6 +615,12 @@ class LearningFlowIntegrationTest {
     assertEquals(2,usage.path("byPurpose").size()); assertEquals(1,usage.path("byStudent").size());
     assertEquals(3,usage.path("byStudent").path(0).path("calls").asInt());
     assertEquals("TIMEOUT",usage.path("recentErrors").path(0).path("status").asText());
+    db.update("insert into llm_calls(user_id,purpose,language,status,duration_ms,total_tokens) values(null, 'TRANSLATION','JAVA','OK',100,100)");
+    var translatedUsage=json.readTree(mvc.perform(get("/api/admin/llm/usage").param("days","30").cookie(cookie(admin))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals(4, translatedUsage.path("totals").path("calls").asInt());
+    assertEquals(3, translatedUsage.path("byPurpose").size());
+    assertEquals(1, translatedUsage.path("byStudent").size());
+    for (var language : translatedUsage.path("byLanguage")) if ("JAVA".equals(language.path("language").asText())) assertEquals(1, language.path("calls").asInt());
     mvc.perform(get("/api/admin/llm/usage").cookie(cookie(createStudentAndLogin("nosy-student")))).andExpect(status().isBadRequest());
   }
 

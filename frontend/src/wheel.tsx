@@ -1,3 +1,5 @@
+import { currentLocale, tr } from './locale'
+import { uiText } from './uiText'
 import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, post, remove } from './api'
 import { DrawSound } from './drawSound'
@@ -24,17 +26,17 @@ type Wheel = {
 }
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })
-const pts = (n: number) => `${n} ${plural(n, 'балл', 'балла', 'баллов')}`
+const pts = (n: number) => tr(currentLocale(), `${n} ${plural(n, 'балл', 'балла', 'баллов')}`, `${n} points`, `${n} نقطة`)
 const decimal = (n: number) => String(n).replace('.', ',')
-const reasonText = (p: Person) => p.reason === 'BOARD' ? `${p.grade} у доски` : p.reason === 'TOP' ? `топ: ${pts(p.points)}`
-  : p.grade ? `у доски: ${p.grade}` : !p.attended ? 'не был' : pts(p.points)
+const reasonText = (p: Person) => p.reason === 'BOARD' ? tr(currentLocale(), `${p.grade} у доски`, `${p.grade} au tableau`, `${p.grade} عند السبورة`) : p.reason === 'TOP' ? tr(currentLocale(), `топ: ${pts(p.points)}`, `meilleurs : ${pts(p.points)}`, `الأعلى: ${pts(p.points)}`)
+  : p.grade ? tr(currentLocale(), `у доски: ${p.grade}`, `au tableau : ${p.grade}`, `عند السبورة: ${p.grade}`) : !p.attended ? tr(currentLocale(), 'не был', 'absent', 'غائب') : pts(p.points)
 const prizeIcon = (prize: string) => prize.toLowerCase().includes('шоколад') ? '🍫' : '🎁'
 const MODES: [Mode, string][] = [['ARROW', 'Стрелка'], ['ELIMINATION', 'Выбывание']]
 const GRADES: [number, string][] = [[5, 'только 5'], [4, '4 и 5'], [3, '3, 4 и 5'], [2, 'любая']]
-const gradeRule = (min: number) => min >= 5 ? 'пятёркой' : `оценкой ${min} и выше`
+const gradeRule = (min: number) => min >= 5 ? tr(currentLocale(), 'пятёркой', 'la note 5', 'درجة ٥') : tr(currentLocale(), `оценкой ${min} и выше`, `la note ${min} ou plus`, `درجة ${min} أو أكثر`)
 /** A weight typed by hand: any number above 0, with a comma or a dot; null when it is not one. */
 const parseWeight = (text: string) => { const v = Number(text.trim().replace(',', '.')); return text.trim() && Number.isFinite(v) && v > 0 ? v : null }
-const groupName = (p: Person) => p.group || 'без группы'
+const groupName = (p: Person) => p.group || tr(currentLocale(), 'без группы', 'sans groupe', 'بدون مجموعة')
 
 function Choice<T extends string | number | boolean>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (value: T) => void }) {
   return <div className="period" role="group" aria-label={label}>
@@ -61,13 +63,13 @@ export function DrawSettingsForm({ request, initial, onSaved }: { request: Reque
     <label className="setting-row" key={key}>
       <div><b>{title} <span className="muted">{unit}</span></b><small className="muted">{hint}</small></div>
       <div className="limit-input"><input type="number" min={0} max={max} step="any" value={draft[key]} onChange={e => set(key, Math.max(0, Number(e.target.value) || 0))} />
-        <small className="muted">по умолчанию {decimal(defaults[key])}</small></div>
+        <small className="muted">{uiText("по умолчанию")} {decimal(defaults[key])}</small></div>
     </label>
   const whole = (key: 'winners' | 'minPoints' | 'bonus5' | 'bonus4' | 'bonus3', title: string, hint: string, min: number) =>
     <label className="setting-row" key={key}>
       <div><b>{title}</b><small className="muted">{hint}</small></div>
       <div className="limit-input"><input type="number" min={min} step={1} inputMode="numeric" value={draft[key]} onChange={e => set(key, Math.max(min, Math.floor(Number(e.target.value) || 0)))} />
-        <small className="muted">по умолчанию {defaults[key]}</small></div>
+        <small className="muted">{uiText("по умолчанию")} {defaults[key]}</small></div>
     </label>
   async function save(e: FormEvent) {
     e.preventDefault(); if (!draft) return
@@ -76,43 +78,43 @@ export function DrawSettingsForm({ request, initial, onSaved }: { request: Reque
     setBusy(false)
     if (!value) return
     setSaved(value); setDraft(value); onSaved?.(value)
-    toast({ tone: 'info', icon: 'check', title: 'Настройки жребия сохранены', text: 'Применяются к следующему запуску' })
+    toast({ tone: 'info', icon: 'check', title: uiText("Настройки жребия сохранены"), text: uiText("Применяются к следующему запуску") })
   }
   function testSound() { const s = new DrawSound(true, draft!.volume); s.unlock(); setTimeout(() => s.win(), 60) }
 
   return <form className="draw-settings" onSubmit={save} noValidate>
     <div className="setting-rows">
-      <div className="setting-row"><div><b>Формат</b><small className="muted">«Стрелка» — победитель там, где остановилась стрелка. «Выбывание» — имя под стрелкой выбывает, пока не останутся победители.</small></div>
-        <Choice label="Формат" value={draft.mode} options={MODES} onChange={v => set('mode', v)} /></div>
-      {num('spinSeconds', 'Время прокрутки', 'с', 'Прокрутка, которая выбирает победителя, и решающее выбывание.')}
-      {num('eliminationSeconds', 'Время одного выбывания', 'с', 'Только для «Выбывания»: все выбывания, кроме решающего.')}
-      {whole('winners', 'Число победителей', 'Каждый победитель уходит с колеса, следующего выбирает новая прокрутка.', 1)}
-      <div className="setting-row"><div><b>Следующая прокрутка</b><small className="muted">Вручную — каждую прокрутку запускаешь кнопкой. Сама — следующая начинается через секунду.</small></div>
-        <Choice label="Следующая прокрутка" value={draft.autoNext} options={[[false, 'вручную'], [true, 'сама']]} onChange={v => set('autoNext', v)} /></div>
-      {num('topPercent', 'Доля топа', '%', 'Сколько процентов пришедших и не вызванных к доске попадают на колесо по баллам за пару (с округлением вверх, при равенстве проходят все).', 100)}
-      {whole('minPoints', 'Минимум баллов для топа', 'Меньше этого за пару — в топ не попадает.', 0)}
-      <div className="setting-row"><div><b>Шансы</b><small className="muted">По баллам — шанс растёт с баллами за пару и бонусом за оценку у доски или на аттестации, сектор на колесе тем шире. В «Выбывании» наоборот: шире сектор у того, кто скорее выбудет.</small></div>
-        <Choice label="Шансы" value={draft.chances} options={[['POINTS', 'по баллам'], ['EQUAL', 'равные']]} onChange={v => set('chances', v)} /></div>
+      <div className="setting-row"><div><b>{uiText("Формат")}</b><small className="muted">{uiText("«Стрелка» — победитель там, где остановилась стрелка. «Выбывание» — имя под стрелкой выбывает, пока не останутся победители.")}</small></div>
+        <Choice label={uiText("Формат")} value={draft.mode} options={MODES.map(([value, label]) => [value, value === 'ARROW' ? tr(currentLocale(), label, 'Flèche', 'السهم') : tr(currentLocale(), label, 'Élimination', 'الإقصاء')])} onChange={v => set('mode', v)} /></div>
+      {num('spinSeconds', tr(currentLocale(), "Время прокрутки", "Durée de rotation", "مدة الدوران"), 'с', tr(currentLocale(), "Прокрутка, которая выбирает победителя, и решающее выбывание.", "Rotation qui choisit le gagnant et élimination finale.", "الدوران لاختيار الفائز والإقصاء النهائي."))}
+      {num('eliminationSeconds', tr(currentLocale(), "Время одного выбывания", "Durée d’une élimination", "مدة الإقصاء الواحد"), 'с', tr(currentLocale(), "Только для «Выбывания»: все выбывания, кроме решающего.", "Pour le mode élimination, sauf l’élimination finale.", "للوضع بالإقصاء، عدا الإقصاء النهائي."))}
+      {whole('winners', tr(currentLocale(), "Число победителей", "Nombre de gagnants", "عدد الفائزين"), tr(currentLocale(), "Каждый победитель уходит с колеса, следующего выбирает новая прокрутка.", "Chaque gagnant quitte la roue ; une nouvelle rotation choisit le suivant.", "كل فائز بيخرج من العجلة والدوران التالي بيختار الفائز الجاي."), 1)}
+      <div className="setting-row"><div><b>{uiText("Следующая прокрутка")}</b><small className="muted">{uiText("Вручную — каждую прокрутку запускаешь кнопкой. Сама — следующая начинается через секунду.")}</small></div>
+        <Choice label={uiText("Следующая прокрутка")} value={draft.autoNext} options={[[false, tr(currentLocale(), "вручную", "manuellement", "يدوياً")], [true, tr(currentLocale(), "сама", "automatiquement", "تلقائياً")]]} onChange={v => set('autoNext', v)} /></div>
+      {num('topPercent', tr(currentLocale(), "Доля топа", "Part des meilleurs", "نسبة المتصدرين"), '%', tr(currentLocale(), "Сколько процентов пришедших и не вызванных к доске попадают на колесо по баллам за пару (с округлением вверх, при равенстве проходят все).", "Pourcentage des présents non convoqués au tableau admis selon leurs points (arrondi au supérieur, tous les ex æquo passent).", "نسبة الحاضرين غير المستدعين للسبورة المؤهلين حسب النقاط، بالتقريب للأعلى وقبول كل المتعادلين."), 100)}
+      {whole('minPoints', tr(currentLocale(), "Минимум баллов для топа", "Points minimums pour les meilleurs", "الحد الأدنى لنقاط المتصدرين"), tr(currentLocale(), "Меньше этого за пару — в топ не попадает.", "En dessous de ce seuil, l’étudiant ne fait pas partie des meilleurs.", "الأقل من الحد ما بيدخل قائمة المتصدرين."), 0)}
+      <div className="setting-row"><div><b>{uiText("Шансы")}</b><small className="muted">{uiText("По баллам — шанс растёт с баллами за пару и бонусом за оценку у доски или на аттестации, сектор на колесе тем шире. В «Выбывании» наоборот: шире сектор у того, кто скорее выбудет.")}</small></div>
+        <Choice label={uiText("Шансы")} value={draft.chances} options={[['POINTS', tr(currentLocale(), "по баллам", "selon les points", "حسب النقاط")], ['EQUAL', tr(currentLocale(), "равные", "égales", "متساوية")]]} onChange={v => set('chances', v)} /></div>
       {draft.chances === 'POINTS' && <>
-        {whole('bonus5', 'Бонус за 5', 'Сколько баллов к весу добавляет пятёрка у доски или на аттестации за эту пару.', 0)}
-        {whole('bonus4', 'Бонус за 4', 'То же за четвёрку.', 0)}
-        {whole('bonus3', 'Бонус за 3', 'То же за тройку.', 0)}
+        {whole('bonus5', tr(currentLocale(), "Бонус за 5", "Bonus pour 5", "مكافأة الدرجة ٥"), tr(currentLocale(), "Сколько баллов к весу добавляет пятёрка у доски или на аттестации за эту пару.", "Points ajoutés au poids pour un 5 au tableau ou à l’évaluation pendant la séance.", "النقاط المضافة للوزن لدرجة ٥ في السبورة أو الامتحان خلال الحصة."), 0)}
+        {whole('bonus4', tr(currentLocale(), "Бонус за 4", "Bonus pour 4", "مكافأة الدرجة ٤"), tr(currentLocale(), "То же за четвёрку.", "Même chose pour un 4.", "نفس الشي للدرجة ٤."), 0)}
+        {whole('bonus3', tr(currentLocale(), "Бонус за 3", "Bonus pour 3", "مكافأة الدرجة ٣"), tr(currentLocale(), "То же за тройку.", "Même chose pour un 3.", "نفس الشي للدرجة ٣."), 0)}
       </>}
-      <div className="setting-row"><div><b>Оценка у доски</b><small className="muted">Какая оценка у доски или на аттестации на этой паре даёт место на колесе.</small></div>
-        <Choice label="Оценка у доски" value={draft.boardMinGrade} options={GRADES} onChange={v => set('boardMinGrade', v)} /></div>
-      <label className="setting-row"><div><b>Приз по умолчанию</b><small className="muted">Подставляется в панель жребия; перед запуском можно поменять.</small></div>
+      <div className="setting-row"><div><b>{uiText("Оценка у доски")}</b><small className="muted">{uiText("Какая оценка у доски или на аттестации на этой паре даёт место на колесе.")}</small></div>
+        <Choice label={uiText("Оценка у доски")} value={draft.boardMinGrade} options={GRADES.map(([value, label]) => [value, value === 5 ? tr(currentLocale(), label, '5 seulement', '٥ فقط') : value === 2 ? tr(currentLocale(), label, 'toute note', 'أي درجة') : label])} onChange={v => set('boardMinGrade', v)} /></div>
+      <label className="setting-row"><div><b>{uiText("Приз по умолчанию")}</b><small className="muted">{uiText("Подставляется в панель жребия; перед запуском можно поменять.")}</small></div>
         <input className="draw-prize-input" type="text" value={draft.defaultPrize} placeholder={defaults.defaultPrize} onChange={e => set('defaultPrize', e.target.value)} /></label>
-      <div className="setting-row"><div><b>Приз-сюрприз</b><small className="muted">На проекторе вместо приза «🎁 ???», пока не выявлены все победители.</small></div>
-        <button type="button" role="switch" aria-checked={draft.surprisePrize} aria-label="Приз-сюрприз" className={`switch ${draft.surprisePrize ? 'on' : ''}`} onClick={() => set('surprisePrize', !draft.surprisePrize)}><span /></button></div>
-      <div className="setting-row"><div><b>Звуки</b><small className="muted">Трещотка при вращении, «поп» на выбывании, фанфары на победу.</small></div>
-        <button type="button" role="switch" aria-checked={draft.sound} aria-label="Звуки" className={`switch ${draft.sound ? 'on' : ''}`} onClick={() => set('sound', !draft.sound)}><span /></button></div>
-      <label className="setting-row"><div><b>Громкость <span className="muted">{draft.volume}%</span></b></div>
+      <div className="setting-row"><div><b>{uiText("Приз-сюрприз")}</b><small className="muted">{uiText("На проекторе вместо приза «🎁 ???», пока не выявлены все победители.")}</small></div>
+        <button type="button" role="switch" aria-checked={draft.surprisePrize} aria-label={uiText("Приз-сюрприз")} className={`switch ${draft.surprisePrize ? 'on' : ''}`} onClick={() => set('surprisePrize', !draft.surprisePrize)}><span /></button></div>
+      <div className="setting-row"><div><b>{uiText("Звуки")}</b><small className="muted">{uiText("Трещотка при вращении, «поп» на выбывании, фанфары на победу.")}</small></div>
+        <button type="button" role="switch" aria-checked={draft.sound} aria-label={uiText("Звуки")} className={`switch ${draft.sound ? 'on' : ''}`} onClick={() => set('sound', !draft.sound)}><span /></button></div>
+      <label className="setting-row"><div><b>{uiText("Громкость")} <span className="muted">{draft.volume}%</span></b></div>
         <div className="draw-volume"><input type="range" min={0} max={100} step={5} value={draft.volume} disabled={!draft.sound} onChange={e => set('volume', Number(e.target.value))} />
-          <button type="button" className="ghost" disabled={!draft.sound} onClick={testSound}>Проверить</button></div></label>
+          <button type="button" className="ghost" disabled={!draft.sound} onClick={testSound}>{uiText("Проверить")}</button></div></label>
     </div>
     <div className="pair-actions">
-      <button className="primary" disabled={!dirty || busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>
-      <button type="button" className="ghost" onClick={() => setDraft({ ...defaults })}>Значения по умолчанию</button>
+      <button className="primary" disabled={!dirty || busy}>{busy ? uiText("Сохраняем…") : uiText("Сохранить")}</button>
+      <button type="button" className="ghost" onClick={() => setDraft({ ...defaults })}>{uiText("Значения по умолчанию")}</button>
     </div>
   </form>
 }
@@ -121,8 +123,8 @@ export function DrawSettingsForm({ request, initial, onSaved }: { request: Reque
 export function DrawSettingsView({ request }: { request: Request }) {
   return <section className="analytics settings-page draw-settings-page">
     <div className="card enter">
-      <h2 className="card-title"><span className="chip-icon"><Icon name="sparkle" size={16} /></span> Жребий</h2>
-      <p className="muted small">Приз на паре: колесо из отличившихся у доски и лучших по задачам. Настройки общие для всех групп.</p>
+      <h2 className="card-title"><span className="chip-icon"><Icon name="sparkle" size={16} /></span> {uiText("Жребий")}</h2>
+      <p className="muted small">{uiText("Приз на паре: колесо из отличившихся у доски и лучших по задачам. Настройки общие для всех групп.")}</p>
       <DrawSettingsForm request={request} />
     </div>
   </section>
@@ -151,7 +153,7 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
   useEffect(() => { load(false) }, [load])
   const loadOutsiders = useCallback(() => request(() => api<{ students: Person[] }>(`/admin/pairs/${pair.id}/wheel/outsiders`)).then(v => { if (v) setOutsiders(v.students) }), [pair.id, request])
 
-  if (!wheel) return <section className="card wheel-panel enter"><p className="muted">Собираем претендентов…</p></section>
+  if (!wheel) return <section className="card wheel-panel enter"><p className="muted">{uiText("Собираем претендентов…")}</p></section>
   const others = [...wheel.called, ...wheel.others]
   const everyone = [...wheel.candidates, ...others, ...(outsiders ?? [])]
   const byId = new Map(everyone.map(p => [p.userId, p]))
@@ -173,79 +175,77 @@ export function WheelPanel({ pair, request, onClose }: { pair: Pair; request: Re
     const weight = names.find(n => n.userId === p.userId)?.weight
     if (s.mode !== 'ARROW' || weight === undefined || badWeight) return null
     const percent = weight * 100 / total
-    return `шанс ${percent < 1 ? '<1' : Math.round(percent)}%`
+    return tr(currentLocale(), `шанс ${percent < 1 ? '<1' : Math.round(percent)}%`, `chance ${percent < 1 ? '<1' : Math.round(percent)}%`, `الفرصة ${percent < 1 ? '<1' : Math.round(percent)}%`)
   }
   const typeWeight = (p: Person, text: string) => setTyped(t => { const { [p.userId]: _, ...rest } = t; return text === String(p.weight) ? rest : { ...t, [p.userId]: text } })
   const updateRun = (run: Run) => setWheel(w => w && { ...w, runs: w.runs.some(r => r.id === run.id) ? w.runs.map(r => r.id === run.id ? run : r) : [...w.runs, run] })
   async function deleteRun(id: Id) {
     const value = await request(() => remove<{ runs: Run[] }>(`/admin/pairs/${pair.id}/wheel/runs/${id}`))
     setDeleting(null)
-    if (value) { setWheel(w => w && { ...w, runs: value.runs }); toast({ tone: 'info', icon: 'x', title: 'Запуск жребия удалён' }) }
+    if (value) { setWheel(w => w && { ...w, runs: value.runs }); toast({ tone: 'info', icon: 'x', title: uiText("Запуск жребия удалён") }) }
   }
 
-  return <section className="card wheel-panel enter" aria-label="Жребий">
+  return <section className="card wheel-panel enter" aria-label={uiText("Жребий")}>
     <div className="chart-head">
       <div>
-        <p className="eyebrow">Жребий</p>
-        <h2 className="card-title">Кто крутится за приз</h2>
+        <p className="eyebrow">{uiText("Жребий")}</p>
+        <h2 className="card-title">{uiText("Кто крутится за приз")}</h2>
       </div>
-      <button type="button" className="icon-button" aria-label="Закрыть" title="Закрыть" onClick={onClose}><Icon name="x" /></button>
+      <button type="button" className="icon-button" aria-label={uiText("Закрыть")} title={uiText("Закрыть")} onClick={onClose}><Icon name="x" /></button>
     </div>
-    <p className="muted small">На колесе: все с {gradeRule(wheel.boardMinGrade)} у доски за эту пару и топ‑{decimal(wheel.topPercent)}% по баллам за пару среди тех, кого не вызывали
-      ({wheel.pool} {plural(wheel.pool, 'студент', 'студента', 'студентов')} → {wheel.topCount}{wheel.threshold !== null ? `, порог ${pts(wheel.threshold)}, при равенстве проходят все` : ', никто не проходит'}).
-      На проекторе видны только имена и приз.</p>
+    <p className="muted small">{uiText("На колесе: все с")} {gradeRule(wheel.boardMinGrade)} {uiText("у доски за эту пару и топ‑")}{decimal(wheel.topPercent)}{uiText("% по баллам за пару среди тех, кого не вызывали (")}{wheel.pool} {tr(currentLocale(), plural(wheel.pool, 'студент', 'студента', 'студентов'), 'étudiants', 'طالب')} → {wheel.topCount}{wheel.threshold !== null ? tr(currentLocale(), `, порог ${pts(wheel.threshold)}, при равенстве проходят все`, `, seuil ${pts(wheel.threshold)}, tous les ex æquo sont retenus`, `، الحد ${pts(wheel.threshold)}، وعند التعادل الكل بتأهل`) : uiText(", никто не проходит")}{uiText("). На проекторе видны только имена и приз.")}</p>
     <p className="muted small draw-summary">
-      {s.mode === 'ARROW' ? 'Стрелка' : 'Выбывание'} · {s.winners} {plural(s.winners, 'победитель', 'победителя', 'победителей')} · прокрутка {decimal(s.spinSeconds)} с
-      {s.mode === 'ELIMINATION' ? `, выбывание ${decimal(s.eliminationSeconds)} с` : ''} · {s.autoNext ? 'следующая сама' : 'каждая прокрутка по кнопке'}
-      {s.chances === 'POINTS' ? ` · шансы по баллам (+${s.bonus5}/${s.bonus4}/${s.bonus3} за 5/4/3)` : ' · равные шансы'}{s.surprisePrize ? ' · приз-сюрприз' : ''} · {s.sound ? `звук ${s.volume}%` : 'без звука'}
-      <button type="button" className="row-link" onClick={() => setSettingsOpen(o => !o)}>{settingsOpen ? 'Скрыть настройки' : 'Настройки'}</button>
+      {s.mode === 'ARROW' ? uiText("Стрелка") : uiText("Выбывание")} · {s.winners} {tr(currentLocale(), plural(s.winners, 'победитель', 'победителя', 'победителей'), 'gagnants', 'فائز')} {uiText("· прокрутка")} {decimal(s.spinSeconds)} {uiText("с")}
+      {s.mode === 'ELIMINATION' ? tr(currentLocale(), `, выбывание ${decimal(s.eliminationSeconds)} с`, `, élimination ${decimal(s.eliminationSeconds)} s`, `، الاستبعاد ${decimal(s.eliminationSeconds)} ثانية`) : ''} · {s.autoNext ? uiText("следующая сама") : uiText("каждая прокрутка по кнопке")}
+      {s.chances === 'POINTS' ? tr(currentLocale(), ` · шансы по баллам (+${s.bonus5}/${s.bonus4}/${s.bonus3} за 5/4/3)`, ` · chances selon les points (+${s.bonus5}/${s.bonus4}/${s.bonus3} pour 5/4/3)`, ` · الفرص حسب النقاط (+${s.bonus5}/${s.bonus4}/${s.bonus3} للدرجات 5/4/3)`) : uiText(" · равные шансы")}{s.surprisePrize ? uiText(" · приз-сюрприз") : ''} · {s.sound ? tr(currentLocale(), `звук ${s.volume}%`, `son ${s.volume}%`, `الصوت ${s.volume}%`) : uiText("без звука")}
+      <button type="button" className="row-link" onClick={() => setSettingsOpen(o => !o)}>{settingsOpen ? uiText("Скрыть настройки") : uiText("Настройки")}</button>
     </p>
     {settingsOpen && <div className="draw-settings-inline"><DrawSettingsForm request={request} initial={wheel.settings} onSaved={() => { load(true); if (outsiders) loadOutsiders(); setSettingsOpen(false) }} /></div>}
-    <label className="wheel-add">Приз
+    <label className="wheel-add">{uiText("Приз")}
       <input type="text" value={prize} placeholder={wheel.settings.defaultPrize} onChange={e => setPrize(e.target.value)} /></label>
-    {!wheel.candidates.length && !added.length && <p className="muted">Пока никто не заработал место на колесе. Можно добавить студента вручную.</p>}
+    {!wheel.candidates.length && !added.length && <p className="muted">{uiText("Пока никто не заработал место на колесе. Можно добавить студента вручную.")}</p>}
     <ul className="wheel-people">
       {[...wheel.candidates, ...added].map(p => <li key={p.userId}>
         <label><input type="checkbox" checked={chosen.includes(p.userId)} onChange={() => toggle(p.userId)} />
           <b>{p.displayName}</b> <small className="muted">{p.login}</small>{p.memberOf && <span className="group-tag">{p.memberOf}</span>}</label>
         <span className="wheel-person-tags">
           {chosen.includes(p.userId) && <span className="wheel-weight">
-            <label>вес <input type="text" inputMode="decimal" className={`wheel-weight-input ${typed[p.userId] !== undefined ? 'changed' : ''}`} aria-label={`Вес: ${p.displayName}`}
+            <label>{uiText("вес")} <input type="text" inputMode="decimal" className={`wheel-weight-input ${typed[p.userId] !== undefined ? 'changed' : ''}`} aria-label={tr(currentLocale(), `Вес: ${p.displayName}`, `Poids : ${p.displayName}`, `الوزن: ${p.displayName}`)}
               aria-invalid={typed[p.userId] !== undefined && parseWeight(typed[p.userId]) === null} value={typed[p.userId] ?? String(p.weight)} onChange={e => typeWeight(p, e.target.value)} /></label>
-            {typed[p.userId] !== undefined && <button type="button" className="wheel-weight-reset" aria-label={`Вернуть расчётный вес ${p.weight}`} title={`Вернуть расчётный вес ${p.weight}`} onClick={() => typeWeight(p, String(p.weight))}>↺</button>}
+            {typed[p.userId] !== undefined && <button type="button" className="wheel-weight-reset" aria-label={tr(currentLocale(), `Вернуть расчётный вес ${p.weight}`, `Rétablir le poids calculé ${p.weight}`, `استعادة الوزن المحسوب ${p.weight}`)} title={tr(currentLocale(), `Вернуть расчётный вес ${p.weight}`, `Rétablir le poids calculé ${p.weight}`, `استعادة الوزن المحسوب ${p.weight}`)} onClick={() => typeWeight(p, String(p.weight))}>↺</button>}
             {chance(p) && <small className="muted tabular">{chance(p)}</small>}
           </span>}
-          <span className={`pill ${p.reason === 'BOARD' ? 'wheel-board' : p.reason === 'TOP' ? 'wheel-top' : ''}`}>{p.reason ? reasonText(p) : `${p.group !== undefined ? `другая группа · ${groupName(p)}` : 'вручную'} · ${reasonText(p)}`}</span></span>
+          <span className={`pill ${p.reason === 'BOARD' ? 'wheel-board' : p.reason === 'TOP' ? 'wheel-top' : ''}`}>{p.reason ? reasonText(p) : `${p.group !== undefined ? tr(currentLocale(), `другая группа · ${groupName(p)}`, `autre groupe · ${groupName(p)}`, `مجموعة أخرى · ${groupName(p)}`) : uiText("вручную")} · ${reasonText(p)}`}</span></span>
       </li>)}
     </ul>
-    {addable.length > 0 && <label className="wheel-add">Добавить вручную
+    {addable.length > 0 && <label className="wheel-add">{uiText("Добавить вручную")}
       <select value="" onChange={e => { const id = Number(e.target.value); if (id) setChosen(c => [...c, id]) }}>
-        <option value="">Выбери студента…</option>
+        <option value="">{uiText("Выбери студента…")}</option>
         {addable.map(p => <option key={p.userId} value={p.userId}>{p.displayName}{p.memberOf ? ` · ${p.memberOf}` : ''} — {reasonText(p)}</option>)}
       </select></label>}
     <div className="wheel-outsiders">
-      <button type="button" className="row-link" aria-expanded={outsidersOpen} onClick={() => { setOutsidersOpen(o => !o); if (!outsiders) loadOutsiders() }}>{outsidersOpen ? 'Скрыть другие группы' : 'Из другой группы'}</button>
-      {outsidersOpen && (!outsiders ? <p className="muted small">Загружаем…</p> : !outsiderGroups.length ? <p className="muted small">Больше добавить некого.</p> : <label className="wheel-add">Студент другой группы
+      <button type="button" className="row-link" aria-expanded={outsidersOpen} onClick={() => { setOutsidersOpen(o => !o); if (!outsiders) loadOutsiders() }}>{outsidersOpen ? uiText("Скрыть другие группы") : uiText("Из другой группы")}</button>
+      {outsidersOpen && (!outsiders ? <p className="muted small">{uiText("Загружаем…")}</p> : !outsiderGroups.length ? <p className="muted small">{uiText("Больше добавить некого.")}</p> : <label className="wheel-add">{uiText("Студент другой группы")}
         <select value="" onChange={e => { const id = Number(e.target.value); if (id) setChosen(c => [...c, id]) }}>
-          <option value="">Выбери студента…</option>
+          <option value="">{uiText("Выбери студента…")}</option>
           {outsiderGroups.map(g => <optgroup key={g} label={g}>
             {outsiders.filter(p => groupName(p) === g && !chosen.includes(p.userId)).map(p => <option key={p.userId} value={p.userId}>{p.displayName} — {reasonText(p)}</option>)}
           </optgroup>)}
         </select></label>)}
     </div>
-    {wheel.runs.length > 0 && <div className="draw-history"><span className="control-label">Запуски этой пары</span>
+    {wheel.runs.length > 0 && <div className="draw-history"><span className="control-label">{uiText("Запуски этой пары")}</span>
       {wheel.runs.map(r => <div key={r.id} className="draw-run">
         <span className="pill wheel-winner-pill">{prizeIcon(r.prize)} {r.prize}</span>
-        <span className="draw-run-winners">{r.wins.length ? r.wins.map(w => <span key={w.userId} className={w.absent ? 'absent' : ''} title={w.absent ? 'Не было на паре' : undefined}>{w.displayName}</span>) : <span className="muted">без победителя</span>}</span>
-        <small className="muted">{time(r.createdAt)} · {r.mode === 'ARROW' ? 'стрелка' : 'выбывание'}{r.manualWeights ? ' · веса вручную' : ''}{r.finished ? '' : ' · не завершён'}</small>
-        {deleting === r.id ? <span className="draw-run-confirm">Удалить запуск?
-          <button type="button" className="danger-solid" onClick={() => deleteRun(r.id)}>Удалить</button>
-          <button type="button" className="ghost" onClick={() => setDeleting(null)}>Нет</button></span>
-          : <button type="button" className="icon-button" aria-label="Удалить запуск" title="Удалить запуск" onClick={() => setDeleting(r.id)}><Icon name="x" size={16} /></button>}
+        <span className="draw-run-winners">{r.wins.length ? r.wins.map(w => <span key={w.userId} className={w.absent ? 'absent' : ''} title={w.absent ? uiText("Не было на паре") : undefined}>{w.displayName}</span>) : <span className="muted">{uiText("без победителя")}</span>}</span>
+        <small className="muted">{time(r.createdAt)} · {r.mode === 'ARROW' ? uiText("стрелка") : uiText("выбывание")}{r.manualWeights ? uiText(" · веса вручную") : ''}{r.finished ? '' : uiText(" · не завершён")}</small>
+        {deleting === r.id ? <span className="draw-run-confirm">{uiText("Удалить запуск?")}
+          <button type="button" className="danger-solid" onClick={() => deleteRun(r.id)}>{uiText("Удалить")}</button>
+          <button type="button" className="ghost" onClick={() => setDeleting(null)}>{uiText("Нет")}</button></span>
+          : <button type="button" className="icon-button" aria-label={uiText("Удалить запуск")} title={uiText("Удалить запуск")} onClick={() => setDeleting(r.id)}><Icon name="x" size={16} /></button>}
       </div>)}</div>}
     <div className="pair-actions">
-      <button type="button" className="primary" disabled={!names.length || badWeight} onClick={() => setStage(true)}><Icon name="sparkle" size={16} /> Открыть колесо · {names.length}</button>
-      {badWeight && <small className="form-error">Вес — число больше нуля</small>}
+      <button type="button" className="primary" disabled={!names.length || badWeight} onClick={() => setStage(true)}><Icon name="sparkle" size={16} /> {uiText("Открыть колесо ·")} {names.length}</button>
+      {badWeight && <small className="form-error">{uiText("Вес — число больше нуля")}</small>}
     </div>
     {stage && <WheelStage pairId={pair.id!} people={names} manualWeights={manualWeights} prize={prizeName} settings={wheel.settings} request={request} onRun={updateRun} onClose={() => setStage(false)} />}
   </section>
@@ -420,22 +420,22 @@ function WheelStage({ pairId, people, manualWeights, prize, settings, request, o
   const wanted = run?.winners ?? settings.winners
   const fontOf = (lines: string[], seg: number) => Math.max(11, Math.min(30, Math.floor(seg * 1.6 / lines.length), Math.floor(NAME_SPACE / (0.62 * Math.max(...lines.map(l => l.length), 4)))))
   const pickName = last ? names.get(last.userId) ?? '' : ''
-  const message = !last ? null : last.kind === 'OUT' ? <>Выбывает: <b>{pickName}</b></>
-    : <>{wanted > 1 ? `Победитель ${winners.length} из ${wanted}` : 'Победитель'}: <b>{pickName}</b></>
-  const nextLabel = !run ? 'Крутить!' : run.replacing && !run.finished ? 'Крутить замену' : 'Крутить дальше'
+  const message = !last ? null : last.kind === 'OUT' ? <>{uiText("Выбывает:")} <b>{pickName}</b></>
+    : <>{wanted > 1 ? tr(currentLocale(), `Победитель ${winners.length} из ${wanted}`, `Gagnant ${winners.length} sur ${wanted}`, `الفائز ${winners.length} من ${wanted}`) : uiText("Победитель")}: <b>{pickName}</b></>
+  const nextLabel = !run ? tr(currentLocale(), "Крутить!", "Tourner !", "لف!") : run.replacing && !run.finished ? tr(currentLocale(), "Крутить замену", "Tirer un remplaçant", "اختار بديل") : tr(currentLocale(), "Крутить дальше", "Continuer à tourner", "واصل اللف")
 
-  return <div ref={ref} className="wheel-stage" role="dialog" aria-modal="true" aria-label="Жребий">
-    {!full && document.fullscreenEnabled && <button type="button" className="wheel-full" onClick={enterFull}>⛶ На весь экран</button>}
-    <button type="button" className="wheel-close" aria-label="Закрыть колесо" onClick={close}><Icon name="x" size={22} /></button>
+  return <div ref={ref} className="wheel-stage" role="dialog" aria-modal="true" aria-label={uiText("Жребий")}>
+    {!full && document.fullscreenEnabled && <button type="button" className="wheel-full" onClick={enterFull}>{uiText("⛶ На весь экран")}</button>}
+    <button type="button" className="wheel-close" aria-label={uiText("Закрыть колесо")} onClick={close}><Icon name="x" size={22} /></button>
     <div className="wheel-head">
-      <h2 className="wheel-title">Жребий <span>{revealed ? prizeIcon(prize) : '🎁'}</span></h2>
-      <p className={`wheel-prize ${revealed && settings.surprisePrize ? 'revealed' : ''}`}>Разыгрываем: <b>{revealed ? prize : '???'}</b></p>
+      <h2 className="wheel-title">{uiText("Жребий")} <span>{revealed ? prizeIcon(prize) : '🎁'}</span></h2>
+      <p className={`wheel-prize ${revealed && settings.surprisePrize ? 'revealed' : ''}`}>{uiText("Разыгрываем:")} <b>{revealed ? prize : '???'}</b></p>
     </div>
     <div className="wheel-area">
       <div className="wheel-pointer" aria-hidden="true" />
       <div ref={disc} className="wheel-disc" style={{ transform: `rotate(${rotation}deg)`, transitionDuration: `${duration}ms` } as CSSProperties}
         onTransitionEnd={e => { if (e.target === disc.current) land() }}>
-        <svg viewBox="0 0 600 600" role="img" aria-label={`На колесе ${n} ${plural(n, 'имя', 'имени', 'имён')}`}>
+        <svg viewBox="0 0 600 600" role="img" aria-label={tr(currentLocale(), `На колесе ${n} ${plural(n, 'имя', 'имени', 'имён')}`, `${n} noms sur la roue`, `${n} اسم في العجلة`)}>
           {n === 1 ? <circle cx={C} cy={C} r={R} fill={colorFor(wheelIds[0])} className={segClass(wheelIds[0])} />
             : wheelIds.map((id, i) => { const a = segs.start[i], sz = segs.size[i]
               return <path key={`s${id}`} d={`M ${C} ${C} L ${point(a)} A ${R} ${R} 0 ${sz > 180 ? 1 : 0} 1 ${point(a + sz)} Z`}
@@ -455,18 +455,18 @@ function WheelStage({ pairId, people, manualWeights, prize, settings, request, o
     <div className="wheel-bottom" aria-live="polite">
       <Burst trigger={burst} count={40} />
       {phase === 'done' ? <div className="wheel-result">
-        {winners.length > 0 && <span className="wheel-result-label">{winners.length > 1 ? 'Приз получают' : 'Приз получает'}{revealed ? <> — <b className="wheel-result-prize">{prize}</b></> : ''}</span>}
+        {winners.length > 0 && <span className="wheel-result-label">{winners.length > 1 ? uiText("Приз получают") : uiText("Приз получает")}{revealed ? <> — <b className="wheel-result-prize">{prize}</b></> : ''}</span>}
         <div className="wheel-winners">{winners.map(w => <span key={w.userId} className="wheel-winner">
           <b className={`wheel-result-name ${winners.length > 1 ? 'small' : ''}`}>{w.displayName}</b>
-          <button type="button" className="wheel-absent" onClick={() => absent(w.userId)} title="Победителя нет в аудитории: разыграть замену">Нет на паре</button>
+          <button type="button" className="wheel-absent" onClick={() => absent(w.userId)} title={uiText("Победителя нет в аудитории: разыграть замену")}>{uiText("Нет на паре")}</button>
         </span>)}</div>
-        {!winners.length && <span className="wheel-result-label">Победителей не осталось</span>}
-        <div className="wheel-buttons"><button type="button" className="primary" onClick={close}>Готово</button></div>
+        {!winners.length && <span className="wheel-result-label">{uiText("Победителей не осталось")}</span>}
+        <div className="wheel-buttons"><button type="button" className="primary" onClick={close}>{uiText("Готово")}</button></div>
       </div> : <div className="wheel-progress">
         {message && <p className="wheel-message">{message}</p>}
-        {winners.length > 0 && <p className="wheel-so-far">{winners.length > 1 ? 'Победители' : 'Победитель'}: {winners.map(w => w.displayName).join(', ')}</p>}
+        {winners.length > 0 && <p className="wheel-so-far">{winners.length > 1 ? uiText("Победители") : uiText("Победитель")}: {winners.map(w => w.displayName).join(', ')}</p>}
         {phase !== 'spinning' && <button type="button" className="primary wheel-spin" disabled={!n} onClick={next}>{nextLabel}</button>}
-        {phase === 'between' && settings.autoNext && <small className="wheel-auto">Следующая прокрутка сейчас начнётся…</small>}
+        {phase === 'between' && settings.autoNext && <small className="wheel-auto">{uiText("Следующая прокрутка сейчас начнётся…")}</small>}
       </div>}
     </div>
   </div>

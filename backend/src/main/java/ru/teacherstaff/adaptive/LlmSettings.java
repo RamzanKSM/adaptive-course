@@ -80,7 +80,7 @@ class LlmSettings {
      * Purposes share settings in pairs: a task repair is task generation.
      */
     private static String key(String purpose) {
-        return "TASK_REPAIR".equals(purpose) ? "TASK" : purpose;
+        return "TASK_REPAIR".equals(purpose) ? "TASK" : "TRANSLATION".equals(purpose) ? "EXPLANATION" : purpose;
     }
 
     /**
