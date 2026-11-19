@@ -22,7 +22,7 @@ type Request = <T>(action: () => Promise<T>) => Promise<T | undefined>
 const COURSES: [CourseLanguage, string][] = [['JAVA', 'Java'], ['PYTHON', 'Python']]
 const courseTitle = (language: CourseLanguage) => COURSES.find(c => c[0] === language)?.[1] ?? language
 const GRADES: BoardGrade[] = ['2', '3', '4', '5']
-const STUDENT_POLL_MS = 5_000, ADMIN_POLL_MS = 2_000, AUTOSAVE_MS = 5_000, AUTOSAVE_DEBOUNCE_MS = 1_200, LOGOUT_SECONDS = 10
+const STUDENT_POLL_MS = 5_000, BOARD_ACTIVE_POLL_MS = 1_000, ADMIN_POLL_MS = 2_000, AUTOSAVE_MS = 5_000, AUTOSAVE_DEBOUNCE_MS = 1_200, LOGOUT_SECONDS = 10
 
 /** The kinds of items in their fixed order: title, the phrase of the call dialog, minutes and weight (as the backend). */
 const KINDS: BoardItemKind[] = ['parsons', 'fix', 'code']
@@ -99,18 +99,26 @@ export const STATION_BOARD_API: BoardTestApi = { base: '/station/tests', headers
 /** Polls GET /board/current while a student is signed in. set() replaces the state at once and drops answers already on the way. */
 export function useBoardCurrent(enabled: boolean) {
   const [current, setCurrent] = useState<BoardCurrent | null>(null)
-  const seq = useRef(0)
+  const seq = useRef(0), polling = useRef(false)
+  const period = current?.test ? BOARD_ACTIVE_POLL_MS : STUDENT_POLL_MS
   useEffect(() => {
     if (!enabled) { seq.current++; setCurrent(null); return }
     let alive = true
-    const tick = () => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      if (polling.current) { timer = setTimeout(tick, period); return }
+      polling.current = true
       const id = ++seq.current
-      api<BoardCurrent>('/board/current', { headers: deviceHeaders() }).then(value => { if (alive && id === seq.current) setCurrent(value) }, () => {})
+      try {
+        const value = await api<BoardCurrent>('/board/current', { headers: deviceHeaders() })
+        if (alive && id === seq.current) setCurrent(value)
+      } catch { /* Retry after the normal interval. */ }
+      finally { polling.current = false }
+      if (alive) timer = setTimeout(tick, period)
     }
-    tick()
-    const timer = setInterval(tick, STUDENT_POLL_MS)
-    return () => { alive = false; clearInterval(timer) }
-  }, [enabled])
+    void tick()
+    return () => { alive = false; clearTimeout(timer) }
+  }, [enabled, period])
   const set = useCallback((value: BoardCurrent | null) => { seq.current++; setCurrent(value) }, [])
   return [current, set] as const
 }
@@ -249,17 +257,19 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
   }, [code, fix, parsons, persist])
   useEffect(() => { const timer = setInterval(persist, AUTOSAVE_MS); return () => clearInterval(timer) }, [persist])
 
-  const finish = useCallback(async (auto: boolean) => {
+  const finish = useCallback(async () => {
     if (done.current) return
     done.current = true; setFinishing(true); setConfirming(false); setError('')
     try { await send<{ finished: boolean }>('finish', 'POST', { ...changedAnswers(), revision: revision.current }); onFinished() }
     catch (e) {
       // Time is up or the server already closed the test (e.g. the teacher finished it): the answers are on the server.
-      if (auto || e instanceof ApiError) { onFinished(); return }
+      if (e instanceof ApiError && e.code === 'BOARD_TEST_OVER') { onFinished(); return }
+      if (e instanceof ApiError) { done.current = false; setFinishing(false); setError(e.message); return }
       done.current = false; setFinishing(false); setError(tr(currentLocale(), `Нет связи с сервером — нажми «${finishText}» ещё раз.`, `Connexion au serveur perdue — appuie à nouveau sur « ${finishText} ».`, `الاتصال بالسيرفر انقطع — اضغط «${finishText}» تاني.`))
     }
   }, [test.id, onFinished]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (over) finish(true) }, [over, finish])
+  // A stale local deadline must never submit a test just extended by the teacher.
+  useEffect(() => { if (over) void persist() }, [over, persist])
 
   // ───── «Запустить» (code and fix; each item keeps its own console) ─────
   const [stdin, setStdin] = useState('')
@@ -378,7 +388,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
         {items.some(i => !touched[i.kind]) && <p className="board-confirm-warn">{uiText("Не начато:")} {items.filter(i => !touched[i.kind]).map(i => `«${kindLabel(i.kind)}»`).join(', ')}.</p>}
         <div className="board-confirm-actions">
           <button type="button" className="ghost big" onClick={() => setConfirming(false)} autoFocus>{attest ? uiText("Продолжить") : uiText("Продолжить тест")}</button>
-          <button type="button" className="primary big" onClick={() => finish(false)}>{attest ? uiText("Сдать") : uiText("Завершить")}</button>
+          <button type="button" className="primary big" onClick={finish}>{attest ? uiText("Сдать") : uiText("Завершить")}</button>
         </div>
       </div>
     </div>}

@@ -8,7 +8,7 @@ import { RelayProjector } from './relay'
 import { plural } from './session'
 import type { BoardStudentTest, Id, StationCall, StationCurrent } from './types'
 
-const POLL_MS = 3_000, DONE_SECONDS = 8, RELAY_POLL_MS = 1_000
+const POLL_MS = 3_000, ACTIVE_POLL_MS = 1_000, DONE_SECONDS = 8, RELAY_POLL_MS = 1_000
 const COURSE: Record<string, string> = { JAVA: 'Java', PYTHON: 'Python' }
 
 /**
@@ -22,22 +22,29 @@ export function StationScreen({ onTeacherLogin, onGone }: { onTeacherLogin: () =
   const [current, setCurrent] = useState<StationCurrent | null>(null)
   const [failed, setFailed] = useState(false)
   const [done, setDone] = useState(false)
-  const seq = useRef(0)
+  const seq = useRef(0), polling = useRef(false)
   const running = useRef<Id | null>(null)
   /** The running test was an attestation: «Работа сдана» instead of «Тест сдан». */
   const attestation = useRef(false)
-  const period = current?.relay ? RELAY_POLL_MS : POLL_MS
+  const period = current?.relay ? RELAY_POLL_MS : current?.test ? ACTIVE_POLL_MS : POLL_MS
   useEffect(() => {
     if (done) return
     let alive = true
-    const tick = () => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      if (polling.current) { timer = setTimeout(tick, period); return }
+      polling.current = true
       const id = ++seq.current
-      api<StationCurrent>('/station/current').then(value => { if (alive && id === seq.current) { setCurrent(value); setFailed(false) } },
-        e => { if (!alive) return; if (e instanceof ApiError && e.status === 401) onGone(); else setFailed(true) })
+      try {
+        const value = await api<StationCurrent>('/station/current')
+        if (alive && id === seq.current) { setCurrent(value); setFailed(false) }
+      } catch (e) {
+        if (alive) { if (e instanceof ApiError && e.status === 401) onGone(); else setFailed(true) }
+      } finally { polling.current = false }
+      if (alive) timer = setTimeout(tick, period)
     }
-    tick()
-    const timer = setInterval(tick, period)
-    return () => { alive = false; clearInterval(timer) }
+    void tick()
+    return () => { alive = false; clearTimeout(timer) }
   }, [done, onGone, period])
   // The running test disappeared (the teacher finished or removed it, the time ran out): it is over for this screen too.
   useEffect(() => {
