@@ -96,10 +96,14 @@ record ReviewRequest(
  * its weight, the student's final program and its check, the «Запустить» runs during the test (oldest first, at most
  * BoardTests.LLM_RUNS, each tagged with its item) and the grade by the checks alone. skillCode: for the LLM call log.
  */
-record BoardAssessmentRequest(Language language, String skillCode, List<Item> items, List<Run> runs, int ruleGrade) {
+record BoardAssessmentRequest(Language language, String skillCode, List<Item> items, List<Run> runs, int ruleGrade, String commentWish) {
     BoardAssessmentRequest {
         items = List.copyOf(items);
         runs = List.copyOf(runs);
+    }
+
+    BoardAssessmentRequest(Language language, String skillCode, List<Item> items, List<Run> runs, int ruleGrade) {
+        this(language, skillCode, items, runs, ruleGrade, null);
     }
 
     /**

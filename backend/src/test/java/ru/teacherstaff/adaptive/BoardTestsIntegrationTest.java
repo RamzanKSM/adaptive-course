@@ -767,6 +767,14 @@ class BoardTestsIntegrationTest {
     assertEquals("Молодец", grades.path("grades").get(0).path("comment").asText());
     // The report (shown by default): per item the statement, the student's own answer, the verdict with the LLM, the check
     // message — never the reference, the solution order, the bug, the LLM's explanations or the points.
+    when(generator.assessBoardTest(eq(a), argThat(req -> req != null && "Повтори циклы".equals(req.commentWish()))))
+        .thenReturn(new BoardAssessment("Другая оценка", List.of(), List.of(), "Повтори циклы и попробуй ещё раз."));
+    var guided = read(admin, post("/api/admin/board/tests/{id}/comment-draft", id).contentType(MediaType.APPLICATION_JSON).content("{\"wish\":\"Повтори циклы\"}"));
+    assertEquals("Повтори циклы и попробуй ещё раз.", guided.path("comment").asText());
+    var unchanged = adminTest(admin, id);
+    assertEquals(view.path("assessment"), unchanged.path("assessment"));
+    assertEquals("4", unchanged.path("finalGrade").asText());
+    assertEquals("Молодец", unchanged.path("comment").asText());
     var report = grades.path("grades").get(0).path("report");
     assertEquals(3, report.size()); assertTrue(adminTest(admin, id).path("reportVisible").asBoolean(), "shown by default");
     for (var entry : report) assertEquals(Set.of("kind", "title", "statement", "language", "answer", "verdict", "passed", "check", "extraUsed"), fields(entry));

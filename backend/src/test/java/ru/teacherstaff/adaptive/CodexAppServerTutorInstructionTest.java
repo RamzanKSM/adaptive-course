@@ -62,6 +62,14 @@ class CodexAppServerTutorInstructionTest {
     assertTrue(prompt.contains("studentComment") && prompt.contains("без оценки") && prompt.contains("4–6 предложений"), "a fuller draft comment for the student, without the grade");
   }
 
+  @Test void teacherWishIsIncludedOnlyAsCommentGuidance() {
+    var request = new BoardAssessmentRequest(Language.JAVA, "LOOP_FOR", java.util.List.of(), java.util.List.of(), 3, "Посоветуй повторить циклы");
+    String prompt = CodexAppServerTutor.boardPrompt(request);
+    assertTrue(prompt.contains("<<<ПОЖЕЛАНИЕ\nПосоветуй повторить циклы\nПОЖЕЛАНИЕ>>>"));
+    assertTrue(prompt.contains("не меняет оценку и вердикты"));
+    assertFalse(CodexAppServerTutor.boardPrompt(new BoardAssessmentRequest(Language.JAVA, "LOOP_FOR", java.util.List.of(), java.util.List.of(), 3)).contains("<<<ПОЖЕЛАНИЕ"));
+  }
+
   @Test void aBoardAssessmentNeedsAReasonAndKeepsKnownItemsAndTwoQuestions() throws Exception {
     var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
     assertThrows(LlmUnavailableException.class, () -> CodexAppServerTutor.parseBoardAssessment(mapper.readTree("{\"summary\":\" \",\"items\":[],\"questions\":[]}")));

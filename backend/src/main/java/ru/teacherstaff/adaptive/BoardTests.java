@@ -1359,40 +1359,8 @@ class BoardTests implements DisposableBean {
             if (!(t.get("assessment") instanceof Map<?, ?> a) || !"PENDING".equals(a.get("status")) || t.get("results_json") == null)
                 return;
             var items = items(t);
-            var answers = answers(t);
             var results = results(t);
-            var runs = runs(t);
-            var recentRuns = new ArrayList<BoardAssessmentRequest.Run>();
-            for (var run : runs.subList(Math.max(0, runs.size() - LLM_RUNS), runs.size())) {
-                var console = run.get("console") instanceof Map<?, ?> c ? c : Map.of();
-                recentRuns.add(new BoardAssessmentRequest.Run(run.get("item") == null ? "code" : (String) run.get("item"), (String) run.get("code"), String.valueOf(console.get("status")), (String) console.get("stdout"), (String) console.get("error")));
-            }
-            var requestItems = new ArrayList<BoardAssessmentRequest.Item>();
-            for (var item : items) {
-                String kind = (String) item.get("kind");
-                if (!BoardItems.ALL.contains(kind)) continue;
-                var result = results.stream().filter(r -> kind.equals(r.get("kind"))).findFirst().orElse(Map.of());
-                boolean passed = Boolean.TRUE.equals(result.get("passed"));
-                String output = (String) result.get("output");
-                int weight = BoardItems.kind(kind).weight();
-                requestItems.add(switch (kind) {
-                    case "parsons" -> {
-                        var texts = new HashMap<Object, String>();
-                        for (var line : lineList(item)) texts.put(line.get("id"), (String) line.get("text"));
-                        var solution = item.get("solution") instanceof List<?> ids ? ids.stream().map(texts::get).toList() : List.<String>of();
-                        yield new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, solution, texts.get(item.get("extraLineId")), null, null,
-                                                              (String) result.get("program"), passed, output);
-                    }
-                    case "fix" ->
-                            new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, null, null, (String) item.get("program"), (String) item.get("bugDescription"),
-                                                            answers.get("fix") instanceof String s ? s : null, passed, output);
-                    default ->
-                            new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, null, null, null, null,
-                                                            answers.get("code") instanceof String s ? s : null, passed, output);
-                });
-            }
-            String skill = (String) items.stream().filter(i -> "code".equals(i.get("kind"))).findFirst().orElse(items.getFirst()).get("skillCode");
-            var request = new BoardAssessmentRequest(Language.of(t.get("language")), skill, requestItems, recentRuns, Integer.parseInt((String) t.get("rule_grade")));
+            var request = assessmentRequest(t, null);
             long user = ((Number) t.get("user_id")).longValue();
             Map<String, Object> assessment;
             try {
@@ -1410,6 +1378,62 @@ class BoardTests implements DisposableBean {
             db.update("update board_tests set assessment_json=? where id=? and json_extract(assessment_json,'$.status')='PENDING'", write(unavailable("Ошибка оценки: " + e.getMessage())), id);
         } finally {
             processing.remove("assess:" + id);
+        }
+    }
+
+    private BoardAssessmentRequest assessmentRequest(Map<String, Object> t, String wish) {
+        var items = items(t);
+        var answers = answers(t);
+        var results = results(t);
+        var runs = runs(t);
+        var recentRuns = new ArrayList<BoardAssessmentRequest.Run>();
+        for (var run : runs.subList(Math.max(0, runs.size() - LLM_RUNS), runs.size())) {
+            var console = run.get("console") instanceof Map<?, ?> c ? c : Map.of();
+            recentRuns.add(new BoardAssessmentRequest.Run(run.get("item") == null ? "code" : (String) run.get("item"), (String) run.get("code"), String.valueOf(console.get("status")), (String) console.get("stdout"), (String) console.get("error")));
+        }
+        var requestItems = new ArrayList<BoardAssessmentRequest.Item>();
+        for (var item : items) {
+            String kind = (String) item.get("kind");
+            if (!BoardItems.ALL.contains(kind)) continue;
+            var result = results.stream().filter(r -> kind.equals(r.get("kind"))).findFirst().orElse(Map.of());
+            boolean passed = Boolean.TRUE.equals(result.get("passed"));
+            String output = (String) result.get("output");
+            int weight = BoardItems.kind(kind).weight();
+            requestItems.add(switch (kind) {
+                case "parsons" -> {
+                    var texts = new HashMap<Object, String>();
+                    for (var line : lineList(item)) texts.put(line.get("id"), (String) line.get("text"));
+                    var solution = item.get("solution") instanceof List<?> ids ? ids.stream().map(texts::get).toList() : List.<String>of();
+                    yield new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, solution, texts.get(item.get("extraLineId")), null, null,
+                                                          (String) result.get("program"), passed, output);
+                }
+                case "fix" ->
+                        new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, null, null, (String) item.get("program"), (String) item.get("bugDescription"),
+                                                        answers.get("fix") instanceof String s ? s : null, passed, output);
+                default ->
+                        new BoardAssessmentRequest.Item(kind, (String) item.get("title"), (String) item.get("statement"), weight, null, null, null, null,
+                                                        answers.get("code") instanceof String s ? s : null, passed, output);
+            });
+        }
+        String skill = (String) items.stream().filter(i -> "code".equals(i.get("kind"))).findFirst().orElse(items.getFirst()).get("skillCode");
+        return new BoardAssessmentRequest(Language.of(t.get("language")), skill, requestItems, recentRuns, Integer.parseInt((String) t.get("rule_grade")), wish);
+    }
+
+    String commentDraft(long id, String wish) {
+        if (wish == null || wish.isBlank() || wish.length() > COMMENT_MAX)
+            throw new ApiError("INVALID_COMMENT_WISH", "Введи пожелание длиной до " + COMMENT_MAX + " символов");
+        var test = load(id);
+        if (!"FINISHED".equals(test.get("status")) || test.get("results_json") == null || test.get("rule_grade") == null)
+            throw new ApiError("BOARD_TEST_NOT_CHECKED", "Сначала дождись результатов проверки");
+        if (!generator.available()) throw new ApiError("LLM_UNAVAILABLE", "Помощник сейчас недоступен");
+        try {
+            var request = assessmentRequest(test, wish.strip());
+            long user = ((Number) test.get("user_id")).longValue();
+            String draft = generator.assessBoardTest(user, request).studentComment();
+            if (draft == null || draft.isBlank()) throw new ApiError("EMPTY_COMMENT", "Помощник вернул пустой комментарий");
+            return draft.strip();
+        } catch (LlmUnavailableException e) {
+            throw new ApiError("LLM_UNAVAILABLE", "Не удалось подготовить черновик комментария");
         }
     }
 

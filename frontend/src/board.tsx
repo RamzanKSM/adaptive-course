@@ -1502,6 +1502,18 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
   const [comment, setComment] = useState(test.comment ?? (fresh ? draft : ''))
   useEffect(() => { if (fresh && draft) setComment(current => current.trim() ? current : draft) }, [fresh, draft])
   const [report, setReport] = useState(test.reportVisible !== false)
+  const [wish, setWish] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [proposal, setProposal] = useState('')
+  const [draftError, setDraftError] = useState('')
+  async function generateDraft() {
+    setGenerating(true); setDraftError(''); setProposal('')
+    try {
+      const result = await post<{ comment: string }>(`/admin/board/tests/${test.id}/comment-draft`, { wish })
+      setProposal(result.comment)
+    } catch (e) { setDraftError(e instanceof Error ? e.message : String(e)) }
+    finally { setGenerating(false) }
+  }
   const [saving, setSaving] = useState(false)
   const changed = grade !== test.finalGrade || comment.trim() !== (test.comment ?? '').trim() || report !== (test.reportVisible !== false)
   async function submit(e: FormEvent) {
@@ -1519,6 +1531,16 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
     {draft && comment.trim() === draft && comment.trim() !== (test.comment ?? '').trim()
       ? <p className="muted small board-comment-draft"><Icon name="sparkle" size={14} /> {uiText("Черновик от нейросети — поправь, если нужно. Студент увидит комментарий только после сохранения.")}</p>
       : draft && comment.trim() !== draft && <button type="button" className="ghost small-button board-comment-draft" onClick={() => setComment(draft)}><Icon name="sparkle" size={14} /> {uiText("Вставить черновик нейросети")}</button>}
+    {test.status === 'FINISHED' && <div>
+      <label>{tr(currentLocale(), 'Пожелание к комментарию', 'Consigne pour le commentaire', 'توجيه للتعليق')}
+        <textarea rows={2} maxLength={1000} value={wish} onChange={e => setWish(e.target.value)}
+          placeholder={tr(currentLocale(), 'Например, посоветуй ещё раз повторить циклы', 'Par exemple, conseille de revoir les boucles', 'مثلاً: انصح بمراجعة الحلقات')} /></label>
+      <button type="button" className="ghost small-button" disabled={generating || !wish.trim()} onClick={generateDraft}>
+        {generating && <span className="spinner" />} {tr(currentLocale(), 'Подготовить черновик', 'Préparer un brouillon', 'إعداد مسودة')}</button>
+      {draftError && <p role="alert">{draftError}</p>}
+      {proposal && <div><p>{proposal}</p><button type="button" className="ghost small-button" onClick={() => { setComment(proposal); setProposal('') }}>
+        {tr(currentLocale(), 'Вставить этот комментарий', 'Utiliser ce commentaire', 'استخدم التعليق ده')}</button></div>}
+    </div>}
     <label className="board-report-toggle"><input type="checkbox" checked={report} onChange={e => setReport(e.target.checked)} />
       <span><b>{uiText("Показать студенту разбор")}</b><small>{uiText("Во вкладке студента «Оценки и план»: по каждому заданию условие, его код, «верно / частично / не верно» и сообщение проверки. Без эталона, описания ошибки, баллов и пояснений LLM.")}</small></span></label>
     <div className="pair-form-actions">

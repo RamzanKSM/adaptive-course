@@ -1693,6 +1693,12 @@ public class ApiController {
         return test;
     }
 
+    @PostMapping("/admin/board/tests/{id}/comment-draft")
+    public Map<String, Object> boardCommentDraft(@PathVariable long id, @RequestBody Map<String, Object> body, HttpServletRequest r) {
+        admin(r);
+        return Map.of("comment", boardTests.commentDraft(id, body.get("wish") instanceof String s ? s : null));
+    }
+
     @PostMapping("/admin/board/tests/{id}/assess")
     public Map<String, Object> assessBoardTest(@PathVariable long id, HttpServletRequest r) {
         admin(r);

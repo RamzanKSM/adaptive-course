@@ -277,6 +277,8 @@ class CodexAppServerTutor implements LlmTutor, LearningContentGenerator, AutoClo
     static String boardPrompt(BoardAssessmentRequest r) {
         var text = new StringBuilder();
         text.append("Курс: ").append(r.language().title).append(".\n\n");
+        if (r.commentWish() != null && !r.commentWish().isBlank())
+            text.append("Пожелание преподавателя только к черновику комментария студенту (не меняет оценку и вердикты):\n<<<ПОЖЕЛАНИЕ\n").append(r.commentWish()).append("\nПОЖЕЛАНИЕ>>>\n\n");
         int n = 1;
         for (var item : r.items()) {
             text.append("Задание ").append(n++).append(" (").append(item.kind()).append(", «").append(BOARD_TITLES.get(item.kind())).append("», вес ").append(item.weight()).append("): «")
