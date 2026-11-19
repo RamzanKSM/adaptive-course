@@ -558,7 +558,9 @@ class BoardTests implements DisposableBean {
         long id = ((Number) t.get("id")).longValue(), user = ((Number) t.get("user_id")).longValue();
         for (int attempt = 0; ; attempt++) {
             Language lang = Language.of(t.get("language"));
-            var items = attestation(t) ? List.of(attestationItem(user, lang, (String) t.get("group_name"), now, Set.of()))
+            var selected = selection(t);
+            var items = selected != null && selected.get("taskId") instanceof Number task ? List.of(BoardTaskBank.item(db, lang, task.longValue()))
+                    : attestation(t) ? List.of(attestationItem(user, lang, (String) t.get("group_name"), now, Set.of()))
                     : chooseItems(user, lang, kinds(t), selectionMinimum(t, lang, now), now, new HashMap<>(), new HashSet<>(), new HashSet<>(), selectedTopics(t), selection(t) != null);
             String pace = paceStatus(user, lang, now);
             var answers = new LinkedHashMap<String, Object>();
@@ -733,13 +735,13 @@ class BoardTests implements DisposableBean {
     }
 
     Map<String, Object> run(long user, long id, Object item, String code, String device) {
-        return run(user, id, item, code, device, null);
+        return run(user, id, item, code, device, null, "");
     }
 
     /**
      * revision: the screen's revision of the test; a run of a replaced item's old code is shown but not saved as the answer.
      */
-    Map<String, Object> run(long user, long id, Object item, String code, String device, Object revision) {
+    Map<String, Object> run(long user, long id, Object item, String code, String device, Object revision, String stdin) {
         Instant now = now();
         settle(now);
         var t = own(user, id);
@@ -751,7 +753,7 @@ class BoardTests implements DisposableBean {
         boolean stale = items(t).stream().anyMatch(i -> kind.equals(i.get("kind")) && stale(i, revision));
         Language lang = Language.of(t.get("language"));
         long started = System.nanoTime();
-        var console = runner.console(lang, code, "");
+        var console = runner.console(lang, code, stdin);
         log.info("Board test {} console run ({}, {}): {} in {} ms", id, lang, kind, console.status(), (System.nanoTime() - started) / 1_000_000);
         if (stale) log.info("Board test {}: a run of the replaced {} item, not saved as the answer", id, kind);
         else
@@ -862,7 +864,10 @@ class BoardTests implements DisposableBean {
                     view.put("extraLines", item.get("extraLines"));
                 }
                 case "fix" -> view.put("program", item.get("program"));
-                default -> view.put("starterCode", item.get("starterCode"));
+                default -> {
+                    view.put("starterCode", item.get("starterCode"));
+                    if (item.get("bankTask") != null) view.put("bankTask", true);
+                }
             }
             items.add(view);
             shown.put(kind, answers.get(kind));
@@ -1464,8 +1469,15 @@ class BoardTests implements DisposableBean {
         if (!FORMAT_TEST.equals(format) && !FORMAT_ATTESTATION.equals(format))
             throw new ApiError("INVALID_FORMAT", "format — TEST или ATTESTATION");
         Language lang = Language.parse((String) body.get("language"));
+        if (FORMAT_ATTESTATION.equals(format) && body.get("taskId") != null) throw new ApiError("INVALID_FORMAT", "Задача из банка доступна только для обычного вызова");
         if (FORMAT_ATTESTATION.equals(format))
             return summary(load(call(admin, user.longValue(), lang, List.of("code"), seconds(body.get("minutes")), FORMAT_ATTESTATION)));
+        if (body.get("taskId") != null) {
+            if (!(body.get("taskId") instanceof Number task) || task.longValue() <= 0 || task.doubleValue() != task.longValue())
+                throw new ApiError("INVALID_TASK", "Некорректный ID задачи");
+            BoardTaskBank.item(db, lang, task.longValue());
+            return summary(load(call(admin, user.longValue(), lang, List.of("code"), BoardItems.seconds(List.of("code")), FORMAT_TEST, write(obj("taskId", task.longValue())))));
+        }
         var kinds = BoardItems.parse(body.get("kinds"));
         var rows = db.queryForList("select group_name from users where id=? and role='STUDENT'", user.longValue());
         if (rows.isEmpty()) throw new NotFoundError("STUDENT_NOT_FOUND", "Студент не найден");
@@ -1525,6 +1537,7 @@ class BoardTests implements DisposableBean {
         settle(now);
         var t = load(id);
         requireEditable(t);
+        if (selection(t) != null && selection(t).containsKey("taskId")) throw new ApiError("BOARD_FIXED_TASK", "Выбранную задачу нельзя изменить");
         if (attestation(t)) {
             int seconds = body != null && body.get("minutes") != null ? seconds(body.get("minutes")) : duration(t);
             if (db.update("update board_tests set duration_seconds=? where id=? and status in ('CALLED','EXPIRED')", seconds, id) == 0)
@@ -1556,6 +1569,7 @@ class BoardTests implements DisposableBean {
             var t = load(id);
             if (!"STARTED".equals(t.get("status")) || now.isAfter(instant(t.get("ends_at")).plus(GRACE)))
                 throw new ApiError("BOARD_TEST_NOT_RUNNING", "Заменить задание можно только в идущем тесте");
+            if (selection(t) != null && selection(t).containsKey("taskId")) throw new ApiError("BOARD_FIXED_TASK", "Выбранную задачу нельзя заменить");
             var items = new ArrayList<>(items(t));
             int index = -1;
             for (int i = 0; i < items.size(); i++) if (items.get(i).get("kind").equals(kind)) index = i;
@@ -1749,10 +1763,12 @@ class BoardTests implements DisposableBean {
 
     private Map<String, Object> summary(Map<String, Object> t) {
         var assessment = t.get("assessment") instanceof Map<?, ?> a ? a.get("status") : null;
-        return obj("id", t.get("id"), "userId", t.get("user_id"), "displayName", t.get("display_name"), "status", t.get("status"), "calledAt", t.get("called_at"),
+        var view = obj("id", t.get("id"), "userId", t.get("user_id"), "displayName", t.get("display_name"), "status", t.get("status"), "calledAt", t.get("called_at"),
                    "expiresAt", t.get("call_expires_at"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "finishedAt", t.get("finished_at"),
                    "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t), "source", source(t),
                    "stationId", t.get("station_id"), "stationName", t.get("station_name"), "format", format(t));
+        if (selection(t) != null && selection(t).containsKey("taskId")) view.put("bankTask", true);
+        return view;
     }
 
     /**

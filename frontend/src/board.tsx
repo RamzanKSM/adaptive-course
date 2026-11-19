@@ -1,3 +1,4 @@
+import { BoardTaskBank } from './boardTaskBank'
 import { currentLocale, tr } from './locale'
 import { uiText } from './uiText'
 import { CSSProperties, DragEvent, FormEvent, KeyboardEvent, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -261,12 +262,13 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
   useEffect(() => { if (over) finish(true) }, [over, finish])
 
   // ───── «Запустить» (code and fix; each item keeps its own console) ─────
+  const [stdin, setStdin] = useState('')
   const [runs, setRuns] = useState<Partial<Record<RunKind, { console: ConsoleRun; n: number }>>>({})
   const [running, setRunning] = useState<RunKind | null>(null)
   async function runItem(item: RunKind, text: string) {
     setRunning(item); setError('')
     try {
-      const result = await send<{ console: ConsoleRun }>('run', 'POST', { item, code: text, revision: revision.current })
+      const result = await send<{ console: ConsoleRun }>('run', 'POST', { item, code: text, revision: revision.current, stdin })
       setRuns(r => ({ ...r, [item]: { console: result.console, n: (r[item]?.n ?? 0) + 1 } }))
     }
     catch (e) { setError(e instanceof Error ? e.message : tr(currentLocale(), "Не удалось запустить программу", "Impossible d’exécuter le programme", "تعذر تشغيل البرنامج")) }
@@ -358,6 +360,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
                 <CodeMirror className="code-editor board-editor" value={item.kind === 'fix' ? fix : code} extensions={EDITOR_EXTENSIONS[item.language]} editable={!locked} readOnly={locked}
                   onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited(item.kind) }}
                   aria-label={item.kind === 'fix' ? tr(currentLocale(), `Программа с ошибкой на ${courseTitle(item.language)}`, `Programme erroné en ${courseTitle(item.language)}`, `برنامج فيه خطأ بلغة ${courseTitle(item.language)}`) : tr(currentLocale(), `Редактор решения на ${courseTitle(item.language)}`, `Éditeur de solution ${courseTitle(item.language)}`, `محرر الحل بلغة ${courseTitle(item.language)}`)} />
+                {item.kind === 'code' && item.bankTask && <label>{tr(currentLocale(), "Входные данные", "Données d’entrée", "بيانات الإدخال")}<textarea rows={3} maxLength={10000} value={stdin} onChange={e => setStdin(e.target.value)} /></label>}
                 {runs[item.kind] && <ConsolePanel key={runs[item.kind]!.n} run={runs[item.kind]!.console} origin="run" language={item.language} />}
               </div>
             </>}
@@ -832,7 +835,7 @@ function BoardActions({ test, busy, onAct, onEdit }: { test: BoardTestSummary; b
   return <div className="board-actions">
     {live(test) && button('extend', 'plus', tr(currentLocale(), "+1 мин", "+1 min", "+١ دقيقة"))}
     {test.status === 'STARTED' && button('finish', 'flag', tr(currentLocale(), "Завершить сейчас", "Terminer maintenant", "أنهي الآن"))}
-    {editable && <button type="button" className="ghost small-button" disabled={!!mine} onClick={() => setEditing(true)}><Icon name="target" size={15} />{uiText("Изменить")}</button>}
+    {editable && !test.bankTask && <button type="button" className="ghost small-button" disabled={!!mine} onClick={() => setEditing(true)}><Icon name="target" size={15} />{uiText("Изменить")}</button>}
     {test.status === 'CALLED' && button('cancel', 'x', tr(currentLocale(), "Отменить", "Annuler", "إلغاء"))}
     {button('recall', 'refresh', tr(currentLocale(), "Вызвать снова", "Convoquer à nouveau", "استدعي تاني"))}
     {button('delete', 'x', tr(currentLocale(), "Удалить", "Supprimer", "حذف"), 'ghost danger')}
@@ -1075,6 +1078,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
         : <aside className="card board-summary" aria-label={uiText("Итог")}><h2 className="card-title">{uiText("Итог")}</h2><p className="muted small">{SUMMARY_HINT}</p></aside>}
     </div>
 
+    {group && language && overview && <BoardTaskBank key={`bank:${query}`} language={language} members={overview.members} onCalled={id => { setReload(n => n + 1); open(id) }} />}
     <BoardJournalCard key={query} journal={journal} openId={openId} onOpen={open} />
     <BoardStations request={request} onBecomeStation={onBecomeStation} />
   </section>
@@ -1202,7 +1206,7 @@ function BoardTestItems({ test, onReplace }: { test: BoardAdminTest; onReplace?:
       const check = checkOf(test, item.kind, i)
       return <BoardItemBlock key={item.kind} id={`board-review-${test.id}-${item.kind}`} labelledBy={`board-review-tab-${test.id}-${item.kind}`} hidden={i !== shown}
         item={item} check={check} explanation={explanation(item.kind)}>
-        {onReplace && <ReplaceItem key={`${item.kind}:${item.taskId ?? ''}`} kind={item.kind} onReplace={onReplace} />}
+        {onReplace && !test.bankTask && <ReplaceItem key={`${item.kind}:${item.taskId ?? ''}`} kind={item.kind} onReplace={onReplace} />}
         {item.statement && <div className="board-statement-open"><small>{uiText("Условие")}</small><Markdown>{item.statement}</Markdown></div>}
         {item.kind === 'parsons' ? <ParsonsReview item={item} placed={test.answers?.parsons ?? null} assembled={check?.program ?? null} />
           : item.kind === 'fix' ? <>

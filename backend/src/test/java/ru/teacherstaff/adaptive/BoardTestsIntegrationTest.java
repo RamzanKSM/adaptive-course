@@ -95,6 +95,39 @@ class BoardTestsIntegrationTest {
 
   // ---------------------------------------------------------------- kinds and time
 
+  @Test void aTeacherFindsAndCallsAnArchivedHardTask() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("bank-hard", "Студент", "BANK"); long student = studentId("bank-hard");
+    String topic = skill("BT_BANK_HARD", 2);
+    long task = codeTask(topic, 2, "CURATED", "curated:bank-hard:1");
+    db.update("update tasks set title='Редкая задача циклы',mode='HARD',active=0,reference_code='SECRET REFERENCE' where id=?", task);
+    db.update("insert into task_cases(task_id,ordinal,input,expected,is_public) values(?,1,'42\n','ok\n',1)", task);
+    var search = read(admin, get("/api/admin/board/bank").param("language", "JAVA").param("query", "ЦИКЛЫ"));
+    assertTrue(search.path("tasks").toString().contains("Редкая задача циклы"));
+    expect(token, get("/api/admin/board/bank").param("language", "JAVA"), status().isBadRequest(), "FORBIDDEN");
+    long id = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content("{\"userId\":" + student + ",\"language\":\"JAVA\",\"taskId\":" + task + "}")).path("id").asLong();
+    expect(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"fix\"]}"), status().isBadRequest(), "BOARD_FIXED_TASK");
+    var started = read(token, post("/api/board/tests/{id}/start", id));
+    assertEquals("Редкая задача циклы", started.path("items").get(0).path("title").asText());
+    assertTrue(started.path("items").get(0).path("bankTask").asBoolean());
+    assertFalse(started.toString().contains("SECRET REFERENCE"));
+    assertEquals(task, adminTest(admin, id).path("items").get(0).path("taskId").asLong());
+    read(token, post("/api/board/tests/{id}/run", id).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"code\",\"code\":\"print(1)\",\"stdin\":\"42\"}"));
+    verify(runner).console(Language.JAVA, "print(1)", "42");
+    expect(admin, post("/api/admin/board/tests/{id}/items/code/replace", id), status().isBadRequest(), "BOARD_FIXED_TASK");
+    read(token, post("/api/board/tests/{id}/finish", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"RIGHT\"}"));
+    verify(runner).run(eq(Language.JAVA), eq("RIGHT"), contains("42"));
+    long again = read(admin, post("/api/admin/board/tests/{id}/recall", id)).path("id").asLong();
+    String stationToken = stationToken(admin);
+    var stationView = station(stationToken, post("/api/station/tests/{id}/start", again));
+    assertFalse(stationView.toString().contains("SECRET REFERENCE"));
+    assertEquals(task, adminTest(admin, again).path("items").get(0).path("taskId").asLong());
+    station(stationToken, post("/api/station/tests/{id}/run", again).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"code\",\"code\":\"station code\",\"stdin\":\"123\"}"));
+    verify(runner).console(Language.JAVA, "station code", "123");
+    finishNow(admin, again);
+    mvc.perform(delete("/api/station").header("X-Board-Station", stationToken)).andExpect(status().isNoContent());
+  }
+
   @Test void theKindsAreChosenAtTheCallAndGiveTheTime() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("kd-a", "Карина", "K-1"); long a = studentId("kd-a");

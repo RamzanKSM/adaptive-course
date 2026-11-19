@@ -173,7 +173,7 @@ export interface BoardLine { id: string; text: string }
 export type BoardStudentItem =
   | { kind: 'parsons'; title: string; statement: string; language: CourseLanguage; before: string; after: string; lines: BoardLine[]; extraLines: number }
   | { kind: 'fix'; title: string; statement: string; language: CourseLanguage; program: string }
-  | { kind: 'code'; title: string; statement: string; language: CourseLanguage; starterCode?: string | null }
+  | { kind: 'code'; title: string; statement: string; language: CourseLanguage; starterCode?: string | null; bankTask?: boolean }
 /** Only the chosen kinds: code/fix — the program text, parsons — ids of the placed lines in the student's order. */
 export interface BoardAnswers { code?: string | null; fix?: string | null; parsons?: string[] | null }
 /** The student's view: never the checks, scores, grades or the assessment. now — the server clock. */
@@ -186,7 +186,7 @@ export interface BoardStudentTest {
   revision?: number
   /** The student's name (station views only). */
   displayName?: string
-  format?: BoardFormat
+  format?: BoardFormat; bankTask?: boolean
 }
 /** GET /board/current: the student's active call or their running test. canStart false — the test starts only at the board station. */
 export interface BoardCurrent { call: { id: Id; calledAt: string; expiresAt: string; kinds?: BoardItemKind[] | null; durationSeconds?: number | null; canStart?: boolean; format?: BoardFormat } | null; test: BoardStudentTest | null }
@@ -236,6 +236,7 @@ export interface BoardTestSummary {
   kinds?: BoardItemKind[] | null; durationSeconds?: number | null; source?: BoardSource
   /** The station the test was started at; null — from the student's own account. */
   stationId?: Id | null; stationName?: string | null
+  bankTask?: boolean
   format?: BoardFormat
 }
 export interface BoardMember { userId: Id; login: string; displayName: string; present: boolean; lastTestAt: string | null; tests: number; lastGrade: BoardGrade | null

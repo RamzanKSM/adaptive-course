@@ -1598,7 +1598,9 @@ public class ApiController {
         long retryAfter = runLimiter.retryAfterSeconds(u);
         if (retryAfter > 0)
             return ResponseEntity.status(429).header("Retry-After", String.valueOf(retryAfter)).body(Map.of("error", "RUN_RATE_LIMITED", "message", translations.text("Слишком много запусков подряд. Подожди " + retryAfter + " с.", "system-error", List.of())));
-        return ResponseEntity.ok(boardTests.run(u, id, b.get("item"), source, device, b.get("revision")));
+        String stdin = b.get("stdin") instanceof String in ? in : "";
+        if (stdin.length() > 10_000) throw bad("STDIN_TOO_LONG", "Входные данные длиннее 10 000 символов");
+        return ResponseEntity.ok(boardTests.run(u, id, b.get("item"), source, device, b.get("revision"), stdin));
     }
 
     @PostMapping("/board/tests/{id}/finish")
@@ -1615,6 +1617,12 @@ public class ApiController {
     public Map<String, Object> board(@RequestParam(name = "group", required = false) String group, @RequestParam(name = "language", required = false) String language, HttpServletRequest r) {
         admin(r);
         return boardTests.overview(group, language);
+    }
+
+    @GetMapping("/admin/board/bank")
+    public BoardTaskBank.Page boardBank(@RequestParam String language, @RequestParam(defaultValue = "") String query, @RequestParam(defaultValue = "0") int offset, HttpServletRequest r) {
+        admin(r);
+        return BoardTaskBank.search(db, Language.parse(language), query, offset);
     }
 
     @GetMapping("/admin/board/topics")
