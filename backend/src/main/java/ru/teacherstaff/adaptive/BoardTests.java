@@ -461,8 +461,8 @@ class BoardTests implements DisposableBean {
     void settle(Instant now) {
         int expired = db.update("update board_tests set status='EXPIRED' where status='CALLED' and call_expires_at<?", iso(now));
         if (expired > 0) log.info("{} board call(s) expired", expired);
-        for (long id : db.queryForList("select id from board_tests where status='STARTED' and ends_at<?", Long.class, iso(now.minus(GRACE))))
-            if (claim(id, Map.of(), now)) {
+        for (long id : db.queryForList("select id from board_tests where status='STARTED' and paused_at is null and ends_at<?", Long.class, iso(now.minus(GRACE))))
+            if (claimExpired(id, now)) {
                 log.info("Board test {} finished by the server: its time is over", id);
                 executor.execute(() -> check(id));
             }
@@ -475,7 +475,7 @@ class BoardTests implements DisposableBean {
     /**
      * STARTED → FINISHED with the given answers on top of the autosaved ones; false if another request finished it first.
      */
-    private boolean claim(long id, Map<String, Object> answers, Instant now) {
+    private boolean claim(long id, Map<String, Object> answers, Instant now, boolean student) {
         var set = answersUpdate(answers);
         var params = new ArrayList<Object>();
         params.add(iso(now));
@@ -484,6 +484,11 @@ class BoardTests implements DisposableBean {
         params.add(id);
         return db.update("update board_tests set status='FINISHED',finished_at=?,answers_json=" + set.sql() + ",assessment_json=? where id=? and status='STARTED'", params.toArray()) > 0;
     }
+    private boolean claimExpired(long id, Instant now) {
+        return db.update("update board_tests set status='FINISHED',finished_at=?,assessment_json=? where id=? and status='STARTED' and paused_at is null and ends_at<?",
+                iso(now), write(Map.of("status", "PENDING")), id, iso(now.minus(GRACE))) > 0;
+    }
+
     /**
      * The answers of a request body, validated against the test's items: code and fix — text; parsons — ids of the item's
      * lines, each at most once. A field of a kind the test does not have is an error; absent and null fields are left out.
@@ -719,6 +724,9 @@ class BoardTests implements DisposableBean {
         var t = own(user, id);
         requireDevice(t, device);
         requireRunning(t, now);
+        // Let an in-flight draft arrive just after pause, using the same grace as expiry.
+        if (t.get("paused_at") != null && now.isAfter(instant(t.get("paused_at")).plus(GRACE)))
+            throw new ApiError("BOARD_TEST_PAUSED", "Тест на паузе");
         var set = answersUpdate(submitted(body, items(t)));
         var params = new ArrayList<Object>(set.params());
         params.add(id);
@@ -747,6 +755,7 @@ class BoardTests implements DisposableBean {
         var t = own(user, id);
         requireDevice(t, device);
         requireRunning(t, now);
+        if (t.get("paused_at") != null) throw new ApiError("BOARD_TEST_PAUSED", "Тест на паузе");
         String kind = item == null ? "code" : item instanceof String s ? s : "";
         if (!List.of("code", "fix").contains(kind) || !kinds(t).contains(kind))
             throw new ApiError("INVALID_ITEM", "Запускать можно только код заданий этого теста «Исправь ошибку» и «Напиши код»");
@@ -775,11 +784,16 @@ class BoardTests implements DisposableBean {
         var t = own(user, id);
         requireDevice(t, device);
         if ("STARTED".equals(t.get("status"))) {
+            if (t.get("paused_at") != null) throw new ApiError("BOARD_TEST_PAUSED", "Тест на паузе");
             var answers = submitted(body, items(t));
             if (now.isAfter(instant(t.get("ends_at")).plus(GRACE))) answers = Map.of();
-            if (claim(id, answers, now)) {
+            if (claim(id, answers, now, true)) {
                 log.info("Board test {} finished by the student", id);
                 check(id);
+            } else {
+                var after = own(user, id);
+                if (after.get("paused_at") != null && "STARTED".equals(after.get("status")))
+                    throw new ApiError("BOARD_TEST_PAUSED", "Тест на паузе");
             }
         } else if (!"FINISHED".equals(t.get("status"))) throw new ApiError("BOARD_TEST_NOT_STARTED", "Тест не начат");
         return obj("finished", true);
@@ -836,7 +850,7 @@ class BoardTests implements DisposableBean {
 
     private void requireRunning(Map<String, Object> t, Instant now) {
         if (!"STARTED".equals(t.get("status"))) throw over();
-        if (now.isAfter(instant(t.get("ends_at")).plus(GRACE)))
+        if (t.get("paused_at") == null && now.isAfter(instant(t.get("ends_at")).plus(GRACE)))
             throw new ApiError("BOARD_TEST_OVER", "Время теста вышло");
     }
 
@@ -845,7 +859,7 @@ class BoardTests implements DisposableBean {
      */
     private Map<String, Object> studentView(Map<String, Object> t, String device) {
         if (elsewhere(t, device))
-            return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "now", iso(now()), "elsewhere", true, "format", format(t));
+            return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "pausedAt", t.get("paused_at"), "now", iso(now()), "elsewhere", true, "format", format(t));
         return studentView(t);
     }
 
@@ -872,7 +886,7 @@ class BoardTests implements DisposableBean {
             items.add(view);
             shown.put(kind, answers.get(kind));
         }
-        return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "now", iso(now()), "durationSeconds", duration(t),
+        return obj("id", t.get("id"), "status", t.get("status"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "pausedAt", t.get("paused_at"), "now", iso(now()), "durationSeconds", duration(t),
                    "items", items, "answers", shown, "revision", revision(t), "format", format(t));
     }
 
@@ -1063,7 +1077,7 @@ class BoardTests implements DisposableBean {
      * Lessons, the assistant and the console are closed while the student's attestation runs (owner, 2026-10-27).
      */
     void requireNoAttestation(long user) {
-        if (count("select count(*) from board_tests where user_id=? and format=? and status='STARTED' and ends_at>=?", user, FORMAT_ATTESTATION, iso(now().minus(GRACE))) > 0)
+        if (count("select count(*) from board_tests where user_id=? and format=? and status='STARTED' and (paused_at is not null or ends_at>=?)", user, FORMAT_ATTESTATION, iso(now().minus(GRACE))) > 0)
             throw new ApiError("ATTESTATION_RUNNING", "Идёт аттестация — уроки и помощник откроются, когда сдашь работу");
     }
 
@@ -1567,7 +1581,7 @@ class BoardTests implements DisposableBean {
         settle(now);
         for (int attempt = 0; ; attempt++) {
             var t = load(id);
-            if (!"STARTED".equals(t.get("status")) || now.isAfter(instant(t.get("ends_at")).plus(GRACE)))
+            if (!"STARTED".equals(t.get("status")) || (t.get("paused_at") == null && now.isAfter(instant(t.get("ends_at")).plus(GRACE))))
                 throw new ApiError("BOARD_TEST_NOT_RUNNING", "Заменить задание можно только в идущем тесте");
             if (selection(t) != null && selection(t).containsKey("taskId")) throw new ApiError("BOARD_FIXED_TASK", "Выбранную задачу нельзя заменить");
             var items = new ArrayList<>(items(t));
@@ -1638,15 +1652,42 @@ class BoardTests implements DisposableBean {
             throw new ApiError("INVALID_SECONDS", "seconds — целое число от 1 до " + EXTEND_MAX_SECONDS);
         Instant now = now();
         settle(now);
-        var t = load(id);
-        switch ((String) t.get("status")) {
-            case "CALLED", "EXPIRED" ->
-                    db.update("update board_tests set status='CALLED',call_expires_at=? where id=?", iso(later(instant(t.get("call_expires_at")), now).plusSeconds(seconds)), id);
-            case "STARTED" ->
-                    db.update("update board_tests set ends_at=? where id=? and status='STARTED'", iso(later(instant(t.get("ends_at")), now).plusSeconds(seconds)), id);
-            default -> throw new ApiError("BOARD_TEST_NOT_RUNNING", "Продлить можно только вызов или идущий тест");
+        for (;;) {
+            var t = load(id);
+            int updated;
+            switch ((String) t.get("status")) {
+                case "CALLED", "EXPIRED" -> updated = db.update(
+                        "update board_tests set status='CALLED',call_expires_at=? where id=? and status=? and call_expires_at is ?",
+                        iso(later(instant(t.get("call_expires_at")), now).plusSeconds(seconds)), id, t.get("status"), t.get("call_expires_at"));
+                case "STARTED" -> {
+                    Instant base = t.get("paused_at") == null ? now : instant(t.get("paused_at"));
+                    updated = db.update("update board_tests set ends_at=? where id=? and status='STARTED' and ends_at is ? and paused_at is ?",
+                            iso(later(instant(t.get("ends_at")), base).plusSeconds(seconds)), id, t.get("ends_at"), t.get("paused_at"));
+                }
+                default -> throw new ApiError("BOARD_TEST_NOT_RUNNING", "Продлить можно только вызов или идущий тест");
+            }
+            if (updated > 0) break;
         }
         log.info("Board test {} extended by {} s", id, seconds);
+        return adminView(load(id));
+    }
+
+    Map<String, Object> pause(long id, boolean pause) {
+        Instant now = now();
+        settle(now);
+        for (;;) {
+            var t = load(id);
+            if (!"STARTED".equals(t.get("status"))) throw new ApiError("BOARD_TEST_NOT_RUNNING", "Тест не идёт");
+            if (pause && t.get("paused_at") == null) {
+                if (!now.isBefore(instant(t.get("ends_at")))) throw over();
+                if (db.update("update board_tests set paused_at=? where id=? and status='STARTED' and paused_at is null and ends_at is ?",
+                        iso(now), id, t.get("ends_at")) > 0) break;
+            } else if (!pause && t.get("paused_at") != null) {
+                Instant paused = instant(t.get("paused_at"));
+                if (db.update("update board_tests set ends_at=?,paused_at=null where id=? and status='STARTED' and paused_at=? and ends_at is ?",
+                        iso(instant(t.get("ends_at")).plus(Duration.between(paused, later(paused, now)))), id, t.get("paused_at"), t.get("ends_at")) > 0) break;
+            } else break;
+        }
         return adminView(load(id));
     }
 
@@ -1658,7 +1699,7 @@ class BoardTests implements DisposableBean {
         settle(now);
         var t = load(id);
         if ("STARTED".equals(t.get("status"))) {
-            if (claim(id, Map.of(), now)) {
+            if (claim(id, Map.of(), now, false)) {
                 log.info("Board test {} finished by the teacher", id);
                 check(id);
             }
@@ -1764,7 +1805,7 @@ class BoardTests implements DisposableBean {
     private Map<String, Object> summary(Map<String, Object> t) {
         var assessment = t.get("assessment") instanceof Map<?, ?> a ? a.get("status") : null;
         var view = obj("id", t.get("id"), "userId", t.get("user_id"), "displayName", t.get("display_name"), "status", t.get("status"), "calledAt", t.get("called_at"),
-                   "expiresAt", t.get("call_expires_at"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "finishedAt", t.get("finished_at"),
+                   "expiresAt", t.get("call_expires_at"), "startedAt", t.get("started_at"), "endsAt", t.get("ends_at"), "pausedAt", t.get("paused_at"), "finishedAt", t.get("finished_at"),
                    "suggestedGrade", t.get("suggested_grade"), "finalGrade", t.get("final_grade"), "assessmentStatus", assessment, "kinds", kinds(t), "durationSeconds", duration(t), "source", source(t),
                    "stationId", t.get("station_id"), "stationName", t.get("station_name"), "format", format(t));
         if (selection(t) != null && selection(t).containsKey("taskId")) view.put("bankTask", true);

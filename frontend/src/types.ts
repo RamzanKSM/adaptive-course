@@ -178,7 +178,7 @@ export type BoardStudentItem =
 export interface BoardAnswers { code?: string | null; fix?: string | null; parsons?: string[] | null }
 /** The student's view: never the checks, scores, grades or the assessment. now — the server clock. */
 export interface BoardStudentTest {
-  id: Id; status: BoardStatus; startedAt: string; endsAt: string; now: string; durationSeconds?: number | null
+  id: Id; status: BoardStatus; startedAt: string; endsAt: string; pausedAt?: string | null; now: string; durationSeconds?: number | null
   items: BoardStudentItem[]; answers: BoardAnswers
   /** The test runs in another browser (the board PC): only id, status, startedAt, endsAt and now come with it. */
   elsewhere?: boolean
@@ -231,7 +231,7 @@ export interface BoardStudentGrade { id: Id; date: string; grade: BoardGrade; co
 export type AssessmentStatus = 'PENDING' | 'DONE' | 'UNAVAILABLE'
 export interface BoardTestSummary {
   id: Id; userId: Id; displayName: string; status: BoardStatus
-  calledAt: string; expiresAt: string | null; startedAt: string | null; endsAt: string | null; finishedAt: string | null
+  calledAt: string; expiresAt: string | null; startedAt: string | null; endsAt: string | null; pausedAt?: string | null; finishedAt: string | null
   suggestedGrade: BoardGrade | null; finalGrade: BoardGrade | null; assessmentStatus: AssessmentStatus | null
   kinds?: BoardItemKind[] | null; durationSeconds?: number | null; source?: BoardSource
   /** The station the test was started at; null — from the student's own account. */

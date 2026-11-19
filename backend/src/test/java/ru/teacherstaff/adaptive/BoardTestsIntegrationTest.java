@@ -62,8 +62,10 @@ class BoardTestsIntegrationTest {
   static String assembled(List<String> lines) { return BEFORE + "\n" + String.join("\n", lines) + "\n" + AFTER; }
   static final String FIX_REFERENCE = "int a = 1;\nint b = 2;\nint c = 3;\nprint(a + b + c);\n";
 
+  @org.junit.jupiter.api.io.TempDir static Path databaseDir;
+
   @DynamicPropertySource static void properties(DynamicPropertyRegistry p) {
-    p.add("spring.datasource.url", () -> "jdbc:sqlite:file:board-" + UUID.randomUUID() + "?mode=memory&cache=shared");
+    p.add("spring.datasource.url", () -> "jdbc:sqlite:" + databaseDir.resolve("board.db"));
     p.add("app.diagnostic.source", () -> Path.of("..", "java_initial_diagnostic_mvp_v2.md").toAbsolutePath().toString());
     p.add("app.bootstrap-admin-login", () -> "admin");
     p.add("app.bootstrap-admin-password", () -> "admin-pass");
@@ -384,7 +386,7 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_CALL");
     var call = call(admin, a);
     assertEquals("CALLED", call.path("status").asText()); assertEquals(START.plus(Duration.ofMinutes(5)).toString(), call.path("expiresAt").asText());
-    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds", "source", "stationId", "stationName", "format"), fields(call));
+    assertEquals(Set.of("id", "userId", "displayName", "status", "calledAt", "expiresAt", "startedAt", "endsAt", "pausedAt", "finishedAt", "suggestedGrade", "finalGrade", "assessmentStatus", "kinds", "durationSeconds", "source", "stationId", "stationName", "format"), fields(call));
     long id = call.path("id").asLong();
     var current = read(token, get("/api/board/current"));
     assertEquals(id, current.path("call").path("id").asLong()); assertTrue(current.path("test").isNull());
@@ -423,6 +425,45 @@ class BoardTestsIntegrationTest {
   }
 
   // ---------------------------------------------------------------- timer, checks, grades
+
+  @Test void pausePersistsDraftAndFreezesDeadline() throws Exception {
+    String admin = login("admin", "admin-pass"), token = createStudent("pause-a", "Пауза", "P-1");
+    long user = studentId("pause-a"); simpleBank(user, "BT_PAUSE");
+    long id = startTest(admin, token, user).path("id").asLong();
+    now = START.plusSeconds(30);
+    read(token, put("/api/board/tests/{id}/answers", id).contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"draft\"}"));
+    assertEquals(now.toString(), read(admin, post("/api/admin/board/tests/{id}/pause", id)).path("pausedAt").asText());
+    now = START.plusSeconds(900);
+    var paused = read(token, get("/api/board/current")).path("test");
+    assertEquals("draft", paused.path("answers").path("code").asText());
+    assertEquals(START.plusSeconds(30).toString(), paused.path("pausedAt").asText());
+    read(admin, post("/api/admin/board/tests/{id}/extend", id).contentType(MediaType.APPLICATION_JSON).content("{\"seconds\":60}"));
+    var resumed = read(admin, post("/api/admin/board/tests/{id}/resume", id));
+    assertEquals(now.plusSeconds(450).toString(), resumed.path("endsAt").asText());
+    assertTrue(resumed.path("pausedAt").isNull());
+    assertEquals("draft", read(token, get("/api/board/current")).path("test").path("answers").path("code").asText());
+  }
+
+  @Test void concurrentExtensionsAndResumeDoNotLoseTime() throws Exception {
+    String admin = login("admin", "admin-pass"), token = createStudent("race-clock", "Таймер", "P-2");
+    long user = studentId("race-clock"); simpleBank(user, "BT_RACE_CLOCK");
+    long id = startTest(admin, token, user).path("id").asLong();
+    now = START.plusSeconds(10);
+    board.pause(id, true);
+    now = START.plusSeconds(110);
+    var pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+    var start = new java.util.concurrent.CountDownLatch(1);
+    try {
+      var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+      for (int i = 0; i < 3; i++) futures.add(pool.submit(() -> { start.await(); board.extend(id, Map.of("seconds", 60)); return null; }));
+      futures.add(pool.submit(() -> { start.await(); board.pause(id, false); return null; }));
+      start.countDown();
+      for (var future : futures) future.get(10, java.util.concurrent.TimeUnit.SECONDS);
+    } finally { pool.shutdownNow(); }
+    var result = adminTest(admin, id);
+    assertEquals(START.plusSeconds(700).toString(), result.path("endsAt").asText());
+    assertTrue(result.path("pausedAt").isNull());
+  }
 
   @Test void theServerFinishesATestAfterItsTimeWithTheLastAutosave() throws Exception {
     String admin = login("admin", "admin-pass");
@@ -620,7 +661,7 @@ class BoardTestsIntegrationTest {
     var started = read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "board-pc"));
     assertFalse(started.path("items").isMissingNode());
     var other = read(token, get("/api/board/current").header("X-Board-Device", "own-pc")).path("test");
-    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "elsewhere", "format"), fields(other)); assertTrue(other.path("elsewhere").asBoolean());
+    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "pausedAt", "now", "elsewhere", "format"), fields(other)); assertTrue(other.path("elsewhere").asBoolean());
     assertTrue(read(token, get("/api/board/current").header("X-Board-Device", "board-pc")).path("test").path("elsewhere").isMissingNode());
     assertTrue(read(token, post("/api/board/tests/{id}/start", id).header("X-Board-Device", "own-pc")).path("elsewhere").asBoolean(), "a second start does not take it over");
     read(token, put("/api/board/tests/{id}/answers", id).header("X-Board-Device", "board-pc").contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"SOLVED\"}"));
@@ -783,7 +824,7 @@ class BoardTestsIntegrationTest {
     simpleBank(a, "BT_LK");
     long id = call(admin, a).path("id").asLong();
     var started = read(token, post("/api/board/tests/{id}/start", id));
-    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "now", "durationSeconds", "items", "answers", "revision", "format"), fields(started)); assertEquals(0, started.path("revision").asInt());
+    assertEquals(Set.of("id", "status", "startedAt", "endsAt", "pausedAt", "now", "durationSeconds", "items", "answers", "revision", "format"), fields(started)); assertEquals(0, started.path("revision").asInt());
     assertEquals(List.of("parsons", "fix", "code"), started.path("items").findValuesAsText("kind"));
     assertEquals(Set.of("kind", "title", "statement", "language", "before", "after", "lines", "extraLines"), fields(started.path("items").get(0)));
     assertEquals(Set.of("kind", "title", "statement", "language", "program"), fields(started.path("items").get(1)));

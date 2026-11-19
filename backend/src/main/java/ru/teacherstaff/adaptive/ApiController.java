@@ -1661,6 +1661,18 @@ public class ApiController {
         return boardTests.recall(uid(r), id);
     }
 
+    @PostMapping("/admin/board/tests/{id}/pause")
+    public Map<String, Object> pauseBoardTest(@PathVariable long id, HttpServletRequest r) {
+        admin(r);
+        return boardTests.pause(id, true);
+    }
+
+    @PostMapping("/admin/board/tests/{id}/resume")
+    public Map<String, Object> resumeBoardTest(@PathVariable long id, HttpServletRequest r) {
+        admin(r);
+        return boardTests.pause(id, false);
+    }
+
     @PostMapping("/admin/board/tests/{id}/extend")
     public Map<String, Object> extendBoardTest(@PathVariable long id, @RequestBody(required = false) Map<String, Object> b, HttpServletRequest r) {
         admin(r);

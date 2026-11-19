@@ -210,12 +210,12 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
   // The server clock decides: endsAt is compared with the client clock shifted by the server's «now» of the last poll.
   const offset = useMemo(() => { const server = ms(test.now); return Number.isNaN(server) ? 0 : server - Date.now() }, [test.now])
   const now = useNow(250)
-  const left = ms(test.endsAt) - (now + offset)
-  const over = left <= 0
+  const left = ms(test.endsAt) - (test.pausedAt ? ms(test.pausedAt) : now + offset)
+  const over = !test.pausedAt && left <= 0
   const [finishing, setFinishing] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
-  const locked = over || finishing
+  const locked = over || finishing || !!test.pausedAt
   const done = useRef(false)
   /** An attestation: the same screen, its own words («Сдать работу»). */
   const attest = isAttestation(test)
@@ -331,7 +331,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
         </button>)}
       </div> : <span />}
       <div className={`board-timer ${low ? 'low' : ''} ${over ? 'over' : ''}`} role="timer" aria-live="off" aria-label={tr(currentLocale(), `Осталось ${clock(left)}`, `Temps restant : ${clock(left)}`, `المتبقي ${clock(left)}`)}>
-        <Icon name="clock" size={26} /><span className="tabular">{clock(left)}</span>
+        <Icon name="clock" size={26} /><span className="tabular">{clock(left)}</span>{test.pausedAt && <small>{tr(currentLocale(), 'Пауза', 'Pause', 'إيقاف مؤقت')}</small>}
       </div>
       <div className="board-bar-actions">
         <SaveBadge state={locked ? 'saved' : save} />
@@ -371,7 +371,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
         </section>
       })}
     </div>
-    {confirming && <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-confirm-title">
+    {confirming && !locked && <div className="board-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="board-confirm-title">
       <div className="board-call">
         <h2 id="board-confirm-title" className="title">{finishText}?</h2>
         <p>{attest ? uiText("Работа отправится преподавателю, изменить её") : uiText("Ответы отправятся преподавателю, изменить их")} {uiText("будет нельзя. Осталось")} {clock(left)}.</p>
@@ -802,13 +802,13 @@ function KindsNote({ test }: { test: Pick<BoardTestSummary, 'kinds' | 'durationS
 function Countdown({ test, now }: { test: BoardTestSummary; now: number }) {
   const target = test.status === 'CALLED' ? ms(test.expiresAt) : test.status === 'STARTED' ? ms(test.endsAt) : NaN
   if (Number.isNaN(target)) return null
-  const left = target - now
+  const left = target - (test.pausedAt ? ms(test.pausedAt) : now)
   return <span className={`board-countdown ${left < 60_000 ? 'low' : ''}`} title={test.status === 'CALLED' ? uiText("Вызов истекает через") : uiText("До конца теста")}>
-    <Icon name="clock" size={15} /><b className="tabular">{left > 0 ? clock(left) : '0:00'}</b><small>{test.status === 'CALLED' ? (left > 0 ? uiText("ждём начала") : uiText("вызов истёк")) : (left > 0 ? uiText("до конца") : uiText("время вышло"))}</small>
+    <Icon name="clock" size={15} /><b className="tabular">{left > 0 ? clock(left) : '0:00'}</b><small>{test.status === 'CALLED' ? (left > 0 ? uiText("ждём начала") : uiText("вызов истёк")) : (test.pausedAt ? tr(currentLocale(), 'пауза', 'pause', 'توقف مؤقت') : left > 0 ? uiText("до конца") : uiText("время вышло"))}</small>
   </span>
 }
 
-type Act = 'cancel' | 'recall' | 'extend' | 'finish' | 'delete' | 'assess'
+type Act = 'pause' | 'resume' | 'cancel' | 'recall' | 'extend' | 'finish' | 'delete' | 'assess'
 
 /** A call's change: the kinds of a test, the minutes of an attestation. */
 type CallChange = { kinds: BoardItemKind[] } | { minutes: number }
@@ -834,6 +834,7 @@ function BoardActions({ test, busy, onAct, onEdit }: { test: BoardTestSummary; b
   </div>
   return <div className="board-actions">
     {live(test) && button('extend', 'plus', tr(currentLocale(), "+1 мин", "+1 min", "+١ دقيقة"))}
+    {test.status === 'STARTED' && button(test.pausedAt ? 'resume' : 'pause', 'clock', test.pausedAt ? uiText('Продолжить') : tr(currentLocale(), 'Пауза', 'Pause', 'إيقاف مؤقت'))}
     {test.status === 'STARTED' && button('finish', 'flag', tr(currentLocale(), "Завершить сейчас", "Terminer maintenant", "أنهي الآن"))}
     {editable && !test.bankTask && <button type="button" className="ghost small-button" disabled={!!mine} onClick={() => setEditing(true)}><Icon name="target" size={15} />{uiText("Изменить")}</button>}
     {test.status === 'CALLED' && button('cancel', 'x', tr(currentLocale(), "Отменить", "Annuler", "إلغاء"))}
