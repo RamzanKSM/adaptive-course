@@ -1,0 +1,11 @@
+.board-more-actions { flex-basis: 100%; }
+.board-more-actions summary, .board-draft-tools summary { cursor: pointer; color: var(--brand-ink); font-size: 13px; font-weight: 750; }
+.board-more-actions-list { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
+.board-action-confirm { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.board-draft-tools { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.board-draft-tools summary { padding: 9px 10px; }
+.board-draft-tools summary .icon { vertical-align: middle; }
+.board-draft-tools-body { display: grid; gap: 8px; padding: 0 10px 10px; }
+.board-draft-tools-body .small-button { justify-self: start; margin: 0; }
+.board-draft-tools-body p { margin: 0; }
+.board-draft-proposal { display: grid; gap: 8px; padding: 10px; border-radius: 10px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }

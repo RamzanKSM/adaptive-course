@@ -1,4 +1,5 @@
 import { BoardTaskBank } from './boardTaskBank'
+import './board-controls.css'
 import { currentLocale, tr } from './locale'
 import { uiText } from './uiText'
 import { CSSProperties, DragEvent, FormEvent, KeyboardEvent, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -699,7 +700,7 @@ function useAttestationMinutes() {
 function FormatSwitch({ format, onChange }: { format: BoardFormat; onChange: (format: BoardFormat) => void }) {
   return <div className="period board-format" role="group" aria-label={uiText("Формат вызова")}>
     {([['TEST', 'Тест'], ['ATTESTATION', 'Аттестация']] as const).map(([key, title]) =>
-      <button key={key} type="button" className={key === format ? 'active' : ''} aria-pressed={key === format} onClick={() => key !== format && onChange(key)}>{title}</button>)}
+      <button key={key} type="button" className={key === format ? 'active' : ''} aria-pressed={key === format} onClick={() => key !== format && onChange(key)}>{uiText(title)}</button>)}
   </div>
 }
 
@@ -826,30 +827,42 @@ type EditCall = (test: BoardTestSummary, change: CallChange) => Promise<string |
 
 /** Every action the teacher may take on a call or test; nothing is hidden behind the status except what has no meaning. */
 function BoardActions({ test, busy, onAct, onEdit }: { test: BoardTestSummary; busy: string | null; onAct: (act: Act, test: BoardTestSummary) => void; onEdit: EditCall }) {
-  const [confirm, setConfirm] = useState(false)
+  const [confirm, setConfirm] = useState<'delete' | 'finish' | null>(null)
   const [editing, setEditing] = useState(false)
   const editable = test.status === 'CALLED' || test.status === 'EXPIRED'
   if (editing && editable) return <CallEditor test={test} onSave={change => onEdit(test, change)} onClose={() => setEditing(false)} />
   const mine = busy?.endsWith(`:${test.id}`) ? busy.split(':')[0] : null
   const button = (act: Act, icon: Parameters<typeof Icon>[0]['name'], text: string, className = 'ghost') =>
-    <button type="button" className={`${className} small-button`} disabled={!!mine} onClick={() => act === 'delete' ? setConfirm(true) : onAct(act, test)}>
+    <button type="button" className={`${className} small-button`} disabled={!!mine} onClick={() => act === 'delete' || act === 'finish' ? setConfirm(act) : onAct(act, test)}>
       {mine === act ? <span className="spinner" aria-hidden="true" /> : <Icon name={icon} size={15} />}{text}</button>
-  if (confirm) return <div className="danger-zone open board-delete">
+  if (confirm === 'finish') return <div className="board-action-confirm" role="group">
+    <b>{tr(currentLocale(), 'Завершить тест сейчас?', 'Terminer le test maintenant ?', 'إنهاء الاختبار الآن؟')}</b>
+    <div className="board-actions">
+      <button type="button" className="danger-solid small-button" disabled={!!mine} onClick={() => onAct('finish', test)}>{mine === 'finish' && <span className="spinner" aria-hidden="true" />}{tr(currentLocale(), 'Завершить', 'Terminer', 'إنهاء')}</button>
+      <button type="button" className="ghost small-button" disabled={!!mine} onClick={() => setConfirm(null)}>{uiText('Отмена')}</button>
+    </div>
+  </div>
+  if (confirm === 'delete') return <div className="danger-zone open board-delete">
     <b>{uiText("Удалить")} {test.status === 'CALLED' ? uiText("вызов") : isAttestation(test) ? uiText("аттестацию") : uiText("тест")} — {test.displayName}?</b>
     <p className="muted small">{uiText("Ответы, проверки, оценка LLM и итоговая оценка будут удалены. Восстановить нельзя.")}</p>
     <div className="password-row">
       <button type="button" className="danger-solid" disabled={mine === 'delete'} onClick={() => onAct('delete', test)}>{mine === 'delete' ? <><span className="spinner" aria-hidden="true" /> {uiText("Удаляем…")}</> : uiText("Удалить")}</button>
-      <button type="button" className="ghost" onClick={() => setConfirm(false)}>{uiText("Отмена")}</button>
+      <button type="button" className="ghost" onClick={() => setConfirm(null)}>{uiText("Отмена")}</button>
     </div>
   </div>
   return <div className="board-actions">
     {live(test) && button('extend', 'plus', tr(currentLocale(), "+1 мин", "+1 min", "+١ دقيقة"))}
     {test.status === 'STARTED' && button(test.pausedAt ? 'resume' : 'pause', 'clock', test.pausedAt ? uiText('Продолжить') : tr(currentLocale(), 'Пауза', 'Pause', 'إيقاف مؤقت'))}
-    {test.status === 'STARTED' && button('finish', 'flag', tr(currentLocale(), "Завершить сейчас", "Terminer maintenant", "أنهي الآن"))}
+    <details className="board-more-actions">
+      <summary>{tr(currentLocale(), 'Другие действия', 'Autres actions', 'إجراءات أخرى')}</summary>
+      <div className="board-more-actions-list">
     {editable && !test.bankTask && <button type="button" className="ghost small-button" disabled={!!mine} onClick={() => setEditing(true)}><Icon name="target" size={15} />{uiText("Изменить")}</button>}
     {test.status === 'CALLED' && button('cancel', 'x', tr(currentLocale(), "Отменить", "Annuler", "إلغاء"))}
     {button('recall', 'refresh', tr(currentLocale(), "Вызвать снова", "Convoquer à nouveau", "استدعي تاني"))}
+    {test.status === 'STARTED' && button('finish', 'flag', tr(currentLocale(), "Завершить сейчас", "Terminer maintenant", "أنهي الآن"))}
     {button('delete', 'x', tr(currentLocale(), "Удалить", "Supprimer", "حذف"), 'ghost danger')}
+      </div>
+    </details>
   </div>
 }
 
@@ -864,7 +877,14 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const [openId, setOpenId] = useState<Id | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
-  const [planDate, setPlanDate] = useState('')
+  const t = (ru: string, fr: string, ar: string) => tr(currentLocale(), ru, fr, ar)
+  const [source, setSource] = useState<'auto' | 'date' | 'topics' | 'bank'>('auto')
+  const [bankTask, setBankTask] = useState<{ id: Id; title: string } | null>(null)
+  const [topicFilter, setTopicFilter] = useState('')
+  const [memberFilter, setMemberFilter] = useState('')
+  const [topicsError, setTopicsError] = useState(false)
+  const [topicRetry, setTopicRetry] = useState(0)
+  const [planDate, setPlanDate] = useState(() => moscow(Date.now()).date)
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(() => new Set())
   const [planTopics, setPlanTopics] = useState<{ topics: { code: string; title: string }[]; planTopics: string[] | null } | null>(null)
   const [kinds, toggleKind] = useBoardKinds()
@@ -894,11 +914,11 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   useEffect(() => {
     if (!query) return
     let alive = true
-    setPlanTopics(null)
+    setPlanTopics(null); setTopicsError(false)
     api<{ topics: { code: string; title: string }[]; planTopics: string[] | null }>(`/admin/board/topics?${query}${planDate ? `&date=${encodeURIComponent(planDate)}` : ''}`)
-      .then(v => { if (alive) setPlanTopics(v) }, () => { if (alive) setPlanTopics(null) })
+      .then(v => { if (alive) setPlanTopics(v) }, () => { if (alive) setTopicsError(true) })
     return () => { alive = false }
-  }, [query, planDate])
+  }, [query, planDate, topicRetry])
 
   // Members and active calls/tests, every 2 s: the first load reports errors, the polls stay quiet.
   useEffect(() => {
@@ -917,8 +937,8 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
     return () => { alive = false }
   }, [query, activeKey, reload])
 
-  function chooseGroup(value: string) { if (value === group) return; setSelectedTopics(new Set()); setGroup(value); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
-  function chooseCourse(value: CourseLanguage) { setSelectedTopics(new Set()); setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
+  function chooseGroup(value: string) { if (value === group) return; setMemberFilter(''); setBankTask(null); setTopicFilter(''); setSelectedTopics(new Set()); setGroup(value); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
+  function chooseCourse(value: CourseLanguage) { setMemberFilter(''); setBankTask(null); setTopicFilter(''); setSelectedTopics(new Set()); setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
   /** Opening a test scrolls to its detail as soon as it is rendered (the detail mounts with the new id). */
   const scrollTo = useRef(false)
   const scroll = () => { if (scrollTo.current && detailRef.current) { scrollTo.current = false; detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }
@@ -926,9 +946,12 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const open = (id: Id) => { scrollTo.current = true; setOpenId(id); requestAnimationFrame(scroll) }
 
   /** The call with the current format: a test with the chosen kinds, an attestation with the minutes. */
-  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes } : { userId: member.userId, language, kinds, planDate: planDate || null, topicCodes: selectedTopics.size ? [...selectedTopics] : null }
+  const ready = attest ? minutes !== null : source === 'date' ? !!planDate && !!planTopics?.planTopics?.length : source === 'topics' ? selectedTopics.size > 0 : source !== 'bank' || !!bankTask
+  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes }  : source === 'bank'
+    ? { userId: member.userId, language, taskId: bankTask?.id }
+    : { userId: member.userId, language, kinds, planDate: source === 'date' ? planDate : null, topicCodes: source === 'topics' ? [...selectedTopics] : null }
   async function call(member: BoardMember) {
-    if (!language || (attest && minutes === null)) return
+    if (!language || !ready) return
     setBusy(`call:${member.userId}`)
     const test = await request(() => post<BoardTestSummary>('/admin/board/call', callBody(member)))
     setBusy(null)
@@ -993,6 +1016,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
     return [...overview.members].sort((a, b) => Number(b.userId === suggested) - Number(a.userId === suggested) || Number(b.present) - Number(a.present)
       || (a.lastTestAt ? ms(a.lastTestAt) : -Infinity) - (b.lastTestAt ? ms(b.lastTestAt) : -Infinity) || a.displayName.localeCompare(b.displayName, 'ru'))
   }, [overview])
+  const visibleMembers = members?.filter(m => (m.displayName + ' ' + m.login).toLocaleLowerCase().includes(memberFilter.trim().toLocaleLowerCase()))
   const activeOf = (userId: Id) => overview?.active.find(t => t.userId === userId && live(t))
   const chosen = members?.filter(m => picked.has(m.userId)) ?? []
 
@@ -1004,40 +1028,55 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const present = overview?.members.filter(m => m.present).length ?? 0
   const pace = overview?.pace ?? null
   return <section className="analytics board-admin board-wide">
-    <div className="board-console">
-      <div className="card board-left enter">
-        <p className="eyebrow">{uiText("Преподаватель")}</p>
-        <h1 className="display small">{uiText("К доске")}</h1>
-        <p className="muted small board-lead">{attest ? tr(currentLocale(), "Отметь студентов и вызови на аттестацию — каждый нажмёт «Начать аттестацию» за своим компьютером и решит одну сквозную задачу; у вызванных одновременно задачи разные. Оценка LLM и предложенная оценка видны только тебе.", "Sélectionne les étudiants et convoque-les à l’évaluation : chacun lance une tâche sur son ordinateur ; les tâches simultanées sont différentes. Seul l’enseignant voit l’évaluation LLM et la note proposée.", "اختار الطلاب واستدعيهم للامتحان: كل طالب بيبدأ مهمة من جهازه، والمهام المتزامنة مختلفة. تقييم المساعد والدرجة المقترحة ظاهرة للأستاذ فقط.")
-          : uiText("Вызови студента — он нажмёт «Начать тест» на компьютере у доски и решит тест из выбранных заданий. Оценка LLM и предложенная оценка видны только тебе.")}</p>
-        {!groups ? <p className="muted small">{uiText("Загружаем группы…")}</p>
-          : <div className="topic-filters group-filters" role="group" aria-label={uiText("Группа")}>{groups.map(g =>
-            <button key={g} type="button" className={g === group ? 'active' : ''} aria-pressed={g === group} onClick={() => chooseGroup(g)}>{g}</button>)}</div>}
+    <header className="board-desk-head">
+      <h1 className="display small">{uiText("К доске")}</h1>
+      <div className="board-desk-filters">
+        {overview && overview.active.some(live) && <a className="board-live-link" href="#board-live-tests"><span className="live-dot" />{uiText("Сейчас у доски")} · {overview.active.filter(live).length}</a>}
+        <label>{uiText("Группа")} <select value={group} onChange={e => chooseGroup(e.target.value)}>{groups?.map(g => <option key={g}>{g}</option>)}</select></label>
         <div className="period" role="group" aria-label={uiText("Курс")}>
           {COURSES.map(([key, title]) => <button key={key} type="button" disabled={!language} className={key === language ? 'active' : ''} aria-pressed={key === language} onClick={() => key !== language && chooseCourse(key)}>{title}</button>)}
         </div>
-        <FormatSwitch format={format} onChange={setFormat} />
+      </div>
+    </header>
+    <div className="board-prep">
+      <section className="card board-setup">
+        <div className="board-setup-head"><h2 className="card-title">{t('Задание для ответа', 'Exercice au tableau', 'تمرين السبورة')}</h2><FormatSwitch format={format} onChange={setFormat} /></div>
         {attest ? <>
           <MinutesInput legend={uiText("Аттестация")} value={minutesValue} onChange={setMinutes} />
           {overview && <PlanDateInput value={overview.settings?.attestationPlanDate ?? null} onSave={savePlanDate} />}
           <AttestationNote pace={pace} pool={overview?.attestation ?? null} loaded={!!overview} />
         </> : <>
-          <KindPicker kinds={kinds} onToggle={toggleKind} />
-          <label className="board-minutes board-plan-date">{tr(currentLocale(), 'Уровень по плану на дату', 'Niveau prévu à la date', 'المستوى حسب الخطة في تاريخ')}
-            <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} />
-            <small className="muted">{tr(currentLocale(), 'Пусто — план на сегодня', 'Vide : plan du jour', 'فارغ: خطة اليوم')}</small>
-          </label>
-          {planTopics?.planTopics ? <details><summary>{tr(currentLocale(), `Темы плана: ${planTopics.planTopics.length}`, `Notions prévues : ${planTopics.planTopics.length}`, `مواضيع الخطة: ${planTopics.planTopics.length}`)}</summary>
-            <ol>{planTopics.topics.filter(t => planTopics.planTopics?.includes(t.code)).map(t => <li key={t.code}>{t.title}</li>)}</ol>
-          </details> : planTopics && <p className="muted small">{tr(currentLocale(), 'Для группы нет календарного плана', 'Aucun calendrier pour ce groupe', 'لا توجد خطة زمنية لهذه المجموعة')}</p>}
-
-          {planTopics && <details><summary>{tr(currentLocale(), `Выбрать темы ответа${selectedTopics.size ? `: ${selectedTopics.size}` : ''}`, `Choisir les notions${selectedTopics.size ? ` : ${selectedTopics.size}` : ''}`, `اختيار مواضيع الإجابة${selectedTopics.size ? `: ${selectedTopics.size}` : ''}`)}</summary>
-            <p className="muted small">{tr(currentLocale(), 'Отметь темы для заданий. Если ничего не отмечено, темы выбираются автоматически. Ручной выбор имеет приоритет над планом на дату.', 'Sélectionne les notions des exercices. Sans sélection, elles sont choisies automatiquement. La sélection manuelle prime sur le plan à la date.', 'اختار مواضيع المهام. بدون اختيار تُحدد تلقائياً. الاختيار اليدوي له أولوية على خطة التاريخ.')}</p>
-            {planTopics.topics.map(t => <label key={t.code} style={{ display: 'block' }}><input type="checkbox" checked={selectedTopics.has(t.code)} onChange={() => setSelectedTopics(old => { const next = new Set(old); if (!next.delete(t.code)) next.add(t.code); return next })} /> {t.title}</label>)}
-          </details>}
-          {!planDate && !selectedTopics.size && <RangeNote pace={pace} loaded={!!overview} />}
+          <fieldset className="board-source"><legend>{t('Подбор задания', 'Sélection de l’exercice', 'اختيار التمرين')}</legend>
+            <div>{([
+              ['auto', t('По уровню студента', 'Niveau de l’étudiant', 'حسب مستوى الطالب')],
+              ['date', t('По дате', 'Par date', 'حسب التاريخ')],
+              ['topics', t('По темам', 'Par thème', 'حسب المواضيع')],
+              ['bank', t('Из банка', 'Dans la banque', 'من بنك التمارين')]
+            ] as const).map(([key, label]) => <button type="button" key={key} aria-pressed={source === key} onClick={() => setSource(key)}>{label}</button>)}</div>
+          </fieldset>
+          {source === 'bank' && language && <BoardTaskBank key={query} language={language} selected={bankTask} onSelect={setBankTask} />}
+          {topicsError && (source === 'date' || source === 'topics') && <p role="alert">{t('Не удалось загрузить темы.', 'Impossible de charger les thèmes.', 'تعذّر تحميل المواضيع.')} <button type="button" className="ghost small-button" onClick={() => setTopicRetry(n => n + 1)}>{uiText("Повторить")}</button></p>}
+          {source === 'date' && <div className="board-source-panel"><label>{t('Дата занятия', 'Date du cours', 'تاريخ الحصة')}
+            <input type="date" value={planDate} onChange={e => { setPlanTopics(null); setPlanDate(e.target.value) }} /></label>
+            {planDate && !topicsError && (planTopics?.planTopics ? <details><summary>{t('Темы плана', 'Thèmes prévus', 'مواضيع الخطة')} · {planTopics.planTopics.length}</summary>
+              <ol>{planTopics.topics.filter(topic => planTopics.planTopics?.includes(topic.code)).map(topic => <li key={topic.code}>{topic.title}</li>)}</ol></details>
+              : <p role="status">{planTopics ? t('Для группы нет календарного плана', 'Aucun calendrier pour ce groupe', 'لا توجد خطة لهذه المجموعة') : uiText('Загружаем…')}</p>)}
+          </div>}
+          {source === 'topics' && <div className="board-source-panel">
+            <label>{t('Темы ответа', 'Thèmes à préparer', 'مواضيع الإجابة')} · {selectedTopics.size}
+              <input type="search" value={topicFilter} placeholder={t('Найти тему', 'Rechercher un thème', 'بحث عن موضوع')} onChange={e => setTopicFilter(e.target.value)} /></label>
+            <div className="board-topic-options">{planTopics?.topics.filter(topic => topic.title.toLocaleLowerCase().includes(topicFilter.trim().toLocaleLowerCase())).map(topic =>
+              <label key={topic.code}><input type="checkbox" checked={selectedTopics.has(topic.code)} onChange={() => setSelectedTopics(old => { const next = new Set(old); if (!next.delete(topic.code)) next.add(topic.code); return next })} />{topic.title}</label>)}
+              {!planTopics && !topicsError && <span>{uiText('Загружаем…')}</span>}
+              {planTopics && !planTopics.topics.some(topic => topic.title.toLocaleLowerCase().includes(topicFilter.trim().toLocaleLowerCase())) && <span>{t('Темы не найдены', 'Aucun thème trouvé', 'لم يتم العثور على مواضيع')}</span>}
+            </div></div>}
+          {source !== 'bank' && <KindPicker kinds={kinds} onToggle={toggleKind} />}
+          {source === 'auto' && <RangeNote pace={pace} loaded={!!overview} />}
         </>}
+      </section>
+      <section className="card board-roster">
         <h2 className="card-title">{uiText("Студенты")}{overview && <span className="muted small">{uiText("на месте")} {present} {uiText("из")} {overview.members.length}</span>}</h2>
+        {!!members && members.length > 5 && <input className="board-member-filter" type="search" aria-label={t('Найти студента', 'Rechercher un étudiant', 'بحث عن طالب')} placeholder={t('Имя или логин студента', 'Nom ou identifiant', 'الاسم أو اسم المستخدم')} value={memberFilter} onChange={e => setMemberFilter(e.target.value)} />}
         {attest && !!members?.length && <div className="board-attest-call">
           <button type="button" className="primary small-button" disabled={!chosen.length || minutes === null || busy === 'call:picked'} onClick={() => callPicked(chosen)}>
             {busy === 'call:picked' ? <span className="spinner" aria-hidden="true" /> : <Icon name="award" size={15} />}{uiText("Вызвать на аттестацию (")}{chosen.length})</button>
@@ -1045,7 +1084,8 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
           {callError && <p className="form-error" role="alert">{callError}</p>}
         </div>}
         {!members ? <p className="muted">{uiText("Загружаем…")}</p> : !members.length ? <p className="muted">{uiText("В группе нет участников курса")} {language ? courseTitle(language) : ''}.</p>
-          : <ul className="board-member-list">{members.map(m => {
+           : !visibleMembers?.length ? <p className="muted">{t('Студенты не найдены', 'Aucun étudiant trouvé', 'لم يتم العثور على طلاب')}</p>
+          : <ul className="board-member-list">{visibleMembers.map(m => {
             const suggested = !attest && m.userId === overview?.suggested, active = activeOf(m.userId)
             return <li key={m.userId} className={`${suggested ? 'suggested' : ''} ${attest && picked.has(m.userId) ? 'picked' : ''}`}>
               {attest && <input type="checkbox" className="board-pick" checked={picked.has(m.userId)} onChange={() => pick(m.userId)} aria-label={tr(currentLocale(), `Отметить для аттестации: ${m.displayName}`, `Sélectionner pour l’évaluation : ${m.displayName}`, `اختيار للامتحان: ${m.displayName}`)} />}
@@ -1059,16 +1099,15 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
               </span>
               {active ? <button type="button" className="row-link board-member-state" onClick={() => open(active.id)}><BoardStatusTag status={active.status} /></button>
                 : !attest && m.lastGrade && <span title={uiText("Последняя оценка у доски")}><GradeChip grade={m.lastGrade} small /></span>}
-              <button type="button" className={`${suggested ? 'primary' : 'ghost'} small-button`} disabled={busy === `call:${m.userId}` || busy === 'call:picked' || (attest && minutes === null)} onClick={() => call(m)}
+              <button type="button" className={`${suggested ? 'primary' : 'ghost'} small-button`} disabled={busy === `call:${m.userId}` || busy === 'call:picked' || !ready} onClick={() => call(m)}
                 title={attest ? uiText("Вызвать только этого студента на аттестацию") : undefined}>
                 {busy === `call:${m.userId}` ? <span className="spinner" aria-hidden="true" /> : <Icon name="flag" size={15} />}{uiText("Вызвать")}</button>
             </li>
           })}</ul>}
-        <p className="muted small table-note">{attest ? uiText("Каждому вызванному — задача, которой у него ещё не было и которую сейчас не решает никто другой. Пока идёт аттестация, уроки и помощник у студента закрыты.")
-          : uiText("Предложение: сначала те, кто на месте, затем кто дольше всех не был у доски (случайно среди трёх). Решаешь ты.")}</p>
-      </div>
-
-      <div className="card board-active">
+      </section>
+    </div>
+    <div className={`board-live-layout${openId === null ? ' no-detail' : ''}`}>
+      <div className="card board-active" id="board-live-tests">
         <h2 className="card-title"><span className="live-dot" aria-hidden="true" /> {uiText("Сейчас у доски")}</h2>
         {!overview ? <p className="muted">{uiText("Загружаем…")}</p> : !overview.active.length ? <p className="muted">{uiText("Никто не вызван. Нажми «Вызвать» у студента.")}</p>
           : <ul className="board-active-list">{overview.active.map(t => <li key={t.id} className={openId === t.id ? 'selected' : ''}>
@@ -1086,10 +1125,8 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
 
       {openId !== null
         ? <BoardTestDetail key={openId} id={openId} anchor={detailRef} request={request} busy={busy} onAct={act} onEdit={editCall} onClose={() => setOpenId(null)} register={register} onSaved={() => setReload(n => n + 1)} />
-        : <aside className="card board-summary" aria-label={uiText("Итог")}><h2 className="card-title">{uiText("Итог")}</h2><p className="muted small">{SUMMARY_HINT}</p></aside>}
+        : null}
     </div>
-
-    {group && language && overview && <BoardTaskBank key={`bank:${query}`} language={language} members={overview.members} onCalled={id => { setReload(n => n + 1); open(id) }} />}
     <BoardJournalCard key={query} journal={journal} openId={openId} onOpen={open} />
     <BoardStations request={request} onBecomeStation={onBecomeStation} />
   </section>
@@ -1531,16 +1568,18 @@ function GradeForm({ test, onSave }: { test: BoardAdminTest; onSave: (grade: Boa
     {draft && comment.trim() === draft && comment.trim() !== (test.comment ?? '').trim()
       ? <p className="muted small board-comment-draft"><Icon name="sparkle" size={14} /> {uiText("Черновик от нейросети — поправь, если нужно. Студент увидит комментарий только после сохранения.")}</p>
       : draft && comment.trim() !== draft && <button type="button" className="ghost small-button board-comment-draft" onClick={() => setComment(draft)}><Icon name="sparkle" size={14} /> {uiText("Вставить черновик нейросети")}</button>}
-    {test.status === 'FINISHED' && <div>
+    {test.status === 'FINISHED' && <details className="board-draft-tools">
+      <summary><Icon name="sparkle" size={14} /> {tr(currentLocale(), 'Подготовить комментарий с пожеланием', 'Préparer un commentaire avec une consigne', 'إعداد تعليق بتوجيه')}</summary>
+      <div className="board-draft-tools-body">
       <label>{tr(currentLocale(), 'Пожелание к комментарию', 'Consigne pour le commentaire', 'توجيه للتعليق')}
         <textarea rows={2} maxLength={1000} value={wish} onChange={e => setWish(e.target.value)}
           placeholder={tr(currentLocale(), 'Например, посоветуй ещё раз повторить циклы', 'Par exemple, conseille de revoir les boucles', 'مثلاً: انصح بمراجعة الحلقات')} /></label>
       <button type="button" className="ghost small-button" disabled={generating || !wish.trim()} onClick={generateDraft}>
         {generating && <span className="spinner" />} {tr(currentLocale(), 'Подготовить черновик', 'Préparer un brouillon', 'إعداد مسودة')}</button>
       {draftError && <p role="alert">{draftError}</p>}
-      {proposal && <div><p>{proposal}</p><button type="button" className="ghost small-button" onClick={() => { setComment(proposal); setProposal('') }}>
+      {proposal && <div className="board-draft-proposal"><p>{proposal}</p><button type="button" className="ghost small-button" onClick={() => { setComment(proposal); setProposal('') }}>
         {tr(currentLocale(), 'Вставить этот комментарий', 'Utiliser ce commentaire', 'استخدم التعليق ده')}</button></div>}
-    </div>}
+    </div></details>}
     <label className="board-report-toggle"><input type="checkbox" checked={report} onChange={e => setReport(e.target.checked)} />
       <span><b>{uiText("Показать студенту разбор")}</b><small>{uiText("Во вкладке студента «Оценки и план»: по каждому заданию условие, его код, «верно / частично / не верно» и сообщение проверки. Без эталона, описания ошибки, баллов и пояснений LLM.")}</small></span></label>
     <div className="pair-form-actions">
