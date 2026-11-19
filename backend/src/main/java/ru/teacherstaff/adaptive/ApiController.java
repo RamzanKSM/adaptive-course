@@ -1617,6 +1617,12 @@ public class ApiController {
         return boardTests.overview(group, language);
     }
 
+    @GetMapping("/admin/board/topics")
+    public Map<String, Object> boardTopics(@RequestParam String group, @RequestParam String language, @RequestParam(required = false) String date, HttpServletRequest r) {
+        admin(r);
+        return boardTests.topicOptions(group, language, date);
+    }
+
     @PostMapping("/admin/board/call")
     public Map<String, Object> callToBoard(@RequestBody(required = false) Map<String, Object> b, HttpServletRequest r) {
         admin(r);

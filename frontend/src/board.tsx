@@ -850,6 +850,8 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const [openId, setOpenId] = useState<Id | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  const [planDate, setPlanDate] = useState('')
+  const [planTopics, setPlanTopics] = useState<{ topics: { code: string; title: string }[]; planTopics: string[] | null } | null>(null)
   const [kinds, toggleKind] = useBoardKinds()
   const [format, setFormat] = useBoardFormat()
   const attest = format === 'ATTESTATION'
@@ -873,6 +875,15 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
     groupCourse(group).then(found => { if (alive) setCourse({ group, language: found ?? 'JAVA' }) })
     return () => { alive = false }
   }, [group, course?.group])
+
+  useEffect(() => {
+    if (!query) return
+    let alive = true
+    setPlanTopics(null)
+    api<{ topics: { code: string; title: string }[]; planTopics: string[] | null }>(`/admin/board/topics?${query}${planDate ? `&date=${encodeURIComponent(planDate)}` : ''}`)
+      .then(v => { if (alive) setPlanTopics(v) }, () => { if (alive) setPlanTopics(null) })
+    return () => { alive = false }
+  }, [query, planDate])
 
   // Members and active calls/tests, every 2 s: the first load reports errors, the polls stay quiet.
   useEffect(() => {
@@ -900,7 +911,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const open = (id: Id) => { scrollTo.current = true; setOpenId(id); requestAnimationFrame(scroll) }
 
   /** The call with the current format: a test with the chosen kinds, an attestation with the minutes. */
-  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes } : { userId: member.userId, language, kinds }
+  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes } : { userId: member.userId, language, kinds, planDate: planDate || null }
   async function call(member: BoardMember) {
     if (!language || (attest && minutes === null)) return
     setBusy(`call:${member.userId}`)
@@ -997,7 +1008,15 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
           <AttestationNote pace={pace} pool={overview?.attestation ?? null} loaded={!!overview} />
         </> : <>
           <KindPicker kinds={kinds} onToggle={toggleKind} />
-          <RangeNote pace={pace} loaded={!!overview} />
+          <label className="board-minutes board-plan-date">{tr(currentLocale(), 'Уровень по плану на дату', 'Niveau prévu à la date', 'المستوى حسب الخطة في تاريخ')}
+            <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} />
+            <small className="muted">{tr(currentLocale(), 'Пусто — план на сегодня', 'Vide : plan du jour', 'فارغ: خطة اليوم')}</small>
+          </label>
+          {planTopics?.planTopics ? <details><summary>{tr(currentLocale(), `Темы плана: ${planTopics.planTopics.length}`, `Notions prévues : ${planTopics.planTopics.length}`, `مواضيع الخطة: ${planTopics.planTopics.length}`)}</summary>
+            <ol>{planTopics.topics.filter(t => planTopics.planTopics?.includes(t.code)).map(t => <li key={t.code}>{t.title}</li>)}</ol>
+          </details> : planTopics && <p className="muted small">{tr(currentLocale(), 'Для группы нет календарного плана', 'Aucun calendrier pour ce groupe', 'لا توجد خطة زمنية لهذه المجموعة')}</p>}
+
+          {!planDate && <RangeNote pace={pace} loaded={!!overview} />}
         </>}
         <h2 className="card-title">{uiText("Студенты")}{overview && <span className="muted small">{uiText("на месте")} {present} {uiText("из")} {overview.members.length}</span>}</h2>
         {attest && !!members?.length && <div className="board-attest-call">

@@ -98,6 +98,7 @@ class BoardTestsIntegrationTest {
   @Test void theKindsAreChosenAtTheCallAndGiveTheTime() throws Exception {
     String admin = login("admin", "admin-pass");
     String token = createStudent("kd-a", "Карина", "K-1"); long a = studentId("kd-a");
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", a, "language", "JAVA", "planDate", "2041-01-01"))), status().isBadRequest(), "INVALID_DATE");
     simpleBank(a, "BT_KD");
     var all = call(admin, a, null);
     assertEquals(List.of("parsons", "fix", "code"), texts(all.path("kinds")), "no kinds: all three"); assertEquals(420, all.path("durationSeconds").asInt(), "2 + 2 + 3 minutes");
@@ -492,6 +493,25 @@ class BoardTestsIntegrationTest {
       var board = read(admin, get("/api/admin/board").param("group", "B-RANGE").param("language", "JAVA"));
       assertEquals(BoardTests.minimum(total, LocalDate.ofInstant(START, ZoneOffset.UTC).minusDays(30), LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(30), LocalDate.ofInstant(START, ZoneOffset.UTC)),
           board.path("pace").path("topics").asInt()); assertEquals(total, board.path("pace").path("total").asInt());
+      var day = LocalDate.ofInstant(START, ZoneOffset.UTC).minusDays(20);
+      var planned = read(admin, get("/api/admin/board/topics").param("group", "B-RANGE").param("language", "JAVA").param("date", day.toString()));
+      int expected = BoardTests.minimum(total, LocalDate.ofInstant(START, ZoneOffset.UTC).minusDays(30), LocalDate.ofInstant(START, ZoneOffset.UTC).plusDays(30), day);
+      assertEquals(expected, planned.path("planTopics").size());
+      assertTrue(planned.path("topics").size() >= expected);
+      var dated = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", a, "language", "JAVA", "kinds", List.of("code"), "planDate", day.toString()))));
+      long datedId = dated.path("id").asLong();
+      var snapshot = json.readTree(db.queryForObject("select selection_json from board_tests where id=?", String.class, datedId));
+      assertEquals(expected, snapshot.path("minimum").size());
+      assertEquals(day.toString(), snapshot.path("date").asText());
+      expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", a, "language", "JAVA", "planDate", "not-a-date"))), status().isBadRequest(), "INVALID_DATE");
+      assertEquals("CALLED", db.queryForObject("select status from board_tests where id=?", String.class, datedId), "invalid date must not cancel an existing call");
+      var recalledDate = read(admin, post("/api/admin/board/tests/{id}/recall", datedId));
+      long recalledDateId = recalledDate.path("id").asLong();
+      assertEquals(snapshot, json.readTree(db.queryForObject("select selection_json from board_tests where id=?", String.class, recalledDateId)), "recall keeps the selected plan");
+      var startedDate = read(token, post("/api/board/tests/{id}/start", recalledDateId));
+      assertEquals(1, startedDate.path("items").size());
+      assertEquals(minCode, adminTest(admin, recalledDateId).path("items").get(0).path("taskId").asLong(), "dated plan never selects a reached topic beyond the plan");
+      read(admin, post("/api/admin/board/tests/{id}/cancel", recalledDateId));
       // Each member's standing as in «Прогресс»: the lag behind the plan line and the farthest closed topic.
       var standing = member(board, "rg-a");
       assertEquals(board.path("pace").path("topics").asInt() - 3, standing.path("lag").asInt()); assertEquals("BEHIND", standing.path("status").asText());
