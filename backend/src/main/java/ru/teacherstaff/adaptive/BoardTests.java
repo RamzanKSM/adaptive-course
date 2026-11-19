@@ -760,14 +760,19 @@ class BoardTests implements DisposableBean {
         if (!List.of("code", "fix").contains(kind) || !kinds(t).contains(kind))
             throw new ApiError("INVALID_ITEM", "Запускать можно только код заданий этого теста «Исправь ошибку» и «Напиши код»");
         boolean stale = items(t).stream().anyMatch(i -> kind.equals(i.get("kind")) && stale(i, revision));
+        // Save at launch. A newer autosave may arrive while the runner is working.
+        int launchedRevision = revision(t);
+        if (!stale)
+            db.update("update board_tests set answers_json=json_set(coalesce(answers_json,'{}'),'$." + kind + "',?) "
+                    + "where id=? and status='STARTED' and paused_at is null and items_revision=?", code, id, launchedRevision);
         Language lang = Language.of(t.get("language"));
         long started = System.nanoTime();
         var console = runner.console(lang, code, stdin);
         log.info("Board test {} console run ({}, {}): {} in {} ms", id, lang, kind, console.status(), (System.nanoTime() - started) / 1_000_000);
         if (stale) log.info("Board test {}: a run of the replaced {} item, not saved as the answer", id, kind);
         else
-            db.update("update board_tests set runs_json=json_insert(coalesce(runs_json,'[]'),'$[#]',json(?)),answers_json=json_set(coalesce(answers_json,'{}'),'$." + kind + "',?) where id=? and status='STARTED'",
-                      write(obj("at", iso(now), "item", kind, "code", code, "console", console.view())), code, id);
+            db.update("update board_tests set runs_json=json_insert(coalesce(runs_json,'[]'),'$[#]',json(?)) where id=? and status='STARTED' and items_revision=?",
+                      write(obj("at", iso(now), "item", kind, "code", code, "console", console.view())), id, launchedRevision);
         return obj("console", console.view());
     }
 

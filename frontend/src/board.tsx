@@ -370,7 +370,7 @@ export function BoardTestScreen({ test, name, onFinished, endpoints = STUDENT_BO
                 <CodeMirror className="code-editor board-editor" value={item.kind === 'fix' ? fix : code} extensions={EDITOR_EXTENSIONS[item.language]} editable={!locked} readOnly={locked}
                   onChange={value => { if (item.kind === 'fix') setFix(value); else setCode(value); edited(item.kind) }}
                   aria-label={item.kind === 'fix' ? tr(currentLocale(), `Программа с ошибкой на ${courseTitle(item.language)}`, `Programme erroné en ${courseTitle(item.language)}`, `برنامج فيه خطأ بلغة ${courseTitle(item.language)}`) : tr(currentLocale(), `Редактор решения на ${courseTitle(item.language)}`, `Éditeur de solution ${courseTitle(item.language)}`, `محرر الحل بلغة ${courseTitle(item.language)}`)} />
-                {item.kind === 'code' && item.bankTask && <label>{tr(currentLocale(), "Входные данные", "Données d’entrée", "بيانات الإدخال")}<textarea rows={3} maxLength={10000} value={stdin} onChange={e => setStdin(e.target.value)} /></label>}
+                {item.kind === 'code' && item.bankTask && <label>{tr(currentLocale(), "Входные данные", "Données d’entrée", "بيانات الإدخال")}<textarea rows={3} maxLength={10000} disabled={locked} value={stdin} onChange={e => setStdin(e.target.value)} /></label>}
                 {runs[item.kind] && <ConsolePanel key={runs[item.kind]!.n} run={runs[item.kind]!.console} origin="run" language={item.language} />}
               </div>
             </>}

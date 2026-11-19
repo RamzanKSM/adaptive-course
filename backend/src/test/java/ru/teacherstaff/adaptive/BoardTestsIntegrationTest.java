@@ -124,8 +124,18 @@ class BoardTestsIntegrationTest {
     var stationView = station(stationToken, post("/api/station/tests/{id}/start", again));
     assertFalse(stationView.toString().contains("SECRET REFERENCE"));
     assertEquals(task, adminTest(admin, again).path("items").get(0).path("taskId").asLong());
+    // Autosave and teacher pause may both arrive while the station's console run is in flight.
+    when(runner.console(Language.JAVA, "station code", "123")).thenAnswer(invocation -> {
+      station(stationToken, put("/api/station/tests/{id}/answers", again).contentType(MediaType.APPLICATION_JSON)
+          .content("{\"code\":\"newer draft\"}"));
+      read(admin, post("/api/admin/board/tests/{id}/pause", again));
+      return new PistonCodeRunner.Console("OK", "printed", null, false);
+    });
     station(stationToken, post("/api/station/tests/{id}/run", again).contentType(MediaType.APPLICATION_JSON).content("{\"item\":\"code\",\"code\":\"station code\",\"stdin\":\"123\"}"));
     verify(runner).console(Language.JAVA, "station code", "123");
+    var paused = station(stationToken, get("/api/station/current")).path("test");
+    assertTrue(paused.path("pausedAt").isTextual());
+    assertEquals("newer draft", paused.path("answers").path("code").asText());
     finishNow(admin, again);
     mvc.perform(delete("/api/station").header("X-Board-Station", stationToken)).andExpect(status().isNoContent());
   }
