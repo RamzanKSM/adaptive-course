@@ -559,7 +559,7 @@ class BoardTests implements DisposableBean {
         for (int attempt = 0; ; attempt++) {
             Language lang = Language.of(t.get("language"));
             var items = attestation(t) ? List.of(attestationItem(user, lang, (String) t.get("group_name"), now, Set.of()))
-                    : chooseItems(user, lang, kinds(t), selectionMinimum(t, lang, now), now, new HashMap<>(), new HashSet<>(), new HashSet<>(), selection(t) != null);
+                    : chooseItems(user, lang, kinds(t), selectionMinimum(t, lang, now), now, new HashMap<>(), new HashSet<>(), new HashSet<>(), selectedTopics(t), selection(t) != null);
             String pace = paceStatus(user, lang, now);
             var answers = new LinkedHashMap<String, Object>();
             for (var item : items) answers.put((String) item.get("kind"), initialAnswer(item));
@@ -881,14 +881,14 @@ class BoardTests implements DisposableBean {
      * Regular tasks only, so a hard-mode student gets the same kind of test; no task or story twice in a test.
      */
     private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, List<String> minimum, Instant now) {
-        return chooseItems(user, lang, kinds, minimum, now, new HashMap<>(), new HashSet<>(), new HashSet<>(), false);
+        return chooseItems(user, lang, kinds, minimum, now, new HashMap<>(), new HashSet<>(), new HashSet<>(), null, false);
     }
 
     /**
      * chosen, usedTasks, usedStories — what the test already holds (replaceItem): the new items avoid them and order their topics by them.
      */
     private List<Map<String, Object>> chooseItems(long user, Language lang, List<String> kinds, List<String> minimum, Instant now,
-                                                  Map<String, Fit> chosen, Set<Long> usedTasks, Set<String> usedStories, boolean limitedToPlan) {
+                                                  Map<String, Fit> chosen, Set<Long> usedTasks, Set<String> usedStories, List<String> selected, boolean limitedToPlan) {
         var course = db.queryForList("select code from skills where language=? order by block_no,sort_order,code", String.class, lang.name());
         Set<String> reached = new HashSet<>(db.queryForList("select p.skill_code from student_skills p join skills s on s.code=p.skill_code where p.user_id=? and s.language=? and (p.completed_iterations>=1 or p.mastered=1)", String.class, user, lang.name()));
         reached.addAll(db.queryForList("select s.code from diagnostic_skill_results d join skills s on s.code=d.skill_code where d.user_id=? and d.confirmed=1 and s.language=?", String.class, user, lang.name()));
@@ -901,7 +901,7 @@ class BoardTests implements DisposableBean {
                                       + "where t.language=? and t.active=1 and t.mode='NORMAL' and coalesce(t.goal_json,'') not like '%IO_BEHAVIOR%'", (rs, i) -> candidate(rs), lang.name()))
             byTopic.computeIfAbsent(c.skill(), k -> new ArrayList<>()).add(c);
 
-        var range = limitedToPlan ? new Range(minimum, List.of()) : range(course, minimum.size(), reached);
+        var range = selected != null ? new Range(selected, List.of()) : limitedToPlan ? new Range(minimum, List.of()) : range(course, minimum.size(), reached);
         // The heaviest item first: code takes its topic, fix and parsons prefer other topics.
         for (String kind : List.of("code", "fix", "parsons"))
             if (kinds.contains(kind) && !chosen.containsKey(kind)) {
@@ -910,7 +910,7 @@ class BoardTests implements DisposableBean {
             }
         var items = itemsOf(lang, kinds, chosen);
         for (var item : items)
-            item.put("zone", course.indexOf((String) item.get("skillCode")) < minimum.size() ? ZONE_MINIMUM : ZONE_ABOVE);
+            item.put("zone", minimum.contains((String) item.get("skillCode")) ? ZONE_MINIMUM : ZONE_ABOVE);
         return items;
     }
 
@@ -931,14 +931,30 @@ class BoardTests implements DisposableBean {
 
     private Map<String, Object> validateSelection(Map<String, Object> body, Language lang, String group) {
         LocalDate day = parseSelectionDate(body.get("planDate"));
-        if (day == null) return null;
+        Object raw = body.get("topicCodes");
+        if (day == null && raw == null) return null;
+        List<String> topics = null;
+        if (raw != null) {
+            if (!(raw instanceof List<?> list) || list.isEmpty() || list.stream().anyMatch(x -> !(x instanceof String)))
+                throw new ApiError("INVALID_TOPICS", "Выбери хотя бы одну тему");
+            var requested = new HashSet<>(((List<?>) raw).stream().map(String.class::cast).toList());
+            var course = db.queryForList("select code from skills where language=? order by block_no,sort_order,code", String.class, lang.name());
+            if (!course.containsAll(requested)) throw new ApiError("INVALID_TOPICS", "Неизвестная тема курса");
+            topics = course.stream().filter(requested::contains).toList();
+        }
         var plan = pacePlan(group, lang, day == null ? ProgressAnalytics.day(now()) : day);
         if (day != null && plan == null) throw new ApiError("INVALID_DATE", "Для группы нет календарного плана");
-        return obj("minimum", plan.topics(), "date", day.toString());
+        return obj("minimum", plan == null ? List.of() : plan.topics(), "date", day == null ? null : day.toString(), "topics", topics);
     }
 
     private Map<String, Object> selection(Map<String, Object> test) {
         return test.get("selection_json") == null ? null : read((String) test.get("selection_json"), new TypeReference<LinkedHashMap<String, Object>>() {});
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> selectedTopics(Map<String, Object> test) {
+        var selected = selection(test);
+        return selected == null ? null : (List<String>) selected.get("topics");
     }
 
     @SuppressWarnings("unchecked")
@@ -1472,6 +1488,12 @@ class BoardTests implements DisposableBean {
         Instant now = now();
         settle(now);
         String source = SOURCE_RANGE, group = (String) rows.getFirst().get("group_name");
+        if (selection != null && FORMAT_TEST.equals(format)) {
+            var temporary = new HashMap<String, Object>();
+            temporary.put("selection_json", selection);
+            var topics = selectedTopics(temporary);
+            if (topics != null) chooseItems(user, lang, kinds, selectionMinimum(temporary, lang, now), now, new HashMap<>(), new HashSet<>(), new HashSet<>(), topics, true);
+        }
         if (FORMAT_ATTESTATION.equals(format) && attestationOptions(lang, group, now, Set.of()).isEmpty())
             throw noAttestationTask(lang, group, now, false);
         db.update("update board_tests set status='CANCELLED' where user_id=? and status='CALLED'", user);
@@ -1511,6 +1533,10 @@ class BoardTests implements DisposableBean {
             return adminView(load(id));
         }
         var kinds = body != null && body.get("kinds") != null ? BoardItems.parse(body.get("kinds")) : kinds(t);
+        if (selectedTopics(t) != null) {
+            Language lang = Language.of(t.get("language"));
+            chooseItems(((Number) t.get("user_id")).longValue(), lang, kinds, selectionMinimum(t, lang, now), now, new HashMap<>(), new HashSet<>(), new HashSet<>(), selectedTopics(t), true);
+        }
         if (db.update("update board_tests set kinds=?,source=?,duration_seconds=? where id=? and status in ('CALLED','EXPIRED')", write(kinds), SOURCE_RANGE, BoardItems.seconds(kinds), id) == 0)
             requireEditable(load(id));
         log.info("Board test {} call edited: {} → {}", id, kinds(t), kinds);
@@ -1556,7 +1582,7 @@ class BoardTests implements DisposableBean {
             }, usedTasks.toArray());
             var old = items.get(index);
             var fresh = attestation(t) ? attestationItem(user, lang, (String) t.get("group_name"), now, usedTasks)
-                    : chooseItems(user, lang, List.of(kind), minimum, now, chosen, usedTasks, usedStories, selection(t) != null).getFirst();
+                    : chooseItems(user, lang, List.of(kind), minimum, now, chosen, usedTasks, usedStories, selectedTopics(t), selection(t) != null).getFirst();
             var replaced = new ArrayList<Object>(old.get("replacedTaskIds") instanceof List<?> earlier ? earlier : List.of());
             replaced.add(old.get("taskId"));
             fresh.put("replacedTaskIds", replaced);

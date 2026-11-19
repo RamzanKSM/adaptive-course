@@ -545,6 +545,30 @@ class BoardTestsIntegrationTest {
     } finally { db.update("delete from app_settings where key='session_date'"); }
   }
 
+  @Test void manuallyChosenTopicsConstrainCallRecallAndReplacement() throws Exception {
+    String admin = login("admin", "admin-pass");
+    String token = createStudent("manual-a", "Мира", "B-MANUAL"); long user = studentId("manual-a");
+    String chosen = skill("BT_MANUAL", 999), outside = skill("BT_MANUAL_OUTSIDE", 999);
+    long first = codeTask(chosen, 2, "CURATED", "curated:manual-a:1");
+    long second = codeTask(chosen, 2, "CURATED", "curated:manual-b:1");
+    codeTask(outside, 2, "CURATED", "curated:manual-outside:1");
+    var body = Map.of("userId", user, "language", "JAVA", "kinds", List.of("code"), "topicCodes", List.of(chosen));
+    long id = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).path("id").asLong();
+    expect(admin, patch("/api/admin/board/tests/{id}/call", id).contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"fix\"]}"), status().isBadRequest(), "NO_BOARD_TASK");
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("userId", user, "language", "JAVA", "topicCodes", List.of("UNKNOWN")))), status().isBadRequest(), "INVALID_TOPICS");
+    assertEquals("CALLED", db.queryForObject("select status from board_tests where id=?", String.class, id));
+    long recalled = read(admin, post("/api/admin/board/tests/{id}/recall", id)).path("id").asLong();
+    var student = read(token, post("/api/board/tests/{id}/start", recalled));
+    assertFalse(student.toString().contains("reference"));
+    var item = adminTest(admin, recalled).path("items").get(0);
+    assertEquals(chosen, item.path("skillCode").asText());
+    assertTrue(Set.of(first, second).contains(item.path("taskId").asLong()));
+    var replacement = read(admin, post("/api/admin/board/tests/{id}/items/code/replace", recalled)).path("items").get(0);
+    assertEquals(chosen, replacement.path("skillCode").asText());
+    assertNotEquals(item.path("taskId").asLong(), replacement.path("taskId").asLong());
+    expect(admin, post("/api/admin/board/tests/{id}/items/code/replace", recalled), status().isBadRequest(), "NO_BOARD_TASK");
+  }
+
   @Test void theMinimumForTodayIsAUniformPlanFromTheGroupsFirstLessonToTheSession() {
     LocalDate start = LocalDate.parse("2041-09-01"), session = LocalDate.parse("2042-01-10");   // 131 days
     assertEquals(1, BoardTests.minimum(44, start, session, start), "the first day: at least one topic");

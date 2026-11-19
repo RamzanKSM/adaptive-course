@@ -851,6 +851,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const [busy, setBusy] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [planDate, setPlanDate] = useState('')
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(() => new Set())
   const [planTopics, setPlanTopics] = useState<{ topics: { code: string; title: string }[]; planTopics: string[] | null } | null>(null)
   const [kinds, toggleKind] = useBoardKinds()
   const [format, setFormat] = useBoardFormat()
@@ -902,8 +903,8 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
     return () => { alive = false }
   }, [query, activeKey, reload])
 
-  function chooseGroup(value: string) { if (value === group) return; setGroup(value); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
-  function chooseCourse(value: CourseLanguage) { setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
+  function chooseGroup(value: string) { if (value === group) return; setSelectedTopics(new Set()); setGroup(value); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
+  function chooseCourse(value: CourseLanguage) { setSelectedTopics(new Set()); setCourse({ group, language: value }); setOverview(null); setJournal(null); setOpenId(null); setPicked(new Set()) }
   /** Opening a test scrolls to its detail as soon as it is rendered (the detail mounts with the new id). */
   const scrollTo = useRef(false)
   const scroll = () => { if (scrollTo.current && detailRef.current) { scrollTo.current = false; detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }
@@ -911,7 +912,7 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
   const open = (id: Id) => { scrollTo.current = true; setOpenId(id); requestAnimationFrame(scroll) }
 
   /** The call with the current format: a test with the chosen kinds, an attestation with the minutes. */
-  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes } : { userId: member.userId, language, kinds, planDate: planDate || null }
+  const callBody = (member: BoardMember) => attest ? { userId: member.userId, language, format: 'ATTESTATION', minutes } : { userId: member.userId, language, kinds, planDate: planDate || null, topicCodes: selectedTopics.size ? [...selectedTopics] : null }
   async function call(member: BoardMember) {
     if (!language || (attest && minutes === null)) return
     setBusy(`call:${member.userId}`)
@@ -1016,7 +1017,11 @@ export function BoardAdmin({ request, groups, onBecomeStation }: { request: Requ
             <ol>{planTopics.topics.filter(t => planTopics.planTopics?.includes(t.code)).map(t => <li key={t.code}>{t.title}</li>)}</ol>
           </details> : planTopics && <p className="muted small">{tr(currentLocale(), 'Для группы нет календарного плана', 'Aucun calendrier pour ce groupe', 'لا توجد خطة زمنية لهذه المجموعة')}</p>}
 
-          {!planDate && <RangeNote pace={pace} loaded={!!overview} />}
+          {planTopics && <details><summary>{tr(currentLocale(), `Выбрать темы ответа${selectedTopics.size ? `: ${selectedTopics.size}` : ''}`, `Choisir les notions${selectedTopics.size ? ` : ${selectedTopics.size}` : ''}`, `اختيار مواضيع الإجابة${selectedTopics.size ? `: ${selectedTopics.size}` : ''}`)}</summary>
+            <p className="muted small">{tr(currentLocale(), 'Отметь темы для заданий. Если ничего не отмечено, темы выбираются автоматически. Ручной выбор имеет приоритет над планом на дату.', 'Sélectionne les notions des exercices. Sans sélection, elles sont choisies automatiquement. La sélection manuelle prime sur le plan à la date.', 'اختار مواضيع المهام. بدون اختيار تُحدد تلقائياً. الاختيار اليدوي له أولوية على خطة التاريخ.')}</p>
+            {planTopics.topics.map(t => <label key={t.code} style={{ display: 'block' }}><input type="checkbox" checked={selectedTopics.has(t.code)} onChange={() => setSelectedTopics(old => { const next = new Set(old); if (!next.delete(t.code)) next.add(t.code); return next })} /> {t.title}</label>)}
+          </details>}
+          {!planDate && !selectedTopics.size && <RangeNote pace={pace} loaded={!!overview} />}
         </>}
         <h2 className="card-title">{uiText("Студенты")}{overview && <span className="muted small">{uiText("на месте")} {present} {uiText("из")} {overview.members.length}</span>}</h2>
         {attest && !!members?.length && <div className="board-attest-call">
