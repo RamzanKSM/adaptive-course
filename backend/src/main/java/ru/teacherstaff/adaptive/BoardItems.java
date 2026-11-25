@@ -129,16 +129,17 @@ final class BoardItems {
         return diff(lang, meaningfulLines(lang, reference), meaningfulLines(lang, wrong)).stream().mapToInt(Hunk::changed).sum();
     }
 
-    static Bug bug(Language lang, String reference, List<Wrong> wrong) {
-        if (reference == null || reference.isBlank()) return null;
-        Bug best = null;
+    static List<Bug> bugs(Language lang, String reference, List<Wrong> wrong) {
+        if (reference == null || reference.isBlank()) return List.of();
+        var bugs = new ArrayList<Bug>();
         for (var w : wrong) {
             if (w.source() == null || w.source().isBlank()) continue;
             int changed = changed(lang, reference, w.source());
-            if (changed >= 1 && changed <= FIX_MAX_CHANGED && (best == null || changed < best.changed()))
-                best = new Bug(w.source(), w.description(), changed);
+            if (changed >= 1 && changed <= FIX_MAX_CHANGED)
+                bugs.add(new Bug(w.source(), w.description(), changed));
         }
-        return best;
+        bugs.sort(Comparator.comparingInt(Bug::changed));
+        return bugs;
     }
 
     static Parsons parsons(Language lang, String starter, String reference, List<Wrong> wrong) {

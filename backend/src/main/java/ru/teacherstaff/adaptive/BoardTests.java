@@ -314,7 +314,7 @@ class BoardTests implements DisposableBean {
         Integer difficulty = rs.wasNull() ? null : d;
         boolean curated = rs.getInt(7) == 1;
         String key = rs.getString(8);
-        return new Candidate(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), difficulty, curated, key, rs.getString(9), rs.getString(10),
+        return new Candidate(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), difficulty, curated, key, rs.getString(9), rs.getString(10), rs.getString(11),
                              curated && key != null && key.matches("curated:[^:]+:.+") ? story(key) : null);
     }
 
@@ -570,7 +570,8 @@ class BoardTests implements DisposableBean {
             String pace = paceStatus(user, lang, now);
             var answers = new LinkedHashMap<String, Object>();
             for (var item : items) answers.put((String) item.get("kind"), initialAnswer(item));
-            var params = new ArrayList<Object>(Arrays.asList(iso(now), iso(now.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), station, station, id, iso(now), t.get("kinds"), t.get("source"), t.get("duration_seconds")));
+            Instant startedAt = now();
+            var params = new ArrayList<Object>(Arrays.asList(iso(startedAt), iso(startedAt.plusSeconds(duration(t))), write(items), write(answers), pace, deviceHash(device), station, station, id, iso(now), t.get("kinds"), t.get("source"), t.get("duration_seconds")));
             if (station != null) params.add(station);
             int started = db.update("update board_tests set status='STARTED',started_at=?,ends_at=?,items_json=?,answers_json=?,runs_json='[]',pace_status=?,device=?,station_id=?,station_name=(select name from board_stations where id=?) "
                                             + "where id=? and status='CALLED' and call_expires_at>=? and kinds is ? and source is ? and duration_seconds is ?"
@@ -921,7 +922,7 @@ class BoardTests implements DisposableBean {
         for (String key : db.queryForList("select t.external_key from successful_task_credit c join tasks t on t.id=c.task_id where c.user_id=? and t.source='CURATED' and t.external_key like 'curated:%:%'", String.class, user))
             solvedStories.add(story(key));
         Map<String, List<Candidate>> byTopic = new HashMap<>();
-        for (var c : db.query("select t.id,ts.skill_code,t.title,t.statement,t.starter_code,t.difficulty,t.source='CURATED',t.external_key,t.reference_code,t.wrong_json from tasks t join task_target_skills ts on ts.task_id=t.id "
+        for (var c : db.query("select t.id,ts.skill_code,t.title,t.statement,t.starter_code,t.difficulty,t.source='CURATED',t.external_key,t.reference_code,t.wrong_json,t.goal_json from tasks t join task_target_skills ts on ts.task_id=t.id "
                                       + "where t.language=? and t.active=1 and t.mode='NORMAL' and coalesce(t.goal_json,'') not like '%IO_BEHAVIOR%'", (rs, i) -> candidate(rs), lang.name()))
             byTopic.computeIfAbsent(c.skill(), k -> new ArrayList<>()).add(c);
 
@@ -1142,11 +1143,12 @@ class BoardTests implements DisposableBean {
     private Fit pick(Language lang, String kind, Collection<String> topics, Map<String, List<Candidate>> byTopic, Set<Long> solvedTasks, Set<String> solvedStories,
                      Set<Long> usedTasks, Set<String> usedStories) {
         var difficulties = BoardItems.kind(kind).difficulties();
+        Set<Long> rejectedFixes = new HashSet<>();
         for (boolean bankOnly : new boolean[]{true, false})
             for (String topic : topics) {
                 var fits = new ArrayList<Fit>();
                 for (var c : shuffled(byTopic.getOrDefault(topic, List.of()))) {
-                    if (usedTasks.contains(c.id()) || usedStories.contains(c.storyOrTask()) || bankOnly && !c.curated())
+                    if (usedTasks.contains(c.id()) || usedStories.contains(c.storyOrTask()) || bankOnly != c.curated() || rejectedFixes.contains(c.id()))
                         continue;
                     var fit = fit(lang, kind, c);
                     if (fit != null) fits.add(fit);
@@ -1154,14 +1156,46 @@ class BoardTests implements DisposableBean {
                 fits.sort(Comparator.comparing((Fit f) -> !f.task().curated()).thenComparing(f -> solved(f.task(), solvedTasks, solvedStories))
                                   .thenComparingInt(f -> f.task().difficulty() == null || !difficulties.contains(f.task().difficulty()) ? difficulties.size() : difficulties.indexOf(f.task().difficulty()))
                                   .thenComparingInt(Fit::rank));
-                if (!fits.isEmpty()) {
-                    var f = fits.getFirst();
+                for (var candidate : fits) {
+                    var f = "fix".equals(kind) ? visibleBug(lang, candidate) : candidate;
+                    if (f == null) {
+                        rejectedFixes.add(candidate.task().id());
+                        continue;
+                    }
                     usedTasks.add(f.task().id());
                     usedStories.add(f.task().storyOrTask());
                     return f;
                 }
             }
         throw new ApiError("NO_BOARD_TASK", "Для задания «" + BoardItems.kind(kind).title() + "» не нашлось задачи в темах от минимума на сегодня до уровня студента — выбери другие задания");
+    }
+
+    /** A fix starts with a successful console run that differs from the output stated in the task. */
+    private Fit visibleBug(Language lang, Fit fit) {
+        var c = fit.task();
+        TaskGoal goal = TaskGoal.fromJson(json, c.goalJson());
+        String expected = goal != null && (goal.kind() == TaskGoal.Kind.OUTPUT_TEXT || goal.kind() == TaskGoal.Kind.FIXED_ARITHMETIC)
+                ? goal.expectedOutput() : null;
+        if (expected == null) {
+            var reference = runner.console(lang, c.reference(), "");
+            if ("UNAVAILABLE".equals(reference.status())) throw boardRunnerUnavailable();
+            if (!"OK".equals(reference.status()) || reference.truncated() || reference.stdout() == null || reference.stdout().isBlank()) return null;
+            expected = reference.stdout();
+        }
+        @SuppressWarnings("unchecked")
+        var bugs = (List<BoardItems.Bug>) fit.detail();
+        for (var bug : bugs) {
+            var console = runner.console(lang, bug.program(), "");
+            if ("UNAVAILABLE".equals(console.status())) throw boardRunnerUnavailable();
+            if ("OK".equals(console.status()) && !console.truncated() &&
+                !Objects.equals(console.stdout() == null ? "" : console.stdout(), expected))
+                return new Fit(c, bug, bug.changed());
+        }
+        return null;
+    }
+
+    private static ApiError boardRunnerUnavailable() {
+        return new ApiError("BOARD_RUNNER_UNAVAILABLE", "Не удалось подобрать задание: запуск кода сейчас недоступен. Попробуй ещё раз.");
     }
 
     /**
@@ -1174,8 +1208,8 @@ class BoardTests implements DisposableBean {
                 return p == null ? null : new Fit(c, p, p.extra() == null ? 1 : 0);
             }
             case "fix" -> {
-                var bug = BoardItems.bug(lang, c.reference(), wrong(c));
-                return bug == null ? null : new Fit(c, bug, bug.changed());
+                var bugs = BoardItems.bugs(lang, c.reference(), wrong(c));
+                return bugs.isEmpty() ? null : new Fit(c, bugs, bugs.getFirst().changed());
             }
             // A task of a few lines is too easy for the board, a long one does not fit in its minutes; unknown size (a generated task) in between.
             default -> {
@@ -1630,7 +1664,7 @@ class BoardTests implements DisposableBean {
                 if (item.get("replacedTaskIds") instanceof List<?> earlier)
                     for (Object e : earlier) usedTasks.add(((Number) e).longValue());
                 if (!kind.equals(item.get("kind")) && BoardItems.ALL.contains(item.get("kind")))
-                    chosen.put((String) item.get("kind"), new Fit(new Candidate(task, (String) item.get("skillCode"), null, null, null, null, false, null, null, null, null), null, 0));
+                    chosen.put((String) item.get("kind"), new Fit(new Candidate(task, (String) item.get("skillCode"), null, null, null, null, false, null, null, null, null, null), null, 0));
             }
             Set<String> usedStories = new HashSet<>();
             db.query("select id,source='CURATED',external_key from tasks where id in " + in(usedTasks.size()), (RowCallbackHandler) rs -> {
@@ -1968,7 +2002,7 @@ class BoardTests implements DisposableBean {
      */
     private record Candidate(
             long id, String skill, String title, String statement, String starter, Integer difficulty, boolean curated,
-            String key, String reference, String wrongJson, String story
+            String key, String reference, String wrongJson, String goalJson, String story
     ) {
         String storyOrTask() {
             return story == null ? "task:" + id : story;

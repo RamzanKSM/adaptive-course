@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -359,6 +361,51 @@ class BoardTestsIntegrationTest {
     fixTask(later, 2, "curated:fx-later:1", Map.of("b равно 3", "int a = 1;\nint b = 3;\nint c = 3;\nprint(a + b + c);\n"));
     var other = adminTest(admin, startTest(admin, token, a, List.of("fix")).path("id").asLong()).path("items").get(0);
     assertNotEquals(fix, other.path("taskId").asLong(), "a bug of three lines is not a fix item");
+  }
+
+  @ParameterizedTest
+  @EnumSource(Language.class)
+  void fixRequiresAVisibleDifferenceOnTheInitialRun(Language language) throws Exception {
+    String admin = login("admin", "admin-pass");
+    String login = "visible-" + language.name().toLowerCase(Locale.ROOT);
+    String token = createStudent(login, "Студент", "B-VISIBLE");
+    String topic = skill("BT_VISIBLE_" + language, 2);
+    db.update("update skills set language=? where code=?", language.name(), topic);
+    String reference = language == Language.JAVA
+        ? "public class Solution {\n public static void main(String[] args) {\n  int x = 1;\n  System.out.println(x > 0 ? 6 : 0);\n }\n}"
+        : "x = 1\nprint(6 if x > 0 else 0)";
+    String same = reference.replace("> 0", ">= 0");
+    String different = reference.replace("> 0", "< 0");
+    long task = fixTask(topic, 2, "curated:" + login + ":1", Map.of("a", same, "b", different));
+    db.update("update tasks set language=?, reference_code=?, goal_json=? where id=?", language.name(), reference,
+        json.writeValueAsString(Map.of("kind", "OUTPUT_TEXT", "expectedOutput", "6\n")), task);
+    when(runner.console(language, same, "")).thenReturn(new PistonCodeRunner.Console("OK", "6\n", null, false));
+    when(runner.console(language, different, "")).thenReturn(new PistonCodeRunner.Console("OK", "0\n", null, false));
+
+    String callBody = json.writeValueAsString(Map.of("userId", studentId(login), "language", language.name(),
+        "topicCodes", List.of(topic), "kinds", List.of("fix")));
+    long id = read(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(callBody)).path("id").asLong();
+    when(runner.console(language, different, "")).thenAnswer(call -> {
+      now = now.plusSeconds(5);
+      return new PistonCodeRunner.Console("OK", "0\n", null, false);
+    });
+    var started = read(token, post("/api/board/tests/{id}/start", id));
+    assertEquals(different, started.path("answers").path("fix").asText());
+    assertEquals(now.plusSeconds(120).toString(), started.path("endsAt").asText(), "selection time is outside the student's two minutes");
+    finishNow(admin, id);
+
+    db.update("update tasks set wrong_json=? where id=?", wrongJson(Map.of("невидимая ошибка", same)), task);
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(callBody),
+        status().isBadRequest(), "NO_BOARD_TASK");
+
+    // Older tasks can lack goal metadata. Compare with their runnable reference in that case.
+    db.update("update tasks set goal_json=null where id=?", task);
+    when(runner.console(language, reference, "")).thenReturn(new PistonCodeRunner.Console("OK", "6\n", null, false));
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(callBody),
+        status().isBadRequest(), "NO_BOARD_TASK");
+    when(runner.console(language, same, "")).thenReturn(PistonCodeRunner.Console.of("UNAVAILABLE", "offline"));
+    expect(admin, post("/api/admin/board/call").contentType(MediaType.APPLICATION_JSON).content(callBody),
+        status().isBadRequest(), "BOARD_RUNNER_UNAVAILABLE");
   }
 
   @Test void fixPrefersAnotherTopicThanCodeAndATestNeverRepeatsAStory() throws Exception {
